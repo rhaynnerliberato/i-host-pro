@@ -1,0 +1,705 @@
+Documento 12 - Modelo de Dados Conceitual
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define o modelo conceitual de dados do iHostPro.
+
+Seu objetivo não é especificar tabelas, índices ou tipos de dados.
+
+O objetivo é representar o domínio de negócio da plataforma, as entidades principais, seus relacionamentos e regras de consistência.
+
+A definição do modelo físico, do tipo de banco de dados e das estratégias de persistência será responsabilidade do Claude Code, respeitando este modelo conceitual.
+
+2. Princípios
+
+O modelo de dados deverá:
+
+representar fielmente o domínio de negócio;
+evitar redundância desnecessária;
+favorecer consistência;
+permitir evolução futura;
+suportar múltiplos tenants;
+suportar milhões de registros;
+permitir auditoria completa;
+permitir versionamento quando necessário.
+3. Hierarquia do Domínio
+Plataforma
+    │
+    ▼
+Tenant (Administrador)
+    │
+    ├──────────────┐
+    ▼              ▼
+Usuários       Proprietários
+    │
+    ▼
+Grupos de Imóveis
+    │
+    ▼
+Condomínios
+    │
+    ▼
+Imóveis
+    │
+    ▼
+Reservas
+    │
+    ▼
+Hospedagens
+    │
+    ▼
+Faxinas
+4. Entidades Fundamentais
+
+As seguintes entidades fazem parte do núcleo da plataforma.
+
+Tenant
+
+Representa um cliente da plataforma.
+
+Exemplos:
+
+Administrador
+Empresa administradora
+Imobiliária
+
+Responsável por isolar completamente os dados.
+
+Usuário
+
+Pessoa autenticada.
+
+Pode possuir um ou mais papéis.
+
+Exemplos:
+
+Administrador
+
+Operador
+
+Faxineira
+
+Proprietário
+
+Papel
+
+Define responsabilidades.
+
+Não armazena regras de negócio.
+
+Relaciona-se com permissões.
+
+Permissão
+
+Representa uma ação autorizada.
+
+Exemplos:
+
+Editar imóvel.
+
+Excluir reserva.
+
+Visualizar dashboard.
+
+5. Estrutura Imobiliária
+Condomínio
+
+Representa o condomínio físico.
+
+Possui:
+
+endereço;
+portarias;
+regras;
+observações;
+contatos;
+integrações próprias (quando existirem).
+
+Um condomínio poderá possuir diversos imóveis.
+
+Portaria
+
+Representa um ponto de acesso.
+
+Pode existir mais de uma.
+
+Exemplos:
+
+Portaria principal.
+
+Portaria de serviço.
+
+Portaria remota.
+
+Cada portaria poderá possuir:
+
+telefone;
+WhatsApp;
+horários;
+regras;
+mensagens automáticas.
+Grupo de Imóveis
+
+Permite agrupar imóveis.
+
+Exemplos:
+
+Studios.
+
+Lofts.
+
+Praia.
+
+Centro.
+
+Luxo.
+
+Tem como objetivo compartilhar configurações.
+
+Imóvel
+
+Principal ativo da plataforma.
+
+Possui:
+
+identificação;
+condomínio;
+grupo;
+localização;
+capacidade;
+políticas;
+configurações;
+fechadura;
+instruções;
+calendário.
+Fechadura
+
+Representa o mecanismo de acesso.
+
+Não pressupõe tecnologia específica.
+
+Pode ser:
+
+Senha fixa.
+
+Senha dinâmica.
+
+Token.
+
+API.
+
+Bluetooth.
+
+RFID.
+
+Outras tecnologias futuras.
+
+6. Reservas
+Reserva
+
+Representa a contratação da hospedagem.
+
+Origem:
+
+Airbnb.
+
+Booking.
+
+VRBO.
+
+Manual.
+
+Outras plataformas.
+
+Possui:
+
+origem;
+datas;
+hóspedes;
+status;
+valores;
+histórico.
+Hóspede
+
+Representa a pessoa responsável pela reserva.
+
+Armazena:
+
+nome;
+idioma;
+canais de comunicação;
+histórico;
+preferências;
+avaliações;
+conversas.
+Hospedagem
+
+Representa a permanência efetiva do hóspede.
+
+É derivada da reserva.
+
+Permite controlar:
+
+check-in;
+checkout;
+solicitações;
+mensagens;
+ocorrências.
+7. Agenda
+Evento de Agenda
+
+Representa qualquer compromisso.
+
+Exemplos:
+
+Reserva.
+
+Faxina.
+
+Manutenção.
+
+Inspeção.
+
+Bloqueio.
+
+Reforma.
+
+Visita.
+
+8. Faxinas
+Faxina
+
+Representa uma limpeza.
+
+Possui:
+
+imóvel;
+data;
+horário;
+status;
+responsável;
+checklist;
+duração;
+observações.
+Checklist
+
+Representa itens de inspeção.
+
+Exemplos:
+
+Fogão.
+
+Geladeira.
+
+TV.
+
+Ar-condicionado.
+
+Banheiro.
+
+Enxoval.
+
+Lixo.
+
+Janela.
+
+Intercorrência
+
+Problema encontrado.
+
+Exemplos:
+
+Furto.
+
+Quebra.
+
+Objeto esquecido.
+
+Dano.
+
+Animal.
+
+Fumo.
+
+Ruído.
+
+Falta de material.
+
+Evidência
+
+Representa anexos.
+
+Tipos:
+
+Foto.
+
+Vídeo.
+
+Áudio.
+
+Documento.
+
+9. Comunicação
+Conversa
+
+Representa um canal de atendimento.
+
+Pode conter:
+
+Mensagens.
+
+Eventos.
+
+Anexos.
+
+Histórico.
+
+Mensagem
+
+Representa uma interação.
+
+Pode ser:
+
+Recebida.
+
+Enviada.
+
+Automática.
+
+Manual.
+
+IA.
+
+Humana.
+
+Template
+
+Modelo reutilizável.
+
+Utiliza variáveis.
+
+Possui versões.
+
+10. Inteligência Artificial
+Sessão IA
+
+Representa uma conversa processada pela IA.
+
+Armazena:
+
+contexto;
+intenção;
+idioma;
+ações executadas;
+confiança;
+custo;
+histórico.
+Prompt
+
+Representa o prompt construído dinamicamente.
+
+Nunca deverá ser fixo.
+
+Será montado utilizando:
+
+Configurações.
+
+Políticas.
+
+Templates.
+
+Dados da reserva.
+
+Dados do imóvel.
+
+Histórico.
+
+Memória
+
+Representa informações temporárias utilizadas pela IA durante uma sessão.
+
+Não substitui a base transacional.
+
+11. Configuração
+Política
+
+Define regras de negócio configuráveis.
+
+Exemplos:
+
+Late checkout.
+
+Animais.
+
+Early check-in.
+
+Pagamento.
+
+Configuração
+
+Define comportamento da plataforma.
+
+Exemplos:
+
+Horários.
+
+Notificações.
+
+Mensagens.
+
+Integrações.
+
+Workflow
+
+Representa uma automação.
+
+Possui:
+
+gatilhos;
+
+condições;
+
+ações;
+
+eventos;
+
+status.
+
+12. Integrações
+Integração
+
+Representa uma conexão externa.
+
+Exemplos:
+
+Airbnb.
+
+WhatsApp.
+
+PIX.
+
+Google.
+
+Booking.
+
+Credencial
+
+Representa informações de autenticação.
+
+Nunca armazenar credenciais em texto simples.
+
+Sincronização
+
+Representa uma execução.
+
+Armazena:
+
+início;
+fim;
+resultado;
+erros;
+estatísticas.
+13. Auditoria
+Auditoria
+
+Registro imutável.
+
+Toda alteração relevante deverá gerar um evento de auditoria.
+
+Log
+
+Registro técnico.
+
+Voltado para diagnóstico.
+
+Não substitui auditoria.
+
+Evento
+
+Representa acontecimentos do domínio.
+
+Exemplos:
+
+ReservaCriada.
+
+FaxinaConcluída.
+
+MensagemRecebida.
+
+14. Dashboard
+Indicador
+
+Representa uma métrica.
+
+Exemplos:
+
+Ocupação.
+
+Receita.
+
+Tempo médio.
+
+Cancelamentos.
+
+Métrica
+
+Representa séries históricas.
+
+Permite gráficos.
+
+15. Arquivos
+
+Todos os anexos deverão possuir uma entidade própria.
+
+Exemplos:
+
+Fotos.
+
+Vídeos.
+
+Documentos.
+
+Relatórios.
+
+Áudios.
+
+Miniaturas.
+
+Metadados.
+
+16. Relacionamentos Principais
+Tenant
+ ├── Usuários
+ ├── Proprietários
+ ├── Condomínios
+ ├── Grupos
+ ├── Imóveis
+ ├── Configurações
+ ├── Políticas
+ ├── Templates
+ ├── Workflows
+ ├── Integrações
+ └── Dashboards
+
+Condomínio
+ ├── Portarias
+ └── Imóveis
+
+Grupo
+ └── Imóveis
+
+Imóvel
+ ├── Reservas
+ ├── Faxinas
+ ├── Agenda
+ ├── Políticas
+ ├── Configurações
+ ├── Intercorrências
+ └── Histórico
+
+Reserva
+ ├── Hóspede
+ ├── Hospedagem
+ ├── Conversa
+ └── Eventos
+
+Faxina
+ ├── Faxineira
+ ├── Checklist
+ ├── Evidências
+ └── Intercorrências
+17. Regras de Consistência
+
+O modelo deverá respeitar obrigatoriamente:
+
+nenhuma entidade pertence a mais de um Tenant;
+nenhuma reserva existe sem um imóvel;
+nenhuma hospedagem existe sem uma reserva;
+nenhuma faxina existe sem um imóvel;
+nenhuma conversa existe sem uma origem;
+nenhuma auditoria pode ser alterada;
+nenhum evento poderá ser apagado fisicamente.
+18. Exclusão de Dados
+
+O sistema deverá privilegiar:
+
+arquivamento;
+desativação;
+versionamento;
+exclusão lógica (soft delete).
+
+Exclusão física deverá ocorrer apenas quando realmente necessária ou exigida por legislação aplicável.
+
+19. Histórico
+
+As seguintes entidades deverão manter histórico completo:
+
+imóveis;
+reservas;
+hóspedes;
+faxinas;
+configurações;
+políticas;
+templates;
+integrações;
+workflows;
+mensagens.
+20. Versionamento
+
+Sempre que aplicável, o sistema deverá manter versões para:
+
+políticas;
+templates;
+configurações;
+prompts;
+workflows.
+
+O histórico de versões deverá permitir auditoria, comparação e eventual restauração.
+
+21. Evolução do Modelo
+
+O modelo deverá ser preparado para incorporar novas entidades sem necessidade de reestruturação significativa.
+
+Exemplos futuros:
+
+contratos;
+manutenção preventiva;
+fornecedores;
+inventário do imóvel;
+precificação dinâmica;
+gestão financeira;
+tarefas operacionais;
+seguros;
+múltiplas equipas de limpeza.
+22. Estratégia de Persistência
+
+Cabe ao Claude Code definir o modelo físico mais adequado, podendo utilizar diferentes tecnologias de armazenamento conforme a natureza dos dados (transacionais, cache, busca, arquivos e analytics).
+
+Independentemente da tecnologia escolhida, o modelo deverá garantir:
+
+consistência transacional onde necessária;
+elevada performance;
+facilidade de evolução;
+baixo custo operacional;
+alta disponibilidade;
+suporte a consultas eficientes;
+capacidade de crescimento sem refatorações estruturais.
+23. Considerações Finais para o Claude Code
+
+Este documento representa o modelo conceitual do domínio, e não um esquema físico de banco de dados.
+
+A implementação deverá respeitar os conceitos aqui definidos, mas o Claude Code terá autonomia para decidir:
+
+o(s) tipo(s) de banco(s) de dados mais adequados;
+a normalização ou desnormalização quando justificável;
+índices;
+chaves;
+relacionamentos físicos;
+estratégias de particionamento;
+otimizações de leitura e escrita.
+
+As decisões deverão priorizar escalabilidade, simplicidade, consistência e facilidade de manutenção, preservando a integridade do domínio de negócio definido para o iHostPro.

@@ -1,0 +1,505 @@
+iHostPro
+Documento 02
+Problema de Negócio
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo do Documento
+
+Este documento descreve detalhadamente os problemas de negócio que motivam a existência do iHostPro.
+
+Seu objetivo é fornecer contexto suficiente para que qualquer desenvolvedor, arquiteto de software, designer ou agente de inteligência artificial compreenda profundamente a realidade operacional dos administradores de hospedagens de curta temporada.
+
+Este documento não descreve soluções técnicas.
+
+Ele descreve exclusivamente os problemas que precisam ser resolvidos.
+
+2. Contexto do Mercado
+
+O mercado de hospedagens de curta temporada cresceu significativamente nos últimos anos devido à popularização de plataformas como:
+
+Airbnb
+Booking
+VRBO
+Reservas diretas
+Outras plataformas
+
+Embora essas plataformas facilitem a comercialização dos imóveis, elas não automatizam toda a operação diária do anfitrião.
+
+Na prática, a gestão operacional continua extremamente dependente de trabalho manual.
+
+3. A Realidade Atual do Administrador
+
+O administrador é responsável por coordenar praticamente toda a operação.
+
+Ele precisa acompanhar constantemente:
+
+reservas
+alterações
+cancelamentos
+check-ins
+check-outs
+limpeza
+atendimento
+comunicação
+intercorrências
+pagamentos
+manutenção
+
+Grande parte dessas tarefas ocorre através de aplicativos independentes.
+
+Exemplo:
+
+Airbnb
+
+↓
+
+WhatsApp
+
+↓
+
+Agenda
+
+↓
+
+Notas
+
+↓
+
+Fotos
+
+↓
+
+Ligações
+
+↓
+
+Planilhas
+
+↓
+
+Memória do administrador
+
+O administrador torna-se o elo entre todos esses sistemas.
+
+4. A Dor Principal
+
+O problema central não é administrar imóveis.
+
+O problema é administrar processos operacionais repetitivos.
+
+Cada reserva gera uma cadeia de tarefas dependentes.
+
+Se qualquer uma delas falhar, toda a experiência do hóspede pode ser comprometida.
+
+5. Processo Atual
+
+Atualmente, uma simples reserva pode exigir o seguinte fluxo:
+
+Nova reserva
+
+↓
+
+Administrador abre Airbnb
+
+↓
+
+Confere calendário
+
+↓
+
+Compara com agenda da faxineira
+
+↓
+
+Atualiza manualmente WhatsApp
+
+↓
+
+Confere novamente
+
+↓
+
+Espera contato do hóspede
+
+↓
+
+Responde manualmente
+
+↓
+
+Envia formulário
+
+↓
+
+Espera preenchimento
+
+↓
+
+Envia senha
+
+↓
+
+Envia regras
+
+↓
+
+Envia localização
+
+↓
+
+Envia mensagem para portaria
+
+↓
+
+Fica disponível durante toda hospedagem
+
+↓
+
+Recebe reclamações
+
+↓
+
+Recebe dúvidas
+
+↓
+
+Recebe solicitações
+
+↓
+
+Coordena checkout
+
+↓
+
+Coordena limpeza
+
+↓
+
+Repete tudo novamente
+
+Esse processo ocorre continuamente.
+
+6. Problemas Identificados
+6.1 Atualização Manual das Faxinas
+
+Hoje toda alteração na agenda depende do administrador.
+
+Nova reserva.
+
+↓
+
+Administrador atualiza WhatsApp.
+
+↓
+
+Faxineira visualiza.
+
+↓
+
+Administrador confere novamente.
+
+Esse processo gera:
+
+retrabalho;
+risco de esquecimento;
+atraso;
+informações divergentes.
+6.2 Comunicação com Faxineiras
+
+A comunicação ocorre exclusivamente pelo WhatsApp.
+
+Problemas observados:
+
+mensagens perdidas;
+esquecimento;
+ausência de confirmação;
+falta de rastreabilidade;
+dificuldade para localizar informações antigas.
+6.3 Comunicação com Hóspedes
+
+Durante toda a hospedagem o administrador permanece disponível.
+
+Perguntas frequentes:
+
+senha do Wi-Fi;
+estacionamento;
+horário;
+localização;
+lixo;
+janela;
+energia;
+TV;
+check-in;
+checkout;
+toalhas;
+travesseiros;
+animais;
+malas;
+endereço.
+
+Grande parte dessas perguntas se repete diariamente.
+
+6.4 Envio da Senha
+
+A senha precisa ser enviada somente no dia do check-in.
+
+O processo atual depende da memória do administrador.
+
+Isso gera risco de:
+
+esquecer;
+atrasar;
+enviar senha errada;
+enviar senha para hóspede errado.
+6.5 Comunicação com Portaria
+
+Todos os dias o administrador precisa informar manualmente:
+
+nome;
+apartamento;
+horário previsto.
+
+Esse processo é repetitivo.
+
+6.6 Early Check-in
+
+Hoje depende da análise manual.
+
+O administrador precisa verificar:
+
+agenda;
+limpeza;
+disponibilidade;
+situação do imóvel.
+
+Todo o processo é manual.
+
+6.7 Late Checkout
+
+Também depende de análise manual.
+
+É necessário:
+
+consultar agenda;
+
+↓
+
+consultar próxima reserva;
+
+↓
+
+calcular cobrança;
+
+↓
+
+receber PIX;
+
+↓
+
+bloquear calendário;
+
+↓
+
+atualizar faxina.
+
+6.8 Intercorrências
+
+As faxineiras costumam informar problemas horas depois.
+
+Isso dificulta:
+
+identificar o hóspede responsável;
+solicitar reembolso;
+documentar evidências;
+registrar histórico.
+6.9 Crescimento da Operação
+
+Quanto maior o número de imóveis,
+
+maior o número de:
+
+mensagens;
+
+↓
+
+faxinas;
+
+↓
+
+hóspedes;
+
+↓
+
+problemas;
+
+↓
+
+coordenação.
+
+O trabalho cresce proporcionalmente.
+
+Não existe ganho de escala.
+
+7. Problemas Já Ocorridos
+
+Durante o levantamento foram identificadas ocorrências reais:
+
+esquecimento de avisar faxineira;
+faxina agendada no dia errado;
+conflito de horários;
+envio de senha incorreta;
+atraso na resposta ao hóspede;
+cancelamento não comunicado;
+check-in atrasado;
+faxina esquecida;
+dificuldade para rastrear danos;
+atraso no registro de problemas;
+perda de contexto das conversas.
+
+Esses problemas servem como casos reais que a plataforma deverá evitar.
+
+8. Tempo Gasto Atualmente
+
+Estimativa média diária.
+
+Atualizar agenda de faxinas:
+
+20 minutos
+
+Responder hóspedes:
+
+1 hora
+
+Enviar senhas:
+
+15 minutos
+
+Conferir reservas:
+
+20 minutos
+
+Total aproximado:
+
+1 hora e 55 minutos por dia.
+
+Grande parte desse tempo é consumido por atividades repetitivas.
+
+9. Dependência Humana
+
+Atualmente praticamente toda decisão depende do administrador.
+
+Exemplos:
+
+Nova reserva
+
+↓
+
+Administrador
+
+Alteração
+
+↓
+
+Administrador
+
+Cancelamento
+
+↓
+
+Administrador
+
+Early check-in
+
+↓
+
+Administrador
+
+Late checkout
+
+↓
+
+Administrador
+
+Senha
+
+↓
+
+Administrador
+
+Portaria
+
+↓
+
+Administrador
+
+Dúvida
+
+↓
+
+Administrador
+
+Esse modelo impede escalabilidade.
+
+10. Consequências do Modelo Atual
+
+Maior carga de trabalho.
+
+Maior risco de erros.
+
+Maior desgaste.
+
+Maior dependência da memória.
+
+Baixa rastreabilidade.
+
+Dificuldade para crescer.
+
+Disponibilidade praticamente 24 horas por dia.
+
+11. Situação Ideal
+
+Na visão do administrador, um dia ideal seria:
+
+não precisar acompanhar manualmente a agenda de faxinas;
+não precisar enviar senhas manualmente;
+não precisar responder perguntas repetitivas;
+confiar que hóspedes receberão as informações corretas no momento adequado;
+ter segurança de que faxinas ocorrerão conforme planejado;
+ser notificado apenas quando houver exceções ou situações que realmente exijam intervenção humana.
+12. Oportunidade de Mercado
+
+O problema identificado não é exclusivo de um único administrador.
+
+Ele é comum a milhares de anfitriões que utilizam plataformas de aluguel por temporada.
+
+Isso cria uma oportunidade para uma plataforma SaaS capaz de:
+
+padronizar operações;
+automatizar processos;
+reduzir trabalho manual;
+aumentar produtividade;
+permitir crescimento da operação.
+13. Premissas do Projeto
+
+O projeto parte das seguintes premissas:
+
+o administrador deseja automatizar tarefas repetitivas, mas manter controle sobre exceções;
+regras de operação variam entre administradores e devem ser configuráveis;
+o sistema deve adaptar-se ao negócio do administrador, e não o contrário;
+a automação deve aumentar a confiabilidade, nunca reduzir o controle;
+toda decisão automatizada deve ser auditável;
+o crescimento do número de imóveis não deve exigir crescimento proporcional da equipe operacional.
+14. Critérios de Sucesso
+
+Os problemas descritos neste documento serão considerados resolvidos quando:
+
+a maior parte das tarefas operacionais repetitivas for executada automaticamente;
+o administrador atuar predominantemente em situações excepcionais;
+erros operacionais recorrentes forem significativamente reduzidos;
+hóspedes receberem atendimento rápido, consistente e contextualizado;
+faxineiras trabalharem com uma agenda centralizada e rastreável;
+toda a operação puder ser acompanhada e auditada em tempo real;
+a plataforma permitir que o administrador aumente o número de imóveis sob gestão sem aumento proporcional do tempo dedicado à operação.

@@ -1,0 +1,661 @@
+Documento 09 - Atores, Papéis e Modelo de Permissões (RBAC)
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define todos os atores do iHostPro, seus papéis (Roles), permissões, responsabilidades e limitações.
+
+O objetivo é garantir que:
+
+cada usuário visualize apenas o que lhe compete;
+toda ação seja autorizada antes de executada;
+a plataforma seja preparada para crescimento futuro;
+novos perfis possam ser adicionados sem alteração estrutural do sistema.
+
+O sistema deverá utilizar RBAC (Role Based Access Control).
+
+As permissões deverão ser independentes do código de interface.
+
+2. Conceitos
+
+Usuário
+
+Pessoa autenticada na plataforma.
+
+Perfil (Role)
+
+Conjunto de responsabilidades.
+
+Permissão (Permission)
+
+Ação que pode ser executada.
+
+Recurso (Resource)
+
+Objeto do sistema.
+
+Exemplos:
+
+Imóvel
+
+Reserva
+
+Faxina
+
+Dashboard
+
+Template
+
+Política
+
+Configuração
+
+Escopo
+
+Limite onde a permissão é válida.
+
+3. Modelo de Segurança
+
+O sistema deverá utilizar:
+
+Usuário
+
+↓
+
+Papéis
+
+↓
+
+Permissões
+
+↓
+
+Recursos
+
+↓
+
+Ações
+
+Nunca deverão existir permissões codificadas diretamente na interface.
+
+Toda autorização deverá ocorrer no backend.
+
+4. Papéis Oficiais
+
+Na primeira versão existirão os seguintes papéis.
+
+Administrador
+
+Operador
+
+Faxineira
+
+Proprietário
+
+Sistema
+
+Agente IA
+
+Integração
+
+No futuro novos papéis poderão ser adicionados.
+
+5. Administrador
+
+Responsável pela operação.
+
+Possui acesso praticamente completo.
+
+Pode:
+
+Gerenciar imóveis
+
+Gerenciar reservas
+
+Gerenciar faxinas
+
+Cadastrar usuários
+
+Cadastrar faxineiras
+
+Cadastrar proprietários
+
+Editar políticas
+
+Editar configurações
+
+Editar templates
+
+Visualizar auditoria
+
+Gerenciar integrações
+
+Visualizar indicadores
+
+Responder hóspedes
+
+Executar ações administrativas
+
+Consultar relatórios
+
+Exportar dados
+
+Reabrir processos
+
+Alterar permissões (quando autorizado)
+
+Não poderá:
+
+Alterar logs de auditoria
+
+Excluir auditoria
+
+Alterar histórico
+
+Modificar regras internas da plataforma
+
+6. Operador
+
+Perfil opcional.
+
+Responsável por auxiliar o administrador.
+
+Pode:
+
+Consultar reservas
+
+Consultar hóspedes
+
+Consultar agendas
+
+Responder mensagens
+
+Criar observações
+
+Cadastrar reservas manuais
+
+Gerenciar faxinas
+
+Consultar dashboards
+
+Consultar relatórios
+
+Não poderá:
+
+Editar políticas
+
+Editar integrações
+
+Editar usuários
+
+Excluir auditorias
+
+Alterar configurações críticas
+
+7. Faxineira
+
+Possui acesso extremamente simples.
+
+Tela principal:
+
+Agenda.
+
+Poderá:
+
+Visualizar agenda
+
+Visualizar imóvel
+
+Abrir localização
+
+Iniciar faxina
+
+Concluir faxina
+
+Registrar intercorrência
+
+Enviar fotos
+
+Enviar vídeos
+
+Solicitar materiais
+
+Solicitar ajuda
+
+Informar atraso
+
+Visualizar instruções da limpeza
+
+Visualizar observações
+
+Visualizar histórico das próprias faxinas
+
+Não poderá:
+
+Visualizar reservas
+
+Visualizar hóspedes
+
+Editar imóveis
+
+Editar agenda
+
+Editar políticas
+
+Editar configurações
+
+Visualizar dashboards administrativos
+
+8. Proprietário
+
+Perfil somente leitura.
+
+Poderá visualizar apenas imóveis associados.
+
+Poderá consultar:
+
+Reservas
+
+Calendário
+
+Receitas (quando permitido)
+
+Taxa de ocupação
+
+Intercorrências
+
+Histórico
+
+Relatórios
+
+Avaliações
+
+Não poderá:
+
+Editar imóveis
+
+Responder hóspedes
+
+Alterar reservas
+
+Alterar políticas
+
+Editar configurações
+
+Visualizar imóveis de outros proprietários
+
+9. Agente IA
+
+Usuário sistémico.
+
+Executará ações automaticamente.
+
+Permissões:
+
+Consultar reservas
+
+Consultar políticas
+
+Consultar templates
+
+Consultar agenda
+
+Consultar faxinas
+
+Consultar configurações
+
+Consultar imóveis
+
+Enviar mensagens
+
+Executar workflows
+
+Registrar auditoria
+
+Criar solicitações
+
+Atualizar estados autorizados
+
+Nunca poderá:
+
+Excluir dados
+
+Alterar configurações
+
+Alterar políticas
+
+Modificar auditoria
+
+Executar ações não previstas
+
+Ignorar regras
+
+Inventar informações
+
+10. Sistema
+
+Representa processos internos.
+
+Pode:
+
+Executar jobs
+
+Executar sincronizações
+
+Atualizar cache
+
+Executar filas
+
+Executar workflows
+
+Registrar auditoria
+
+Processar integrações
+
+11. Integração
+
+Representa sistemas externos.
+
+Exemplos:
+
+Airbnb
+
+Booking
+
+WhatsApp
+
+Stripe
+
+PIX
+
+Fechaduras
+
+Google Calendar
+
+Possuirá permissões extremamente limitadas.
+
+12. Recursos
+
+Todos os recursos deverão possuir permissões próprias.
+
+Recursos iniciais:
+
+Tenant
+
+Usuários
+
+Papéis
+
+Permissões
+
+Imóveis
+
+Condomínios
+
+Grupos
+
+Reservas
+
+Agenda
+
+Faxinas
+
+Intercorrências
+
+Templates
+
+Configurações
+
+Políticas
+
+Integrações
+
+Mensagens
+
+Conversas
+
+Dashboard
+
+Relatórios
+
+Auditoria
+
+Arquivos
+
+Notificações
+
+13. Ações
+
+Todo recurso poderá possuir ações.
+
+Exemplos:
+
+Criar
+
+Consultar
+
+Editar
+
+Excluir
+
+Arquivar
+
+Exportar
+
+Importar
+
+Executar
+
+Cancelar
+
+Reabrir
+
+Aprovar
+
+Negar
+
+Delegar
+
+14. Escopo das Permissões
+
+As permissões poderão possuir escopo.
+
+Exemplos.
+
+Global
+
+Tenant
+
+Grupo
+
+Imóvel
+
+Próprio usuário
+
+Própria faxina
+
+Próprio proprietário
+
+Exemplo:
+
+Administrador
+
+↓
+
+Editar qualquer imóvel.
+
+Faxineira
+
+↓
+
+Visualizar apenas imóveis presentes em sua agenda.
+
+15. Matriz Simplificada
+Recurso            Admin  Operador  Faxineira  Proprietário  IA
+
+Imóveis              X        L          L           L         L
+Reservas             X        X          -           L         L
+Agenda               X        X          X           L         L
+Faxinas              X        X          X           L         L
+Políticas            X        -          -           -         L
+Templates            X        -          -           -         L
+Configurações        X        -          -           -         L
+Auditoria            X        L          -           -         R
+Dashboard            X        L          -           L         R
+Relatórios           X        L          -           L         R
+
+Legenda:
+
+X = Controle total
+
+L = Leitura
+
+R = Apenas utilização interna
+
+= Sem acesso
+16. Privilégios Especiais
+
+Algumas ações exigirão autorização adicional.
+
+Exemplos:
+
+Excluir imóvel
+
+Excluir utilizador
+
+Alterar permissões
+
+Exportar dados sensíveis
+
+Alterar integrações
+
+Modificar políticas financeiras
+
+Essas ações poderão exigir:
+
+Confirmação.
+
+MFA (futuro).
+
+Senha novamente.
+
+Registro obrigatório de auditoria.
+
+17. Princípio do Menor Privilégio
+
+Todo utilizador deverá possuir apenas as permissões necessárias.
+
+Permissões desnecessárias deverão ser removidas.
+
+18. Herança de Papéis
+
+Inicialmente não haverá herança.
+
+Cada papel será independente.
+
+No futuro poderá existir:
+
+Administrador Regional
+
+Supervisor
+
+Gerente
+
+Auditor
+
+Suporte
+
+19. Auditoria
+
+Toda operação protegida deverá registrar:
+
+Utilizador
+
+Perfil
+
+Permissão utilizada
+
+Recurso
+
+Ação
+
+Resultado
+
+Data
+
+IP
+
+Sessão
+
+Origem
+
+20. Sessões
+
+Cada sessão deverá possuir:
+
+Identificador
+
+Data de criação
+
+Última atividade
+
+Dispositivo
+
+Navegador
+
+Endereço IP
+
+Localização aproximada (quando disponível)
+
+Status
+
+21. Futuras Evoluções
+
+O modelo deverá suportar:
+
+Permissões temporárias
+
+Delegação
+
+Acesso por horário
+
+Acesso por localização
+
+Permissões condicionais
+
+Permissões por plano contratado
+
+22. Segurança
+
+Nenhuma permissão poderá ser validada exclusivamente na interface.
+
+Toda validação deverá ocorrer obrigatoriamente no backend.
+
+A interface deverá apenas ocultar funcionalidades sem acesso.
+
+23. Objetivos
+
+O modelo de permissões deverá:
+
+garantir segurança;
+permitir escalabilidade;
+facilitar manutenção;
+reduzir riscos;
+suportar crescimento da plataforma;
+permitir novos perfis sem alterações estruturais.
+24. Considerações específicas para o iHostPro
+
+Embora o sistema utilize RBAC como base, recomenda-se que a autorização seja implementada como RBAC + ABAC (Attribute-Based Access Control).
+
+Exemplos de atributos que poderão influenciar uma autorização:
+
+o utilizador pertence ao mesmo tenant;
+o proprietário está associado ao imóvel;
+a faxineira foi designada para aquela faxina;
+a reserva pertence ao imóvel consultado;
+a política do tenant permite determinada ação.
+
+Essa combinação oferece muito mais flexibilidade para um SaaS multi-tenant do que um RBAC puro, mantendo simplicidade para o utilizador final.

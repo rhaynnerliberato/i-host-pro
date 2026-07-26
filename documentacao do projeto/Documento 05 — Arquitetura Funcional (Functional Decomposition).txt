@@ -1,0 +1,678 @@
+iHostPro
+Documento 05
+Arquitetura Funcional da Plataforma (Functional Decomposition)
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define a decomposição funcional do iHostPro.
+
+Seu objetivo é organizar a plataforma em módulos independentes, coesos e desacoplados, estabelecendo claramente as responsabilidades de cada um.
+
+Nenhuma funcionalidade deverá existir sem pertencer a um módulo definido neste documento.
+
+2. Princípios da Arquitetura Funcional
+
+A divisão funcional deverá seguir os seguintes princípios:
+
+Alta coesão.
+Baixo acoplamento.
+Responsabilidade única.
+Independência funcional.
+Facilidade de evolução.
+Facilidade de testes.
+Escalabilidade.
+
+Cada módulo deverá possuir uma responsabilidade claramente definida.
+
+3. Mapa Geral da Plataforma
+
+A plataforma será composta pelos seguintes módulos principais:
+
+iHostPro
+
+├── Administração
+├── Usuários
+├── Imóveis
+├── Condomínios
+├── Reservas
+├── Agenda
+├── Faxinas
+├── Hóspedes
+├── Comunicação
+├── Agente IA
+├── Workflows
+├── Políticas
+├── Configurações
+├── Templates
+├── Notificações
+├── Integrações
+├── Auditoria
+├── Dashboard
+├── Relatórios
+├── Arquivos
+├── Monitorização
+└── Sistema
+
+Cada módulo poderá possuir submódulos.
+
+4. Módulo Administração
+
+Responsável pela gestão operacional do tenant.
+
+Responsabilidades
+Cadastro do tenant
+Configurações gerais
+Plano contratado
+Preferências
+Dados da empresa
+Idiomas
+Fusos horários
+Configurações regionais
+5. Módulo Usuários
+
+Responsável por toda gestão de utilizadores.
+
+Funcionalidades
+Cadastro
+Autenticação
+Recuperação de senha
+Perfis
+Papéis (RBAC)
+Permissões
+Sessões
+MFA (futuro)
+
+Perfis previstos:
+
+Administrador
+Operador
+Faxineira
+Proprietário
+6. Módulo Imóveis
+
+Gerencia todas as informações dos imóveis.
+
+Funcionalidades
+
+Cadastro
+
+Endereço
+
+Condomínio
+
+Fotos
+
+Status
+
+Configurações
+
+Políticas
+
+Instruções
+
+Senha
+
+Check-in
+
+Checkout
+
+Grupo
+
+Integrações
+
+Documentos
+
+Histórico
+
+7. Módulo Condomínios
+
+Responsável pelas informações compartilhadas entre imóveis.
+
+Funcionalidades
+
+Cadastro
+
+Portarias
+
+Contactos
+
+Localização
+
+Formulários
+
+Regras
+
+Observações
+
+8. Módulo Reservas
+
+Núcleo da operação.
+
+Toda reserva gera eventos.
+
+Funcionalidades
+
+Importação
+
+Alteração
+
+Cancelamento
+
+Histórico
+
+Origem
+
+Datas
+
+Status
+
+Sincronização
+
+Eventos
+
+9. Módulo Agenda
+
+Responsável pelo calendário operacional.
+
+Não é apenas calendário.
+
+É um coordenador de eventos.
+
+Exibe
+
+Reservas
+
+Faxinas
+
+Bloqueios
+
+Early Check-in
+
+Late Checkout
+
+Manutenções
+
+Intercorrências
+
+10. Módulo Faxinas
+
+Responsável pelo ciclo completo da limpeza.
+
+Funcionalidades
+
+Agenda
+
+Iniciar
+
+Concluir
+
+Reabrir
+
+Cancelar
+
+Observações
+
+Fotos
+
+Vídeos
+
+Ocorrências
+
+Solicitação de materiais
+
+Solicitação de ajuda
+
+Histórico
+
+11. Módulo Hóspedes
+
+Gerencia informações dos hóspedes.
+
+Funcionalidades
+
+Histórico
+
+Reservas
+
+Mensagens
+
+Solicitações
+
+Preferências
+
+Ocorrências
+
+Idioma
+
+Avaliações
+
+12. Módulo Comunicação
+
+Responsável por todas as comunicações.
+
+Canais previstos:
+
+WhatsApp
+
+Email
+
+Push
+
+SMS (futuro)
+
+Interno
+
+Toda comunicação deverá ser centralizada neste módulo.
+
+13. Módulo Agente IA
+
+Um dos módulos centrais.
+
+Responsável por executar processos inteligentes.
+
+Responsabilidades
+
+Responder hóspedes
+
+Consultar políticas
+
+Consultar configurações
+
+Executar workflows
+
+Tomar decisões autorizadas
+
+Escalar humanos
+
+Registrar auditoria
+
+Nunca possuir regras fixas.
+
+Sempre consultar configurações.
+
+14. Módulo Workflows
+
+Motor de automação.
+
+Responsável por coordenar processos.
+
+Exemplo:
+
+Reserva criada
+
+↓
+
+Criar faxina
+
+↓
+
+Atualizar agenda
+
+↓
+
+Enviar mensagem
+
+↓
+
+Atualizar dashboard
+
+↓
+
+Registrar auditoria
+
+15. Módulo Políticas
+
+Motor de regras de negócio.
+
+Tudo que pode variar deverá estar aqui.
+
+Exemplos:
+
+Check-in
+
+Checkout
+
+Early check-in
+
+Late checkout
+
+Animais
+
+Visitantes
+
+Estacionamento
+
+Pagamento
+
+Cobranças
+
+Cancelamentos
+
+16. Módulo Configurações
+
+Centraliza parâmetros da plataforma.
+
+Exemplos:
+
+Mensagens
+
+Templates
+
+Horários
+
+Valores
+
+Prazos
+
+Idiomas
+
+Preferências
+
+Integrações
+
+Comportamento da IA
+
+17. Módulo Templates
+
+Gerencia textos reutilizáveis.
+
+Exemplos
+
+Mensagem de boas-vindas
+
+Senha
+
+Portaria
+
+Faxina
+
+Check-in
+
+Checkout
+
+Pagamento
+
+PIX
+
+Cobrança
+
+Avaliação
+
+As mensagens poderão conter variáveis.
+
+18. Módulo Notificações
+
+Gerencia todas as notificações.
+
+Exemplos
+
+Administrador
+
+Faxineira
+
+Proprietário
+
+Sistema
+
+Alertas
+
+Lembretes
+
+Falhas
+
+Eventos
+
+19. Módulo Integrações
+
+Responsável por sistemas externos.
+
+Inicialmente:
+
+Airbnb
+
+WhatsApp
+
+PIX
+
+Posteriormente:
+
+Booking
+
+VRBO
+
+Google Calendar
+
+Fechaduras
+
+Gateways
+
+Outros.
+
+Nenhum outro módulo deverá comunicar diretamente com serviços externos.
+
+Toda integração passará obrigatoriamente por este módulo.
+
+20. Módulo Auditoria
+
+Responsável pelo histórico permanente.
+
+Registrar:
+
+Alterações
+
+Mensagens
+
+Eventos
+
+Decisões da IA
+
+Alterações de configuração
+
+Logins
+
+Permissões
+
+Falhas
+
+Nunca poderá ser desativado.
+
+21. Módulo Dashboard
+
+Responsável por indicadores operacionais.
+
+Exemplos:
+
+Check-ins hoje
+
+Check-outs
+
+Faxinas
+
+Problemas
+
+Reservas
+
+Mensagens
+
+Ocupação
+
+Receitas
+
+Alertas
+
+22. Módulo Relatórios
+
+Responsável pela geração de relatórios.
+
+Exportação
+
+Filtros
+
+Comparativos
+
+Indicadores
+
+Históricos
+
+Financeiro
+
+Operacional
+
+23. Módulo Arquivos
+
+Centraliza armazenamento.
+
+Tipos:
+
+Fotos
+
+Vídeos
+
+Documentos
+
+Comprovativos
+
+Anexos
+
+Auditorias
+
+Nunca armazenar arquivos diretamente em outros módulos.
+
+24. Módulo Monitorização
+
+Responsável pela saúde da plataforma.
+
+Logs
+
+Performance
+
+Erros
+
+Filas
+
+Integrações
+
+IA
+
+Eventos
+
+Disponibilidade
+
+25. Módulo Sistema
+
+Funcionalidades internas.
+
+Versionamento
+
+Feature Flags
+
+Migrações
+
+Licenciamento
+
+Jobs
+
+Cache
+
+Filas
+
+Configurações internas
+
+26. Dependências Permitidas
+
+Para reduzir acoplamento:
+
+Reservas
+    ↓
+Agenda
+    ↓
+Workflows
+    ↓
+IA
+    ↓
+Comunicação
+
+Nunca o inverso.
+
+27. Dependências Proibidas
+
+Exemplos:
+
+❌ IA gravar diretamente na base de dados.
+
+❌ Reservas enviarem WhatsApp diretamente.
+
+❌ Faxinas chamarem APIs externas.
+
+❌ Dashboard alterar regras.
+
+❌ Templates conterem lógica.
+
+28. Comunicação Entre Módulos
+
+A comunicação deverá ocorrer preferencialmente através de:
+
+Eventos
+
+↓
+
+Mensagens internas
+
+↓
+
+Serviços bem definidos
+
+Nunca por dependências circulares.
+
+29. Escalabilidade Funcional
+
+Cada módulo deverá poder evoluir independentemente.
+
+Exemplo:
+
+Adicionar módulo Financeiro.
+
+↓
+
+Nenhum outro módulo deverá precisar ser reescrito.
+
+Adicionar módulo Manutenção.
+
+↓
+
+Nenhum módulo existente deverá sofrer alterações estruturais.
+
+30. Critérios para Criação de Novos Módulos
+
+Um novo módulo somente deverá ser criado quando:
+
+representar um domínio independente;
+possuir responsabilidades próprias;
+puder evoluir separadamente;
+reduzir complexidade dos módulos existentes.
+
+Caso contrário, deverá ser incorporado a um módulo existente.
+
+31. Critérios de Qualidade
+
+Todo módulo deverá possuir:
+
+responsabilidade única;
+interfaces bem definidas;
+baixo acoplamento;
+alta coesão;
+testes independentes;
+documentação própria;
+eventos claramente definidos;
+auditoria integrada.
+32. Visão Final
+
+A arquitetura funcional do iHostPro deverá permanecer estável ao longo da evolução do produto.
+
+Novas funcionalidades deverão ser adicionadas dentro dos módulos existentes sempre que possível.
+
+A criação de novos módulos deverá ser uma exceção, garantindo uma plataforma organizada, previsível e de fácil manutenção.

@@ -1,0 +1,37 @@
+# OpenTelemetry Collector — recebe telemetria via OTLP das aplicações
+# (IHostPro.Api, IHostPro.Worker) e expõe métricas em formato Prometheus
+# para scrape. Ver ADR-007 (Observabilidade) e ADR-001.
+#
+# Pipeline: Aplicações -> OTLP -> OpenTelemetry Collector -> Prometheus -> Grafana
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  # Expõe um endpoint de scrape no formato Prometheus (componente do Collector,
+  # distinto do pacote .NET "OpenTelemetry.Exporter.Prometheus.AspNetCore", que
+  # nunca teve versão estável — ver ADR-007).
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus, debug]
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

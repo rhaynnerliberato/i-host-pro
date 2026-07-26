@@ -1,0 +1,550 @@
+Documento 16 - Arquitetura do Agente de Inteligência Artificial
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define a arquitetura do Agente de Inteligência Artificial do iHostPro.
+
+O agente será responsável pelo atendimento automático aos hóspedes, execução de tarefas operacionais, consulta às regras do sistema e tomada de decisões previamente autorizadas pelo administrador.
+
+O objetivo é que o agente se comporte como um colaborador virtual da operação, e não apenas como um chatbot baseado em perguntas e respostas.
+
+2. Princípios
+
+O agente deverá ser:
+
+confiável;
+previsível;
+auditável;
+configurável;
+contextual;
+multilíngue;
+orientado por regras;
+orientado por eventos;
+seguro.
+3. Papel do Agente
+
+O agente deverá ser capaz de:
+
+responder dúvidas;
+interpretar linguagem natural;
+consultar informações do sistema;
+executar ações permitidas;
+iniciar workflows;
+atualizar registros;
+solicitar confirmação quando necessário;
+encaminhar casos complexos ao administrador.
+4. O que o Agente NÃO é
+
+O agente não deverá:
+
+inventar respostas;
+assumir informações inexistentes;
+criar regras próprias;
+ignorar políticas configuradas;
+alterar dados sem autorização;
+tomar decisões fora das permissões recebidas.
+5. Arquitetura Geral
+WhatsApp
+
+↓
+
+Communication Module
+
+↓
+
+AI Gateway
+
+↓
+
+Context Builder
+
+↓
+
+Policy Engine
+
+↓
+
+Workflow Engine
+
+↓
+
+Application Services
+
+↓
+
+Banco de Dados
+
+↓
+
+Resposta ao Hóspede
+
+O modelo de linguagem nunca deverá comunicar diretamente com o banco de dados.
+
+6. AI Gateway
+
+Toda comunicação com modelos de IA deverá passar por um módulo central.
+
+Responsabilidades:
+
+selecionar o modelo adequado;
+montar prompts;
+controlar custos;
+controlar tokens;
+validar respostas;
+registrar auditoria;
+aplicar políticas;
+executar ferramentas (tools).
+7. Context Builder
+
+Antes de enviar qualquer solicitação ao modelo, o sistema deverá montar automaticamente o contexto necessário.
+
+Esse contexto poderá incluir:
+
+imóvel;
+reserva;
+hóspede;
+idioma;
+histórico;
+mensagens anteriores;
+políticas do imóvel;
+configurações do grupo;
+configurações do tenant;
+agenda;
+status da faxina;
+disponibilidade;
+workflows ativos.
+
+O modelo nunca deverá receber apenas a mensagem do hóspede.
+
+8. Fontes de Contexto
+
+O agente poderá consultar:
+
+cadastro do imóvel;
+reserva;
+hospedagem;
+calendário;
+agenda;
+faxina;
+configurações;
+políticas;
+templates;
+histórico do hóspede;
+histórico de conversas;
+ocorrências;
+pagamentos;
+auditoria (quando aplicável).
+9. Hierarquia de Conhecimento
+
+Ao responder, o agente deverá priorizar:
+
+Configurações do imóvel
+Configurações do grupo
+Configurações do condomínio
+Configurações do tenant
+Regras padrão da plataforma
+
+Sempre prevalecerá a configuração mais específica.
+
+10. Memória
+
+O agente deverá possuir memória de curto prazo durante cada conversa.
+
+Essa memória armazenará:
+
+assunto atual;
+intenções;
+respostas anteriores;
+confirmações;
+contexto temporário.
+
+Essa memória será descartada ao final da sessão.
+
+11. Memória Persistente
+
+O sistema também manterá histórico permanente.
+
+Exemplos:
+
+mensagens;
+decisões;
+ações executadas;
+pagamentos;
+aprovações;
+reclamações.
+
+Esse histórico poderá ser utilizado em futuras conversas.
+
+12. Ferramentas (Tools)
+
+O agente não deverá executar ações diretamente.
+
+Sempre utilizará ferramentas internas da plataforma.
+
+Exemplos:
+
+Consultar Agenda
+
+Consultar Reserva
+
+Consultar Políticas
+
+Consultar Disponibilidade
+
+Consultar Status da Faxina
+
+Criar PIX
+
+Atualizar Agenda
+
+Criar Workflow
+
+Enviar Mensagem
+
+Registrar Intercorrência
+
+Registrar Auditoria
+
+13. Planejamento
+
+Sempre que receber uma solicitação, o agente deverá seguir o seguinte fluxo:
+
+Receber mensagem
+
+↓
+
+Identificar intenção
+
+↓
+
+Montar contexto
+
+↓
+
+Consultar regras
+
+↓
+
+Consultar políticas
+
+↓
+
+Consultar dados
+
+↓
+
+Definir ação
+
+↓
+
+Executar ferramentas
+
+↓
+
+Gerar resposta
+
+↓
+
+Registrar auditoria
+14. Tomada de Decisão
+
+O agente somente poderá tomar decisões quando:
+
+existir regra configurada;
+possuir todas as informações necessárias;
+a ação estiver autorizada;
+não existir necessidade de aprovação humana.
+
+Caso contrário, deverá encaminhar ao administrador.
+
+15. Situações Autorizadas
+
+Exemplos:
+
+Responder perguntas frequentes.
+
+Informar endereço.
+
+Enviar localização.
+
+Enviar senha da porta no momento permitido.
+
+Informar Wi-Fi.
+
+Informar estacionamento.
+
+Informar regras do imóvel.
+
+Informar horário.
+
+Informar funcionamento da portaria.
+
+Consultar disponibilidade.
+
+Autorizar early check-in.
+
+Autorizar late checkout.
+
+Gerar PIX.
+
+Atualizar agenda.
+
+Notificar portaria.
+
+Criar eventos.
+
+Executar workflows.
+
+16. Situações Proibidas
+
+Nunca decidir sozinho:
+
+reembolso;
+descontos não previstos;
+acidentes;
+polícia;
+danos graves;
+conflitos;
+reclamações graves;
+negociações especiais;
+qualquer caso configurado como "aprovação humana obrigatória".
+17. Tratamento de Dúvidas
+
+Quando não compreender a solicitação:
+
+informar que não compreendeu;
+pedir esclarecimentos;
+evitar respostas genéricas;
+nunca inventar informações.
+18. Multilíngue
+
+O agente deverá identificar automaticamente o idioma do hóspede.
+
+Sempre responder no mesmo idioma.
+
+Caso necessário, poderá traduzir internamente as mensagens para consultar regras e gerar respostas, preservando o idioma do utilizador na comunicação.
+
+19. Personalidade
+
+O agente deverá comunicar-se como um anfitrião experiente.
+
+Características:
+
+educado;
+cordial;
+objetivo;
+acolhedor;
+natural;
+profissional.
+
+Nunca deverá parecer robótico.
+
+Evitar respostas excessivamente longas.
+
+20. Prompt Builder
+
+O prompt enviado ao modelo deverá ser construído dinamicamente.
+
+Componentes:
+
+instruções do sistema;
+identidade do tenant;
+contexto da conversa;
+regras do imóvel;
+políticas;
+estado atual;
+ferramentas disponíveis;
+idioma;
+objetivos da resposta.
+
+Nenhum prompt deverá ser fixo no código.
+
+21. Engine de Políticas
+
+Antes de responder ou executar qualquer ação, o agente deverá consultar o Motor de Políticas.
+
+Exemplo:
+
+Solicitação de late checkout.
+
+↓
+
+Consultar política.
+
+↓
+
+Consultar agenda.
+
+↓
+
+Consultar faxina.
+
+↓
+
+Consultar disponibilidade.
+
+↓
+
+Decidir.
+
+22. Workflows
+
+Sempre que uma decisão implicar uma sequência de ações, o agente deverá iniciar um workflow.
+
+Exemplo:
+
+Late checkout aprovado.
+
+↓
+
+Gerar PIX.
+
+↓
+
+Aguardar pagamento.
+
+↓
+
+Confirmar pagamento.
+
+↓
+
+Bloquear calendário.
+
+↓
+
+Atualizar faxina.
+
+↓
+
+Avisar portaria.
+
+↓
+
+Confirmar ao hóspede.
+
+23. RAG (Retrieval-Augmented Generation)
+
+O agente deverá utilizar recuperação de contexto antes de responder.
+
+As fontes poderão incluir:
+
+políticas;
+configurações;
+templates;
+FAQs;
+histórico da conversa;
+dados da reserva.
+
+Nunca responder apenas com conhecimento do modelo.
+
+24. Auditoria
+
+Toda interação deverá registrar:
+
+mensagem recebida;
+intenção identificada;
+ferramentas utilizadas;
+dados consultados;
+decisões tomadas;
+resposta enviada;
+custo estimado;
+modelo utilizado.
+25. Controlo de Custos
+
+O sistema deverá monitorizar:
+
+número de chamadas;
+tokens consumidos;
+custo por conversa;
+custo por tenant;
+custo por hóspede.
+
+Quando possível, reutilizar contexto e respostas para reduzir custos.
+
+26. Seleção do Modelo
+
+O Claude Code deverá prever uma arquitetura que permita utilizar diferentes modelos de IA.
+
+A seleção poderá considerar:
+
+custo;
+velocidade;
+qualidade;
+tipo de tarefa;
+idioma.
+
+O modelo utilizado não deverá ficar fixo na arquitetura.
+
+27. Segurança
+
+O agente nunca deverá expor:
+
+credenciais;
+prompts internos;
+configurações administrativas;
+dados de outros tenants;
+informações sensíveis.
+28. Alucinação
+
+O agente deverá minimizar alucinações.
+
+Sempre que não possuir informação suficiente:
+
+consultar novamente o sistema;
+pedir esclarecimentos;
+ou encaminhar para atendimento humano.
+
+Nunca deverá preencher lacunas com suposições.
+
+29. Aprendizagem
+
+O agente não deverá alterar automaticamente regras da plataforma com base nas conversas.
+
+Qualquer ajuste de políticas ou templates deverá depender de ação explícita do administrador.
+
+No futuro, o sistema poderá sugerir melhorias com base em padrões observados, mas nunca aplicá-las automaticamente.
+
+30. Observabilidade
+
+O administrador deverá poder consultar:
+
+histórico de conversas;
+decisões tomadas;
+ferramentas executadas;
+workflows iniciados;
+custos;
+tempos de resposta;
+falhas.
+31. Evolução
+
+A arquitetura deverá permitir adicionar novas capacidades ao agente sem alterar sua estrutura principal.
+
+Exemplos futuros:
+
+chamadas de voz;
+atendimento telefónico;
+integração com assistentes virtuais;
+análise automática de imagens enviadas pelos hóspedes;
+reconhecimento de documentos;
+recomendações locais personalizadas.
+32. Critérios de Qualidade
+
+O Agente IA será considerado adequado quando:
+
+responder corretamente utilizando apenas informações autorizadas;
+respeitar integralmente as políticas configuradas;
+executar ações apenas através das ferramentas internas;
+manter contexto ao longo da conversa;
+encaminhar corretamente situações que exigem intervenção humana;
+operar em múltiplos idiomas;
+produzir respostas naturais e consistentes;
+registrar auditoria completa de todas as decisões.
+
+33. Observação Importante:
+
+O Agente IA é o principal diferencial competitivo do iHostPro. Ele deverá ser desenvolvido como um orquestrador inteligente de processos, e não como um simples chatbot. Sua função é compreender o contexto operacional, consultar regras configuráveis, utilizar ferramentas internas da plataforma, executar workflows autorizados e oferecer uma experiência de atendimento natural, segura e auditável. Toda a arquitetura deverá ser preparada para evoluir com novos modelos de IA e novas capacidades, mantendo o domínio de negócio independente da tecnologia utilizada pelo modelo de linguagem.

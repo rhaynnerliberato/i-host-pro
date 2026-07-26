@@ -1,0 +1,489 @@
+Documento 11 - Arquitetura Técnica da Plataforma
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define os princípios arquiteturais do iHostPro.
+
+O objetivo não é definir linguagens, frameworks ou bancos de dados específicos.
+
+A Inteligência Artificial responsável pelo desenvolvimento deverá escolher as tecnologias mais adequadas considerando:
+
+performance;
+escalabilidade;
+baixo custo operacional;
+facilidade de manutenção;
+maturidade da tecnologia;
+comunidade ativa;
+alta produtividade;
+segurança;
+possibilidade de evolução por muitos anos.
+
+Toda decisão tecnológica deverá respeitar os princípios definidos neste documento.
+
+2. Objetivos da Arquitetura
+
+A arquitetura deverá ser projetada para:
+
+operar 24 horas por dia;
+suportar crescimento contínuo;
+permitir novas funcionalidades sem grandes refatorações;
+suportar múltiplos administradores (multi-tenant);
+suportar milhares de imóveis;
+suportar milhares de reservas por dia;
+suportar milhares de conversas simultâneas com IA;
+minimizar custos de infraestrutura;
+ser simples de manter;
+ser modular;
+ser altamente observável.
+3. Princípios Arquiteturais
+
+Toda a plataforma deverá seguir os seguintes princípios:
+
+Domain Driven Design (DDD);
+Clean Architecture;
+SOLID;
+Event Driven Architecture;
+API First;
+Cloud Native;
+Stateless Services;
+Twelve-Factor App;
+Separation of Concerns;
+Convention over Configuration (quando aplicável);
+Configuração acima de código para regras de negócio.
+4. Estilo Arquitetural
+
+A arquitetura deverá ser modular.
+
+Não deverá ser implementado um monólito acoplado.
+
+Também não há necessidade de iniciar com dezenas de microserviços.
+
+A recomendação é utilizar um Monólito Modular (Modular Monolith), preparado para futura extração de serviços independentes.
+
+Cada módulo deverá possuir baixo acoplamento e alta coesão.
+
+5. Organização por Domínio
+
+A aplicação deverá ser organizada por domínios de negócio e não por camadas técnicas.
+
+Exemplo:
+
+Reservas
+
+Faxinas
+
+Agenda
+
+IA
+
+Comunicação
+
+Integrações
+
+Dashboard
+
+Relatórios
+
+Usuários
+
+Configurações
+
+Políticas
+
+Auditoria
+
+Arquivos
+
+Cada domínio deverá conter seus próprios componentes internos.
+
+6. Separação em Camadas
+
+Cada módulo deverá possuir separação clara entre:
+
+apresentação;
+aplicação;
+domínio;
+infraestrutura;
+persistência;
+integrações.
+
+O domínio nunca deverá depender da infraestrutura.
+
+7. Multi-Tenant
+
+A plataforma deverá nascer multi-tenant.
+
+Todos os dados deverão pertencer obrigatoriamente a um Tenant.
+
+Nenhuma consulta poderá acessar dados de outro Tenant.
+
+O isolamento deverá ocorrer em todas as camadas da aplicação.
+
+A arquitetura deverá permitir, futuramente, estratégias distintas de isolamento (banco compartilhado, schema por tenant ou banco dedicado) sem reescrever o domínio.
+
+8. Organização dos Módulos
+
+Os módulos deverão comunicar-se preferencialmente através de eventos.
+
+Chamadas diretas deverão ser evitadas sempre que possível.
+
+Eventos deverão ser publicados internamente.
+
+Cada módulo poderá possuir consumidores próprios.
+
+9. Arquitetura Orientada a Eventos
+
+Eventos deverão ser utilizados para:
+
+criação de reservas;
+alteração de reservas;
+cancelamentos;
+criação de faxinas;
+conclusão de faxinas;
+envio de mensagens;
+notificações;
+atualizações do dashboard;
+auditoria;
+workflows;
+integrações.
+
+Nenhum módulo deverá conhecer detalhes internos de outro módulo.
+
+10. Camada de Workflows
+
+A automação não deverá ficar distribuída pelo código.
+
+Toda automação deverá passar por um motor de workflows.
+
+Exemplos:
+
+Nova reserva.
+
+↓
+
+Criar faxina.
+
+↓
+
+Atualizar agenda.
+
+↓
+
+Notificar faxineira.
+
+↓
+
+Preparar check-in.
+
+↓
+
+Monitorar formulário.
+
+↓
+
+Liberar senha.
+
+↓
+
+Avisar portaria.
+
+11. Motor de Políticas
+
+Toda decisão de negócio deverá consultar o Motor de Políticas.
+
+Nunca utilizar valores fixos no código.
+
+Exemplo:
+
+Late Checkout
+
+↓
+
+Consultar política
+
+↓
+
+Executar decisão
+
+Jamais:
+
+if(checkout > 14h)
+12. Motor de Configuração
+
+Todas as configurações deverão ser carregadas dinamicamente.
+
+O sistema nunca deverá exigir recompilação para alteração de regras operacionais.
+
+13. Camada de IA
+
+A IA deverá ser tratada como um módulo da plataforma.
+
+Não deverá existir código espalhado realizando chamadas diretas ao modelo de linguagem.
+
+Toda interação deverá passar por uma camada responsável por:
+
+montar contexto;
+consultar configurações;
+consultar políticas;
+consultar reservas;
+consultar agenda;
+consultar histórico;
+consultar memória;
+registrar auditoria;
+controlar custos;
+controlar tokens;
+controlar fallback.
+14. Arquitetura de Integrações
+
+Integrações externas deverão ser desacopladas.
+
+Cada integração deverá possuir:
+
+cliente próprio;
+autenticação própria;
+tratamento de erros;
+retry;
+versionamento;
+monitoramento;
+logs independentes.
+15. Persistência
+
+O modelo de persistência deverá ser escolhido pela IA considerando:
+
+consistência;
+desempenho;
+escalabilidade;
+custo;
+facilidade de manutenção.
+
+É permitido utilizar diferentes tecnologias de armazenamento para diferentes necessidades (persistência transacional, cache, busca textual, armazenamento de arquivos), desde que isso seja justificado pela arquitetura e mantenha baixa complexidade operacional.
+
+16. Cache
+
+O sistema deverá utilizar cache para:
+
+configurações;
+políticas;
+templates;
+dashboards;
+indicadores;
+consultas frequentes.
+
+O cache deverá possuir invalidação automática.
+
+17. Filas
+
+Operações demoradas deverão ser executadas assincronamente.
+
+Exemplos:
+
+envio de mensagens;
+sincronizações;
+geração de relatórios;
+processamento de imagens;
+notificações;
+geração de documentos;
+backups.
+18. Arquivos
+
+Arquivos não deverão ser armazenados diretamente na base transacional.
+
+Fotos, vídeos e anexos deverão utilizar armazenamento apropriado para objetos.
+
+O banco armazenará apenas metadados e referências.
+
+19. Busca
+
+O sistema deverá oferecer busca rápida.
+
+A IA poderá utilizar esse mecanismo para recuperar contexto.
+
+Pesquisas deverão suportar:
+
+hóspedes;
+reservas;
+mensagens;
+imóveis;
+ocorrências;
+auditoria;
+templates.
+20. API
+
+Toda funcionalidade deverá ser exposta através de APIs bem definidas.
+
+A interface Web nunca deverá acessar diretamente o banco de dados.
+
+No futuro outras interfaces poderão utilizar as mesmas APIs.
+
+21. Interface
+
+A interface deverá ser desacoplada do backend.
+
+Toda comunicação deverá ocorrer através de APIs.
+
+A interface deverá ser responsiva.
+
+O sistema deverá funcionar:
+
+Desktop;
+Tablet;
+Smartphone.
+
+Sem necessidade de instalação.
+
+22. Observabilidade
+
+A plataforma deverá ser totalmente observável.
+
+Registrar:
+
+logs estruturados;
+métricas;
+eventos;
+rastreamento distribuído (quando aplicável);
+auditoria;
+erros;
+consumo de IA;
+desempenho.
+23. Auditoria
+
+Toda operação relevante deverá gerar auditoria.
+
+A auditoria nunca poderá depender da interface.
+
+Mesmo chamadas por API deverão ser auditadas.
+
+24. Segurança
+
+A segurança deverá ser tratada como requisito arquitetural.
+
+Toda comunicação deverá ser autenticada e autorizada.
+
+Segredos, credenciais e chaves nunca poderão ser armazenados diretamente no código-fonte.
+
+25. Escalabilidade
+
+A arquitetura deverá permitir crescimento horizontal.
+
+Nenhum componente deverá assumir execução em uma única instância.
+
+Sessões deverão ser independentes do servidor.
+
+26. Resiliência
+
+Falhas externas não deverão interromper a plataforma.
+
+Sempre que possível deverão existir:
+
+retry;
+timeout;
+circuit breaker;
+fallback;
+filas de reprocessamento.
+27. Evolução
+
+Novos módulos deverão poder ser adicionados sem alterar módulos existentes.
+
+O objetivo é manter a arquitetura aberta para extensão e fechada para modificação.
+
+28. Organização do Código
+
+A estrutura física do projeto deverá refletir os domínios de negócio.
+
+Evitar organização baseada apenas em:
+
+controllers;
+services;
+repositories;
+models.
+
+O código deverá ser organizado por contexto de negócio.
+
+29. Padrões Recomendados
+
+Sempre que fizer sentido, considerar a utilização de:
+
+Repository;
+Unit of Work;
+Specification;
+Strategy;
+Factory;
+Builder;
+Adapter;
+Facade;
+Mediator;
+Observer;
+CQRS (apenas onde agregar valor);
+Outbox Pattern para publicação confiável de eventos;
+Saga apenas quando existirem transações distribuídas.
+
+Esses padrões não devem ser utilizados por obrigação, mas apenas quando simplificarem a solução.
+
+30. Deploy
+
+A arquitetura deverá permitir implantação automatizada.
+
+O processo de publicação deverá suportar:
+
+ambientes independentes;
+configuração por ambiente;
+rollback;
+migrações controladas;
+atualização sem indisponibilidade sempre que possível.
+31. Custos
+
+Toda decisão arquitetural deverá equilibrar:
+
+desempenho;
+simplicidade;
+custo operacional;
+facilidade de evolução.
+
+Evitar tecnologias excessivamente complexas para o estágio inicial do produto.
+
+A arquitetura deve ser preparada para crescer, mas sem introduzir complexidade prematura.
+
+32. Critérios de Qualidade
+
+A arquitetura será considerada adequada quando:
+
+permitir evolução sem grandes refatorações;
+suportar múltiplos tenants;
+manter baixo acoplamento entre módulos;
+centralizar regras de negócio em políticas e configurações;
+utilizar eventos como principal mecanismo de integração interna;
+manter alta testabilidade;
+suportar alta observabilidade;
+ser segura por padrão;
+permitir escalabilidade horizontal;
+minimizar custos operacionais.
+33. Decisões Arquiteturais Delegadas ao Claude Code
+
+O Claude Code deverá definir, justificando tecnicamente sempre que relevante:
+
+linguagem de programação;
+framework backend;
+framework frontend;
+biblioteca de componentes visuais;
+banco(s) de dados;
+mecanismo de cache;
+mecanismo de filas;
+solução de armazenamento de arquivos;
+mecanismo de autenticação;
+biblioteca de observabilidade;
+infraestrutura de deploy;
+estratégia de CI/CD;
+estratégia de versionamento de banco;
+ferramenta de documentação de APIs;
+tecnologias para integração com IA.
+
+Todas as escolhas deverão priorizar maturidade, produtividade, segurança, baixo custo e facilidade de manutenção, evitando adoção de tecnologias apenas por tendência.
+
+
+Observação Importante:
+
+O iHostPro não deve ser desenvolvido como um framework, mas como uma plataforma SaaS comercial, preparada para crescer durante muitos anos. A arquitetura deverá privilegiar simplicidade, clareza e modularidade, evitando tanto um monólito rígido quanto uma arquitetura de microserviços excessivamente complexa para a fase inicial do produto. O código produzido deverá ser limpo, extensível e suficientemente desacoplado para permitir evolução contínua sem reescritas significativas.

@@ -1,0 +1,532 @@
+Documento 18 - Dashboards, Indicadores e Business Intelligence
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define os indicadores, métricas, dashboards e análises que deverão ser disponibilizados pelo iHostPro.
+
+O objetivo é permitir que administradores acompanhem a saúde operacional do negócio, identifiquem problemas rapidamente e tomem decisões baseadas em dados.
+
+Os dashboards deverão utilizar apenas dados já existentes na plataforma, evitando processamento desnecessário sempre que possível.
+
+2. Princípios
+
+Todos os dashboards deverão ser:
+
+simples;
+rápidos;
+responsivos;
+personalizáveis;
+filtráveis;
+exportáveis;
+atualizados automaticamente;
+preparados para grande volume de dados.
+3. Dashboard Principal
+
+Ao acessar o sistema, o administrador deverá visualizar um painel operacional contendo informações do dia atual.
+
+Exibir prioritariamente:
+
+Check-ins de hoje;
+Check-outs de hoje;
+Faxinas pendentes;
+Faxinas em andamento;
+Faxinas concluídas;
+Hóspedes aguardando resposta;
+Ocorrências abertas;
+Integrações com erro;
+Workflows com falha;
+Alertas críticos.
+
+Esta tela deverá responder imediatamente:
+
+"Existe algo que precisa da minha atenção agora?"
+
+4. Dashboard Operacional
+
+Indicadores sugeridos:
+
+Reservas hoje
+
+Check-ins hoje
+
+Check-outs hoje
+
+Faxinas previstas
+
+Faxinas concluídas
+
+Faxinas atrasadas
+
+Mensagens recebidas
+
+Mensagens respondidas pela IA
+
+Mensagens encaminhadas para humano
+
+Solicitações pendentes
+
+PIX aguardando pagamento
+
+PIX pagos
+
+Ocorrências abertas
+
+Ocorrências resolvidas
+
+5. Dashboard de Ocupação
+
+Indicadores:
+
+Taxa de ocupação
+
+Dias ocupados
+
+Dias vagos
+
+Reservas futuras
+
+Reservas canceladas
+
+Tempo médio entre reservas
+
+Dias bloqueados
+
+Calendário consolidado
+
+Filtros:
+
+período;
+imóvel;
+grupo;
+condomínio.
+6. Dashboard Financeiro
+
+Mesmo que o módulo financeiro não seja implementado inicialmente, a arquitetura deverá prever indicadores como:
+
+Receita por período
+
+Receita por imóvel
+
+Receita por grupo
+
+Receita por proprietário
+
+Valor médio por reserva
+
+Valor médio por diária
+
+Late checkouts cobrados
+
+PIX emitidos
+
+PIX recebidos
+
+Receita perdida por cancelamentos
+
+Receita prevista
+
+Receita realizada
+
+7. Dashboard das Faxinas
+
+Indicadores:
+
+Quantidade de faxinas
+
+Tempo médio de limpeza
+
+Tempo médio até início
+
+Tempo médio até conclusão
+
+Faxinas atrasadas
+
+Intercorrências registradas
+
+Fotos anexadas
+
+Solicitações de material
+
+Pedidos de ajuda
+
+Distribuição das faxinas por colaborador
+
+8. Dashboard da IA
+
+Este será um dos dashboards mais importantes.
+
+Indicadores:
+
+Conversas iniciadas
+
+Mensagens recebidas
+
+Mensagens enviadas
+
+Tempo médio de resposta
+
+Idioma das conversas
+
+Principais intenções
+
+Perguntas mais frequentes
+
+Casos resolvidos automaticamente
+
+Casos encaminhados ao administrador
+
+Taxa de resolução automática
+
+Quantidade de tokens utilizados
+
+Custo estimado por conversa
+
+Custo por tenant
+
+Custo por imóvel
+
+9. Dashboard das Integrações
+
+Indicadores:
+
+Integrações ativas
+
+Falhas
+
+Retries executados
+
+Tempo médio de sincronização
+
+Última sincronização
+
+Quantidade de reservas importadas
+
+Quantidade de mensagens enviadas
+
+Quantidade de webhooks recebidos
+
+Fila de erros
+
+Disponibilidade das integrações
+
+10. Dashboard dos Workflows
+
+Exibir:
+
+Workflows ativos
+
+Concluídos
+
+Pendentes
+
+Falhados
+
+Tempo médio
+
+Tempo máximo
+
+Execuções por tipo
+
+Reprocessamentos
+
+Taxa de sucesso
+
+11. Dashboard das Ocorrências
+
+Indicadores:
+
+Quantidade de danos
+
+Quantidade de furtos
+
+Animais não autorizados
+
+Fumo
+
+Objetos esquecidos
+
+Equipamentos danificados
+
+Intercorrências por imóvel
+
+Intercorrências por hóspede
+
+Tempo médio para resolução
+
+12. Dashboard dos Hóspedes
+
+Indicadores:
+
+Novos hóspedes
+
+Hóspedes recorrentes
+
+Países de origem
+
+Idiomas
+
+Tempo médio de estadia
+
+Reservas por hóspede
+
+Solicitações frequentes
+
+Quantidade de problemas
+
+13. Dashboard dos Imóveis
+
+Cada imóvel deverá possuir indicadores próprios.
+
+Exemplos:
+
+Número de reservas
+
+Ocupação
+
+Tempo médio entre reservas
+
+Tempo médio de limpeza
+
+Ocorrências
+
+Mensagens
+
+Receita (quando disponível)
+
+Avaliações
+
+Cancelamentos
+
+14. Dashboard dos Proprietários
+
+Quando existir suporte a múltiplos proprietários, cada um poderá visualizar apenas seus imóveis.
+
+Indicadores:
+
+Receita
+
+Ocupação
+
+Reservas
+
+Cancelamentos
+
+Avaliações
+
+Ocorrências
+
+15. Dashboard de Performance da Plataforma
+
+Indicadores técnicos:
+
+Tempo médio de resposta
+
+Utilização de CPU
+
+Utilização de memória
+
+Tempo de consultas
+
+Tempo das APIs
+
+Quantidade de erros
+
+Filas
+
+Consumo de armazenamento
+
+Disponibilidade
+
+Este dashboard será voltado ao suporte técnico.
+
+16. Alertas Inteligentes
+
+O sistema deverá destacar automaticamente situações relevantes.
+
+Exemplos:
+
+Faxina atrasada
+
+Check-in sem faxina concluída
+
+Mensagem sem resposta
+
+Integração indisponível
+
+Workflow parado
+
+PIX expirado
+
+Cancelamento recente
+
+Ocorrência grave
+
+Alto consumo de IA
+
+17. Filtros
+
+Todos os dashboards deverão permitir filtros por:
+
+Período
+
+Imóvel
+
+Grupo
+
+Condomínio
+
+Faxineira
+
+Proprietário
+
+Tenant
+
+Status
+
+Origem da reserva
+
+Canal de venda
+
+18. Exportação
+
+Sempre que fizer sentido, permitir exportação para:
+
+CSV
+
+Excel
+
+PDF
+
+Os relatórios deverão respeitar os filtros aplicados.
+
+19. Atualização
+
+Os dashboards deverão ser atualizados automaticamente.
+
+Sempre que possível, utilizar atualização incremental.
+
+Evitar recálculo completo em todas as consultas.
+
+20. Histórico
+
+Os indicadores deverão permitir análise histórica.
+
+Exemplos:
+
+Últimos 7 dias
+
+30 dias
+
+90 dias
+
+12 meses
+
+Período personalizado
+
+Comparação entre períodos
+
+21. KPIs Estratégicos
+
+O sistema deverá calcular indicadores de negócio, como:
+
+Taxa de ocupação
+
+Tempo médio de resposta ao hóspede
+
+Tempo médio de conclusão das faxinas
+
+Percentagem de atendimento automatizado
+
+Percentagem de early check-ins aprovados
+
+Percentagem de late checkouts aprovados
+
+Taxa de cancelamento
+
+Taxa de ocorrências
+
+Tempo médio de sincronização
+
+Disponibilidade das integrações
+
+22. Visualizações
+
+O Claude Code poderá escolher os componentes mais adequados.
+
+Exemplos:
+
+Cards
+
+Tabelas
+
+Gráficos de barras
+
+Gráficos de linhas
+
+Gráficos circulares
+
+Heatmaps
+
+Calendários
+
+Timeline
+
+Mapas (quando aplicável)
+
+A escolha deverá privilegiar clareza e facilidade de interpretação.
+
+23. Performance
+
+Os dashboards deverão permanecer rápidos mesmo com milhões de registros.
+
+O Claude Code poderá utilizar estratégias como:
+
+agregações;
+cache;
+materialização;
+processamento assíncrono;
+índices especializados.
+
+Sempre priorizando simplicidade e baixo custo operacional.
+
+24. Permissões
+
+Os dashboards deverão respeitar rigorosamente as permissões do utilizador.
+
+Exemplos:
+
+Faxineira:
+
+apenas sua agenda e seus indicadores.
+
+Proprietário:
+
+apenas seus imóveis.
+
+Administrador:
+
+todos os dados do tenant.
+25. Evolução
+
+A arquitetura deverá permitir a criação de novos dashboards sem necessidade de alterar os existentes.
+
+Os indicadores deverão ser desacoplados da interface, permitindo futura utilização por APIs públicas, aplicações móveis e ferramentas externas de BI.
+
+26. Critérios de Qualidade
+
+A camada de Business Intelligence será considerada adequada quando:
+
+apresentar informações relevantes de forma clara;
+permitir tomada rápida de decisão;
+suportar grandes volumes de dados;
+manter excelente desempenho;
+respeitar permissões de acesso;
+permitir evolução contínua sem refatorações significativas.
+
+27. Observação Importante:
+
+Os dashboards do iHostPro não deverão ser encarados apenas como relatórios, mas como uma central de comando operacional. O foco principal é destacar exceções, problemas e oportunidades de ação imediata. A plataforma deverá privilegiar indicadores acionáveis ("actionable insights"), evitando excesso de gráficos decorativos ou métricas sem utilidade prática. A arquitetura deverá permitir que novos indicadores sejam adicionados futuramente sem impacto significativo na estrutura existente.

@@ -1,0 +1,446 @@
+iHostPro
+Documento 07
+Catálogo de Eventos de Domínio (Domain Events Catalogue)
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define todos os eventos oficiais do domínio do iHostPro.
+
+Os eventos representam fatos ocorridos dentro da plataforma e constituem o principal mecanismo de comunicação entre módulos.
+
+Todo comportamento automatizado deverá ser iniciado pela publicação de um ou mais eventos de domínio.
+
+Nenhum módulo deverá executar lógica de negócio pertencente a outro módulo através de chamadas diretas quando existir um evento equivalente.
+
+2. Princípios
+
+Todo evento representa um fato consumado.
+
+Um evento:
+
+nunca representa uma intenção;
+nunca representa um comando;
+nunca representa uma solicitação.
+
+Eventos representam apenas algo que realmente aconteceu.
+
+Exemplos corretos:
+
+ReservaConfirmada
+FaxinaConcluida
+PixRecebido
+
+Exemplos incorretos:
+
+CriarFaxina
+EnviarSenha
+AtualizarAgenda
+
+Esses são comandos, não eventos.
+
+3. Estrutura Padrão de um Evento
+
+Todo evento deverá possuir obrigatoriamente os seguintes campos:
+
+Campo	Obrigatório	Descrição
+EventId	Sim	Identificador único
+EventName	Sim	Nome oficial do evento
+AggregateId	Sim	Identificador da entidade principal
+AggregateType	Sim	Tipo da entidade
+TenantId	Sim	Cliente proprietário
+Timestamp	Sim	Data e hora UTC
+Version	Sim	Versão do evento
+CorrelationId	Sim	Identificador da operação
+CausationId	Sim	Evento que originou este
+ActorType	Sim	Usuário, IA, Sistema, Integração
+ActorId	Opcional	Identificador do ator
+Payload	Sim	Dados do evento
+4. Convenção de Nomenclatura
+
+Todos os eventos deverão utilizar:
+
+Verbo no passado.
+
+Exemplos:
+
+ReservaCriada
+
+ReservaConfirmada
+
+ReservaCancelada
+
+FaxinaCriada
+
+FaxinaConcluida
+
+MensagemRecebida
+
+PixConfirmado
+
+Nunca utilizar:
+
+CriarReserva
+
+EnviarMensagem
+
+AtualizarAgenda
+
+5. Eventos do Módulo Reservas
+ReservationCreated
+
+Publicado quando uma nova reserva é criada.
+
+Consumidores típicos:
+
+Agenda
+Faxinas
+Dashboard
+Auditoria
+IA
+ReservationUpdated
+
+Quando qualquer dado relevante da reserva for alterado.
+
+ReservationCancelled
+
+Quando a reserva for cancelada.
+
+Dispara:
+
+cancelamento da faxina;
+atualização da agenda;
+notificações.
+ReservationConfirmed
+
+Reserva validada.
+
+GuestCheckedIn
+
+Check-in realizado.
+
+GuestCheckedOut
+
+Checkout realizado.
+
+ReservationClosed
+
+Reserva totalmente encerrada.
+
+6. Eventos do Módulo Faxinas
+CleaningCreated
+
+Faxina criada.
+
+CleaningAssigned
+
+Faxineira definida.
+
+CleaningStarted
+
+Faxina iniciada.
+
+CleaningInspectionStarted
+
+Inspeção iniciada.
+
+CleaningCompleted
+
+Faxina concluída.
+
+Consumidores:
+
+IA
+
+Agenda
+
+Dashboard
+
+Portaria
+
+CleaningCancelled
+
+Faxina cancelada.
+
+CleaningDelayed
+
+Faxina atrasada.
+
+CleaningNeedsHelp
+
+Solicitou ajuda.
+
+CleaningNeedsMaterial
+
+Solicitou materiais.
+
+7. Eventos do Hóspede
+GuestMessageReceived
+
+Mensagem recebida.
+
+GuestQuestionAnswered
+
+Pergunta respondida.
+
+GuestRequestedEarlyCheckin
+
+Solicitação criada.
+
+GuestRequestedLateCheckout
+
+Solicitação criada.
+
+GuestReportedProblem
+
+Problema informado.
+
+GuestRequestedHuman
+
+Solicitou administrador.
+
+8. Eventos do Agente IA
+AIConversationStarted
+AIConversationEnded
+AIEscalatedToHuman
+AIExecutedWorkflow
+AIDecisionMade
+AIMessageSent
+AIUnableToAnswer
+9. Eventos Financeiros
+PixPaymentReceived
+PixPaymentConfirmed
+PaymentFailed
+RefundRequested
+RefundApproved
+RefundRejected
+10. Eventos da Comunicação
+MessageQueued
+MessageSending
+MessageSent
+MessageDelivered
+MessageRead
+MessageFailed
+MessageRetried
+11. Eventos da Agenda
+ScheduleUpdated
+CalendarBlocked
+CalendarReleased
+EarlyCheckinApproved
+LateCheckoutApproved
+LateCheckoutDenied
+12. Eventos das Configurações
+PropertyConfigurationUpdated
+PolicyUpdated
+TemplateUpdated
+IntegrationConfigured
+AIConfigurationUpdated
+13. Eventos de Usuários
+UserCreated
+UserUpdated
+UserBlocked
+UserLoggedIn
+UserLoggedOut
+PasswordChanged
+14. Eventos da Auditoria
+AuditRecordCreated
+SensitiveOperationExecuted
+PermissionChanged
+15. Eventos das Integrações
+AirbnbSyncStarted
+AirbnbReservationImported
+AirbnbReservationUpdated
+AirbnbReservationCancelled
+WhatsAppMessageReceived
+WhatsAppMessageSent
+WhatsAppWebhookFailed
+16. Eventos do Sistema
+SystemStarted
+JobStarted
+JobFinished
+JobFailed
+BackupCompleted
+CacheInvalidated
+HealthCheckFailed
+17. Cadeias de Eventos
+Exemplo 1
+
+Nova Reserva
+
+↓
+
+ReservationCreated
+
+↓
+
+CleaningCreated
+
+↓
+
+ScheduleUpdated
+
+↓
+
+DashboardUpdated
+
+↓
+
+AuditRecordCreated
+
+Exemplo 2
+
+Faxina Concluída
+
+↓
+
+CleaningCompleted
+
+↓
+
+EarlyCheckinAvailable
+
+↓
+
+AIMessageSent
+
+↓
+
+PropertyReleased
+
+↓
+
+DashboardUpdated
+
+Exemplo 3
+
+PIX Recebido
+
+↓
+
+PixPaymentConfirmed
+
+↓
+
+LateCheckoutApproved
+
+↓
+
+CalendarBlocked
+
+↓
+
+CleaningScheduleUpdated
+
+↓
+
+GuestNotified
+
+↓
+
+AuditRecordCreated
+
+18. Eventos Compostos
+
+Um único evento poderá originar diversos outros.
+
+Exemplo:
+
+GuestCheckedOut
+
+↓
+
+CleaningCreated
+
+↓
+
+CleaningAssigned
+
+↓
+
+PropertyInspectionStarted
+
+↓
+
+DashboardUpdated
+
+↓
+
+AuditCreated
+
+Todos deverão possuir CorrelationId comum.
+
+19. Versionamento
+
+Eventos nunca poderão ser alterados após publicação.
+
+Caso seja necessário modificar sua estrutura:
+
+Criar nova versão.
+
+Exemplo:
+
+ReservationCreatedV2
+
+Preservando compatibilidade.
+
+20. Idempotência
+
+Todo consumidor deverá suportar o processamento repetido do mesmo evento.
+
+Processar o mesmo evento duas vezes nunca poderá produzir efeitos duplicados.
+
+21. Garantias
+
+A plataforma deverá garantir:
+
+publicação confiável;
+processamento assíncrono;
+rastreabilidade;
+reprocessamento;
+ordenação quando necessária;
+isolamento entre consumidores.
+22. Eventos Proibidos
+
+Nunca criar eventos que representem:
+
+consultas;
+comandos;
+intenções;
+validações intermediárias.
+
+Eventos representam apenas fatos consumados.
+
+23. Auditoria
+
+Todo evento deverá gerar automaticamente um registo de auditoria contendo:
+
+evento;
+data;
+origem;
+utilizador;
+entidade afetada;
+resultado;
+correlação.
+24. Evolução do Catálogo
+
+Novos eventos deverão:
+
+representar um facto de negócio;
+possuir consumidores identificados;
+ser documentados neste catálogo antes da implementação;
+manter compatibilidade com versões anteriores.
+
+Nenhum evento poderá ser introduzido diretamente no código sem atualização deste documento.
+
+25. Catálogo Resumido
+Domínio	Eventos Principais
+Reservas	ReservationCreated, ReservationConfirmed, ReservationUpdated, ReservationCancelled, GuestCheckedIn, GuestCheckedOut, ReservationClosed
+Faxinas	CleaningCreated, CleaningAssigned, CleaningStarted, CleaningCompleted, CleaningCancelled, CleaningDelayed
+Comunicação	MessageQueued, MessageSent, MessageDelivered, MessageRead, MessageFailed
+IA	AIConversationStarted, AIDecisionMade, AIEscalatedToHuman
+Agenda	ScheduleUpdated, CalendarBlocked, CalendarReleased
+Financeiro	PixPaymentConfirmed, RefundRequested
+Sistema	JobStarted, JobFinished, BackupCompleted

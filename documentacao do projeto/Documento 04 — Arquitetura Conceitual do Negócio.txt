@@ -1,0 +1,571 @@
+iHostPro
+Documento 04
+Arquitetura Conceitual do Negócio (Business Domain Model)
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define os principais conceitos de negócio do iHostPro e os relacionamentos entre eles.
+
+Seu objetivo é criar uma linguagem comum para todo o projeto, garantindo que desenvolvedores, arquitetos, designers, inteligência artificial e futuros colaboradores utilizem os mesmos conceitos e terminologias.
+
+Este documento é independente de tecnologia, banco de dados ou arquitetura de software.
+
+2. Visão Geral do Domínio
+
+O iHostPro é uma plataforma responsável por coordenar toda a operação de hospedagens de curta temporada.
+
+Seu domínio principal é composto por pessoas, imóveis, reservas, eventos, processos e políticas.
+
+Toda a plataforma gira em torno desses elementos.
+
+3. Entidades de Negócio
+3.1 Tenant
+
+Representa um cliente da plataforma.
+
+É a maior unidade de isolamento do sistema.
+
+Um tenant possui sua própria operação independente.
+
+Exemplos:
+
+João Administrador
+Empresa XPTO Hospedagens
+Imobiliária ABC
+
+Cada tenant possui:
+
+usuários;
+imóveis;
+reservas;
+equipes;
+configurações;
+políticas;
+automações;
+histórico;
+integrações.
+
+Nenhum dado poderá ser compartilhado entre tenants.
+
+3.2 Usuário
+
+Pessoa autenticada na plataforma.
+
+Todo usuário pertence exatamente a um tenant.
+
+Tipos previstos:
+
+Administrador
+Operador
+Faxineira
+Proprietário
+Supervisor
+Futuros perfis
+
+As permissões serão controladas por papéis (RBAC).
+
+3.3 Administrador
+
+Responsável pela operação.
+
+Possui acesso completo conforme permissões.
+
+Pode:
+
+configurar o sistema;
+cadastrar imóveis;
+configurar políticas;
+acompanhar indicadores;
+acompanhar reservas;
+acompanhar faxinas;
+visualizar auditorias;
+alterar configurações.
+3.4 Faxineira
+
+Usuário responsável pela execução da limpeza.
+
+Pode:
+
+visualizar agenda;
+iniciar faxina;
+concluir faxina;
+anexar evidências;
+registrar ocorrências;
+solicitar materiais;
+informar atraso;
+solicitar ajuda.
+
+Não possui acesso administrativo.
+
+3.5 Proprietário
+
+Usuário que acompanha apenas seus imóveis.
+
+Pode visualizar:
+
+reservas;
+ocupação;
+indicadores;
+histórico;
+intercorrências.
+
+Não altera a operação.
+
+3.6 Imóvel
+
+Unidade disponível para hospedagem.
+
+Possui informações próprias.
+
+Exemplos:
+
+nome;
+código;
+condomínio;
+endereço;
+capacidade;
+regras;
+políticas;
+senha;
+instruções;
+integrações.
+
+Todo imóvel pertence exatamente a um tenant.
+
+3.7 Grupo de Imóveis
+
+Conjunto lógico de imóveis.
+
+Existe para facilitar configurações.
+
+Exemplos:
+
+Condomínio A
+
+Casas de Praia
+
+Lofts
+
+Apartamentos Luxo
+
+As configurações poderão ser aplicadas ao grupo.
+
+O imóvel poderá sobrescrever configurações específicas.
+
+3.8 Condomínio
+
+Representa um condomínio físico.
+
+Um condomínio poderá conter vários imóveis.
+
+Possui:
+
+portarias;
+regras;
+formulários;
+localização;
+contatos.
+3.9 Portaria
+
+Representa o controle de acesso do condomínio.
+
+Pode ser:
+
+humana;
+remota;
+digital.
+
+Receberá notificações automáticas.
+
+3.10 Reserva
+
+Representa uma hospedagem.
+
+Origina praticamente toda a operação.
+
+Uma reserva possui:
+
+hóspede;
+imóvel;
+datas;
+origem;
+status;
+eventos;
+comunicação;
+pagamentos relacionados.
+3.11 Hóspede
+
+Pessoa que ocupará o imóvel.
+
+Não possui login.
+
+Interage exclusivamente através do Agente IA no WhatsApp.
+
+Possui histórico completo.
+
+3.12 Faxina
+
+Representa uma atividade operacional.
+
+Sempre associada a um imóvel.
+
+Pode ser originada por:
+
+checkout;
+manutenção;
+inspeção;
+limpeza extraordinária.
+
+Possui:
+
+responsável;
+horário;
+status;
+evidências;
+observações.
+3.13 Intercorrência
+
+Qualquer evento inesperado.
+
+Exemplos:
+
+dano;
+furto;
+quebra;
+fumaça;
+animal;
+atraso;
+problema elétrico;
+problema hidráulico.
+
+Possui:
+
+categoria;
+gravidade;
+descrição;
+fotos;
+vídeos;
+responsável;
+data;
+resolução.
+3.14 Evento
+
+Tudo que acontece na plataforma.
+
+Exemplos:
+
+Nova reserva.
+
+Reserva cancelada.
+
+Check-in realizado.
+
+Faxina iniciada.
+
+Faxina concluída.
+
+Pagamento confirmado.
+
+PIX recebido.
+
+Mensagem recebida.
+
+Todo comportamento do sistema será dirigido por eventos.
+
+3.15 Workflow
+
+Representa um processo automatizado.
+
+Exemplo:
+
+Reserva criada
+
+↓
+
+Criar faxina
+
+↓
+
+Atualizar agenda
+
+↓
+
+Enviar mensagens
+
+↓
+
+Registrar auditoria
+
+↓
+
+Notificar envolvidos
+
+3.16 Política
+
+Representa uma regra de negócio configurável.
+
+Exemplos:
+
+Check-in.
+
+Checkout.
+
+Late checkout.
+
+Early check-in.
+
+Animais.
+
+Visitantes.
+
+Estacionamento.
+
+Cobranças.
+
+Toda política poderá variar conforme imóvel ou grupo.
+
+3.17 Configuração
+
+Representa qualquer parâmetro ajustável.
+
+Exemplos:
+
+Mensagens.
+
+Templates.
+
+Horários.
+
+Valores.
+
+Integrações.
+
+Notificações.
+
+Idioma.
+
+3.18 Template
+
+Modelo reutilizável.
+
+Pode ser utilizado para:
+
+mensagens;
+
+emails;
+
+WhatsApp;
+
+portaria;
+
+faxineiras;
+
+check-in;
+
+checkout.
+
+3.19 Integração
+
+Conexão com sistemas externos.
+
+Exemplos:
+
+Airbnb.
+
+Booking.
+
+Fechaduras.
+
+WhatsApp.
+
+PIX.
+
+Google Calendar.
+
+Outros.
+
+3.20 Agente IA
+
+Usuário sistêmico.
+
+Responsável por:
+
+atendimento;
+execução de workflows;
+consulta de políticas;
+consulta de configurações;
+registro de auditoria;
+encaminhamento para humanos.
+3.21 Auditoria
+
+Registro permanente de ações.
+
+Toda alteração importante deverá gerar auditoria.
+
+Nunca poderá ser removida.
+
+3.22 Notificação
+
+Comunicação enviada automaticamente.
+
+Pode possuir diferentes canais:
+
+WhatsApp.
+
+Push.
+
+Email.
+
+SMS.
+
+Interna.
+
+3.23 Dashboard
+
+Conjunto de indicadores.
+
+Cada perfil visualizará informações diferentes.
+
+4. Relacionamentos
+
+Tenant
+
+↓
+
+Usuários
+
+↓
+
+Papéis
+
+↓
+
+Permissões
+
+↓
+
+Imóveis
+
+↓
+
+Reservas
+
+↓
+
+Eventos
+
+↓
+
+Workflows
+
+↓
+
+Comunicações
+
+↓
+
+Histórico
+
+Cada reserva poderá gerar:
+
+faxina;
+mensagens;
+notificações;
+auditorias;
+eventos;
+pagamentos;
+solicitações.
+
+Cada imóvel poderá possuir:
+
+políticas;
+configurações;
+templates;
+integrações.
+
+Cada grupo poderá sobrescrever configurações.
+
+Cada imóvel poderá sobrescrever o grupo.
+
+Cada tenant poderá sobrescrever padrões globais.
+
+5. Hierarquia de Configuração
+
+Toda configuração seguirá a seguinte prioridade (da maior para a menor):
+
+Configuração específica do imóvel
+Configuração do grupo de imóveis
+Configuração padrão do tenant
+Configuração padrão da plataforma
+
+Essa hierarquia garante flexibilidade sem duplicação de configurações.
+
+6. Hierarquia de Decisão
+
+Quando um processo automatizado for executado, a ordem obrigatória será:
+
+Consultar políticas
+Consultar configurações
+Consultar estado atual
+Executar regras
+Registrar auditoria
+Executar notificações
+Atualizar indicadores
+
+Nenhuma decisão automatizada poderá ignorar esse fluxo.
+
+7. Modelo Mental da Plataforma
+
+O iHostPro deve ser entendido como um sistema operacional para hospedagens.
+
+Ele não executa tarefas isoladas; ele coordena processos.
+
+Fluxo conceitual:
+
+Eventos → Políticas → Workflows → IA → Usuários → Auditoria → Indicadores
+
+Todo comportamento da plataforma deve respeitar essa cadeia.
+
+8. Princípios do Domínio
+O domínio deve ser independente da tecnologia.
+Regras de negócio não devem depender da interface do usuário.
+O domínio deve ser capaz de evoluir sem quebrar integrações existentes.
+Conceitos devem permanecer estáveis ao longo do tempo.
+O domínio deve refletir a realidade operacional do negócio, e não limitações técnicas.
+9. Glossário Oficial
+
+Para evitar ambiguidades, os seguintes termos passam a ser oficiais:
+
+Termo	Definição
+Tenant	Cliente da plataforma
+Usuário	Pessoa autenticada
+Administrador	Responsável pela operação
+Faxineira	Responsável pela limpeza
+Proprietário	Acompanha apenas seus imóveis
+Hóspede	Cliente final que utiliza o imóvel
+Imóvel	Unidade locável
+Grupo	Agrupamento lógico de imóveis
+Reserva	Período de hospedagem
+Faxina	Atividade operacional de limpeza
+Evento	Fato ocorrido na plataforma
+Workflow	Processo automatizado
+Política	Regra de negócio configurável
+Configuração	Parâmetro ajustável pelo administrador
+Template	Modelo reutilizável de conteúdo
+Intercorrência	Problema registrado durante a operação
+Auditoria	Registro permanente de ações
+Agente IA	Operador inteligente da plataforma
+10. Critérios de Evolução
+
+Qualquer novo conceito introduzido na plataforma deverá:
+
+representar uma necessidade real do domínio;
+possuir definição clara;
+ter responsabilidade única;
+relacionar-se de forma consistente com os demais conceitos;
+evitar sobreposição de responsabilidades;
+ser documentado neste modelo antes de sua implementação.

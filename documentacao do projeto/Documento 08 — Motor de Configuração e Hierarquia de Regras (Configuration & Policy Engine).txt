@@ -1,0 +1,662 @@
+Documento 08 — Motor de Configuração e Políticas (Configuration & Policy Engine)
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento especifica como o iHostPro deverá permitir que praticamente todo o comportamento da plataforma seja configurado pelo administrador, sem necessidade de alteração de código.
+
+O sistema não deverá assumir que todos os administradores trabalham da mesma forma.
+
+O comportamento operacional deverá ser definido por:
+
+Configurações
+Políticas
+Templates
+Workflows
+Eventos
+Permissões
+
+O código deverá apenas interpretar essas configurações.
+
+2. Princípios
+
+O sistema deve nascer preparado para atender milhares de administradores.
+
+Cada administrador possui regras diferentes.
+
+Cada condomínio possui regras diferentes.
+
+Cada imóvel possui particularidades.
+
+Cada plataforma de reservas possui comportamentos próprios.
+
+Logo:
+
+Nenhuma regra de negócio que possa variar entre clientes deverá ser implementada diretamente no código.
+
+3. Hierarquia de Configuração
+
+Toda configuração deverá seguir a seguinte ordem de prioridade:
+
+Plataforma
+↓
+Tenant (Administrador)
+↓
+Grupo de Imóveis
+↓
+Imóvel
+
+Quanto mais específico o nível, maior a prioridade.
+
+Exemplo:
+
+Plataforma
+
+Late checkout = proibido
+
+↓
+
+Administrador
+
+Late checkout = permitido
+
+↓
+
+Grupo Praia
+
+Late checkout = permitido até 16h
+
+↓
+
+Apartamento 1204
+
+Late checkout = permitido até 18h
+
+Resultado:
+
+Apartamento 1204 utilizará 18h.
+
+4. Tipos de Configuração
+
+As configurações deverão ser classificadas por categoria.
+
+Categorias iniciais:
+
+Operacionais
+
+Financeiras
+
+Comunicação
+
+IA
+
+Reservas
+
+Faxinas
+
+Check-in
+
+Checkout
+
+Integrações
+
+Segurança
+
+Notificações
+
+Relatórios
+
+Interface
+
+5. Políticas
+
+Uma política representa uma regra de negócio.
+
+Exemplos:
+
+Pode fazer early check-in?
+
+Pode entrar com animais?
+
+Pode receber visitas?
+
+Pode fumar?
+
+Pode guardar bagagem?
+
+Pode solicitar toalhas extras?
+
+Pode permanecer após checkout?
+
+Existe cobrança?
+
+Qual valor?
+
+Qual horário?
+
+Qual prazo?
+
+A IA nunca responderá utilizando valores fixos.
+
+Sempre consultará as políticas.
+
+6. Estrutura de uma Política
+
+Toda política deverá possuir:
+
+Identificador
+
+Nome
+
+Descrição
+
+Categoria
+
+Escopo
+
+Valor
+
+Tipo
+
+Versão
+
+Status
+
+Prioridade
+
+Condições
+
+Ações
+
+Observações
+
+7. Escopos
+
+As políticas poderão existir em quatro níveis:
+
+GLOBAL
+
+TENANT
+
+GRUPO
+
+IMÓVEL
+
+O mecanismo de herança deverá ser automático.
+
+8. Tipos de Valor
+
+Uma política poderá assumir diferentes tipos:
+
+Booleano
+
+Texto
+
+Número
+
+Percentual
+
+Valor monetário
+
+Data
+
+Hora
+
+Lista
+
+Objeto
+
+Expressão
+
+9. Exemplos
+
+Early Check-in
+
+Permitido = Sim
+
+Horário mínimo = 10h
+
+Necessita faxina concluída = Sim
+
+Necessita formulário = Sim
+
+Necessita portaria avisada = Sim
+
+Necessita pagamento = Não
+
+Late Checkout
+
+Permitido = Sim
+
+Até = 16h
+
+Cobrança = 50% da diária
+
+Necessita PIX = Sim
+
+Bloquear calendário = Sim
+
+Atualizar faxina = Sim
+
+Animais
+
+Permitido = Não
+
+Estacionamento
+
+Permitido = Sim
+
+Necessita cadastro = Sim
+
+10. Configurações do Agente IA
+
+Todo comportamento da IA deverá ser configurável.
+
+Exemplos:
+
+Idioma padrão
+
+Temperatura
+
+Tom de voz
+
+Nível de formalidade
+
+Uso de emojis
+
+Comprimento máximo das respostas
+
+Horário de atendimento
+
+Mensagens automáticas
+
+Limites de autonomia
+
+Condições para escalar atendimento
+
+11. Autonomia da IA
+
+Cada decisão deverá possuir um nível.
+
+Nível 0
+
+Nunca permitido.
+
+Sempre encaminhar para humano.
+
+Nível 1
+
+Pode responder.
+
+Não pode executar ações.
+
+Nível 2
+
+Pode responder.
+
+Pode executar ações simples.
+
+Nível 3
+
+Pode tomar decisões previstas nas políticas.
+
+Nível 4
+
+Total autonomia dentro das regras configuradas.
+
+12. Políticas de Escalonamento
+
+Sempre escalar para humano quando:
+
+Solicitação explícita.
+
+Acidente.
+
+Polícia.
+
+Reembolso.
+
+Negociação financeira.
+
+Dano grave.
+
+Comportamento agressivo.
+
+Informação insuficiente.
+
+Falha de integração.
+
+Resposta com baixa confiança.
+
+Essas regras deverão ser configuráveis.
+
+13. Templates
+
+Os templates deverão ser totalmente editáveis.
+
+Nunca ficarão fixos no código.
+
+Exemplos:
+
+Boas-vindas
+
+Senha
+
+Wi-Fi
+
+Checkout
+
+Portaria
+
+Faxineira
+
+PIX
+
+Pagamento
+
+Avaliação
+
+14. Variáveis
+
+Os templates poderão utilizar variáveis.
+
+Exemplo:
+
+{{nome_hospede}}
+
+{{nome_imovel}}
+
+{{apartamento}}
+
+{{senha}}
+
+{{wifi}}
+
+{{horario_checkin}}
+
+{{horario_checkout}}
+
+{{pix}}
+
+{{porteiro}}
+
+{{link_formulario}}
+
+15. Workflows Configuráveis
+
+O administrador poderá configurar:
+
+Quando executar.
+
+Quem notificar.
+
+Qual template utilizar.
+
+Qual atraso aceitar.
+
+Quais condições validar.
+
+Qual política consultar.
+
+Quais eventos disparar.
+
+16. Eventos Configuráveis
+
+O administrador poderá definir ações para eventos.
+
+Exemplo:
+
+CleaningCompleted
+
+↓
+
+Enviar senha
+
+↓
+
+Avisar portaria
+
+↓
+
+Enviar mensagem de boas-vindas
+
+↓
+
+Atualizar dashboard
+
+Outro administrador poderá preferir:
+
+CleaningCompleted
+
+↓
+
+Não enviar senha
+
+↓
+
+Aguardar autorização manual
+
+O sistema deverá suportar ambos.
+
+17. Regras Condicionais
+
+Toda política poderá possuir condições.
+
+Exemplo:
+
+SE
+
+Reserva vier do Airbnb
+
+E
+
+Hospedagem superior a 7 dias
+
+ENTÃO
+
+Oferecer limpeza adicional.
+
+Outro exemplo:
+
+SE
+
+Há reserva no mesmo dia
+
+ENTÃO
+
+Não permitir late checkout.
+
+18. Configuração de Horários
+
+Todos os horários deverão ser configuráveis.
+
+Check-in
+
+Checkout
+
+Faxina
+
+Silêncio
+
+Atendimento
+
+Lembretes
+
+Mensagens
+
+Notificações
+
+19. Valores Financeiros
+
+Nenhum valor financeiro deverá existir no código.
+
+Exemplos:
+
+Valor da faxina.
+
+Valor do late checkout.
+
+Multas.
+
+Taxas.
+
+Descontos.
+
+PIX.
+
+Reembolsos.
+
+20. Integrações
+
+Cada integração deverá possuir suas próprias configurações.
+
+Airbnb
+
+WhatsApp
+
+PIX
+
+Booking
+
+Google Calendar
+
+Fechaduras
+
+Email
+
+SMS
+
+21. Configuração por Canal
+
+Uma mesma política poderá variar conforme o canal.
+
+Exemplo:
+
+WhatsApp
+
+↓
+
+Mensagem resumida.
+
+Email
+
+↓
+
+Mensagem detalhada.
+
+Aplicação
+
+↓
+
+Mensagem completa.
+
+22. Versionamento
+
+Toda alteração de configuração deverá gerar:
+
+Nova versão.
+
+Histórico.
+
+Data.
+
+Hora.
+
+Autor.
+
+Motivo.
+
+Nenhuma configuração deverá ser perdida.
+
+23. Auditoria
+
+Toda alteração deverá registrar:
+
+Quem alterou.
+
+Quando.
+
+Valor anterior.
+
+Valor novo.
+
+Origem.
+
+IP (quando aplicável).
+
+Sessão.
+
+24. Cache
+
+Como configurações serão consultadas constantemente, o sistema deverá utilizar cache inteligente.
+
+Entretanto:
+
+Sempre que uma configuração for alterada:
+
+Invalidar cache.
+
+Recarregar automaticamente.
+
+Sem necessidade de reiniciar a aplicação.
+
+25. Performance
+
+O carregamento das configurações deverá ser otimizado.
+
+Objetivos:
+
+Resolver todas as configurações efetivas de um imóvel em menos de 50 ms.
+
+Permitir milhares de consultas simultâneas.
+
+Evitar consultas repetidas ao banco de dados.
+
+26. Configuração Efetiva
+
+Internamente o sistema deverá calcular a "Configuração Efetiva" de cada imóvel, resultante da combinação da hierarquia:
+
+Plataforma → Tenant → Grupo → Imóvel.
+
+Essa configuração consolidada será utilizada pelos módulos internos, evitando que cada funcionalidade precise recalcular heranças e prioridades.
+
+27. Limites da Configuração
+
+O administrador poderá configurar o comportamento do sistema, mas não poderá alterar:
+
+a arquitetura da plataforma;
+a estrutura das máquinas de estados;
+os eventos de domínio;
+as entidades do sistema;
+as permissões básicas dos perfis;
+as garantias de segurança;
+os mecanismos de auditoria.
+
+Esses elementos fazem parte do núcleo da plataforma e garantem consistência entre todos os clientes.
+
+28. Validação
+
+Antes de salvar qualquer configuração, o sistema deverá validar:
+
+tipo do valor;
+formato;
+dependências;
+conflitos;
+ciclos;
+referências inválidas;
+impacto em políticas relacionadas.
+
+Alterações inválidas deverão ser rejeitadas com mensagens claras ao administrador.
+
+29. Objetivos do Motor de Configuração
+
+O motor deverá:
+
+eliminar a necessidade de alterações de código para mudanças operacionais;
+permitir personalização por cliente;
+garantir consistência e segurança;
+suportar evolução contínua da plataforma;
+servir como fonte única de verdade para todas as decisões do sistema e do Agente IA.

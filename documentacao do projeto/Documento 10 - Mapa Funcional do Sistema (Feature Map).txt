@@ -1,0 +1,639 @@
+Documento 10 - Mapa Funcional do Sistema (Feature Map)
+
+Versão: 1.0
+
+Status: Oficial
+
+Objetivo
+
+Este documento apresenta o mapa funcional completo do iHostPro.
+
+Ele não detalha todos os casos de uso, mas identifica todas as funcionalidades que deverão existir na plataforma, seus principais fluxos e suas relações.
+
+Durante o desenvolvimento cada item poderá ser refinado conforme novos aprendizados obtidos através dos testes e validações com usuários reais.
+
+Este documento servirá como backlog funcional oficial do projeto.
+
+1. Administração
+Objetivo
+
+Permitir ao administrador controlar toda a operação.
+
+Funcionalidades
+Login
+Logout
+Recuperação de senha
+Dashboard
+Configurações
+Perfil
+Alterar senha
+Alterar idioma
+Alterar tema
+Configurações gerais
+Histórico de atividades
+
+Fluxo principal
+
+Entrar
+
+↓
+
+Visualizar Dashboard
+
+↓
+
+Gerenciar Operação
+
+2. Gestão de Imóveis
+
+Funcionalidades
+
+Cadastrar imóvel
+Editar imóvel
+Arquivar imóvel
+Agrupar imóveis
+Alterar configurações
+Alterar políticas
+Configurar instruções
+Configurar senha
+Configurar check-in
+Configurar checkout
+Configurar integração
+
+Fluxo
+
+Cadastrar
+
+↓
+
+Configurar
+
+↓
+
+Ativar
+
+↓
+
+Receber reservas
+
+3. Condomínios
+
+Funcionalidades
+
+Cadastro
+Portarias
+Endereço
+Formulários
+Contatos
+Regras
+Observações
+
+Fluxo
+
+Cadastrar
+
+↓
+
+Associar imóveis
+
+↓
+
+Associar portarias
+
+4. Reservas
+
+Funcionalidades
+
+Importação automática
+Alteração
+Cancelamento
+Bloqueio manual
+Sincronização
+Histórico
+Timeline
+
+Fluxo
+
+Reserva criada
+
+↓
+
+Validar
+
+↓
+
+Atualizar agenda
+
+↓
+
+Criar faxina
+
+↓
+
+Criar workflows
+
+↓
+
+Monitorar hospedagem
+
+↓
+
+Encerrar
+
+5. Agenda
+
+Funcionalidades
+
+Agenda geral
+Agenda por imóvel
+Agenda por faxineira
+Agenda por período
+Agenda diária
+Agenda semanal
+Agenda mensal
+
+Fluxos
+
+Nova reserva
+
+↓
+
+Atualizar agenda
+
+Cancelamento
+
+↓
+
+Remover eventos
+
+Late checkout
+
+↓
+
+Atualizar horários
+
+6. Faxinas
+
+Funcionalidades
+
+Criar
+Designar
+Iniciar
+Concluir
+Registrar danos
+Registrar fotos
+Registrar vídeos
+Solicitar materiais
+Solicitar ajuda
+Informar atraso
+Reabrir faxina
+
+Fluxo
+
+Criada
+
+↓
+
+Designada
+
+↓
+
+Iniciada
+
+↓
+
+Inspecionada
+
+↓
+
+Concluída
+
+↓
+
+Liberar imóvel
+
+7. Portal da Faxineira
+
+Funcionalidades
+
+Login
+Agenda
+Navegação até imóvel
+Iniciar faxina
+Finalizar
+Upload de fotos
+Upload de vídeos
+Checklist
+Ocorrências
+Solicitação de materiais
+Solicitação de ajuda
+8. Hóspedes
+
+Funcionalidades
+
+Histórico
+Timeline
+Preferências
+Idioma
+Conversas
+Ocorrências
+Avaliações
+
+Fluxo
+
+Reserva
+
+↓
+
+Conversa
+
+↓
+
+Hospedagem
+
+↓
+
+Checkout
+
+↓
+
+Histórico
+
+9. Comunicação
+
+Funcionalidades
+
+WhatsApp
+Templates
+Histórico
+Timeline
+Pesquisa
+Mensagens automáticas
+Mensagens manuais
+
+Fluxo
+
+Evento
+
+↓
+
+Gerar mensagem
+
+↓
+
+Enviar
+
+↓
+
+Registrar
+
+10. Agente IA
+
+Funcionalidades
+
+Atendimento
+Tradução automática
+Consulta de políticas
+Consulta da agenda
+Consulta da reserva
+Consulta da faxina
+Consulta do imóvel
+Consulta das configurações
+Escalonamento humano
+Registro de auditoria
+
+Fluxo
+
+Mensagem recebida
+
+↓
+
+Entender intenção
+
+↓
+
+Consultar regras
+
+↓
+
+Responder
+
+↓
+
+Registrar histórico
+
+11. Check-in
+
+Fluxo principal
+
+Reserva confirmada
+
+↓
+
+Aguardar formulário
+
+↓
+
+Aguardar contato
+
+↓
+
+Enviar senha
+
+↓
+
+Enviar instruções
+
+↓
+
+Avisar portaria
+
+↓
+
+Liberar entrada
+
+12. Checkout
+
+Fluxo
+
+Receber solicitação
+
+↓
+
+Consultar agenda
+
+↓
+
+Validar regras
+
+↓
+
+Permitir ou negar
+
+↓
+
+Atualizar calendário
+
+↓
+
+Atualizar faxina
+
+13. Early Check-in
+
+Fluxo
+
+Solicitação
+
+↓
+
+Consultar política
+
+↓
+
+Consultar agenda
+
+↓
+
+Consultar faxina
+
+↓
+
+Tudo OK
+
+↓
+
+Autorizar
+
+↓
+
+Avisar portaria
+
+↓
+
+Enviar confirmação
+
+14. Late Checkout
+
+Fluxo
+
+Solicitação
+
+↓
+
+Consultar agenda
+
+↓
+
+Existe novo hóspede?
+
+↓
+
+Não
+
+↓
+
+Calcular cobrança
+
+↓
+
+Gerar PIX
+
+↓
+
+Confirmar pagamento
+
+↓
+
+Bloquear agenda
+
+↓
+
+Atualizar faxina
+
+↓
+
+Confirmar ao hóspede
+
+15. Portaria
+
+Funcionalidades
+
+Mensagens automáticas
+Lista de hóspedes do dia
+Atualizações
+Histórico
+
+Fluxo
+
+Check-in aprovado
+
+↓
+
+Enviar hóspedes autorizados
+
+16. Templates
+
+Funcionalidades
+
+Cadastro
+Variáveis
+Versões
+Testes
+Pré-visualização
+17. Configurações
+
+Funcionalidades
+
+Políticas
+Valores
+Horários
+IA
+Mensagens
+Integrações
+Financeiro
+18. Integrações
+
+Primeira versão
+
+Airbnb
+WhatsApp
+PIX
+
+Preparado para
+
+Booking
+VRBO
+Google Calendar
+Fechaduras
+PMS
+ERPs
+19. Dashboard
+
+Indicadores
+
+Reservas
+Check-ins
+Check-outs
+Faxinas
+Pendências
+Problemas
+Mensagens
+Ocupação
+Receita
+SLA
+20. Relatórios
+Faxinas
+Hóspedes
+Reservas
+Ocorrências
+Financeiro
+Mensagens
+IA
+Produtividade
+Auditoria
+21. Auditoria
+
+Registrar
+
+Login
+Alterações
+Mensagens
+Configurações
+Eventos
+IA
+Integrações
+Workflows
+22. Notificações
+
+Enviar para
+
+Administrador
+
+Faxineira
+
+Proprietário
+
+Sistema
+
+Portaria
+
+Hóspede
+
+23. Workflows
+
+Automações previstas
+
+Nova reserva
+Alteração
+Cancelamento
+Faxina criada
+Faxina concluída
+Check-in
+Checkout
+Early Check-in
+Late Checkout
+PIX recebido
+Dano registrado
+Pedido de ajuda
+Intercorrência
+Falha de integração
+24. Funcionalidades Futuras
+Aplicativo nativo
+Integração com fechaduras inteligentes
+Reconhecimento de imagens para inspeção
+OCR de documentos
+Voice Agent
+Assistente por telefone
+IA para previsão de ocupação
+IA para precificação dinâmica
+Gestão financeira
+Gestão de manutenção
+Marketplace de faxineiras
+Portal do proprietário
+Portal do hóspede (opcional)
+API pública
+Webhooks
+Multiempresa
+Multiidioma completo
+Multi-moeda
+25. Fluxo Macro da Plataforma
+Reserva criada
+        │
+        ▼
+Atualizar agenda
+        │
+        ▼
+Criar faxina
+        │
+        ▼
+Notificar faxineira
+        │
+        ▼
+Aguardar check-in
+        │
+        ▼
+IA atende hóspede
+        │
+        ▼
+Enviar senha
+        │
+        ▼
+Avisar portaria
+        │
+        ▼
+Hospedagem
+        │
+        ▼
+Checkout
+        │
+        ▼
+Nova faxina
+        │
+        ▼
+Inspeção
+        │
+        ▼
+Registrar intercorrências
+        │
+        ▼
+Encerrar reserva

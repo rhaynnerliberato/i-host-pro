@@ -1,0 +1,115 @@
+name: ihostpro
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: ihostpro-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ihostpro
+      POSTGRES_PASSWORD: ihostpro_dev
+      POSTGRES_DB: ihostpro
+    ports:
+      - "5432:5432"
+    volumes:
+      - ihostpro-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ihostpro"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: ihostpro-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: ihostpro-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ihostpro
+      RABBITMQ_DEFAULT_PASS: ihostpro_dev
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    # Tag fixa (última versão oficialmente publicada pelo projeto — ver
+    # relatório da tarefa: o MinIO Community Edition foi arquivado e não
+    # recebe mais publicações no Docker Hub desde set/2025).
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: ihostpro-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ihostpro
+      MINIO_ROOT_PASSWORD: ihostpro_dev
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # Console
+    volumes:
+      - ihostpro-minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.117.0
+    container_name: ihostpro-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC (recebe telemetria das aplicações)
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Métricas expostas em formato Prometheus (scrape)
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: ihostpro-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ihostpro-prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: ihostpro-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ihostpro
+      GF_SECURITY_ADMIN_PASSWORD: ihostpro_dev
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ihostpro-grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  ihostpro-postgres-data:
+  ihostpro-minio-data:
+  ihostpro-prometheus-data:
+  ihostpro-grafana-data:

@@ -1,0 +1,452 @@
+Documento 21 - DevOps, Operação e Estratégia de Deploy
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define as diretrizes de DevOps, implantação (Deploy), operação, monitorização e evolução contínua da plataforma iHostPro.
+
+O objetivo é garantir que a plataforma possa evoluir continuamente com segurança, previsibilidade, baixo risco e alta disponibilidade.
+
+O Claude Code deverá escolher as tecnologias mais adequadas para implementar esta estratégia.
+
+2. Princípios
+
+Toda a operação deverá seguir os princípios de:
+
+Automação
+Reprodutibilidade
+Observabilidade
+Segurança
+Escalabilidade
+Alta disponibilidade
+Baixo tempo de recuperação
+Deploy frequente
+Rollback seguro
+3. Ambientes
+
+A plataforma deverá possuir ambientes independentes.
+
+No mínimo:
+
+Desenvolvimento
+
+↓
+
+Homologação
+
+↓
+
+Produção
+
+No futuro poderão existir:
+
+Sandbox
+
+Preview
+
+QA
+
+Treinamento
+
+Cada ambiente deverá possuir configurações próprias.
+
+4. Infraestrutura como Código
+
+Toda a infraestrutura deverá ser reproduzível.
+
+Nenhum recurso crítico deverá depender de configuração manual.
+
+A infraestrutura deverá poder ser recriada integralmente em caso de necessidade.
+
+5. Configurações
+
+Toda configuração deverá ficar fora do código.
+
+Exemplos:
+
+credenciais
+
+tokens
+
+URLs
+
+segredos
+
+chaves
+
+timeouts
+
+parâmetros
+
+limites
+
+As configurações deverão ser específicas por ambiente.
+
+6. Pipeline de CI/CD
+
+Toda alteração deverá passar por uma pipeline automatizada.
+
+Fluxo sugerido:
+
+Commit
+
+↓
+
+Build
+
+↓
+
+Testes
+
+↓
+
+Análise Estática
+
+↓
+
+Empacotamento
+
+↓
+
+Deploy Homologação
+
+↓
+
+Homologação
+
+↓
+
+Deploy Produção
+
+Nenhum deploy manual deverá ser necessário para a operação normal da plataforma.
+
+7. Build
+
+Todo build deverá ser reproduzível.
+
+Não depender de configurações locais do desenvolvedor.
+
+8. Testes Automáticos
+
+A pipeline deverá executar automaticamente:
+
+testes unitários;
+testes de integração;
+testes E2E (quando aplicável);
+validações de qualidade;
+validações de segurança.
+
+Falhas deverão interromper a pipeline.
+
+9. Análise Estática
+
+O código deverá passar por ferramentas de análise estática.
+
+Verificar:
+
+qualidade;
+duplicação;
+complexidade;
+vulnerabilidades;
+boas práticas.
+10. Versionamento
+
+Toda versão deverá possuir identificação única.
+
+Cada release deverá possuir:
+
+versão
+
+data
+
+autor
+
+mudanças
+
+migrações
+
+compatibilidade
+
+11. Estratégia de Deploy
+
+O deploy deverá minimizar indisponibilidades.
+
+Sempre que possível utilizar estratégias como:
+
+Rolling Update
+
+Blue/Green
+
+Canary
+
+A escolha da melhor estratégia ficará a cargo do Claude Code.
+
+12. Rollback
+
+Todo deploy deverá permitir rollback rápido.
+
+Caso ocorra falha crítica:
+
+↓
+
+Interromper deploy
+
+↓
+
+Restaurar versão anterior
+
+↓
+
+Manter integridade dos dados
+
+13. Banco de Dados
+
+Migrações deverão ser automatizadas.
+
+Sempre que tecnicamente possível:
+
+versionadas;
+reversíveis;
+testadas previamente.
+14. Armazenamento
+
+Arquivos deverão permanecer independentes da aplicação.
+
+Atualizações da aplicação nunca deverão comprometer os arquivos enviados pelos utilizadores.
+
+15. Logs
+
+Todos os serviços deverão produzir logs estruturados.
+
+Características:
+
+pesquisáveis;
+correlacionáveis;
+filtráveis;
+centralizados.
+16. Monitorização
+
+Toda a plataforma deverá disponibilizar métricas.
+
+Exemplos:
+
+CPU
+
+Memória
+
+Disco
+
+Tempo de resposta
+
+Filas
+
+Integrações
+
+IA
+
+Banco de dados
+
+17. Alertas
+
+O sistema deverá gerar alertas para situações relevantes.
+
+Exemplos:
+
+Alta utilização
+
+Falha de integração
+
+Fila congestionada
+
+Erro recorrente
+
+Workflow parado
+
+Backup falhou
+
+Consumo elevado da IA
+
+18. Health Checks
+
+Cada serviço deverá disponibilizar endpoints de verificação de saúde.
+
+Estados mínimos:
+
+Healthy
+
+Degraded
+
+Unavailable
+
+19. Observabilidade
+
+Toda requisição deverá poder ser rastreada de ponta a ponta.
+
+O sistema deverá permitir identificar rapidamente:
+
+onde ocorreu uma falha;
+qual serviço respondeu;
+qual integração foi utilizada;
+quanto tempo foi consumido.
+20. Escalabilidade
+
+A infraestrutura deverá permitir crescimento gradual.
+
+Exemplos:
+
+mais administradores
+
+mais imóveis
+
+mais reservas
+
+mais mensagens
+
+mais workflows
+
+mais integrações
+
+mais chamadas para IA
+
+O aumento de carga não deverá exigir alterações arquiteturais.
+
+21. Segurança Operacional
+
+Toda operação deverá considerar:
+
+segregação de ambientes
+
+princípio do menor privilégio
+
+rotação de credenciais
+
+proteção de segredos
+
+auditoria
+
+22. Gestão de Segredos
+
+Segredos nunca deverão:
+
+estar no código
+
+estar em logs
+
+ser enviados para o cliente
+
+ser armazenados em texto plano
+
+23. Backups
+
+Backups deverão ser:
+
+automáticos
+
+monitorados
+
+testados periodicamente
+
+armazenados com redundância
+
+24. Recuperação
+
+A plataforma deverá possuir procedimentos para:
+
+falha de aplicação
+
+falha de banco
+
+falha de integração
+
+falha de IA
+
+falha de armazenamento
+
+25. Atualizações
+
+Atualizações da plataforma deverão preservar:
+
+dados
+
+configurações
+
+workflows
+
+políticas
+
+histórico
+
+auditoria
+
+26. Operação Multi-Tenant
+
+Toda operação deverá respeitar o isolamento entre tenants.
+
+Atualizações e incidentes de um tenant não deverão afetar os demais.
+
+27. Custos Operacionais
+
+O Claude Code deverá considerar soluções equilibradas entre:
+
+performance
+
+confiabilidade
+
+custo
+
+simplicidade operacional
+
+Evitar tecnologias excessivamente complexas para o estágio inicial do produto.
+
+28. Documentação Operacional
+
+A plataforma deverá possuir documentação para:
+
+instalação
+
+configuração
+
+deploy
+
+rollback
+
+backup
+
+recuperação
+
+monitorização
+
+resolução de incidentes
+
+29. Continuidade do Negócio
+
+A arquitetura deverá permitir continuidade da operação mesmo diante de falhas parciais.
+
+Quando possível:
+
+degradação controlada;
+reprocessamento automático;
+recuperação transparente ao utilizador.
+30. Evolução
+
+Novos serviços poderão ser adicionados futuramente sem necessidade de reestruturação completa da infraestrutura.
+
+A arquitetura deverá favorecer evolução incremental.
+
+31. Critérios de Qualidade
+
+A operação será considerada adequada quando:
+
+os deploys forem automatizados e previsíveis;
+as falhas puderem ser rapidamente identificadas;
+existir capacidade de rollback;
+a plataforma suportar crescimento contínuo;
+os ambientes forem reproduzíveis;
+a observabilidade permitir diagnóstico eficiente;
+a operação exigir o mínimo possível de intervenções manuais.
+32. Observação para o Claude Code
+
+A estratégia de DevOps do iHostPro deverá privilegiar simplicidade operacional, automação e evolução contínua. A infraestrutura não deverá ser mais complexa do que o necessário para um SaaS em crescimento, mas deverá nascer preparada para escalar de forma gradual. Todas as decisões relacionadas à infraestrutura, pipeline, monitorização, deploy e operação deverão buscar o melhor equilíbrio entre confiabilidade, custo, facilidade de manutenção e capacidade de expansão futura, evitando dependências desnecessárias de fornecedores específicos e preservando a portabilidade da plataforma.

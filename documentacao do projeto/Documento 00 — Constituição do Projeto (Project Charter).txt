@@ -1,0 +1,330 @@
+iHostPro
+Documento 00 — Constituição do Projeto (Project Charter)
+
+Versão: 1.0
+
+Status: Oficial
+
+Nome do Produto: iHostPro
+
+Tipo: Plataforma SaaS Multi-Tenant para Gestão Inteligente de Hospedagens de Curta Temporada
+
+1. Objetivo deste Documento
+
+Este documento estabelece a visão estratégica, os princípios fundamentais, os limites arquiteturais e as diretrizes obrigatórias do projeto iHostPro.
+
+Ele é a principal referência para todas as decisões de negócio, arquitetura, desenvolvimento, design, experiência do usuário, integração, inteligência artificial e evolução do produto.
+
+Caso qualquer documento futuro entre em conflito com este, este documento prevalece.
+
+2. Sobre o Produto
+
+O iHostPro é uma plataforma SaaS voltada para a automação inteligente da operação de hospedagens de curta temporada.
+
+Seu objetivo é eliminar atividades operacionais repetitivas realizadas manualmente por anfitriões e administradores de imóveis, permitindo que grande parte da operação diária seja executada automaticamente por um agente de inteligência artificial e por mecanismos internos de automação.
+
+O sistema deve centralizar informações, reduzir erros humanos, aumentar a produtividade e proporcionar uma experiência superior tanto para administradores quanto para hóspedes.
+
+O iHostPro não deve ser concebido como um sistema específico para um único cliente. Desde sua primeira versão, deve ser tratado como um produto comercial, preparado para atender diferentes modelos de operação, diferentes perfis de administradores e diferentes mercados.
+
+3. Missão
+
+Automatizar a operação completa da gestão de hospedagens de curta temporada, oferecendo uma plataforma segura, configurável, escalável e inteligente, capaz de reduzir drasticamente o trabalho manual sem comprometer a qualidade do atendimento ao hóspede.
+
+4. Visão
+
+Ser a principal plataforma operacional para gestão inteligente de hospedagens de curta temporada, tornando-se referência em automação, inteligência artificial e eficiência operacional.
+
+5. Propósito
+
+Permitir que administradores ampliem sua operação sem aumentar proporcionalmente sua carga de trabalho, utilizando automação e inteligência artificial para executar processos operacionais de forma segura, previsível e auditável.
+
+6. O Problema que o Produto Resolve
+
+A operação diária de hospedagens de curta temporada é altamente dependente de processos manuais e distribuída entre diversos aplicativos.
+
+Administradores normalmente precisam:
+
+acompanhar reservas em diferentes plataformas;
+atualizar agendas de limpeza manualmente;
+coordenar equipes de limpeza;
+responder hóspedes durante todo o dia;
+enviar instruções de check-in;
+enviar senhas de acesso;
+avisar portarias;
+controlar pagamentos;
+registrar danos;
+resolver intercorrências;
+responder dúvidas repetitivas;
+manter histórico operacional.
+
+Essa rotina consome muitas horas diariamente, aumenta o risco de falhas humanas e limita a capacidade de crescimento do negócio.
+
+O iHostPro existe para eliminar essa dependência operacional.
+
+7. O Produto Não É
+
+O iHostPro NÃO é:
+
+uma plataforma de reservas;
+um concorrente do Airbnb;
+um chatbot isolado;
+um CRM;
+um ERP genérico;
+um framework de automação;
+um sistema desenvolvido exclusivamente para um único administrador.
+
+Ele é uma plataforma operacional especializada em hospedagens de curta temporada.
+
+8. Público-Alvo
+
+A plataforma deverá atender:
+
+anfitriões individuais;
+administradores profissionais;
+empresas administradoras;
+imobiliárias;
+gestores de condomínios;
+redes de hospedagem;
+proprietários que acompanham seus imóveis;
+equipes de limpeza;
+futuramente parceiros e prestadores de serviços.
+9. Objetivos Estratégicos
+
+O produto deverá:
+
+reduzir o trabalho manual;
+reduzir erros operacionais;
+centralizar informações;
+automatizar processos;
+padronizar operações;
+aumentar a produtividade;
+melhorar a experiência do hóspede;
+aumentar a capacidade operacional do administrador;
+registrar auditoria completa;
+permitir expansão internacional.
+10. Filosofia do Produto
+
+O iHostPro deverá agir como um Sistema Operacional para Hospedagens.
+
+O administrador deixa de executar tarefas repetitivas e passa a supervisionar uma operação automatizada.
+
+Sempre que possível:
+
+Evento → Sistema → Automação → Resultado.
+
+Nunca:
+
+Evento → Administrador → WhatsApp → Planilha → Agenda → Sistema.
+
+11. Princípios Arquiteturais Inegociáveis
+11.1 Plataforma SaaS
+
+O produto deve nascer preparado para múltiplos clientes (multi-tenant).
+
+Jamais assumir:
+
+um único administrador;
+um único condomínio;
+um único imóvel;
+uma única cidade;
+um único país;
+um único idioma;
+uma única plataforma de reservas.
+11.2 Configuração acima de Código
+
+Toda regra que possa variar entre administradores deverá ser configurável.
+
+Exemplos:
+
+mensagens;
+horários;
+políticas de check-in;
+políticas de check-out;
+cobrança de late checkout;
+fluxo operacional;
+comportamento da IA;
+integrações habilitadas;
+notificações.
+
+Não deverão existir regras de negócio específicas codificadas quando puderem ser parametrizadas.
+
+11.3 Simplicidade acima de Flexibilidade Excessiva
+
+O sistema NÃO deve se transformar em um framework.
+
+Nem toda lógica deverá ser configurável.
+
+Deverão ser configuráveis apenas aspectos que variam naturalmente entre administradores.
+
+Aspectos estruturais da plataforma permanecerão implementados nativamente.
+
+11.4 Event Driven
+
+Toda a operação deverá ser baseada em eventos.
+
+Eventos deverão disparar processos automáticos.
+
+Evitar verificações periódicas quando um evento puder iniciar o fluxo.
+
+11.5 IA como Operadora
+
+A Inteligência Artificial não é um chatbot.
+
+Ela deverá atuar como uma operadora virtual.
+
+Ela deverá:
+
+consultar configurações;
+consultar políticas;
+executar processos;
+responder hóspedes;
+registrar auditoria;
+acionar humanos apenas quando necessário.
+11.6 Fonte Única de Verdade
+
+Toda informação operacional pertence ao iHostPro.
+
+Integrações externas apenas sincronizam dados.
+
+Nenhuma regra de negócio poderá depender exclusivamente de um sistema externo.
+
+11.7 Auditoria Total
+
+Toda decisão importante deverá possuir rastreabilidade.
+
+Registrar:
+
+quem;
+quando;
+motivo;
+contexto;
+resultado.
+
+Nada importante poderá acontecer sem histórico.
+
+11.8 Escalabilidade
+
+Nenhuma decisão arquitetural poderá limitar o crescimento futuro da plataforma.
+
+O sistema deverá suportar crescimento contínuo sem necessidade de reescrita da arquitetura.
+
+11.9 Segurança por Padrão
+
+Toda funcionalidade deverá ser projetada considerando segurança desde sua concepção.
+
+Nunca adicionar segurança posteriormente.
+
+12. Filosofia de Desenvolvimento
+
+Durante todo o desenvolvimento deverão ser priorizados:
+
+simplicidade;
+baixo acoplamento;
+alta coesão;
+modularidade;
+escalabilidade;
+legibilidade;
+manutenção facilitada;
+testes automatizados;
+documentação.
+13. Filosofia da Experiência do Usuário
+
+O sistema deverá ser intuitivo.
+
+O administrador não deverá precisar de treinamento técnico.
+
+Sempre priorizar:
+
+poucos cliques;
+telas limpas;
+informações objetivas;
+navegação consistente;
+feedback imediato;
+design moderno.
+14. Filosofia da Inteligência Artificial
+
+A IA deverá:
+
+responder naturalmente;
+agir como humana;
+nunca inventar informações;
+consultar sempre as configurações;
+seguir políticas configuradas;
+explicar quando não souber;
+escalar para um humano quando necessário;
+registrar todas as decisões.
+15. Configurabilidade
+
+A plataforma deverá permitir personalização sem desenvolvimento.
+
+Exemplos:
+
+políticas operacionais;
+templates;
+mensagens;
+fluxos;
+automações;
+notificações;
+comportamento do agente;
+horários;
+integrações;
+grupos de imóveis.
+16. O que NÃO será Configurável
+
+Para evitar transformar o sistema em um framework genérico, permanecerão implementados nativamente:
+
+autenticação;
+autorização;
+auditoria;
+multi-tenant;
+gestão de usuários;
+gerenciamento de eventos;
+gerenciamento de estados;
+segurança;
+estrutura básica dos módulos;
+arquitetura da aplicação;
+comunicação entre serviços;
+persistência;
+versionamento;
+monitoramento;
+observabilidade.
+
+Esses componentes poderão evoluir apenas por desenvolvimento.
+
+17. Critérios de Qualidade
+
+Todo desenvolvimento deverá priorizar:
+
+segurança;
+desempenho;
+escalabilidade;
+manutenibilidade;
+extensibilidade;
+usabilidade;
+confiabilidade;
+testabilidade;
+observabilidade.
+18. Critérios de Sucesso
+
+O projeto será considerado bem-sucedido quando:
+
+um administrador conseguir gerenciar um número significativamente maior de imóveis sem aumento proporcional do trabalho operacional;
+a maioria das tarefas repetitivas for executada automaticamente;
+o hóspede receber atendimento rápido, natural e consistente;
+toda a operação puder ser auditada;
+novos administradores puderem configurar suas operações sem necessidade de desenvolvimento;
+a plataforma estiver preparada para crescer continuamente em número de clientes, imóveis, reservas e integrações.
+19. Declaração Final
+
+O iHostPro não é apenas um software de gestão. Ele é uma plataforma operacional inteligente para hospedagens de curta temporada, construída para automatizar processos, reduzir dependência humana e permitir crescimento sustentável.
+
+Toda decisão de arquitetura, desenvolvimento, experiência do usuário e inteligência artificial deverá preservar essa visão.
+
+Quando houver dúvida entre duas soluções tecnicamente válidas, deverá ser escolhida aquela que:
+
+respeite os princípios desta Constituição;
+simplifique a operação do administrador;
+aumente a capacidade de evolução da plataforma;
+preserve a segurança e a escalabilidade;
+reduza a necessidade de intervenção humana sem comprometer a qualidade do serviço.

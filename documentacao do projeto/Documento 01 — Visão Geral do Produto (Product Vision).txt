@@ -1,0 +1,424 @@
+iHostPro
+Documento 01
+Product Vision
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo do Documento
+
+Este documento apresenta a visão estratégica do iHostPro.
+
+Seu objetivo é estabelecer uma compreensão clara sobre:
+
+qual problema o produto resolve;
+para quem ele foi criado;
+qual transformação ele proporciona;
+quais princípios orientam seu desenvolvimento;
+quais objetivos de negócio devem ser perseguidos durante toda a evolução da plataforma.
+
+Este documento não define arquitetura, tecnologia ou detalhes de implementação.
+
+Toda decisão técnica deverá respeitar a visão apresentada neste documento.
+
+2. Visão Geral
+
+O iHostPro é uma plataforma SaaS multi-tenant destinada à automação inteligente da gestão operacional de hospedagens de curta temporada.
+
+O sistema foi concebido para eliminar tarefas repetitivas, reduzir falhas humanas, centralizar informações e automatizar processos operacionais por meio de inteligência artificial, workflows configuráveis e arquitetura orientada a eventos.
+
+O produto deverá funcionar como o centro operacional da hospedagem, integrando pessoas, imóveis, reservas, comunicação, limpeza e automações em um único ambiente.
+
+Não é apenas um sistema de gestão.
+
+É uma plataforma operacional inteligente.
+
+3. Contexto
+
+O mercado de aluguel por temporada cresce continuamente.
+
+Ao mesmo tempo, cresce também a complexidade da operação.
+
+Administradores precisam lidar diariamente com:
+
+reservas;
+alterações;
+cancelamentos;
+limpeza;
+check-in;
+check-out;
+comunicação com hóspedes;
+comunicação com portarias;
+equipes de limpeza;
+manutenção;
+pagamentos;
+incidentes;
+avaliações.
+
+Grande parte dessas atividades ainda é realizada manualmente.
+
+Isso gera:
+
+desperdício de tempo;
+alto risco operacional;
+erros humanos;
+baixa escalabilidade;
+sobrecarga do administrador.
+4. Problema Central
+
+O maior problema enfrentado pelos administradores não é administrar imóveis.
+
+O problema é administrar processos.
+
+Cada reserva inicia uma cadeia de atividades dependentes entre si.
+
+Por exemplo:
+
+Nova reserva
+
+↓
+
+Atualizar agenda
+
+↓
+
+Criar faxina
+
+↓
+
+Avisar faxineira
+
+↓
+
+Enviar formulário
+
+↓
+
+Aguardar contato
+
+↓
+
+Enviar senha
+
+↓
+
+Avisar portaria
+
+↓
+
+Responder dúvidas
+
+↓
+
+Acompanhar hospedagem
+
+↓
+
+Realizar checkout
+
+↓
+
+Registrar intercorrências
+
+↓
+
+Liberar nova reserva
+
+Hoje, o administrador atua como o elo entre todos esses processos.
+
+Isso impede que sua operação escale.
+
+5. Propósito do Produto
+
+Eliminar a necessidade de coordenação manual da operação diária da hospedagem.
+
+O administrador deixa de executar tarefas operacionais e passa a supervisionar processos automatizados.
+
+6. Transformação Esperada
+
+Antes do iHostPro:
+
+Administrador
+
+↓
+
+Airbnb
+
+↓
+
+WhatsApp
+
+↓
+
+Agenda
+
+↓
+
+Faxineiras
+
+↓
+
+Portaria
+
+↓
+
+Hóspedes
+
+↓
+
+Planilhas
+
+↓
+
+Lembretes
+
+↓
+
+Anotações
+
+Depois do iHostPro:
+
+Administrador
+
+↓
+
+iHostPro
+
+↓
+
+IA
+
+↓
+
+Automação
+
+↓
+
+Operação
+
+7. Objetivos Estratégicos
+
+O iHostPro deverá:
+
+reduzir drasticamente o trabalho operacional;
+diminuir erros humanos;
+aumentar a produtividade;
+melhorar a experiência do hóspede;
+permitir expansão do número de imóveis;
+reduzir dependência do administrador;
+aumentar rastreabilidade;
+centralizar toda operação.
+8. Público-Alvo
+
+O produto foi concebido para atender:
+
+Anfitriões Individuais
+
+Administram poucos imóveis.
+
+Desejam economizar tempo.
+
+Administradores Profissionais
+
+Administram dezenas ou centenas de imóveis.
+
+Precisam de automação.
+
+Empresas de Administração
+
+Necessitam de múltiplos usuários.
+
+Controle operacional.
+
+Escalabilidade.
+
+Imobiliárias
+
+Operam aluguel de temporada.
+
+Precisam padronizar processos.
+
+Redes de Hospedagem
+
+Operações distribuídas.
+
+Múltiplos condomínios.
+
+Múltiplas equipes.
+
+9. Personas
+Administrador
+
+Responsável pela operação.
+
+Objetivos:
+
+controlar imóveis;
+acompanhar reservas;
+reduzir trabalho manual;
+acompanhar indicadores.
+Faxineira
+
+Responsável pela limpeza e inspeção.
+
+Objetivos:
+
+visualizar agenda;
+iniciar limpeza;
+concluir limpeza;
+registrar problemas;
+anexar evidências.
+Hóspede
+
+Não utiliza o sistema diretamente.
+
+Interage exclusivamente através do Agente IA no WhatsApp.
+
+Proprietário
+
+Acompanha apenas seus imóveis.
+
+Não interfere na operação.
+
+Agente IA
+
+Usuário sistêmico.
+
+Executa processos.
+
+Consulta regras.
+
+Toma decisões.
+
+Escala humanos quando necessário.
+
+10. Diferenciais Competitivos
+
+O iHostPro será baseado em cinco pilares.
+
+Automação
+
+Eliminar tarefas repetitivas.
+
+Inteligência Artificial
+
+Executar atendimento e processos.
+
+Configuração
+
+Cada administrador poderá adaptar o sistema sem programação.
+
+Auditoria
+
+Toda decisão ficará registrada.
+
+Escalabilidade
+
+O produto crescerá sem necessidade de reestruturação.
+
+11. O Produto Não Deve Ser
+
+Não deve ser:
+
+apenas um chatbot;
+apenas um calendário;
+apenas um CRM;
+apenas um sistema de reservas;
+apenas um gestor de tarefas.
+12. Princípios do Produto
+
+Toda evolução deverá seguir os princípios abaixo.
+
+Simplicidade
+
+O sistema deverá ser simples para o usuário.
+
+Inteligência
+
+O sistema deverá antecipar necessidades.
+
+Segurança
+
+Nenhuma automação poderá comprometer a operação.
+
+Transparência
+
+Toda decisão deverá ser explicável.
+
+Configurabilidade
+
+Cada administrador possui regras próprias.
+
+O sistema deverá adaptar-se ao administrador.
+
+Nunca o contrário.
+
+Escalabilidade
+
+Toda funcionalidade deverá considerar milhares de clientes.
+
+Modularidade
+
+Novos módulos poderão ser adicionados sem alterar módulos existentes.
+
+Evolução Contínua
+
+O produto deverá evoluir continuamente sem necessidade de reescrita.
+
+13. Visão de Longo Prazo
+
+O iHostPro deverá tornar-se o centro operacional completo da hospedagem.
+
+No futuro deverá integrar:
+
+plataformas de reservas;
+fechaduras inteligentes;
+portarias digitais;
+gateways de pagamento;
+sistemas fiscais;
+sistemas financeiros;
+IoT;
+manutenção;
+controle patrimonial;
+fornecedores;
+BI;
+IA multimodal.
+14. Indicadores de Sucesso
+
+O sucesso do produto será medido por indicadores como:
+
+redução do tempo gasto em tarefas operacionais;
+redução de erros de operação;
+aumento da quantidade de imóveis administrados por usuário;
+tempo médio de resposta ao hóspede;
+satisfação dos hóspedes;
+redução de esquecimentos operacionais;
+redução de conflitos de agenda;
+automações executadas sem intervenção humana;
+disponibilidade da plataforma;
+tempo médio para configuração de um novo imóvel.
+15. Visão do MVP
+
+A primeira versão do iHostPro deverá resolver integralmente as principais dores identificadas durante o levantamento:
+
+sincronização de reservas provenientes do Airbnb;
+geração e atualização automática da agenda de faxinas;
+acompanhamento do ciclo de vida das faxinas;
+comunicação estruturada com as faxineiras;
+atendimento automatizado aos hóspedes via WhatsApp;
+envio automático de instruções de check-in;
+envio seguro da senha de acesso apenas no momento permitido;
+comunicação automática com a portaria;
+tratamento automatizado de solicitações recorrentes, como early check-in e late check-out conforme políticas configuradas;
+registro de intercorrências com fotos, vídeos e observações;
+histórico completo de reservas, hóspedes, limpezas e comunicações;
+painel operacional para acompanhamento diário da operação.
+
+Todo o restante deverá ser projetado desde o início para futura expansão, mas sem comprometer a simplicidade e a rapidez de entrega do MVP.
+
+16. Declaração Final
+
+O iHostPro nasce com a missão de transformar a forma como hospedagens de curta temporada são administradas.
+
+Em vez de um conjunto de ferramentas isoladas, o produto propõe uma plataforma operacional inteligente, onde processos, pessoas, integrações e inteligência artificial trabalham de forma coordenada para reduzir o trabalho manual, aumentar a confiabilidade da operação e permitir que administradores escalem seus negócios com segurança.

@@ -1,0 +1,421 @@
+Documento 15 - Requisitos Não Funcionais
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define os requisitos não funcionais do iHostPro.
+
+Os requisitos não funcionais estabelecem como o sistema deverá se comportar, independentemente das funcionalidades implementadas.
+
+São considerados obrigatórios para toda a plataforma.
+
+2. Objetivos Gerais
+
+O iHostPro deverá ser:
+
+rápido;
+seguro;
+escalável;
+resiliente;
+altamente disponível;
+observável;
+fácil de manter;
+preparado para crescimento contínuo.
+3. Performance
+
+A plataforma deverá responder rapidamente às operações do utilizador.
+
+Objetivos gerais:
+
+interface fluida;
+carregamento progressivo;
+baixa latência;
+consultas otimizadas;
+operações pesadas executadas em segundo plano.
+
+Operações que possam demorar mais do que alguns segundos deverão ser assíncronas.
+
+4. Escalabilidade
+
+A plataforma deverá crescer sem necessidade de reestruturação arquitetural.
+
+Deverá suportar crescimento em:
+
+número de administradores;
+número de imóveis;
+número de reservas;
+número de faxineiras;
+número de mensagens;
+número de conversas com IA;
+número de integrações.
+
+O crescimento deverá ocorrer preferencialmente através de escalabilidade horizontal.
+
+5. Disponibilidade
+
+O sistema deverá permanecer operacional continuamente.
+
+Objetivos:
+
+minimizar indisponibilidades;
+permitir manutenção com impacto reduzido;
+suportar recuperação rápida após falhas.
+6. Confiabilidade
+
+O sistema nunca deverá perder dados confirmados.
+
+Sempre que ocorrer uma falha inesperada, deverá existir mecanismo para:
+
+recuperação;
+reprocessamento;
+auditoria;
+diagnóstico.
+7. Consistência
+
+Os dados críticos deverão manter consistência transacional.
+
+Exemplos:
+
+reservas;
+pagamentos;
+alterações de agenda;
+criação de faxinas;
+aprovação de early check-in;
+aprovação de late checkout.
+8. Segurança
+
+A segurança deverá ser considerada em todas as camadas da plataforma.
+
+Todo acesso deverá exigir autenticação.
+
+Toda ação deverá respeitar autorização baseada em permissões.
+
+9. Autenticação
+
+O sistema deverá suportar autenticação segura.
+
+Preparado para futura integração com:
+
+autenticação social;
+autenticação corporativa;
+múltiplos provedores.
+10. Autorização
+
+As permissões deverão ser granulares.
+
+O acesso nunca deverá ser determinado apenas pelo perfil.
+
+Cada ação poderá possuir autorização própria.
+
+11. Proteção de Dados
+
+Informações sensíveis deverão ser protegidas.
+
+Exemplos:
+
+credenciais;
+tokens;
+chaves;
+dados pessoais;
+contactos;
+informações financeiras.
+
+Sempre que aplicável, utilizar criptografia.
+
+12. LGPD
+
+A plataforma deverá nascer preparada para conformidade com a Lei Geral de Proteção de Dados (LGPD).
+
+Deverá permitir:
+
+identificação dos dados pessoais armazenados;
+anonimização quando necessária;
+eliminação quando exigida;
+exportação mediante solicitação;
+rastreabilidade de tratamento.
+13. Auditoria
+
+Toda operação relevante deverá ser auditada.
+
+A auditoria deverá registrar:
+
+quem executou;
+quando executou;
+origem;
+entidade afetada;
+operação;
+valores anteriores (quando aplicável);
+valores posteriores (quando aplicável).
+
+Os registros de auditoria não deverão ser alteráveis.
+
+14. Observabilidade
+
+A plataforma deverá permitir diagnóstico rápido de problemas.
+
+Deverá disponibilizar:
+
+logs estruturados;
+métricas;
+tracing;
+monitorização;
+correlação entre eventos.
+15. Logging
+
+Os logs deverão ser estruturados.
+
+Nunca utilizar logs apenas em texto livre.
+
+Os logs deverão permitir pesquisa eficiente.
+
+Nunca registrar:
+
+palavras-passe;
+tokens;
+segredos;
+dados bancários completos.
+16. Monitorização
+
+A plataforma deverá disponibilizar indicadores operacionais.
+
+Exemplos:
+
+utilização da CPU;
+utilização de memória;
+tempo médio de resposta;
+erros por minuto;
+integrações indisponíveis;
+filas acumuladas;
+consumo de IA.
+17. Alertas
+
+O sistema deverá permitir alertas automáticos.
+
+Exemplos:
+
+integração indisponível;
+fila congestionada;
+erro repetitivo;
+utilização elevada;
+falhas de sincronização.
+18. Resiliência
+
+O sistema deverá continuar operando mesmo quando serviços externos apresentarem falhas temporárias.
+
+Utilizar mecanismos como:
+
+retry;
+timeout;
+circuit breaker;
+fallback;
+filas de reprocessamento.
+19. Recuperação
+
+Após falhas críticas deverá ser possível recuperar o estado da plataforma.
+
+Toda recuperação deverá preservar a consistência dos dados.
+
+20. Backup
+
+A estratégia de backup deverá contemplar:
+
+backups automáticos;
+retenção configurável;
+restauração validada;
+testes periódicos de recuperação.
+21. Recuperação de Desastres
+
+A arquitetura deverá permitir recuperação em caso de desastre.
+
+O objetivo é minimizar:
+
+perda de dados;
+tempo de indisponibilidade.
+22. Integridade
+
+Toda informação deverá possuir mecanismos de validação.
+
+Nunca permitir dados inconsistentes.
+
+23. Disponibilidade Offline
+
+Não existe requisito para funcionamento offline.
+
+Caso funcionalidades offline sejam adicionadas no futuro, deverão possuir sincronização segura.
+
+24. Configuração
+
+Todas as configurações deverão ser externas ao código.
+
+Nunca exigir recompilação para:
+
+alterar políticas;
+alterar horários;
+alterar mensagens;
+alterar integrações;
+alterar comportamentos configuráveis.
+25. Internacionalização
+
+Toda a plataforma deverá suportar múltiplos idiomas.
+
+Nenhum texto deverá estar fixo no código.
+
+26. Fuso Horário
+
+O sistema deverá ser preparado para operar em diferentes fusos horários.
+
+Datas e horas deverão ser armazenadas de forma consistente e convertidas para apresentação conforme o contexto do utilizador.
+
+27. Acessibilidade
+
+A plataforma deverá seguir boas práticas de acessibilidade.
+
+Considerar:
+
+contraste;
+navegação por teclado;
+leitores de ecrã;
+textos alternativos;
+foco visível.
+28. Compatibilidade
+
+O sistema deverá funcionar corretamente nos principais navegadores modernos.
+
+Também deverá funcionar em dispositivos móveis sem necessidade de instalação.
+
+29. Manutenibilidade
+
+O código deverá ser:
+
+modular;
+legível;
+documentado quando necessário;
+facilmente testável;
+facilmente extensível.
+30. Testabilidade
+
+Toda funcionalidade deverá ser passível de testes automatizados.
+
+A arquitetura deverá facilitar:
+
+testes unitários;
+testes de integração;
+testes end-to-end.
+31. Escalabilidade da IA
+
+A utilização de modelos de IA deverá considerar:
+
+controlo de custos;
+cache quando apropriado;
+reutilização de contexto;
+limitação de tokens;
+seleção dinâmica do modelo quando fizer sentido.
+32. Custos Operacionais
+
+Toda decisão técnica deverá considerar o custo de operação.
+
+Evitar soluções que aumentem significativamente os custos sem benefício proporcional.
+
+O sistema deverá escalar de forma economicamente sustentável.
+
+33. Multi-Tenant
+
+O isolamento entre tenants é obrigatório.
+
+Nenhum dado poderá ser visível entre administradores distintos.
+
+Todas as consultas deverão respeitar o contexto do tenant autenticado.
+
+34. Versionamento
+
+A plataforma deverá permitir evolução contínua.
+
+Mudanças deverão preservar compatibilidade sempre que possível.
+
+35. Migração
+
+Mudanças estruturais deverão permitir migração controlada dos dados.
+
+Migrações deverão ser automatizadas e reversíveis sempre que tecnicamente viável.
+
+36. Atualizações
+
+O sistema deverá permitir atualizações frequentes com impacto mínimo para os utilizadores.
+
+37. Armazenamento
+
+A arquitetura deverá permitir crescimento contínuo do volume de dados.
+
+Arquivos grandes não deverão ser armazenados na base transacional.
+
+38. Pesquisa
+
+As pesquisas deverão permanecer rápidas mesmo com grande volume de dados.
+
+O Claude Code poderá utilizar tecnologias específicas de indexação quando justificável.
+
+39. APIs
+
+Todas as APIs deverão ser:
+
+documentadas;
+versionadas;
+protegidas;
+monitorizadas;
+consistentes.
+40. Uploads
+
+O sistema deverá validar:
+
+tipo de ficheiro;
+tamanho;
+integridade;
+segurança.
+
+Uploads potencialmente maliciosos deverão ser rejeitados.
+
+41. Inteligência Artificial
+
+O agente deverá operar de forma previsível.
+
+Sempre que houver baixa confiança na resposta, deverá:
+
+solicitar mais informações;
+consultar regras configuradas;
+ou encaminhar para um humano.
+
+Nunca deverá inventar informações.
+
+42. Configurabilidade
+
+Todas as regras de negócio definidas como configuráveis deverão poder ser alteradas pelo administrador sem necessidade de intervenção técnica.
+
+O sistema deverá distinguir claramente:
+
+regras fixas da plataforma;
+políticas configuráveis;
+templates;
+workflows;
+parâmetros operacionais.
+43. Evolução
+
+A arquitetura deverá permitir a incorporação de novos módulos sem impacto significativo nos existentes.
+
+44. Critérios de Qualidade
+
+O iHostPro será considerado aderente a este documento quando:
+
+apresentar desempenho consistente mesmo com crescimento do volume de dados;
+manter elevada disponibilidade;
+proteger adequadamente os dados dos utilizadores;
+permitir manutenção e evolução com baixo risco;
+suportar operação multi-tenant de forma segura;
+fornecer mecanismos robustos de auditoria e observabilidade;
+cumprir os requisitos de configurabilidade definidos para a plataforma.
+
+45. Observação Importante:
+
+Os requisitos não funcionais têm a mesma importância que os requisitos funcionais. Sempre que houver conflito entre rapidez de implementação e qualidade arquitetural, deverá prevalecer a solução que preserve a segurança, a escalabilidade, a confiabilidade e a capacidade de evolução do iHostPro a longo prazo, desde que não introduza complexidade desnecessária para a fase inicial do produto.

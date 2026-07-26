@@ -1,0 +1,6 @@
+@IHostPro.Api_HostAddress = http://localhost:5140
+
+GET {{IHostPro.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

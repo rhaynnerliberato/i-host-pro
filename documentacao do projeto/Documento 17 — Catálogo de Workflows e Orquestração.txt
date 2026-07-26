@@ -1,0 +1,773 @@
+Documento 17 — Catálogo de Workflows e Orquestração
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define todos os principais workflows (fluxos automatizados) do iHostPro.
+
+Um Workflow representa uma sequência organizada de eventos, decisões e ações executadas automaticamente pela plataforma.
+
+Os workflows deverão ser configuráveis pelo administrador sempre que fizer sentido.
+
+O sistema nunca deverá depender de regras espalhadas pelo código.
+
+2. Conceitos
+
+Todo Workflow possui:
+
+gatilho (Trigger)
+condições
+regras
+ações
+responsáveis
+auditoria
+encerramento
+
+Estrutura:
+
+Evento
+
+↓
+
+Workflow
+
+↓
+
+Condições
+
+↓
+
+Ações
+
+↓
+
+Resultado
+
+↓
+
+Auditoria
+3. Estados dos Workflows
+
+Todo workflow deverá possuir estados padronizados.
+
+Exemplo:
+
+Pendente
+
+↓
+
+Em execução
+
+↓
+
+Aguardando Evento
+
+↓
+
+Concluído
+
+↓
+
+Cancelado
+
+↓
+
+Falhou
+
+↓
+
+Reprocessando
+4. Eventos
+
+Todo Workflow deverá iniciar através de um evento.
+
+Exemplos:
+
+Reserva criada
+
+Reserva alterada
+
+Reserva cancelada
+
+Pagamento confirmado
+
+Mensagem recebida
+
+Faxina iniciada
+
+Faxina concluída
+
+Check-in realizado
+
+Checkout realizado
+
+Ocorrência registrada
+
+Workflow manual
+
+Evento agendado
+
+5. Workflow 01 — Nova Reserva
+Gatilho
+
+Nova reserva sincronizada.
+
+Fluxo
+Nova Reserva
+
+↓
+
+Validar Reserva
+
+↓
+
+Criar Hospedagem
+
+↓
+
+Atualizar Calendário
+
+↓
+
+Criar Evento
+
+↓
+
+Criar Faxina
+
+↓
+
+Atualizar Agenda
+
+↓
+
+Registrar Auditoria
+
+↓
+
+Finalizar
+6. Workflow 02 — Alteração de Reserva
+Reserva Alterada
+
+↓
+
+Atualizar Datas
+
+↓
+
+Atualizar Agenda
+
+↓
+
+Atualizar Faxina
+
+↓
+
+Atualizar Calendário
+
+↓
+
+Atualizar Eventos
+
+↓
+
+Registrar Auditoria
+7. Workflow 03 — Cancelamento
+Cancelamento
+
+↓
+
+Cancelar Hospedagem
+
+↓
+
+Cancelar Faxina
+
+↓
+
+Atualizar Agenda
+
+↓
+
+Liberar Calendário
+
+↓
+
+Registrar Evento
+
+↓
+
+Auditoria
+8. Workflow 04 — Check-in
+
+Fluxo esperado:
+
+Hoje é dia do Check-in
+
+↓
+
+Verificar formulário
+
+↓
+
+Aguardar contacto do hóspede
+
+↓
+
+Enviar senha
+
+↓
+
+Enviar instruções
+
+↓
+
+Avisar portaria
+
+↓
+
+Registrar envio
+
+↓
+
+Finalizar
+9. Workflow 05 — Early Check-in
+Solicitação
+
+↓
+
+Consultar Políticas
+
+↓
+
+Consultar Agenda
+
+↓
+
+Consultar Faxina
+
+↓
+
+Faxina concluída?
+
+↓
+
+SIM
+
+↓
+
+Liberar Entrada
+
+↓
+
+Avisar Portaria
+
+↓
+
+Registrar
+
+↓
+
+Responder hóspede
+
+Caso contrário:
+
+Informar indisponibilidade
+10. Workflow 06 — Late Checkout
+Solicitação
+
+↓
+
+Consultar Agenda
+
+↓
+
+Existe reserva seguinte?
+
+↓
+
+SIM
+
+↓
+
+Negar
+
+↓
+
+NÃO
+
+↓
+
+Consultar Política
+
+↓
+
+Calcular Valor
+
+↓
+
+Gerar PIX
+
+↓
+
+Enviar PIX
+
+↓
+
+Aguardar Pagamento
+
+↓
+
+Pagamento confirmado
+
+↓
+
+Bloquear Agenda
+
+↓
+
+Atualizar Faxina
+
+↓
+
+Avisar Portaria
+
+↓
+
+Responder hóspede
+11. Workflow 07 — Envio de Senha
+Mensagem do hóspede
+
+↓
+
+Confirmar elegibilidade
+
+↓
+
+Confirmar data
+
+↓
+
+Consultar regras
+
+↓
+
+Enviar senha
+
+↓
+
+Registrar Auditoria
+
+Nunca enviar antes do momento permitido pelas políticas.
+
+12. Workflow 08 — Comunicação com Portaria
+
+Sempre que houver alteração relevante.
+
+Exemplo:
+
+Novo Check-in
+
+↓
+
+Gerar mensagem
+
+↓
+
+Enviar WhatsApp
+
+↓
+
+Confirmar entrega
+
+↓
+
+Registrar
+13. Workflow 09 — Início da Faxina
+Faxineira
+
+↓
+
+Iniciar Faxina
+
+↓
+
+Registrar horário
+
+↓
+
+Atualizar status
+
+↓
+
+Registrar Auditoria
+14. Workflow 10 — Conclusão da Faxina
+Concluir
+
+↓
+
+Checklist
+
+↓
+
+Fotos
+
+↓
+
+Ocorrências
+
+↓
+
+Materiais
+
+↓
+
+Finalizar
+
+↓
+
+Atualizar Agenda
+
+↓
+
+Notificar Administrador
+15. Workflow 11 — Registro de Dano
+Ocorrência
+
+↓
+
+Registrar
+
+↓
+
+Anexar Fotos
+
+↓
+
+Relacionar Reserva
+
+↓
+
+Notificar Administrador
+
+↓
+
+Auditoria
+16. Workflow 12 — Pedido de Material
+Faxineira
+
+↓
+
+Solicitar Material
+
+↓
+
+Registrar
+
+↓
+
+Notificar Administrador
+17. Workflow 13 — Mensagem Recebida
+Mensagem
+
+↓
+
+IA identifica intenção
+
+↓
+
+Consultar Contexto
+
+↓
+
+Consultar Políticas
+
+↓
+
+Responder
+
+↓
+
+Auditoria
+18. Workflow 14 — Escalonamento para Humano
+
+Sempre que ocorrer:
+
+pedido de reembolso
+acidente
+polícia
+negociação
+dano grave
+reclamação grave
+pedido explícito de humano
+baixa confiança da IA
+
+Fluxo:
+
+Mensagem
+
+↓
+
+Classificar
+
+↓
+
+Encaminhar
+
+↓
+
+Notificar Administrador
+
+↓
+
+Suspender IA
+19. Workflow 15 — Sincronização Airbnb
+Iniciar
+
+↓
+
+Consultar API
+
+↓
+
+Importar Alterações
+
+↓
+
+Validar
+
+↓
+
+Gerar Eventos
+
+↓
+
+Atualizar Sistema
+
+↓
+
+Registrar
+20. Workflow 16 — Pagamentos PIX
+Gerar Cobrança
+
+↓
+
+Enviar
+
+↓
+
+Aguardar
+
+↓
+
+Receber Webhook
+
+↓
+
+Validar
+
+↓
+
+Atualizar Sistema
+
+↓
+
+Auditar
+21. Workflow 17 — Monitorização de Integrações
+
+Executado periodicamente.
+
+Consultar Integrações
+
+↓
+
+Detectar Falhas
+
+↓
+
+Retry
+
+↓
+
+Persistiu?
+
+↓
+
+Alertar Administrador
+22. Workflow 18 — Sincronização de Configurações
+
+Sempre que uma política for alterada.
+
+Salvar
+
+↓
+
+Versionar
+
+↓
+
+Invalidar Cache
+
+↓
+
+Publicar Evento
+
+↓
+
+Atualizar Workflows
+23. Workflow 19 — Backup
+
+Executado automaticamente.
+
+Backup
+
+↓
+
+Validar
+
+↓
+
+Registrar
+
+↓
+
+Concluir
+24. Workflow 20 — Auditoria
+
+Todas as operações relevantes.
+
+Evento
+
+↓
+
+Registrar
+
+↓
+
+Persistir
+
+↓
+
+Indexar
+
+↓
+
+Disponibilizar Pesquisa
+25. Workflows Configuráveis
+
+O administrador poderá ativar, desativar ou parametrizar workflows quando aplicável.
+
+Exemplos:
+
+envio automático de senha;
+envio para portaria;
+cobrança de late checkout;
+autorização de early check-in;
+lembretes;
+mensagens automáticas;
+notificações.
+26. Regras dos Workflows
+
+Os workflows nunca deverão conter valores fixos.
+
+Exemplo incorreto:
+
+Late Checkout = 14h
+
+Correto:
+
+Consultar Política
+
+↓
+
+Executar
+27. Versionamento
+
+Cada Workflow deverá possuir:
+
+versão;
+data;
+autor;
+histórico de alterações;
+possibilidade de rollback.
+28. Auditoria
+
+Toda execução deverá registrar:
+
+workflow;
+gatilho;
+utilizador (quando houver);
+IA (quando aplicável);
+horário;
+duração;
+resultado;
+erros.
+29. Falhas
+
+Quando ocorrer falha.
+
+Falhou
+
+↓
+
+Retry
+
+↓
+
+Persistiu?
+
+↓
+
+Fila de Erros
+
+↓
+
+Notificar Administrador
+30. Reprocessamento
+
+O administrador poderá reprocessar workflows com falha.
+
+O sistema deverá impedir duplicidade de efeitos através de mecanismos de idempotência.
+
+31. Dashboard Operacional
+
+O administrador deverá visualizar:
+
+workflows ativos;
+pendentes;
+falhados;
+em execução;
+reprocessando;
+tempo médio;
+quantidade executada;
+taxa de sucesso.
+32. Escalabilidade
+
+Os workflows deverão ser independentes.
+
+A execução simultânea de milhares de workflows não deverá bloquear a plataforma.
+
+33. Critérios de Qualidade
+
+Um Workflow será considerado adequado quando:
+
+puder ser executado automaticamente;
+possuir rastreabilidade completa;
+respeitar políticas configuradas;
+puder ser interrompido e retomado sem perda de consistência;
+produzir auditoria completa;
+evitar efeitos duplicados;
+permitir monitorização e reprocessamento.
+
+34. Observação Importante:
+
+O Workflow Engine deverá ser um dos pilares centrais do iHostPro.
+
+Entretanto, o iHostPro não deverá tornar-se uma plataforma BPM genérica. O objetivo não é permitir que o utilizador desenhe fluxos arbitrários como em ferramentas low-code.
+
+Os workflows representam processos operacionais específicos da gestão de hospedagens. O administrador poderá configurar parâmetros, políticas, gatilhos e comportamentos previstos pela plataforma, mas a estrutura fundamental dos fluxos deverá permanecer controlada pelo sistema, garantindo simplicidade, consistência e facilidade de manutenção.
+
+Os workflows deverão ser orientados a eventos, desacoplados entre si e facilmente extensíveis, permitindo a evolução da plataforma sem introduzir complexidade desnecessária. Dessa forma, o iHostPro continuará sendo uma plataforma SaaS especializada em gestão de hospedagens, e não um framework genérico de automação.

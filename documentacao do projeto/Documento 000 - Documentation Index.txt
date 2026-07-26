@@ -1,0 +1,410 @@
+# Documentation Index
+
+Version: 1.0
+
+Status: Official
+
+---
+
+# 1. Purpose
+
+This document is the entry point for all project documentation.
+
+Its purpose is to help every AI agent identify:
+
+- which document should be consulted;
+- when it must be consulted;
+- which document is authoritative for each subject;
+- which documents are optional depending on the requested task.
+
+This document shall always be read before any development activity.
+
+---
+
+# 2. Documentation Hierarchy
+
+Project documentation follows the hierarchy defined by the Engineering Constitution.
+
+When multiple documents discuss the same subject, the most specific document is authoritative for that subject.
+
+---
+
+# 3. Mandatory Reading
+
+The following documents SHALL be reviewed before starting any implementation.
+
+| Priority | Document | Purpose |
+|----------|----------|---------|
+| 1 | CLAUDE.md | Global project instructions |
+| 2 | ai-rules/00 - Engineering Constitution | Global engineering rules |
+| 3 | ai-rules/01 - Decision Making Policy | Decision authority |
+| 4 | This document | Documentation navigation |
+
+The remaining documents shall be consulted according to the requested work.
+
+---
+
+# 4. Product Documentation
+
+## Product Vision
+
+Consult when:
+
+- understanding the system;
+- understanding project goals;
+- understanding business objectives.
+
+Authoritative document:
+
+01 - Product Vision
+
+---
+
+## Functional Requirements
+
+Consult when:
+
+- implementing features;
+- validating requested behavior;
+- understanding acceptance criteria.
+
+Authoritative document:
+
+02 - Functional Requirements
+
+---
+
+## Business Rules
+
+Consult when:
+
+- implementing business logic;
+- changing workflows;
+- validating domain behavior.
+
+Authoritative document:
+
+03 - Business Rules
+
+---
+
+## Domain Model
+
+Consult when:
+
+- creating entities;
+- changing relationships;
+- understanding aggregates;
+- implementing repositories.
+
+Authoritative document:
+
+04 - Domain Model
+
+---
+
+## System Architecture
+
+Consult when:
+
+- creating modules;
+- changing architecture;
+- introducing infrastructure;
+- organizing components.
+
+Authoritative document:
+
+05 - System Architecture
+
+---
+
+## Multi-Tenant Architecture
+
+Consult when:
+
+- implementing tenant-aware features;
+- creating repositories;
+- handling authentication;
+- isolating tenant data.
+
+Authoritative document:
+
+06 - Multi-Tenant Architecture
+
+---
+
+## Authorization
+
+Consult when:
+
+- implementing authentication;
+- implementing permissions;
+- creating policies;
+- protecting endpoints.
+
+Authoritative document:
+
+07 - Authentication and Authorization
+
+---
+
+## API Specification
+
+Consult when:
+
+- implementing APIs;
+- consuming APIs;
+- validating contracts.
+
+Authoritative document:
+
+08 - API Specification
+
+---
+
+## Database
+
+Consult when:
+
+- creating tables;
+- creating migrations;
+- changing schema;
+- creating indexes.
+
+Authoritative document:
+
+09 - Database Design
+
+---
+
+## UI / UX
+
+Consult when:
+
+- implementing frontend;
+- changing layouts;
+- designing user flows.
+
+Authoritative document:
+
+10 - UI Guidelines
+
+---
+
+## Workflow Engine
+
+Consult when:
+
+- implementing workflows;
+- changing state machines;
+- creating approvals.
+
+Authoritative document:
+
+11 - Workflow Engine
+
+---
+
+## Configuration System
+
+Consult when:
+
+- implementing configurable behavior;
+- creating feature flags;
+- adding settings.
+
+Authoritative document:
+
+12 - Configuration Model
+
+---
+
+## Notification System
+
+Consult when:
+
+- sending notifications;
+- implementing email;
+- implementing SMS;
+- implementing WhatsApp.
+
+Authoritative document:
+
+13 - Notification Architecture
+
+---
+
+## Artificial Intelligence
+
+Consult when:
+
+- implementing AI modules;
+- integrating LLMs;
+- creating prompts;
+- storing AI history.
+
+Authoritative document:
+
+14 - AI Architecture
+
+---
+
+## Integrations
+
+Consult when:
+
+- integrating external systems;
+- creating connectors;
+- consuming third-party APIs.
+
+Authoritative document:
+
+15 - External Integrations
+
+---
+
+## Infrastructure
+
+Consult when:
+
+- creating Docker configuration;
+- configuring cloud resources;
+- changing deployment.
+
+Authoritative document:
+
+16 - Infrastructure
+
+---
+
+## Logging
+
+Consult when:
+
+- implementing logs;
+- observability;
+- monitoring;
+- auditing.
+
+Authoritative document:
+
+17 - Logging & Observability
+
+---
+
+## Security
+
+Consult when:
+
+- handling credentials;
+- encryption;
+- LGPD;
+- secrets;
+- auditing.
+
+Authoritative document:
+
+18 - Security
+
+---
+
+## Testing
+
+Consult when:
+
+- creating tests;
+- validating behavior;
+- regression testing.
+
+Authoritative document:
+
+19 - Testing Strategy
+
+---
+
+## Deployment
+
+Consult when:
+
+- preparing releases;
+- CI/CD;
+- environments.
+
+Authoritative document:
+
+20 - Deployment
+
+---
+
+## ADRs
+
+Consult when:
+
+- changing architecture;
+- validating previous decisions;
+- introducing structural changes.
+
+Directory:
+
+documentation/ADRs/
+
+---
+
+# 5. AI Rules
+
+These documents define AI behavior.
+
+They do not define product behavior.
+
+| Document | Purpose |
+|----------|---------|
+| Engineering Constitution | Global engineering rules |
+| Decision Making Policy | Decision authority |
+| Engineering Principles | Engineering philosophy |
+| Development Standards | Coding standards |
+| Documentation Policy | Documentation lifecycle |
+| Testing and Validation Policy | Validation rules |
+| Definition of Done | Completion criteria |
+| Git and Change Management | Repository rules |
+
+---
+
+# 6. Documentation Lifecycle
+
+Documentation shall evolve together with implementation.
+
+Whenever implementation changes:
+
+- architecture;
+- business rules;
+- workflows;
+- entities;
+- APIs;
+- integrations;
+- infrastructure;
+
+the corresponding documentation shall also be updated.
+
+Implementation is not considered complete until documentation is synchronized.
+
+---
+
+# 7. Missing Documentation
+
+If implementation depends on documentation that does not exist:
+
+1. identify the missing subject;
+2. determine whether an existing document should be extended;
+3. recommend creating new documentation only when necessary.
+
+Avoid duplicate documents.
+
+---
+
+# 8. Final Principle
+
+Documentation is the authoritative description of the project.
+
+Source code is the implementation of that documentation.
+
+Whenever uncertainty exists, consult the appropriate document before making implementation decisions.

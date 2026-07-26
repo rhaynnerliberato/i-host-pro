@@ -1,0 +1,557 @@
+Documento 14 - Diretrizes de UX/UI (User Experience & Interface Guidelines)
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define as diretrizes de experiência do utilizador (UX) e de interface (UI) para o iHostPro.
+
+O objetivo não é desenhar telas específicas.
+
+O objetivo é definir princípios para que toda a plataforma possua uma experiência consistente, intuitiva, moderna e escalável.
+
+O Claude Code deverá escolher a tecnologia e a biblioteca de componentes mais adequadas para implementar essas diretrizes.
+
+2. Princípios Gerais
+
+Toda a plataforma deverá seguir os seguintes princípios:
+
+simplicidade;
+consistência;
+rapidez;
+baixa curva de aprendizagem;
+acessibilidade;
+responsividade;
+previsibilidade;
+redução de cliques;
+foco na produtividade.
+
+O utilizador nunca deverá sentir necessidade de "aprender a usar" o sistema.
+
+3. Filosofia do Produto
+
+O iHostPro é uma plataforma operacional.
+
+O objetivo do utilizador é resolver tarefas rapidamente.
+
+Portanto:
+
+O sistema deverá mostrar apenas o necessário.
+
+Evitar:
+
+excesso de informação;
+telas poluídas;
+menus complexos;
+configurações escondidas.
+4. Mobile First
+
+Embora exista versão desktop, o sistema deverá ser pensado inicialmente para utilização em smartphone.
+
+Motivos:
+
+administrador trabalha fora de casa;
+faxineiras utilizam apenas telemóvel;
+atendimento acontece pelo WhatsApp;
+decisões precisam ser rápidas.
+
+Posteriormente a interface deverá adaptar-se naturalmente para desktop.
+
+5. Responsive Design
+
+Todas as páginas deverão funcionar corretamente em:
+
+smartphone;
+tablet;
+notebook;
+desktop;
+monitores ultrawide.
+
+Nenhuma funcionalidade poderá depender de resolução específica.
+
+6. Navegação
+
+A navegação deverá ser simples.
+
+Estrutura sugerida:
+
+Dashboard
+
+↓
+
+Menu lateral (desktop)
+
+↓
+
+Menu inferior (mobile)
+
+↓
+
+Páginas
+
+↓
+
+Detalhes
+
+↓
+
+Ações
+
+O utilizador nunca deverá ficar perdido.
+
+Sempre deverá existir forma clara de voltar.
+
+7. Dashboard
+
+O Dashboard será a principal tela da plataforma.
+
+Deverá responder imediatamente:
+
+O que acontece hoje?
+
+Existe algum problema?
+
+Quem entra?
+
+Quem sai?
+
+Quem está limpando?
+
+Existe atraso?
+
+Existem mensagens pendentes?
+
+Existe pagamento pendente?
+
+Existe alguma intercorrência?
+
+8. Princípio das Prioridades
+
+Informações deverão ser apresentadas nesta ordem:
+
+Urgente
+
+Importante
+
+Informativo
+
+Histórico
+
+Exemplo:
+
+⚠ Faxina atrasada
+
+↓
+
+Check-in hoje
+
+↓
+
+Mensagens
+
+↓
+
+Indicadores
+
+↓
+
+Gráficos
+
+9. Redução de Cliques
+
+Toda ação frequente deverá exigir o menor número possível de passos.
+
+Exemplo:
+
+Concluir Faxina
+
+Abrir Agenda
+
+↓
+
+Selecionar Faxina
+
+↓
+
+Concluir
+
+↓
+
+Fim
+
+Evitar assistentes longos quando não agregarem valor.
+
+10. Pesquisa Global
+
+O sistema deverá possuir pesquisa global.
+
+Pesquisar:
+
+hóspede;
+imóvel;
+reserva;
+faxina;
+ocorrência;
+mensagem;
+proprietário.
+
+A pesquisa deverá ser extremamente rápida.
+
+11. Calendários
+
+Calendário é uma das telas mais importantes.
+
+Deverá permitir visualizações:
+
+diária;
+semanal;
+mensal;
+por imóvel;
+por faxineira;
+consolidada.
+
+A interação deverá ser fluida, incluindo filtros e destaque visual para conflitos.
+
+12. Timeline
+
+Sempre que existir histórico, preferir Timeline.
+
+Exemplo:
+
+Reserva
+
+↓
+
+Mensagem
+
+↓
+
+Check-in
+
+↓
+
+Faxina
+
+↓
+
+Intercorrência
+
+↓
+
+Checkout
+
+↓
+
+Avaliação
+
+Muito mais intuitivo do que listas cronológicas simples.
+
+13. Cards
+
+Utilizar cards para resumir informações.
+
+Exemplo:
+
+Studio 1234
+
+Check-in hoje
+
+14h
+
+Faxina concluída
+
+Tudo OK
+
+14. Tabelas
+
+Sempre que utilizar tabelas:
+
+Permitir:
+
+ordenação;
+filtros;
+pesquisa;
+paginação ou carregamento incremental;
+exportação quando fizer sentido;
+seleção múltipla.
+15. Formulários
+
+Os formulários deverão:
+
+validar em tempo real;
+indicar claramente erros;
+minimizar campos obrigatórios;
+agrupar informações relacionadas;
+salvar automaticamente rascunhos quando aplicável.
+16. Fluxos Guiados
+
+Operações complexas deverão utilizar assistentes ("wizard").
+
+Exemplos:
+
+Cadastrar imóvel
+
+Configurar integração
+
+Cadastrar condomínio
+
+Importar dados
+
+17. Feedback ao Utilizador
+
+Toda ação deverá produzir feedback.
+
+Exemplos:
+
+Salvo com sucesso.
+
+Erro ao sincronizar.
+
+Mensagem enviada.
+
+Reserva atualizada.
+
+Nunca deixar o utilizador sem retorno.
+
+18. Estados Visuais
+
+Todo elemento deverá indicar claramente seu estado.
+
+Exemplos:
+
+Ativo
+
+Inativo
+
+Pendente
+
+Processando
+
+Concluído
+
+Erro
+
+Cancelado
+
+A representação deverá ser consistente em toda a plataforma.
+
+19. Cores
+
+As cores deverão comunicar significado, mantendo contraste adequado e acessibilidade.
+
+Exemplo de convenção:
+
+Verde: sucesso
+Azul: informação
+Amarelo: atenção
+Vermelho: erro
+Cinzento: inativo
+
+A escolha exata da paleta fica a cargo do Claude Code.
+
+20. Ícones
+
+Utilizar ícones apenas quando melhorarem a compreensão.
+
+Nunca depender exclusivamente de ícones para transmitir informação.
+
+Sempre combinar ícone e texto quando houver risco de ambiguidade.
+
+21. Tipografia
+
+Priorizar legibilidade.
+
+Hierarquia clara:
+
+título;
+subtítulo;
+conteúdo;
+observações.
+
+Evitar excesso de tamanhos de fonte.
+
+22. Acessibilidade
+
+O sistema deverá atender boas práticas de acessibilidade (WCAG).
+
+Considerar:
+
+navegação por teclado;
+contraste adequado;
+foco visível;
+compatibilidade com leitores de ecrã;
+textos alternativos;
+áreas de toque adequadas em dispositivos móveis.
+23. Dark Mode
+
+A plataforma deverá suportar:
+
+modo claro;
+modo escuro;
+modo automático (seguindo o sistema operativo).
+
+A escolha deverá ser persistida por utilizador.
+
+24. Notificações
+
+Existirão diferentes tipos de notificação.
+
+Exemplos:
+
+Informação
+
+Sucesso
+
+Aviso
+
+Erro
+
+Crítica
+
+Cada uma deverá possuir comportamento visual consistente.
+
+25. Upload de Arquivos
+
+O upload deverá permitir:
+
+arrastar e largar (desktop);
+seleção da galeria (mobile);
+utilização da câmara;
+múltiplos ficheiros;
+indicador de progresso;
+pré-visualização.
+26. Portal da Faxineira
+
+A interface da faxineira deverá ser extremamente simples.
+
+Ao entrar no sistema deverá visualizar imediatamente:
+
+próximas faxinas;
+horário;
+imóvel;
+botão "Iniciar";
+botão "Concluir";
+botão "Registrar Ocorrência".
+
+Evitar qualquer funcionalidade desnecessária.
+
+27. Painel do Administrador
+
+O administrador deverá possuir uma visão operacional.
+
+Informações prioritárias:
+
+check-ins de hoje;
+check-outs de hoje;
+faxinas pendentes;
+mensagens pendentes;
+intercorrências;
+pagamentos;
+alertas.
+28. Configurações
+
+As configurações deverão ser organizadas por categorias.
+
+Exemplo:
+
+Geral
+Imóveis
+Comunicação
+IA
+Políticas
+Integrações
+Segurança
+Notificações
+
+Evitar listas extensas e desorganizadas.
+
+29. Histórico
+
+Sempre que existir histórico relevante, oferecer:
+
+Timeline;
+filtros;
+pesquisa;
+comparação entre versões quando aplicável.
+30. Performance Percebida
+
+Mesmo operações demoradas deverão transmitir sensação de rapidez.
+
+Utilizar:
+
+carregamento progressivo;
+skeleton screens;
+indicadores de progresso;
+atualização incremental.
+
+Evitar ecrãs totalmente bloqueados.
+
+31. Consistência
+
+Componentes iguais deverão comportar-se da mesma forma em toda a plataforma.
+
+Botões, tabelas, formulários, modais e filtros deverão seguir padrões únicos.
+
+32. Internacionalização
+
+Toda a interface deverá nascer preparada para múltiplos idiomas.
+
+Não utilizar textos fixos no código.
+
+Todo texto deverá ser internacionalizável.
+
+33. Personalização
+
+Cada tenant poderá personalizar, quando aplicável:
+
+logótipo;
+nome da empresa;
+cores institucionais;
+idioma padrão;
+fuso horário;
+formato de data e hora.
+
+A identidade visual da plataforma deverá permanecer consistente.
+
+34. Design System
+
+O Claude Code deverá adotar um Design System consistente.
+
+Os componentes deverão ser reutilizáveis e documentados.
+
+Exemplos:
+
+Botões
+Campos
+Tabelas
+Cards
+Calendários
+Modais
+Menus
+Abas
+Indicadores
+Badges
+Toasts
+35. Critérios de Qualidade
+
+A experiência do utilizador será considerada adequada quando:
+
+um novo administrador conseguir executar as tarefas principais sem treinamento formal;
+a faxineira conseguir utilizar o sistema apenas com instruções mínimas;
+a navegação for consistente entre todos os módulos;
+a interface for igualmente funcional em desktop e dispositivos móveis;
+as operações mais frequentes exigirem poucos cliques;
+a plataforma transmitir sensação de rapidez e confiabilidade.
+36. Diretrizes Específicas para o iHostPro
+
+Como o iHostPro é uma plataforma operacional utilizada diariamente, as telas deverão priorizar a execução rápida de tarefas em vez de uma interface visualmente sofisticada.
+
+Sempre que houver conflito entre estética e produtividade, deverá prevalecer a produtividade.
+
+O Claude Code deverá privilegiar componentes maduros, acessíveis e amplamente utilizados no mercado, construindo uma interface moderna, limpa e consistente, mas evitando animações excessivas, efeitos desnecessários ou elementos que aumentem a carga cognitiva do utilizador.
+
+Observação Importante:
+
+A interface do iHostPro deverá ser concebida como uma ferramenta de trabalho diário. Cada ecrã deverá responder à pergunta: "Como permitir que o utilizador conclua esta tarefa da forma mais rápida, clara e segura possível?" Essa filosofia deverá orientar todas as decisões de UX e UI ao longo do desenvolvimento da plataforma.

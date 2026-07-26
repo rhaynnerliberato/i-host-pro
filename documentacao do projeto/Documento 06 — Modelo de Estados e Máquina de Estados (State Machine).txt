@@ -1,0 +1,565 @@
+iHostPro
+Documento 06
+Modelo de Estados e Máquina de Estados (Business State Machines)
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define todas as máquinas de estados do domínio de negócio do iHostPro.
+
+Todo processo operacional da plataforma deverá ser orientado por estados.
+
+Mudanças de estado representam fatos do negócio e são responsáveis por disparar workflows, notificações, automações, integrações e ações da Inteligência Artificial.
+
+Nenhuma funcionalidade poderá alterar diretamente dados relevantes sem alterar também o estado correspondente.
+
+2. Princípios Gerais
+
+Toda entidade que represente um processo deverá possuir um ciclo de vida claramente definido.
+
+Cada estado deve representar exatamente uma situação do negócio.
+
+Não poderão existir estados redundantes.
+
+Não poderão existir transições inválidas.
+
+Toda mudança de estado deverá:
+
+gerar auditoria;
+registrar data e hora;
+registrar responsável;
+gerar evento de domínio;
+atualizar indicadores;
+permitir rastreabilidade completa.
+3. Máquina de Estados da Reserva
+
+A Reserva é o principal objeto do domínio.
+
+Grande parte da plataforma gira em torno dela.
+
+Estados
+Criada
+↓
+Confirmada
+↓
+Pré Check-in
+↓
+Check-in Liberado
+↓
+Em Hospedagem
+↓
+Pré Checkout
+↓
+Checkout Realizado
+↓
+Encerrada
+
+Estados alternativos:
+
+Criada
+↓
+Cancelada
+
+Confirmada
+↓
+Cancelada
+
+Pré Check-in
+↓
+Cancelada
+
+Nunca poderá voltar para estados anteriores.
+
+Descrição
+Criada
+
+Reserva recebida da plataforma.
+
+Ainda não passou por validações.
+
+Confirmada
+
+Reserva válida.
+
+Todos os dados obrigatórios foram obtidos.
+
+Deverá iniciar workflows.
+
+Pré Check-in
+
+Reserva entra em preparação.
+
+Nesta fase deverão ocorrer automaticamente:
+
+criação da faxina;
+atualização da agenda;
+preparação das mensagens;
+monitorização do formulário.
+Check-in Liberado
+
+Todas as condições foram atendidas.
+
+Exemplo:
+
+formulário preenchido;
+faxina concluída;
+horário permitido.
+
+IA poderá enviar senha.
+
+Em Hospedagem
+
+Check-in realizado.
+
+Durante esse período:
+
+IA atende dúvidas.
+
+Administrador acompanha.
+
+Solicitações podem ocorrer.
+
+Pré Checkout
+
+Últimas horas da hospedagem.
+
+Preparação da próxima operação.
+
+Checkout Realizado
+
+Hóspede saiu.
+
+Inicia nova cadeia operacional.
+
+Encerrada
+
+Todos os processos concluídos.
+
+Cancelada
+
+Reserva encerrada antes do check-in.
+
+Todos os workflows deverão ser revertidos.
+
+4. Eventos da Reserva
+
+Cada transição deverá gerar eventos.
+
+Exemplo:
+
+ReservationCreated
+
+ReservationConfirmed
+
+ReservationCancelled
+
+PreCheckinStarted
+
+CheckinReleased
+
+GuestCheckedIn
+
+GuestCheckedOut
+
+ReservationClosed
+
+5. Máquina de Estados da Faxina
+Estados
+Pendente
+↓
+Designada
+↓
+Em Deslocamento
+↓
+Iniciada
+↓
+Em Inspeção
+↓
+Concluída
+
+Fluxos alternativos:
+
+Designada
+↓
+Cancelada
+
+Iniciada
+↓
+Interrompida
+
+Iniciada
+↓
+Aguardando Materiais
+
+Iniciada
+↓
+Aguardando Ajuda
+Descrição
+Pendente
+
+Criada automaticamente.
+
+Sem responsável.
+
+Designada
+
+Responsável definido.
+
+Em Deslocamento
+
+Faxineira informou deslocamento.
+
+Opcional.
+
+Configuração por tenant.
+
+Iniciada
+
+Limpeza começou.
+
+Em Inspeção
+
+Limpeza finalizada.
+
+Conferência do imóvel.
+
+Registro de ocorrências.
+
+Fotos.
+
+Vídeos.
+
+Concluída
+
+Imóvel pronto.
+
+Poderá liberar:
+
+Early Check-in.
+
+Envio da senha.
+
+Atualização do Dashboard.
+
+Interrompida
+
+Limpeza interrompida.
+
+Necessita intervenção.
+
+Aguardando Materiais
+
+Necessário reabastecimento.
+
+Aguardando Ajuda
+
+Necessita apoio.
+
+Cancelada
+
+Faxina cancelada.
+
+6. Máquina de Estados do Atendimento IA
+Nova Conversa
+↓
+Identificando Contexto
+↓
+Atendimento Automático
+↓
+Aguardando Resposta
+↓
+Resolvido
+
+Fluxos alternativos
+
+Atendimento Automático
+↓
+Escalado para Humano
+
+Atendimento Automático
+↓
+Aguardando Informação
+
+Atendimento Automático
+↓
+Encerrado
+Estados
+
+Nova Conversa
+
+Primeira mensagem.
+
+Identificando Contexto
+
+IA identifica:
+
+hóspede
+reserva
+idioma
+intenção
+
+Atendimento Automático
+
+IA conduz atendimento.
+
+Aguardando Informação
+
+Necessita dados adicionais.
+
+Escalado para Humano
+
+Transferido ao administrador.
+
+Resolvido
+
+Solicitação encerrada.
+
+7. Máquina de Estados das Solicitações
+
+Abrange:
+
+Early Check-in
+
+Late Checkout
+
+Materiais
+
+Animais
+
+Visitantes
+
+Solicitações gerais
+
+Estados
+Criada
+↓
+Em Análise
+↓
+Aprovada
+↓
+Executada
+↓
+Concluída
+
+Alternativos
+
+Em Análise
+↓
+Negada
+
+Criada
+↓
+Cancelada
+8. Máquina de Estados da Intercorrência
+Registrada
+↓
+Em Investigação
+↓
+Responsável Identificado
+↓
+Em Tratativa
+↓
+Resolvida
+↓
+Encerrada
+
+Alternativos
+
+Registrada
+↓
+Sem Evidências
+
+Em Investigação
+↓
+Improcedente
+9. Máquina de Estados da Comunicação
+
+Toda mensagem enviada pelo sistema deverá possuir estados.
+
+Criada
+↓
+Na Fila
+↓
+Enviando
+↓
+Enviada
+↓
+Recebida
+↓
+Lida
+
+Alternativos
+
+Enviando
+↓
+Falhou
+
+Falhou
+↓
+Reprocessando
+10. Máquina de Estados dos Workflows
+Criado
+↓
+Executando
+↓
+Aguardando Evento
+↓
+Concluído
+
+Alternativos
+
+Executando
+↓
+Erro
+
+Erro
+↓
+Reprocessando
+
+Erro
+↓
+Cancelado
+11. Máquina de Estados das Integrações
+Disponível
+↓
+Sincronizando
+↓
+Sincronizado
+
+Alternativos
+
+Sincronizando
+↓
+Erro
+
+Erro
+↓
+Reprocessando
+
+Erro
+↓
+Desativada
+12. Regras Gerais
+
+Nenhuma máquina poderá:
+
+saltar estados obrigatórios;
+regressar para estados anteriores, salvo quando explicitamente permitido;
+executar transições inválidas.
+
+Toda transição deverá ser validada pelo domínio.
+
+13. Eventos Gerados
+
+Toda mudança de estado deverá publicar um evento.
+
+Exemplo
+
+FaxinaConcluída
+
+↓
+
+Evento publicado
+
+↓
+
+Atualizar Dashboard
+
+↓
+
+Enviar WhatsApp
+
+↓
+
+Atualizar Agenda
+
+↓
+
+Liberar Check-in
+
+↓
+
+Registrar Auditoria
+
+Nenhum módulo deverá depender diretamente do módulo que originou o evento.
+
+14. Regras para IA
+
+A IA nunca deverá assumir estados.
+
+Sempre deverá consultar o estado atual.
+
+Exemplo
+
+❌ "A faxina provavelmente terminou."
+
+✔ Consultar estado da faxina.
+
+Se:
+
+Concluída
+
+↓
+
+Prosseguir.
+
+Caso contrário
+
+↓
+
+Informar que ainda não foi finalizada.
+
+15. Auditoria
+
+Cada transição deverá registrar:
+
+estado anterior;
+estado novo;
+data e hora;
+utilizador responsável;
+origem da alteração (manual, IA, workflow ou integração);
+motivo da alteração (quando aplicável);
+identificador do evento gerado.
+
+Esse histórico deverá ser imutável.
+
+16. Configurabilidade
+
+A estrutura das máquinas de estados é nativa da plataforma e não pode ser alterada pelo administrador.
+
+No entanto, poderão ser configurados:
+
+ações executadas em cada transição;
+notificações associadas;
+workflows disparados;
+destinatários;
+templates de mensagens;
+políticas aplicáveis;
+condições adicionais para permitir uma transição.
+
+Dessa forma, preserva-se a consistência do domínio enquanto se oferece flexibilidade operacional.
+
+17. Critérios de Qualidade
+
+Uma máquina de estados será considerada corretamente implementada quando:
+
+possuir estados mutuamente exclusivos;
+permitir apenas transições válidas;
+publicar eventos de domínio em todas as mudanças;
+manter histórico completo;
+suportar reprocessamento em caso de falha;
+ser independente da interface do utilizador;
+poder ser utilizada por qualquer canal (Web, Mobile, API, IA ou integrações).
+18. Visão Geral das Máquinas de Estados
+Domínio	Máquina de Estados
+Reserva	Criada → Confirmada → Pré Check-in → Check-in Liberado → Em Hospedagem → Pré Checkout → Checkout Realizado → Encerrada
+Faxina	Pendente → Designada → Em Deslocamento → Iniciada → Em Inspeção → Concluída
+Atendimento IA	Nova Conversa → Identificando Contexto → Atendimento Automático → Resolvido
+Solicitação	Criada → Em Análise → Aprovada → Executada → Concluída
+Intercorrência	Registrada → Em Investigação → Responsável Identificado → Em Tratativa → Resolvida → Encerrada
+Comunicação	Criada → Na Fila → Enviando → Enviada → Recebida → Lida
+Workflow	Criado → Executando → Aguardando Evento → Concluído
+Integração	Disponível → Sincronizando → Sincronizado

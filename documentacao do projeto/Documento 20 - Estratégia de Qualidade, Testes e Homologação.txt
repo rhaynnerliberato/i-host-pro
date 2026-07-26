@@ -1,0 +1,476 @@
+Documento 20 - Estratégia de Qualidade, Testes e Homologação
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define a estratégia de garantia da qualidade (Quality Assurance) do iHostPro.
+
+Seu objetivo é assegurar que todas as funcionalidades implementadas sejam verificadas de forma sistemática, reduzindo regressões, aumentando a confiabilidade da plataforma e permitindo evolução contínua com segurança.
+
+A qualidade deverá ser considerada desde o início do desenvolvimento, e não apenas na fase final.
+
+2. Princípios
+
+Toda funcionalidade deverá ser:
+
+especificada;
+implementada;
+testada;
+homologada;
+monitorada após publicação.
+
+A ausência de testes deverá ser tratada como dívida técnica.
+
+3. Pirâmide de Testes
+
+O Claude Code deverá estruturar o projeto considerando a seguinte estratégia:
+
+Base:
+
+Testes Unitários
+
+↓
+
+Testes de Integração
+
+↓
+
+Testes End-to-End
+
+↓
+
+Testes Exploratórios
+
+↓
+
+Homologação
+
+↓
+
+Produção
+
+A maior parte dos testes deverá concentrar-se na base da pirâmide.
+
+4. Testes Unitários
+
+Todo componente de domínio deverá possuir testes unitários.
+
+Exemplos:
+
+regras de negócio;
+políticas;
+cálculo de disponibilidade;
+autorização de early check-in;
+cálculo de late checkout;
+validações;
+serviços de domínio.
+
+Os testes deverão ser rápidos, independentes e determinísticos.
+
+5. Testes de Integração
+
+Validar a comunicação entre módulos internos.
+
+Exemplos:
+
+reserva → agenda;
+agenda → faxina;
+IA → ferramentas;
+workflow → banco de dados;
+políticas → motor de decisão.
+6. Testes End-to-End
+
+Simular fluxos completos do utilizador.
+
+Exemplos:
+
+Criar reserva
+
+↓
+
+Gerar faxina
+
+↓
+
+Enviar mensagem
+
+↓
+
+Check-in
+
+↓
+
+Concluir faxina
+
+↓
+
+Checkout
+
+↓
+
+Registrar auditoria
+
+Os testes deverão reproduzir cenários reais.
+
+7. Testes da IA
+
+O agente deverá possuir testes específicos.
+
+Exemplos:
+
+Perguntas frequentes
+
+Mensagens ambíguas
+
+Mudança de idioma
+
+Solicitação de humano
+
+Early check-in
+
+Late checkout
+
+Reembolso
+
+Mensagens inválidas
+
+Baixa confiança
+
+Cada cenário deverá validar tanto a resposta quanto as ações executadas.
+
+8. Testes de Workflows
+
+Cada workflow deverá possuir testes completos.
+
+Verificar:
+
+gatilho
+
+execução
+
+ações
+
+eventos
+
+falhas
+
+retry
+
+idempotência
+
+auditoria
+
+9. Testes de Integração Externa
+
+As integrações deverão ser testadas utilizando ambientes de homologação ou implementações simuladas (mock/fake).
+
+Nunca depender exclusivamente de serviços externos durante a execução automática da suíte de testes.
+
+10. Testes de Interface
+
+Validar:
+
+renderização
+
+responsividade
+
+acessibilidade
+
+fluxos principais
+
+componentes reutilizáveis
+
+11. Testes de Responsividade
+
+Verificar funcionamento em:
+
+Smartphone
+
+Tablet
+
+Notebook
+
+Desktop
+
+A interface deverá manter usabilidade em todos os formatos suportados.
+
+12. Testes de Performance
+
+Avaliar:
+
+tempo de resposta
+
+consultas
+
+workflows
+
+sincronizações
+
+dashboards
+
+mensagens
+
+IA
+
+O objetivo é identificar gargalos antes da produção.
+
+13. Testes de Carga
+
+Simular múltiplos utilizadores simultâneos.
+
+Exemplos:
+
+100 administradores
+
+1.000 hóspedes
+
+milhares de mensagens
+
+centenas de workflows
+
+sincronizações simultâneas
+
+14. Testes de Estresse
+
+Executar cenários acima da capacidade esperada para observar o comportamento da plataforma.
+
+O sistema deverá degradar de forma controlada, sem perda de consistência dos dados.
+
+15. Testes de Segurança
+
+Validar:
+
+autenticação
+
+autorização
+
+permissões
+
+injeção de código
+
+XSS
+
+CSRF
+
+SQL Injection
+
+controle de acesso
+
+isolamento entre tenants
+
+16. Testes de Recuperação
+
+Simular:
+
+queda de banco
+
+queda de integrações
+
+queda da IA
+
+interrupção de workflows
+
+reinicialização da aplicação
+
+Verificar recuperação automática sempre que possível.
+
+17. Testes de Backup
+
+Executar periodicamente:
+
+backup
+
+restauração
+
+validação da integridade
+
+18. Testes de Migração
+
+Toda alteração estrutural deverá possuir testes de migração.
+
+Verificar:
+
+integridade
+
+rollback
+
+compatibilidade
+
+consistência
+
+19. Testes de Regressão
+
+Sempre que uma funcionalidade for alterada, executar automaticamente os testes relacionados.
+
+O objetivo é impedir que novas implementações quebrem funcionalidades existentes.
+
+20. Homologação
+
+Antes da disponibilização em produção, todas as funcionalidades deverão passar por homologação.
+
+A homologação deverá validar:
+
+requisitos funcionais
+
+requisitos não funcionais
+
+fluxos completos
+
+regras de negócio
+
+configurações
+
+permissões
+
+21. Ambiente de Homologação
+
+O ambiente de homologação deverá reproduzir, na medida do possível, as características do ambiente de produção.
+
+Diferenças deverão ser mínimas e controladas.
+
+22. Dados de Teste
+
+O sistema deverá possuir mecanismos para geração de dados fictícios.
+
+Exemplos:
+
+reservas
+
+hóspedes
+
+imóveis
+
+faxinas
+
+ocorrências
+
+mensagens
+
+pagamentos
+
+Esses dados não deverão conter informações reais.
+
+23. Critérios de Aceitação
+
+Toda funcionalidade deverá possuir critérios objetivos de aceitação.
+
+Exemplo:
+
+Dado...
+
+Quando...
+
+Então...
+
+Os testes deverão validar esses critérios automaticamente sempre que possível.
+
+24. Critérios de Aprovação
+
+Uma funcionalidade somente poderá ser considerada pronta quando:
+
+implementada;
+documentada;
+testada;
+homologada;
+auditável;
+integrada corretamente;
+sem erros críticos conhecidos.
+25. Cobertura de Testes
+
+O Claude Code deverá buscar elevada cobertura de testes para:
+
+domínio;
+regras de negócio;
+políticas;
+workflows;
+integrações internas.
+
+A cobertura não deverá ser medida apenas por percentual de linhas, mas pela qualidade dos cenários testados.
+
+26. Testes Contínuos
+
+Os testes deverão ser executados automaticamente durante o processo de integração contínua (CI).
+
+Qualquer falha deverá impedir a promoção da versão até que seja corrigida.
+
+27. Checklist de Liberação
+
+Antes de cada release, verificar:
+
+testes unitários aprovados;
+testes de integração aprovados;
+testes E2E aprovados;
+migrações validadas;
+integrações operacionais;
+auditoria funcional;
+documentação atualizada;
+ausência de falhas críticas.
+28. Gestão de Defeitos
+
+Todo defeito deverá possuir:
+
+identificador;
+descrição;
+severidade;
+prioridade;
+responsável;
+estado;
+histórico;
+data de resolução.
+29. Classificação de Defeitos
+
+Sugestão:
+
+Crítico
+
+Alto
+
+Médio
+
+Baixo
+
+Melhoria
+
+A prioridade de correção deverá considerar o impacto operacional.
+
+30. Observabilidade Pós-Produção
+
+Após cada publicação, monitorar:
+
+erros
+
+latência
+
+workflows
+
+integrações
+
+consumo da IA
+
+feedback dos utilizadores
+
+alertas
+
+A estabilização da versão faz parte do processo de qualidade.
+
+31. Evolução
+
+A estratégia de testes deverá evoluir juntamente com a plataforma.
+
+Novos módulos deverão incluir seus próprios testes desde a primeira entrega.
+
+32. Critérios de Qualidade
+
+O processo de QA será considerado adequado quando:
+
+detectar regressões antes da produção;
+validar os principais fluxos de negócio;
+garantir estabilidade das integrações;
+assegurar o correto funcionamento do agente de IA;
+permitir evolução contínua da plataforma com baixo risco.
+33. Observação para o Claude Code
+
+A qualidade do iHostPro deverá ser tratada como uma responsabilidade transversal de toda a arquitetura. O objetivo não é apenas atingir alta cobertura de testes, mas garantir que as funcionalidades críticas do negócio permaneçam estáveis ao longo da evolução da plataforma. O Claude Code deverá privilegiar testes automatizados de regras de negócio, workflows, políticas configuráveis e integrações, reduzindo a dependência de validações manuais e permitindo ciclos rápidos e seguros de desenvolvimento contínuo.

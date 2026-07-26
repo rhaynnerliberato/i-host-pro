@@ -1,0 +1,455 @@
+Documento 19 - Arquitetura de Integrações
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define como o iHostPro deverá integrar-se com sistemas externos.
+
+As integrações deverão ser desacopladas da lógica de negócio da plataforma, permitindo adicionar novos fornecedores sem alterar os módulos internos.
+
+O sistema deverá ser orientado por conectores (Connectors), e não por integrações específicas.
+
+2. Princípios
+
+Toda integração deverá ser:
+
+desacoplada;
+versionada;
+resiliente;
+observável;
+substituível;
+monitorizável;
+configurável.
+
+A lógica de negócio nunca deverá depender diretamente da API de um fornecedor específico.
+
+3. Arquitetura Geral
+Aplicação
+
+↓
+
+Application Services
+
+↓
+
+Integration Layer
+
+↓
+
+Connector
+
+↓
+
+API Externa
+
+Os módulos internos nunca deverão conhecer detalhes da API externa.
+
+4. Connectors
+
+Cada sistema externo deverá possuir um Connector próprio.
+
+Exemplos:
+
+Airbnb Connector
+
+WhatsApp Connector
+
+PIX Connector
+
+Email Connector
+
+SMS Connector
+
+Push Notification Connector
+
+AI Connector
+
+Storage Connector
+
+Maps Connector
+
+Identity Connector
+
+5. Adapter Pattern
+
+Cada Connector deverá implementar uma interface comum.
+
+Exemplo:
+
+ReservationProvider
+
+↓
+
+Airbnb
+
+↓
+
+Booking
+
+↓
+
+VRBO
+
+↓
+
+Outro Canal
+
+Os módulos internos conversarão apenas com a interface.
+
+6. Eventos
+
+As integrações deverão comunicar preferencialmente através de eventos.
+
+Exemplo:
+
+ReservaCriada
+
+↓
+
+Evento Interno
+
+↓
+
+Atualizar Agenda
+
+↓
+
+Criar Faxina
+
+↓
+
+Atualizar Calendário
+
+↓
+
+Registrar Auditoria
+
+7. Webhooks
+
+Sempre que o fornecedor suportar Webhooks, estes deverão ser preferidos em relação a polling contínuo.
+
+Todo webhook deverá:
+
+validar autenticidade;
+validar assinatura;
+impedir duplicidade;
+gerar auditoria;
+publicar evento interno.
+8. Polling
+
+Quando um fornecedor não disponibilizar webhooks, o sistema poderá utilizar sincronização periódica.
+
+Essa sincronização deverá ser configurável.
+
+9. Integração Airbnb
+
+O sistema deverá ser preparado para integrar com a API oficial do Airbnb.
+
+Inicialmente deverá suportar:
+
+importação de reservas;
+alterações;
+cancelamentos;
+calendário;
+disponibilidade;
+informações do hóspede (quando disponíveis);
+mensagens suportadas pela API.
+
+Toda a lógica deverá ficar isolada no Airbnb Connector.
+
+10. Futuras Plataformas
+
+A arquitetura deverá permitir adicionar facilmente:
+
+Booking.com
+
+VRBO
+
+Expedia
+
+Decolar
+
+Sites próprios
+
+Motores de reserva
+
+Outras OTAs
+
+Sem alterações na camada de negócio.
+
+11. WhatsApp
+
+O sistema deverá utilizar um Connector específico.
+
+Toda comunicação deverá passar por ele.
+
+Responsabilidades:
+
+enviar mensagens;
+receber mensagens;
+anexos;
+templates;
+estado de entrega;
+leitura;
+auditoria.
+
+O restante da plataforma nunca deverá conhecer detalhes da API utilizada.
+
+12. Inteligência Artificial
+
+A IA deverá possuir um Gateway próprio.
+
+Responsabilidades:
+
+seleção do modelo;
+controlo de custos;
+gestão de contexto;
+execução de ferramentas;
+auditoria.
+
+Os módulos internos nunca deverão chamar diretamente um modelo de linguagem.
+
+13. Pagamentos
+
+Toda integração financeira deverá utilizar um Payment Connector.
+
+Inicialmente:
+
+PIX
+
+No futuro:
+
+Cartão
+
+Boleto
+
+Stripe
+
+Mercado Pago
+
+Asaas
+
+Pagar.me
+
+Outros.
+
+14. Armazenamento
+
+Arquivos deverão utilizar um Storage Connector.
+
+Tipos:
+
+Fotos
+
+Vídeos
+
+Documentos
+
+Comprovativos
+
+Relatórios
+
+A aplicação não deverá depender de um fornecedor específico.
+
+15. Notificações
+
+Criar um Notification Connector.
+
+Capaz de enviar:
+
+Email
+
+SMS
+
+Push
+
+WhatsApp
+
+Notificações internas
+
+Novos canais poderão ser adicionados futuramente.
+
+16. Geolocalização
+
+Preparar um Maps Connector.
+
+Possíveis utilizações futuras:
+
+Localização do imóvel
+
+Navegação
+
+Geocoding
+
+Distância
+
+Tempo estimado
+
+17. Identidade
+
+Criar um Identity Connector.
+
+Permitirá futura integração com:
+
+Google
+
+Microsoft
+
+Apple
+
+LDAP
+
+SAML
+
+OIDC
+
+18. Configuração
+
+Cada Connector deverá possuir:
+
+credenciais
+
+tokens
+
+timeouts
+
+retries
+
+limites
+
+ambiente
+
+logs
+
+Todas essas configurações deverão ficar fora do código.
+
+19. Retry
+
+Toda integração deverá suportar:
+
+retry automático
+
+backoff exponencial
+
+limite de tentativas
+
+fila de reprocessamento
+
+20. Timeout
+
+Toda chamada externa deverá possuir timeout configurável.
+
+Nenhuma requisição poderá permanecer indefinidamente aberta.
+
+21. Circuit Breaker
+
+Caso uma integração apresente falhas consecutivas, o sistema deverá impedir novas tentativas temporariamente.
+
+Após o período de espera, novas tentativas poderão ocorrer automaticamente.
+
+22. Cache
+
+Quando apropriado, poderá ser utilizado cache.
+
+Nunca armazenar dados inconsistentes.
+
+O tempo de vida do cache deverá ser configurável.
+
+23. Idempotência
+
+Todas as integrações deverão ser idempotentes.
+
+O mesmo evento nunca deverá produzir efeitos duplicados.
+
+24. Auditoria
+
+Toda chamada externa deverá registrar:
+
+Data
+
+Hora
+
+Sistema
+
+Operação
+
+Payload (quando permitido)
+
+Resposta
+
+Tempo
+
+Status
+
+Erro
+
+Tentativas
+
+25. Segurança
+
+Todas as credenciais deverão ser protegidas.
+
+Nunca armazenar:
+
+tokens em texto plano
+
+segredos no código
+
+credenciais em logs
+
+26. Monitorização
+
+Cada Connector deverá disponibilizar métricas.
+
+Exemplos:
+
+Tempo médio
+
+Erros
+
+Disponibilidade
+
+Retries
+
+Timeouts
+
+Volume
+
+Fila
+
+27. Versionamento
+
+As integrações deverão permitir coexistência entre diferentes versões das APIs externas.
+
+Mudanças de um fornecedor não deverão afetar imediatamente o restante da plataforma.
+
+28. Testabilidade
+
+Cada Connector deverá poder ser substituído por uma implementação simulada (mock ou fake), permitindo testes automatizados sem depender de serviços externos.
+
+29. Evolução
+
+A inclusão de um novo fornecedor deverá exigir apenas:
+
+implementação de um novo Connector;
+configuração das credenciais;
+ativação pelo administrador (quando aplicável).
+
+Nenhum módulo de negócio deverá ser alterado.
+
+30. Critérios de Qualidade
+
+A camada de Integrações será considerada adequada quando:
+
+estiver completamente desacoplada da lógica de negócio;
+suportar múltiplos fornecedores para o mesmo serviço;
+for resiliente a falhas externas;
+permitir monitorização e auditoria completas;
+possibilitar a adição de novos conectores sem impacto significativo na plataforma.
+
+31. Observação para o Claude Code
+
+A camada de integrações deverá ser tratada como uma infraestrutura independente da lógica do domínio. Toda comunicação com sistemas externos deverá ocorrer exclusivamente através de Connectors bem definidos, com contratos claros, isolamento de responsabilidades, suporte a observabilidade, tolerância a falhas e facilidade de substituição. O objetivo é garantir que o crescimento do iHostPro para novas OTAs, provedores de IA, gateways de pagamento, serviços de mensagens ou outros parceiros ocorra de forma incremental, sem necessidade de reescrever regras de negócio ou comprometer a estabilidade da plataforma.

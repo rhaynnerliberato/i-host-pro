@@ -1,0 +1,530 @@
+Documento 13 - Arquitetura de APIs e Integrações
+
+Versão: 1.0
+
+Status: Oficial
+
+1. Objetivo
+
+Este documento define a arquitetura de APIs, integrações externas, comunicação entre módulos e estratégia de sincronização do iHostPro.
+
+Não define endpoints específicos.
+
+Os contratos detalhados poderão ser gerados automaticamente durante o desenvolvimento.
+
+O objetivo é garantir que todas as integrações sigam o mesmo padrão arquitetural.
+
+2. Princípios
+
+Toda integração deverá ser:
+
+desacoplada;
+resiliente;
+observável;
+segura;
+idempotente;
+versionável;
+monitorável;
+facilmente substituível.
+
+Nenhuma regra de negócio deverá depender diretamente da implementação de uma integração específica.
+
+3. Arquitetura Geral
+                Airbnb
+                   │
+                   ▼
+         Adaptador Airbnb
+                   │
+                   ▼
+          Camada de Integração
+                   │
+                   ▼
+             Eventos Internos
+                   │
+                   ▼
+          Módulos do Sistema
+                   │
+                   ▼
+          Banco de Dados
+
+O mesmo princípio deverá ser aplicado para todas as integrações.
+
+4. Camada de Integrações
+
+Toda integração externa deverá passar por uma camada única.
+
+Essa camada será responsável por:
+
+autenticação;
+tratamento de erros;
+retries;
+logs;
+monitoramento;
+transformação de dados;
+versionamento;
+auditoria.
+
+Nenhum módulo interno deverá consumir APIs externas diretamente.
+
+5. Adaptadores (Adapters)
+
+Cada sistema externo deverá possuir um adaptador independente.
+
+Exemplos:
+
+Airbnb Adapter
+Booking Adapter
+VRBO Adapter
+WhatsApp Adapter
+PIX Adapter
+Google Calendar Adapter
+Smart Lock Adapter
+Email Adapter
+SMS Adapter
+
+Cada adaptador deverá implementar uma interface comum sempre que possível, facilitando a adição de novos provedores.
+
+6. Integrações Previstas
+
+Primeira versão:
+
+Airbnb
+WhatsApp
+PIX
+
+Preparado para futuras integrações:
+
+Booking.com
+VRBO
+Google Calendar
+Apple Calendar
+Outlook Calendar
+Fechaduras Inteligentes
+Stripe
+Mercado Pago
+Asaas
+Pagar.me
+OpenPix
+Twilio
+SendGrid
+AWS SES
+Firebase
+Google Maps
+Waze
+APIs de tradução
+APIs de IA
+7. Estratégia para Airbnb
+
+O sistema deverá sincronizar automaticamente:
+
+novas reservas;
+alterações;
+cancelamentos;
+alterações de datas;
+alterações de hóspedes;
+bloqueios de calendário.
+
+Toda sincronização deverá gerar eventos internos.
+
+Exemplo:
+
+Reserva Importada
+
+↓
+
+ReservationCreated
+
+↓
+
+Atualizar Agenda
+
+↓
+
+Criar Faxina
+
+↓
+
+Disparar Workflows
+8. Estratégia para WhatsApp
+
+Toda comunicação deverá passar pelo módulo de Comunicação.
+
+Nunca chamar diretamente a API do WhatsApp.
+
+Fluxo:
+
+Mensagem
+
+↓
+
+Communication Module
+
+↓
+
+WhatsApp Adapter
+
+↓
+
+Provedor
+
+↓
+
+Entrega
+
+↓
+
+Confirmação
+
+↓
+
+Evento
+9. Estratégia para PIX
+
+A plataforma deverá suportar:
+
+geração de cobrança;
+consulta de pagamento;
+confirmação automática;
+cancelamento;
+expiração.
+
+Fluxo:
+
+Late Checkout
+
+↓
+
+Gerar PIX
+
+↓
+
+Enviar ao hóspede
+
+↓
+
+Aguardar confirmação
+
+↓
+
+Pagamento confirmado
+
+↓
+
+Executar Workflow
+10. Estratégia para Fechaduras
+
+O sistema deverá ser preparado para diferentes tecnologias.
+
+Exemplos:
+
+senha fixa;
+senha temporária;
+API REST;
+Bluetooth;
+NFC;
+Wi-Fi;
+Zigbee;
+Z-Wave.
+
+Cada fabricante deverá possuir seu próprio adaptador.
+
+O domínio nunca deverá conhecer o fabricante.
+
+11. APIs Internas
+
+Toda funcionalidade deverá ser disponibilizada por APIs internas bem definidas.
+
+Características esperadas:
+
+consistentes;
+documentadas;
+versionadas;
+seguras;
+previsíveis.
+
+As interfaces Web e futuras aplicações móveis deverão consumir essas APIs.
+
+12. Versionamento de APIs
+
+As APIs deverão permitir evolução sem quebra de compatibilidade.
+
+Princípios:
+
+versionamento explícito quando necessário;
+compatibilidade retroativa sempre que possível;
+depreciação gradual;
+documentação clara das mudanças.
+13. Webhooks
+
+A plataforma deverá disponibilizar suporte a Webhooks.
+
+Exemplos de eventos:
+
+reserva criada;
+reserva alterada;
+reserva cancelada;
+faxina iniciada;
+faxina concluída;
+dano registrado;
+mensagem recebida;
+mensagem enviada;
+pagamento confirmado;
+workflow executado.
+
+Cada administrador poderá habilitar apenas os eventos desejados.
+
+14. API Pública
+
+O sistema deverá nascer preparado para possuir uma API pública.
+
+Inicialmente poderá permanecer desabilitada.
+
+No futuro deverá permitir:
+
+integração com ERPs;
+PMS;
+CRMs;
+plataformas de automação;
+aplicativos móveis;
+parceiros.
+15. Idempotência
+
+Toda operação crítica deverá ser idempotente.
+
+Exemplos:
+
+Receber duas vezes a mesma reserva.
+
+Receber dois webhooks iguais.
+
+Receber duas confirmações de pagamento.
+
+Receber dois eventos do Airbnb.
+
+O resultado deverá ser sempre consistente.
+
+16. Retries
+
+Falhas temporárias deverão utilizar retries automáticos.
+
+Utilizar política configurável.
+
+Exemplo:
+
+1ª tentativa
+
+↓
+
+2ª tentativa
+
+↓
+
+3ª tentativa
+
+↓
+
+Fila de erro
+
+↓
+
+Notificação
+
+17. Dead Letter Queue
+
+Mensagens que não puderem ser processadas deverão ser encaminhadas para uma fila de falhas.
+
+Nunca deverão ser descartadas silenciosamente.
+
+O administrador deverá poder visualizar:
+
+erro;
+origem;
+payload;
+data;
+motivo;
+quantidade de tentativas.
+18. Timeouts
+
+Toda integração deverá possuir timeout configurável.
+
+Nenhuma chamada externa poderá bloquear indefinidamente a aplicação.
+
+19. Circuit Breaker
+
+Quando uma integração apresentar falhas consecutivas, o sistema deverá impedir novas tentativas por um período configurável.
+
+Após esse período deverá tentar novamente de forma controlada.
+
+20. Rate Limit
+
+A plataforma deverá respeitar os limites impostos pelos provedores.
+
+Quando necessário:
+
+controlar concorrência;
+limitar chamadas;
+utilizar filas;
+reagendar sincronizações.
+21. Logs
+
+Toda integração deverá registrar:
+
+início;
+fim;
+duração;
+resultado;
+erros;
+payload resumido;
+identificadores de correlação.
+
+Nunca registrar dados sensíveis em texto simples.
+
+22. Auditoria
+
+A auditoria deverá registrar apenas os efeitos de negócio.
+
+Exemplo:
+
+"Reserva criada"
+
+e não necessariamente:
+
+"POST /reservations"
+
+23. Monitoramento
+
+Cada integração deverá possuir indicadores próprios.
+
+Exemplos:
+
+tempo médio;
+falhas;
+disponibilidade;
+retries;
+mensagens enviadas;
+mensagens recebidas;
+pagamentos confirmados;
+sincronizações executadas.
+24. Sincronização
+
+Toda sincronização deverá possuir:
+
+identificador;
+origem;
+horário;
+duração;
+status;
+quantidade de registros;
+erros;
+observações.
+25. Consistência
+
+Sempre que houver divergência entre a plataforma e o sistema externo, deverão existir mecanismos de reconciliação.
+
+Exemplos:
+
+sincronização manual;
+sincronização automática;
+comparação de estados;
+reprocessamento.
+26. Segurança
+
+Todas as integrações deverão utilizar mecanismos seguros de autenticação.
+
+Credenciais deverão ser armazenadas de forma protegida.
+
+Renovação de tokens deverá ser automática sempre que suportada pelo provedor.
+
+27. Configuração
+
+Cada integração deverá possuir configurações independentes.
+
+Exemplos:
+
+ativar/desativar;
+credenciais;
+timeout;
+retries;
+horários de sincronização;
+eventos monitorados.
+
+Nenhuma configuração deverá exigir alteração de código.
+
+28. Testabilidade
+
+As integrações deverão ser facilmente simuláveis.
+
+O Claude Code deverá prever mecanismos que permitam testes sem depender dos serviços reais.
+
+29. Evolução
+
+Novas integrações deverão ser adicionadas através de novos adaptadores, sem modificar o domínio de negócio existente.
+
+30. Integração com o Agente IA
+
+O Agente IA nunca deverá comunicar diretamente com APIs externas.
+
+Sempre deverá utilizar serviços internos da plataforma.
+
+Exemplo:
+
+IA
+
+↓
+
+Application Service
+
+↓
+
+Communication Module
+
+↓
+
+WhatsApp Adapter
+
+↓
+
+WhatsApp
+
+Isso garante:
+
+auditoria;
+políticas;
+permissões;
+logs;
+observabilidade;
+consistência.
+31. Estratégia de Eventos
+
+Sempre que uma integração produzir uma alteração de negócio, deverá publicar um evento interno.
+
+Exemplos:
+
+ReservationCreated
+ReservationUpdated
+ReservationCancelled
+CleaningCompleted
+PixConfirmed
+GuestMessageReceived
+GuestMessageSent
+EarlyCheckinApproved
+LateCheckoutApproved
+DamageReported
+
+Esses eventos serão consumidos pelos workflows e pelos demais módulos da plataforma.
+
+32. Critérios de Qualidade
+
+A arquitetura de APIs e integrações será considerada adequada quando:
+
+todas as integrações forem desacopladas do domínio;
+novas integrações puderem ser adicionadas sem alterar o núcleo da aplicação;
+falhas externas não interromperem a operação;
+todas as chamadas forem observáveis e auditáveis;
+operações críticas forem idempotentes;
+houver suporte a retries, timeout, circuit breaker e reconciliação;
+todas as integrações puderem ser configuradas pelo administrador sem necessidade de alteração de código.
+
+Observação Importante:
+
+As integrações representam um dos pontos mais sensíveis da plataforma. O desenvolvimento deverá privilegiar robustez, tolerância a falhas e facilidade de evolução. O objetivo é que o iHostPro possa integrar novos canais, meios de pagamento, plataformas de reservas e dispositivos inteligentes ao longo do tempo sem impactar o domínio de negócio ou exigir refatorações significativas.
