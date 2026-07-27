@@ -1,6 +1,9 @@
 using System.Reflection;
+using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
+using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -34,14 +37,14 @@ try
     // that applies migrations — no DbContext ever calls Database.Migrate() at
     // application startup, avoiding races between multiple instances.
     //
-    // Phase 0 note: no Bounded Context module exists yet, so this run is expected
-    // to discover zero DbContext types. As each module is implemented (starting
-    // with Identity & Access in Phase 1), its DbContext assembly is added to
-    // moduleAssemblies below and will be picked up automatically — no other
-    // module needs to change.
+    // This connects exclusively as the ihostpro_migrator role — its connection
+    // string always comes from THIS process's own appsettings/environment,
+    // never from IHostPro.Api/IHostPro.Worker's configuration, which only ever
+    // holds the ihostpro_app credential (Incremento 1 plan, adendo final,
+    // Section 7).
     var moduleAssemblies = new List<Assembly>
     {
-        // typeof(IdentityDbContext).Assembly,     // added when Identity & Access exists
+        typeof(IdentityDbContext).Assembly,
         // typeof(ReservationsDbContext).Assembly, // added when Reservation & Scheduling exists
     };
 
@@ -52,14 +55,50 @@ try
 
     if (moduleDbContextTypes.Count == 0)
     {
-        log.LogWarning("No Bounded Context DbContext discovered. This is expected until the first module (Identity & Access, Phase 1) is implemented.");
+        log.LogWarning("No Bounded Context DbContext discovered.");
     }
 
     foreach (var dbContextType in moduleDbContextTypes)
     {
+        var connectionStringKey = dbContextType.Name.EndsWith("DbContext", StringComparison.Ordinal)
+            ? dbContextType.Name[..^"DbContext".Length]
+            : dbContextType.Name;
+
+        var connectionString = builder.Configuration.GetConnectionString(connectionStringKey)
+            ?? throw new InvalidOperationException(
+                $"Missing connection string 'ConnectionStrings:{connectionStringKey}' for {dbContextType.Name}.");
+
         log.LogInformation("Applying migrations for {DbContext}", dbContextType.Name);
 
-        if (Activator.CreateInstance(dbContextType) is DbContext dbContext)
+        // Every module DbContext inherits BaseDbContext, whose constructor
+        // shape is fixed by convention: (DbContextOptions<TSelf>,
+        // ITenantContext) (Architecture Principles, Sections 10/16) — this is
+        // what lets this process construct any module's DbContext purely by
+        // reflection, without any module-specific code. Tenant context is
+        // irrelevant to schema/DDL operations, so a fresh, unresolved
+        // TenantContext is sufficient.
+        var optionsBuilderType = typeof(DbContextOptionsBuilder<>).MakeGenericType(dbContextType);
+
+        // The EF Core migrations history table must live inside the module's
+        // own schema, never the default `public` (Architecture Principles,
+        // Section 10 — "cada DbContext possui sua própria tabela de
+        // histórico de migrations"; also the concrete fix for the
+        // "permission denied for schema public" failure found during
+        // Incremento 1 homologation, since ihostpro_migrator is never
+        // granted CREATE on public). SchemaName is a property with no
+        // dependency on a real connection, so a throwaway, unconfigured
+        // instance is enough to read it before building the real options.
+        var probeOptionsBuilder = (DbContextOptionsBuilder)Activator.CreateInstance(optionsBuilderType)!;
+        using var probeDbContext = (DbContext)Activator.CreateInstance(dbContextType, probeOptionsBuilder.Options, new TenantContext())!;
+        var schemaName = ((IModuleDbContext)probeDbContext).SchemaName;
+
+        var optionsBuilder = (DbContextOptionsBuilder)Activator.CreateInstance(optionsBuilderType)!;
+        optionsBuilder.UseNpgsql(connectionString, npgsqlOptions =>
+            npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", schemaName));
+
+        var dbContext = (DbContext)Activator.CreateInstance(dbContextType, optionsBuilder.Options, new TenantContext())!;
+
+        await using (dbContext)
         {
             await dbContext.Database.MigrateAsync();
         }

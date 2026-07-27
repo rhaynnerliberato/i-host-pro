@@ -34,6 +34,16 @@ jobs:
       - name: Architecture Tests
         run: dotnet test tests/IHostPro.ArchitectureTests/IHostPro.ArchitectureTests.csproj --no-build --configuration Release --logger "trx"
 
-      # NOTE (Phase 0 scope): steps for unit/integration tests per Bounded Context,
-      # static analysis and container image build will be added as those modules
-      # and pipelines are implemented (ADR-011).
+      - name: Identity & Access - Unit Tests
+        run: dotnet test tests/Contexts/Identity/IHostPro.Contexts.Identity.Tests.Unit/IHostPro.Contexts.Identity.Tests.Unit.csproj --no-build --configuration Release --logger "trx"
+
+      # Requires Docker (Testcontainers.PostgreSql) — available by default on
+      # GitHub-hosted ubuntu-latest runners. Could not be executed in the
+      # local development environment used to author this increment (see the
+      # Incremento 1 report); this is its first real execution opportunity.
+      - name: Identity & Access - Integration Tests
+        run: dotnet test tests/Contexts/Identity/IHostPro.Contexts.Identity.Tests.Integration/IHostPro.Contexts.Identity.Tests.Integration.csproj --no-build --configuration Release --logger "trx"
+
+      # NOTE (Phase 0/1 scope): steps for additional Bounded Contexts, static
+      # analysis and container image build will be added as those modules and
+      # pipelines are implemented (ADR-011).

@@ -1,6 +1,8 @@
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
+using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
+using IHostPro.Contexts.Identity.Infrastructure;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -27,12 +29,24 @@ try
     builder.Services.AddSwaggerGen();
 
     // Multi-tenant: resolved per request by an authentication/authorization
-    // middleware once Identity & Access is implemented (Phase 1). The scoped
-    // instance is registered here so every downstream service in the request
-    // can depend on ITenantContext (Architecture Principles, Section 7).
+    // middleware once login/JWT exist (Incremento 2). The scoped instance is
+    // registered here so every downstream service in the request can depend
+    // on ITenantContext (Architecture Principles, Section 7).
     builder.Services.AddScoped<ITenantContext, TenantContext>();
 
     builder.Services.AddHealthChecks();
+
+    // Tenant-aware transactional pipeline (TenantTransactionBehavior /
+    // TenantBootstrapBehavior + ITenantAwareUnitOfWork) — foundation
+    // registered now; no Command/Query dispatches through it yet, since no
+    // handler exists until Incremento 2 (Incremento 1 plan, Section 12).
+    builder.Services.AddIHostProTenantAwarePipeline();
+
+    // Identity & Access module (Incremento 1 plan) — DbContext, custom
+    // Identity stores/hasher/validator, tenant bootstrap reader. No
+    // controllers/endpoints exist yet (IHostPro.Contexts.Identity.Api is a
+    // structural placeholder until Incremento 2).
+    builder.Services.AddIdentityModule(builder.Configuration);
 
     // IHostPro.Api only publishes Integration Events (via IEventPublisher); it never
     // consumes messages — consumers/handlers live exclusively in IHostPro.Worker
@@ -60,10 +74,10 @@ try
             .AddRuntimeInstrumentation()
             .AddOtlpExporter(o => o.Endpoint = otlpEndpoint));
 
-    // NOTE (Phase 0 scope): Bounded Context modules (Identity, Reservations, etc.)
-    // do not exist yet. Each module will be registered here through a single
-    // extension method (e.g. `builder.Services.AddReservationsModule(...)`) as it
-    // is implemented in its corresponding phase, per Architecture Principles §16.
+    // Future Bounded Context modules (Reservations, etc.) are registered here
+    // through their own single extension method
+    // (e.g. `builder.Services.AddReservationsModule(...)`) as each is
+    // implemented in its corresponding phase, per Architecture Principles §16.
 
     var app = builder.Build();
 

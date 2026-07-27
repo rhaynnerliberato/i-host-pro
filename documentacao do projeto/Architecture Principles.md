@@ -106,6 +106,21 @@ Regras de dependência **dentro** de um contexto:
 - Eventos e jobs em background sempre preservam o `TenantId` no payload/contexto de execução.
 - A evolução futura para schema-dedicado ou banco-dedicado por tenant é suportada pela arquitetura sem exigir reescrita do domínio (Documento 11 §7).
 
+### Mecanismo de RLS (obrigatório para toda tabela tenant-owned)
+
+Estabelecido durante a Fase 1 (Identity & Access, Incremento 1) e aplicável a todo Bounded Context futuro com tabelas tenant-owned:
+
+- Cada tabela tenant-owned recebe `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` **e** `FORCE ROW LEVEL SECURITY`, com uma policy `USING`/`WITH CHECK` idêntica: `tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid`. O uso de `true` como segundo argumento faz `current_setting` retornar `NULL` em vez de lançar erro quando não definido; como `tenant_id = NULL` nunca é verdadeiro em SQL, a ausência de tenant resolvido falha fechado (zero linhas), nunca com erro.
+- A variável de sessão é sempre definida via `SET LOCAL app.tenant_id = '<uuid>'` — nunca `SET` simples — porque `SET LOCAL` é automaticamente desfeito no `COMMIT`/`ROLLBACK` e não pode vazar para uma conexão física reaproveitada pelo pool.
+- `SET LOCAL` é executado como primeiro comando de toda unidade de trabalho, por um mecanismo genérico e compartilhado em `BuildingBlocks.Infrastructure` (`ITenantAwareUnitOfWork` + `TenantTransactionBehavior`), nunca manualmente por um handler.
+- Tabelas de catálogo da plataforma (não tenant-owned, ex.: `tenants`, `roles`, `permissions`) nunca recebem RLS.
+- Toda relação entre tabelas tenant-owned usa chave alternativa e FK compostas incluindo `tenant_id` (ex.: `sessions (tenant_id, id, user_id)` referenciado por `refresh_tokens (tenant_id, session_id, user_id)`), impedindo relações cross-tenant mesmo sob a role que executa migrations — RLS reduz exposição pela aplicação, mas não substitui integridade referencial.
+- Comportamento fail-closed validado empiricamente contra PostgreSQL real (tenant correto/incorreto/ausente, tentativa de `INSERT`/`UPDATE` cross-tenant, `row_security = off`, `DISABLE ROW LEVEL SECURITY`, reuso de conexão do pool) — ver `documentacao do projeto/Fase 1 - Identity and Access - Validacao e Homologacao.md`.
+
+### Bootstrap de autenticação (mecanismo reservado)
+
+`IBootstrapRequest`/`TenantBootstrapBehavior` (`BuildingBlocks.Application`/`Infrastructure`) resolvem o tenant a partir de dado não confiável (ex.: slug informado no login, ou o segmento não-sensível de um refresh token) **antes** de `ITenantContext` existir, usando exclusivamente um leitor de dados restrito a tabelas não tenant-owned. Esse mecanismo é **reservado exclusivamente para bootstrap de autenticação** (login, troca de refresh token) — não é uma alternativa genérica ao fluxo normal de resolução de tenant via claim JWT (`TenantTransactionBehavior`). Qualquer outro caso de uso que precise resolver tenant fora de uma claim já autenticada exige nova decisão arquitetural (Categoria B, `ai-rules/01 - Decision Making Policy.md`) antes de reutilizar `IBootstrapRequest`.
+
 ---
 
 ## 8. Event-Driven Architecture: Domain Events, Integration Events, Outbox e Event Bus
@@ -136,9 +151,15 @@ Nem todo Domain Event vira um Integration Event — apenas os que representam fa
 ## 10. Estratégia de Persistência
 
 - **PostgreSQL** único, com **um schema dedicado por Bounded Context** e um `DbContext` próprio por contexto (Entity Framework Core).
-- Cada `DbContext` possui sua própria tabela de histórico de migrations, eliminando conflitos entre contextos.
+- Cada `DbContext` possui sua própria tabela de histórico de migrations (`__EFMigrationsHistory`), **dentro do próprio schema do contexto — nunca no schema `public`**. Configurado explicitamente via `UseNpgsql(cs, o => o.MigrationsHistoryTable("__EFMigrationsHistory", "<schema>"))`, de forma idêntica em todo ponto que constrói o `DbContext` (design-time/`IDesignTimeDbContextFactory`, composition root da aplicação, e o `IHostPro.MigrationRunner`) — divergência entre esses pontos quebra a aplicação de migrations. Sem essa configuração, o EF Core usa `public` por padrão, onde a role de migração não tem `CREATE` (Postgres 15+ revoga esse privilégio de `PUBLIC` por padrão) — achado e corrigido durante a homologação real do Incremento 1 (Fase 1).
 - Migrations são aplicadas por um processo dedicado, o **`IHostPro.MigrationRunner`**, nunca automaticamente no `Program.cs` da API (ver Seção 16).
 - Alterações destrutivas seguem a estratégia *expand/contract* (adicionar → migrar dados → remover em release subsequente).
+- **Convenção de nomenclatura (`snake_case`)**: todo schema, tabela e coluna PostgreSQL usa `snake_case`, mapeado explicitamente por propriedade em cada `IEntityTypeConfiguration<T>` (`ToTable("nome_snake_case", schema)`, `HasColumnName("...")`) — nunca por convenção implícita do provider (ex.: pacote de *naming convention*), garantindo nomes determinísticos e revisáveis em cada mapeamento. Estabelecida na Fase 1 (Identity & Access), aplicável a todo contexto futuro.
+- **Duas roles PostgreSQL por ambiente**, estabelecidas na Fase 1 e validadas empiricamente contra PostgreSQL real (ver `documentacao do projeto/Fase 1 - Identity and Access - Validacao e Homologacao.md`):
+  - `ihostpro_migrator` — dona do schema/tabelas que cria via migrations, usada exclusivamente pelo `IHostPro.MigrationRunner`. Recebe `GRANT CREATE ON DATABASE <db> TO ihostpro_migrator` (necessário para `CREATE SCHEMA` na primeira migration de qualquer contexto) — nunca `CREATEDB`, `CREATEROLE`, `SUPERUSER` ou `BYPASSRLS`. Nunca recebe `CREATE` no schema `public`.
+  - `ihostpro_app` — usada por `IHostPro.Api`/`IHostPro.Worker`, restrita a `CONNECT` + `USAGE` no schema + `SELECT`/`INSERT`/`UPDATE`/`DELETE` nas tabelas — nunca `CREATE`, `ALTER`, `DROP`, `BYPASSRLS`, nem membro de `ihostpro_migrator`.
+  - Tabelas futuras criadas por uma migration já recebem os grants corretos automaticamente via `ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator`.
+  - Em desenvolvimento local, as roles são provisionadas por `docker/postgres/init/01-create-roles.sh` — idempotente (`CREATE`/`ALTER ROLE` conforme existência, `GRANT` sempre reaplicado sem erro), credenciais só via variáveis de ambiente, lógica condicional implementada com `SELECT format(...) \gexec` **fora** de blocos `DO $$ ... $$` (a substituição de variável do `psql`, `:'nome'`, não penetra em regiões *dollar-quoted* — achado real durante a homologação). Homologação/produção exigem o mesmo padrão de duas roles através do mecanismo de provisionamento de infraestrutura daquele ambiente.
 
 ---
 

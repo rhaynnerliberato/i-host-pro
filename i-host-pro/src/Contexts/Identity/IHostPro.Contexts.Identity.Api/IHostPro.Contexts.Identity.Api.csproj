@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Structural placeholder (Architecture Principles, Section 16): no
+    controllers/endpoints exist yet — login, refresh and administrative
+    endpoints are scoped to later increments. Referenced here only so the
+    project exists and the Host can eventually register it.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\IHostPro.Contexts.Identity.Application\IHostPro.Contexts.Identity.Application.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <!--
+    Explicit pin, matching Identity.Infrastructure's own version: without it,
+    Npgsql.EntityFrameworkCore.PostgreSQL's transitive floor requirement
+    ([10.0.4, 11.0.0)) and Identity.Infrastructure's direct 10.0.10 reference
+    resolve inconsistently across this project's own multi-hop transitive
+    graph, producing an MSB3277 assembly version conflict warning.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

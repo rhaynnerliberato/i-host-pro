@@ -37,6 +37,10 @@
     <ProjectReference Include="..\..\src\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
     <ProjectReference Include="..\..\src\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\BuildingBlocks\IHostPro.BuildingBlocks.Messaging.Abstractions\IHostPro.BuildingBlocks.Messaging.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Domain\IHostPro.Contexts.Identity.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Application\IHostPro.Contexts.Identity.Application.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Api\IHostPro.Contexts.Identity.Api.csproj" />
   </ItemGroup>
 
 </Project>

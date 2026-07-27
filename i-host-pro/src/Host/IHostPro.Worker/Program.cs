@@ -1,6 +1,8 @@
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
+using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
+using IHostPro.Contexts.Identity.Infrastructure;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -27,6 +29,16 @@ try
     // TenantResolutionMiddleware below, from the TenantId carried by every
     // IntegrationEvent (Architecture Principles, Section 7).
     builder.Services.AddScoped<ITenantContext, TenantContext>();
+
+    // Tenant-aware transactional pipeline (TenantTransactionBehavior /
+    // TenantBootstrapBehavior + ITenantAwareUnitOfWork) — foundation
+    // registered now; no Command/Query dispatches through it yet, since no
+    // handler exists until Incremento 2 (Incremento 1 plan, Section 12).
+    builder.Services.AddIHostProTenantAwarePipeline();
+
+    // Identity & Access module (Incremento 1 plan) — DbContext, custom
+    // Identity stores/hasher/validator, tenant bootstrap reader.
+    builder.Services.AddIdentityModule(builder.Configuration);
 
     // IHostPro.Worker hosts every Bounded Context's message handlers and Sagas,
     // kept in a separate process from IHostPro.Api so message processing can

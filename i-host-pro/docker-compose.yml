@@ -9,10 +9,17 @@ services:
       POSTGRES_USER: ihostpro
       POSTGRES_PASSWORD: ihostpro_dev
       POSTGRES_DB: ihostpro
+      # Consumidas por docker/postgres/init/01-create-roles.sh (Incremento 1
+      # plan, adendo final, Seção 6) — nunca com valor hardcoded, apenas via
+      # .env (não versionado). Sem valor local padrão: se ausentes, o script
+      # de init falha explicitamente em vez de criar roles sem senha.
+      IHOSTPRO_APP_DB_PASSWORD: ${IHOSTPRO_APP_DB_PASSWORD:?defina IHOSTPRO_APP_DB_PASSWORD no .env}
+      IHOSTPRO_MIGRATOR_DB_PASSWORD: ${IHOSTPRO_MIGRATOR_DB_PASSWORD:?defina IHOSTPRO_MIGRATOR_DB_PASSWORD no .env}
     ports:
       - "5432:5432"
     volumes:
       - ihostpro-postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ihostpro"]
       interval: 5s
