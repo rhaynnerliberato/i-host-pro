@@ -594,6 +594,63 @@ namespace IHostPro.Contexts.Identity.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("IHostPro.Contexts.Identity.Domain.SecurityAuditEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)")
+                        .HasColumnName("ip_address");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<string>("ReasonCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("reason_code");
+
+                    b.Property<Guid?>("RefreshTokenId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("refresh_token_id");
+
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "OccurredAt");
+
+                    b.HasIndex("TenantId", "SessionId", "OccurredAt");
+
+                    b.HasIndex("TenantId", "UserId", "OccurredAt");
+
+                    b.ToTable("security_audit_log", "identity");
+                });
+
             modelBuilder.Entity("IHostPro.Contexts.Identity.Domain.Session", b =>
                 {
                     b.Property<Guid>("Id")
@@ -826,6 +883,15 @@ namespace IHostPro.Contexts.Identity.Infrastructure.Persistence.Migrations
                     b.HasOne("IHostPro.Contexts.Identity.Domain.Role", null)
                         .WithMany()
                         .HasForeignKey("RoleCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("IHostPro.Contexts.Identity.Domain.SecurityAuditEntry", b =>
+                {
+                    b.HasOne("IHostPro.Contexts.Identity.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

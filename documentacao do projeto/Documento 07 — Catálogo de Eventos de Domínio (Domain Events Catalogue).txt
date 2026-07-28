@@ -245,6 +245,105 @@ UserBlocked
 UserLoggedIn
 UserLoggedOut
 PasswordChanged
+
+Login rejeitado (qualquer motivo interno: tenant não encontrado/inativo, usuário não encontrado, usuário bloqueado, senha incorreta).
+
+LoginFailed
+
+Conta bloqueada por número de tentativas de login inválidas.
+
+AccountLockedOut
+
+Reutilização de um refresh token já rotacionado detectada (fora da janela de graça de concorrência).
+
+RefreshTokenReuseDetected
+
+Sessão revogada (logout, reuse detectado ou revogação administrativa).
+
+SessionRevoked
+
+Consumidores típicos (LoginFailed, AccountLockedOut, RefreshTokenReuseDetected, SessionRevoked):
+
+Auditoria
+
+Adicionados durante o planejamento do Incremento 2 do contexto Identity & Access (login, JWT, refresh token, logout), conforme aprovação registrada em ADR-012.
+
+13.1 Payloads dos Eventos do Incremento 2 (Login, JWT, Refresh Token, Logout)
+
+Implementados na Etapa 15 do Incremento 2 (ver ADR-013 para a convenção de roteamento RabbitMQ). Nenhum destes eventos inclui e-mail, endereço IP, User-Agent, senha, access token, refresh token, hash de token ou qualquer outro segredo — apenas identificadores e códigos estáveis.
+
+Convenção comum a todos os seis, além dos campos obrigatórios do envelope (Seção 3):
+
+- AggregateType/AggregateId representam o Usuário (AggregateId = userId) em todos os seis eventos, exceto LoginFailed, cujo AggregateType/AggregateId representam o Tenant (AggregateId = tenantId) — o único caso em que o usuário pode não existir (ex.: e-mail não cadastrado), enquanto o tenant já foi resolvido antes deste evento poder ser publicado.
+- ActorType é sempre "User" (o fato é sempre desencadeado por uma requisição de um cliente, mesmo quando rejeitada ou classificada pelo sistema). ActorId é o userId quando conhecido, ausente quando não (LoginFailed com usuário não encontrado).
+- Quando dois eventos são publicados pela mesma operação (LoginFailed+AccountLockedOut; UserLoggedOut+SessionRevoked; RefreshTokenReuseDetected+SessionRevoked), o segundo evento da dupla preenche CausationId com o EventId do primeiro.
+
+UserLoggedIn
+| Campo | Tipo | Descrição |
+|---|---|---|
+| SessionId | Guid | Sessão criada por este login |
+
+LoginFailed
+| Campo | Tipo | Descrição |
+|---|---|---|
+| UserId | Guid? | Nulo quando o e-mail não corresponde a nenhum usuário do tenant |
+| ReasonCode | string | Código ASCII estável — ver tabela de códigos abaixo |
+
+Códigos de ReasonCode para LoginFailed:
+| Código | Situação |
+|---|---|
+| user_not_found | Nenhum usuário com este e-mail no tenant |
+| user_blocked | Usuário existe, está com status Blocked |
+| invalid_password | Senha incorreta — usado tanto quando a tentativa não atinge o limiar de bloqueio quanto na própria tentativa que o atinge (neste segundo caso, acompanhado de AccountLockedOut na mesma operação) |
+| account_locked | Conta já estava bloqueada por tentativas anteriores (distinto de AccountLockedOut, que representa a tentativa que efetivamente inicia o bloqueio) |
+
+AccountLockedOut
+| Campo | Tipo | Descrição |
+|---|---|---|
+| LockoutEnd | DateTimeOffset (UTC) | Instante em que o bloqueio expira |
+| ReasonCode | string | Código ASCII estável — ver tabela de códigos abaixo |
+
+Códigos de ReasonCode para AccountLockedOut:
+| Código | Situação |
+|---|---|
+| max_failed_attempts | Número de tentativas de senha incorreta atingiu o limiar configurado (único gatilho existente neste incremento) |
+
+UserLoggedOut
+| Campo | Tipo | Descrição |
+|---|---|---|
+| SessionId | Guid | Sessão encerrada por este logout |
+
+RefreshTokenReuseDetected
+| Campo | Tipo | Descrição |
+|---|---|---|
+| SessionId | Guid | Sessão cuja cadeia de rotação foi invalidada |
+| TokenId | Guid | Identificador público do refresh token reutilizado (nunca o hash ou o token completo) |
+
+SessionRevoked
+| Campo | Tipo | Descrição |
+|---|---|---|
+| SessionId | Guid | Sessão revogada |
+| ReasonCode | string | Código ASCII estável — ver tabela de códigos abaixo |
+
+Códigos de ReasonCode para SessionRevoked (únicos gatilhos existentes neste incremento):
+| Código | Situação |
+|---|---|
+| logout_requested | Revogação por logout explícito |
+| refresh_token_reuse_detected | Revogação por reutilização de refresh token já rotacionado, fora da janela de graça |
+
+13.2 Roteamento RabbitMQ dos Eventos do Incremento 2
+
+Ver ADR-013 (Convenção de Roteamento RabbitMQ para Integration Events) para a decisão completa. Resumo: exchange único por Bounded Context, tipo topic, routing key = nome do evento em snake_case.
+
+| Evento | Exchange | Routing Key |
+|---|---|---|
+| UserLoggedIn | identity-events | user_logged_in |
+| LoginFailed | identity-events | login_failed |
+| AccountLockedOut | identity-events | account_locked_out |
+| UserLoggedOut | identity-events | user_logged_out |
+| RefreshTokenReuseDetected | identity-events | refresh_token_reuse_detected |
+| SessionRevoked | identity-events | session_revoked |
+
 14. Eventos da Auditoria
 AuditRecordCreated
 SensitiveOperationExecuted
@@ -444,3 +543,4 @@ IA	AIConversationStarted, AIDecisionMade, AIEscalatedToHuman
 Agenda	ScheduleUpdated, CalendarBlocked, CalendarReleased
 Financeiro	PixPaymentConfirmed, RefundRequested
 Sistema	JobStarted, JobFinished, BackupCompleted
+Identity & Access	UserLoggedIn, LoginFailed, AccountLockedOut, UserLoggedOut, RefreshTokenReuseDetected, SessionRevoked

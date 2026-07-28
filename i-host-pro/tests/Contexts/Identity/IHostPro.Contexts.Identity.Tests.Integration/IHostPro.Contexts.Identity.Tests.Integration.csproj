@@ -23,10 +23,13 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="7.*" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.0" />
     <!-- Explicit pin — see IHostPro.Contexts.Identity.Api.csproj for the MSB3277 rationale. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.1.0" />
+    <PackageReference Include="Testcontainers.RabbitMq" Version="4.1.0" />
+    <PackageReference Include="Testcontainers.Redis" Version="4.1.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -38,8 +41,26 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!--
+    Every test class here spins up its own Testcontainers (PostgreSQL and/or
+    Redis) via IAsyncLifetime. xUnit's default parallel test-collection
+    execution then runs several classes' containers simultaneously, which
+    intermittently overwhelms the local Docker daemon's exec/health-check
+    polling under load (observed as a transient DotNet.Testcontainers/
+    Docker.DotNet exception in an otherwise-unrelated test, not a code
+    defect — Incremento 2 plan, Etapa 13). Disabling collection
+    parallelization trades some wall-clock time for reliability, which is
+    the right tradeoff for infrastructure-heavy integration tests.
+  -->
+  <ItemGroup>
+    <None Update="xunit.runner.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Api\IHostPro.Contexts.Identity.Api.csproj" />
     <ProjectReference Include="..\..\..\..\src\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
   </ItemGroup>
 

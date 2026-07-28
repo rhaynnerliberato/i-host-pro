@@ -25,64 +25,93 @@ namespace IHostPro.Contexts.Identity.Tests.Integration;
 /// this evidence can be considered validated.
 /// </para>
 /// </summary>
-public class IdentityRowLevelSecurityTests : IAsyncLifetime
+public class IdentityRowLevelSecurityTests : IClassFixture<IdentityRowLevelSecurityTests.Fixture>
 {
-    private const string AppRolePassword = "test_app_password";
-    private const string MigratorRolePassword = "test_migrator_password";
+    private readonly PostgreSqlContainer _container;
+    private readonly string _migratorConnectionString;
+    private readonly string _appConnectionString;
 
-    private PostgreSqlContainer _container = null!;
-    private string _migratorConnectionString = null!;
-    private string _appConnectionString = null!;
-
-    public async Task InitializeAsync()
+    public IdentityRowLevelSecurityTests(Fixture fixture)
     {
-        _container = new PostgreSqlBuilder()
-            .WithImage("postgres:16")
-            .WithDatabase("ihostpro_test")
-            .WithUsername("ihostpro")
-            .WithPassword("ihostpro_dev")
-            .Build();
-
-        await _container.StartAsync();
-
-        var adminConnectionString = _container.GetConnectionString();
-
-        await using (var adminConnection = new NpgsqlConnection(adminConnectionString))
-        {
-            await adminConnection.OpenAsync();
-
-            // Mirrors docker/postgres/init/01-create-roles.sh's privilege
-            // model exactly (Incremento 1 plan, adendo final, Section 7):
-            // ihostpro_migrator needs CREATE on the database itself to run
-            // the first-ever migration (CREATE SCHEMA identity) — found
-            // during Incremento 1 homologation ("permission denied for
-            // database"). No grant on `public` (obsolete: the migrations
-            // history table lives in `identity`, not `public`, since the
-            // matching fix in IdentityDbContextFactory /
-            // IdentityModuleExtensions / MigrationRunner). ihostpro_app
-            // receives no equivalent grant.
-            await ExecuteAsync(adminConnection, $"""
-                CREATE ROLE ihostpro_migrator LOGIN PASSWORD '{MigratorRolePassword}';
-                CREATE ROLE ihostpro_app LOGIN PASSWORD '{AppRolePassword}';
-                GRANT CREATE ON DATABASE ihostpro_test TO ihostpro_migrator;
-                """);
-        }
-
-        var builder = new NpgsqlConnectionStringBuilder(adminConnectionString);
-
-        builder.Username = "ihostpro_migrator";
-        builder.Password = MigratorRolePassword;
-        _migratorConnectionString = builder.ConnectionString;
-
-        builder.Username = "ihostpro_app";
-        builder.Password = AppRolePassword;
-        _appConnectionString = builder.ConnectionString;
-
-        await using var migratorDbContext = CreateDbContext(_migratorConnectionString, new TenantContext());
-        await migratorDbContext.Database.MigrateAsync();
+        _container = fixture.Container;
+        _migratorConnectionString = fixture.MigratorConnectionString;
+        _appConnectionString = fixture.AppConnectionString;
     }
 
-    public async Task DisposeAsync() => await _container.DisposeAsync();
+    /// <summary>
+    /// Started once per test class, not once per test method (Etapa 15A
+    /// stabilization) — xUnit's <see cref="IAsyncLifetime"/> on the test
+    /// class itself creates a fresh instance (and thus a fresh Testcontainer)
+    /// per <c>[Fact]</c>; with 9 test files each spinning their own
+    /// PostgreSQL/Redis/RabbitMQ containers, that meant 100+ container
+    /// start/stop cycles in a single full suite run, which intermittently
+    /// overwhelmed the Docker daemon's API (observed as a transient
+    /// <c>Docker.DotNet</c>/<c>ChunkedReadStream</c> exception on an
+    /// otherwise-unrelated test). <see cref="IClassFixture{TFixture}"/>
+    /// shares one container per class instead. Test isolation is unaffected:
+    /// every test already seeds its own randomly-keyed data (fresh
+    /// <c>Guid.NewGuid()</c> tenant/user/etc. per test), never relies on a
+    /// pristine database.
+    /// </summary>
+    public sealed class Fixture : IAsyncLifetime
+    {
+        private const string AppRolePassword = "test_app_password";
+        private const string MigratorRolePassword = "test_migrator_password";
+
+        public PostgreSqlContainer Container { get; private set; } = null!;
+        public string MigratorConnectionString { get; private set; } = null!;
+        public string AppConnectionString { get; private set; } = null!;
+
+        public async Task InitializeAsync()
+        {
+            Container = new PostgreSqlBuilder()
+                .WithImage("postgres:16")
+                .WithDatabase("ihostpro_test")
+                .WithUsername("ihostpro")
+                .WithPassword("ihostpro_dev")
+                .Build();
+
+            await Container.StartAsync();
+
+            var adminConnectionString = Container.GetConnectionString();
+
+            await using (var adminConnection = new NpgsqlConnection(adminConnectionString))
+            {
+                await adminConnection.OpenAsync();
+
+                // Mirrors docker/postgres/init/01-create-roles.sh's privilege
+                // model exactly (Incremento 1 plan, adendo final, Section 7):
+                // ihostpro_migrator needs CREATE on the database itself to run
+                // the first-ever migration (CREATE SCHEMA identity) — found
+                // during Incremento 1 homologation ("permission denied for
+                // database"). No grant on `public` (obsolete: the migrations
+                // history table lives in `identity`, not `public`, since the
+                // matching fix in IdentityDbContextFactory /
+                // IdentityModuleExtensions / MigrationRunner). ihostpro_app
+                // receives no equivalent grant.
+                await ExecuteAsync(adminConnection, $"""
+                    CREATE ROLE ihostpro_migrator LOGIN PASSWORD '{MigratorRolePassword}';
+                    CREATE ROLE ihostpro_app LOGIN PASSWORD '{AppRolePassword}';
+                    GRANT CREATE ON DATABASE ihostpro_test TO ihostpro_migrator;
+                    """);
+            }
+
+            var builder = new NpgsqlConnectionStringBuilder(adminConnectionString);
+
+            builder.Username = "ihostpro_migrator";
+            builder.Password = MigratorRolePassword;
+            MigratorConnectionString = builder.ConnectionString;
+
+            builder.Username = "ihostpro_app";
+            builder.Password = AppRolePassword;
+            AppConnectionString = builder.ConnectionString;
+
+            await using var migratorDbContext = CreateDbContext(MigratorConnectionString, new TenantContext());
+            await migratorDbContext.Database.MigrateAsync();
+        }
+
+        public async Task DisposeAsync() => await Container.DisposeAsync();
+    }
 
     [Fact]
     public async Task Migration_applies_cleanly_and_seeds_the_platform_catalog()

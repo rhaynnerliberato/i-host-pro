@@ -37,8 +37,17 @@ public sealed class ValidationBehavior<TMessage, TResponse> : IPipelineBehavior<
         if (failures.Count == 0)
             return await next(message, cancellationToken);
 
+        // Error.Code is built exclusively from each failure's own ErrorCode
+        // (never a hardcoded "Validation.Failed" and never derived from
+        // ErrorMessage) — a validator that never called .WithErrorCode(...)
+        // still contributes FluentValidation's own stable per-validator-type
+        // default (e.g. "NotEmptyValidator"), never null/empty. Only
+        // ErrorMessage is used for the human-readable summary; neither this
+        // join nor the one below ever reads ValidationFailure.AttemptedValue
+        // — the rejected value itself must never appear here, only whatever
+        // static, value-free message the validator itself chose to set.
         var error = new Error(
-            "Validation.Failed",
+            string.Join(",", failures.Select(f => f.ErrorCode)),
             string.Join("; ", failures.Select(f => f.ErrorMessage)));
 
         var responseType = typeof(TResponse);

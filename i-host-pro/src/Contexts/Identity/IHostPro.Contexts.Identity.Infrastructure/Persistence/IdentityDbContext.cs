@@ -26,6 +26,7 @@ public sealed class IdentityDbContext : BaseDbContext
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<SecurityAuditEntry> SecurityAuditLog => Set<SecurityAuditEntry>();
 
     public IdentityDbContext(DbContextOptions<IdentityDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)

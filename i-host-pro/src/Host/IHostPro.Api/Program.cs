@@ -1,13 +1,21 @@
+using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
+using IHostPro.Contexts.Identity.Contracts;
 using IHostPro.Contexts.Identity.Infrastructure;
+using IHostPro.Contexts.Identity.Infrastructure.Authentication;
+using IHostPro.Contexts.Identity.Infrastructure.Caching;
+using IHostPro.Contexts.Identity.Infrastructure.Persistence;
+using JasperFx;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 using Wolverine;
+using Wolverine.EntityFrameworkCore;
+using Wolverine.RabbitMQ;
 
 Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
@@ -34,6 +42,12 @@ try
     // on ITenantContext (Architecture Principles, Section 7).
     builder.Services.AddScoped<ITenantContext, TenantContext>();
 
+    // Read-only accessor Application-layer handlers use to get the resolved
+    // tenant id without depending on ITenantContext directly (Application
+    // cannot reference BuildingBlocks.Infrastructure) — Incremento 2 plan,
+    // Etapa 9.
+    builder.Services.AddScoped<ICurrentTenantProvider, TenantContextCurrentTenantProvider>();
+
     builder.Services.AddHealthChecks();
 
     // Tenant-aware transactional pipeline (TenantTransactionBehavior /
@@ -43,10 +57,42 @@ try
     builder.Services.AddIHostProTenantAwarePipeline();
 
     // Identity & Access module (Incremento 1 plan) — DbContext, custom
-    // Identity stores/hasher/validator, tenant bootstrap reader. No
-    // controllers/endpoints exist yet (IHostPro.Contexts.Identity.Api is a
-    // structural placeholder until Incremento 2).
-    builder.Services.AddIdentityModule(builder.Configuration);
+    // Identity stores/hasher/validator, tenant bootstrap reader. Incremento 2
+    // (login, JWT, refresh token, logout) is being added incrementally on top
+    // of this foundation. isDevelopmentEnvironment gates the Development-only
+    // tenant/user seed configuration (Incremento 2 plan, ajuste 3-4).
+    builder.Services.AddIdentityModule(builder.Configuration, builder.Environment.IsDevelopment());
+
+    // JWT access-token issuance (RSA signing key + IJwtTokenGenerator) — kept
+    // deliberately separate from AddIdentityModule and registered ONLY here,
+    // never in IHostPro.Worker's Program.cs: the Worker never issues or
+    // validates a JWT and must never be required to hold the signing private
+    // key (Incremento 2 plan, Etapa 6).
+    builder.Services.AddIdentityJwtIssuance(builder.Configuration);
+
+    // Session-revocation cache acceleration (Incremento 2 plan, Etapa 12) —
+    // Redis-backed ISessionRevocationCache, registered ONLY here, never in
+    // IHostPro.Worker's Program.cs (mirrors AddIdentityJwtIssuance above):
+    // AddIdentityModule already registers a harmless no-op default for both
+    // hosts, this overrides it with the real implementation for the Api.
+    builder.Services.AddIdentitySessionRevocationCache(builder.Configuration);
+
+    // JWT Bearer authentication/authorization (Incremento 2 plan, Etapa 13;
+    // ADR-012) — validates the access tokens AddIdentityJwtIssuance's
+    // IJwtTokenGenerator issues, and consults AddIdentitySessionRevocationCache's
+    // cache to fast-reject an already-revoked session. Registered ONLY here,
+    // never in IHostPro.Worker's Program.cs, for the same reason as both of
+    // the registrations above. Must be called after them (see
+    // AddIdentityJwtBearerAuthentication's own doc comment).
+    builder.Services.AddIdentityJwtBearerAuthentication();
+
+    // Mediator + the three auth commands' handlers/validators/pipeline
+    // behaviors (Incremento 2 plan, Etapa 14) — registered ONLY here, never
+    // in IHostPro.Worker's Program.cs: dispatching these commands is an
+    // HTTP-request concern. AuthController (IHostPro.Contexts.Identity.Api,
+    // discovered by AddControllers() below via the project reference) only
+    // ever calls ISender.Send(...) — never a concrete handler.
+    builder.Services.AddIdentityCommandDispatch();
 
     // IHostPro.Api only publishes Integration Events (via IEventPublisher); it never
     // consumes messages — consumers/handlers live exclusively in IHostPro.Worker
@@ -55,6 +101,64 @@ try
     builder.Host.UseWolverine(opts =>
     {
         opts.UseIHostProRabbitMq(builder.Configuration, listen: false);
+
+        // Identity's own durable outbox (Incremento 2 plan, Etapa 15A; ADR-004)
+        // — an "ancillary" store enrolled only to IdentityDbContext, in its own
+        // identity_messaging schema, never a store shared with any future
+        // Bounded Context. Registered ONLY here, never in IHostPro.Worker's
+        // Program.cs: Worker gets no access to Identity's store/credentials
+        // this increment (no consumer of these events exists yet).
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("Identity")!,
+            "identity_messaging",
+            typeof(IdentityDbContext));
+
+        // Required in addition to EnrollAncillaryPostgresqlOutbox above — confirmed
+        // empirically (Incremento 2 plan, Etapa 15A): without this,
+        // IDbContextOutbox<IdentityDbContext> never gets registered by Wolverine's
+        // DI wiring at all, and every constructor depending on it (including
+        // IdentityOutboxTransactionExecutor) fails to resolve.
+        opts.UseEntityFrameworkCoreTransactions();
+
+        // No host may create/alter the outbox's schema/tables at runtime —
+        // only IHostPro.MigrationRunner may, via Wolverine/Weasel's own
+        // resource management (host.SetupResources()), never a plain EF Core
+        // migration and never UseResourceSetupOnStartup.
+        opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+
+        // Identity & Access's first six Integration Events (Incremento 2 plan,
+        // Etapa 15; Documento 07 §13.2; ADR-013): one topic exchange per
+        // Bounded Context, routing key = event name in snake_case.
+        // .UseDurableOutbox() is required on every route — confirmed
+        // empirically in Etapa 15A that without it, Wolverine defaults to the
+        // "Inline" sending mode, which does not use the persistent outbox: a
+        // broker outage makes it retry a few times in-process and then
+        // discard the message, never falling back to durable persist-and-relay.
+        //
+        // .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1) — confirmed
+        // by decompiling Wolverine 6.22.0 (homologação real, Incremento 2) that
+        // DurableSendingAgent's first delivery attempt after commit is
+        // synchronous and awaited by the caller; on failure it retries inline,
+        // awaited, up to Endpoint.FailuresBeforeCircuitBreaks times (default 3)
+        // before latching the circuit and deferring the rest to the background
+        // Durability Agent. This is Wolverine's own official, public
+        // configuration surface (SubscriberConfiguration.CircuitBreaking) for
+        // that exact behavior — not a custom workaround — and caps the
+        // request's exposure to a single synchronous attempt instead of three.
+        const string identityEventsExchange = "identity-events";
+
+        void RouteIdentityEvent<TEvent>(string routingKey) where TEvent : IntegrationEvent =>
+            opts.PublishMessage(typeof(TEvent))
+                .ToRabbitRoutingKey(identityEventsExchange, routingKey, exchange => exchange.ExchangeType = ExchangeType.Topic)
+                .UseDurableOutbox()
+                .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        RouteIdentityEvent<UserLoggedIn>("user_logged_in");
+        RouteIdentityEvent<LoginFailed>("login_failed");
+        RouteIdentityEvent<AccountLockedOut>("account_locked_out");
+        RouteIdentityEvent<UserLoggedOut>("user_logged_out");
+        RouteIdentityEvent<RefreshTokenReuseDetected>("refresh_token_reuse_detected");
+        RouteIdentityEvent<SessionRevoked>("session_revoked");
     });
 
     builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();
@@ -89,6 +193,7 @@ try
 
     app.UseSerilogRequestLogging();
     app.UseHttpsRedirection();
+    app.UseAuthentication();
     app.UseAuthorization();
     app.MapControllers();
     app.MapHealthChecks("/health");

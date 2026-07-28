@@ -4,6 +4,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Required for local secrets (JWT dev signing key, DevelopmentSeed
+         admin password) to be sourced from User Secrets instead of a
+         committed appsettings file — Incremento 2 plan, ajuste 4. -->
+    <UserSecretsId>dotnet-IHostPro.Api-ffaa4964-a352-4170-8e93-b0b5f8dcf47b</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,6 +26,10 @@
     <ProjectReference Include="..\..\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
     <!-- One line per module (Architecture Principles, Section 16). -->
     <ProjectReference Include="..\..\Contexts\Identity\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
+    <!-- HTTP endpoints (Incremento 2 plan, Etapa 14) — referenced so
+         AddControllers() discovers AuthController; Identity.Api itself
+         never references Identity.Infrastructure. -->
+    <ProjectReference Include="..\..\Contexts\Identity\IHostPro.Contexts.Identity.Api\IHostPro.Contexts.Identity.Api.csproj" />
   </ItemGroup>
 
 </Project>

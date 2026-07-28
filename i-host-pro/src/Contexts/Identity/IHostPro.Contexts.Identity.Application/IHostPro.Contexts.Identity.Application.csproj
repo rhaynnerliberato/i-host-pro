@@ -2,7 +2,17 @@
 
   <ItemGroup>
     <ProjectReference Include="..\IHostPro.Contexts.Identity.Domain\IHostPro.Contexts.Identity.Domain.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.Identity.Contracts\IHostPro.Contexts.Identity.Contracts.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Messaging.Abstractions\IHostPro.BuildingBlocks.Messaging.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mediator.SourceGenerator" Version="3.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
   </ItemGroup>
 
   <PropertyGroup>

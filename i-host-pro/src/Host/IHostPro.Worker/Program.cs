@@ -1,3 +1,4 @@
+using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
@@ -30,6 +31,9 @@ try
     // IntegrationEvent (Architecture Principles, Section 7).
     builder.Services.AddScoped<ITenantContext, TenantContext>();
 
+    // See IHostPro.Api's Program.cs for the rationale (Incremento 2 plan, Etapa 9).
+    builder.Services.AddScoped<ICurrentTenantProvider, TenantContextCurrentTenantProvider>();
+
     // Tenant-aware transactional pipeline (TenantTransactionBehavior /
     // TenantBootstrapBehavior + ITenantAwareUnitOfWork) — foundation
     // registered now; no Command/Query dispatches through it yet, since no
@@ -38,7 +42,10 @@ try
 
     // Identity & Access module (Incremento 1 plan) — DbContext, custom
     // Identity stores/hasher/validator, tenant bootstrap reader.
-    builder.Services.AddIdentityModule(builder.Configuration);
+    // isDevelopmentEnvironment gates the Development-only tenant/user seed
+    // configuration (Incremento 2 plan, ajuste 3-4) — see IHostPro.Api's
+    // Program.cs for the corresponding registration.
+    builder.Services.AddIdentityModule(builder.Configuration, builder.Environment.IsDevelopment());
 
     // IHostPro.Worker hosts every Bounded Context's message handlers and Sagas,
     // kept in a separate process from IHostPro.Api so message processing can

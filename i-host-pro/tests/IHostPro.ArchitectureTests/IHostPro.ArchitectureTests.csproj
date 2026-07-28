@@ -17,6 +17,12 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="7.*" />
+    <!-- Explicit pin — see IHostPro.Contexts.Identity.Api.csproj for the
+         MSB3277 rationale. Surfaced only now (Incremento 2 plan, Etapa 14):
+         referencing both Identity.Infrastructure and Identity.Api shifted
+         this project's own transitive resolution once Identity.Api gained a
+         Microsoft.AspNetCore.App FrameworkReference. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="NetArchTest.Rules" Version="1.3.2" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -38,6 +44,7 @@
     <ProjectReference Include="..\..\src\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\BuildingBlocks\IHostPro.BuildingBlocks.Messaging.Abstractions\IHostPro.BuildingBlocks.Messaging.Abstractions.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Domain\IHostPro.Contexts.Identity.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Contracts\IHostPro.Contexts.Identity.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Application\IHostPro.Contexts.Identity.Application.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Api\IHostPro.Contexts.Identity.Api.csproj" />

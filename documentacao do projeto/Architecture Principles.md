@@ -93,7 +93,9 @@ Regras de dependência **dentro** de um contexto:
 - Toda operação de escrita é modelada como um **Command** (`ICommand`/`ICommandHandler`); toda operação de leitura como uma **Query** (`IQuery`/`IQueryHandler`).
 - A camada `Api` de cada contexto é mantida "fina": endpoints apenas montam o Command/Query e o despacham, sem lógica de negócio.
 - **Biblioteca de dispatch:** `Mediator` (Martin Othamar, baseado em source generators, licença MIT) — **não** o pacote `MediatR` de Jimmy Bogard, devido ao risco de licenciamento comercial identificado para versões recentes. Ver ADR-002.
-- Pipeline behaviors genéricos (validação via FluentValidation, logging, transação) vivem em `BuildingBlocks.Application` — nunca contêm regra de negócio.
+- Pipeline behaviors genéricos (validação via FluentValidation, logging, transação) vivem em `BuildingBlocks.Application`/`BuildingBlocks.Infrastructure` — nunca contêm regra de negócio.
+- **Registro dos pipeline behaviors (obrigatório, estabelecido na Fase 1, Incremento 2):** `BuildingBlocks.Infrastructure` (`AddIHostProTenantAwarePipeline`) registra apenas a infraestrutura genérica compartilhada (`ITenantAwareUnitOfWork`) — nunca `TenantBootstrapBehavior<,>`/`TenantTransactionBehavior<,>` como *open generic*, pois um registro open-generic casa com **todo** tipo fechado que satisfaça sua constraint, sem forma de excluir um caso específico. Cada Bounded Context registra, em sua própria `Infrastructure`, exatamente os pipeline behaviors que seus próprios Commands/Queries precisam, fechados ao tipo da mensagem onde existir um behavior especializado (ex.: Identity's `RefreshTokenTenantAwareBehavior`/`LogoutTenantAwareBehavior` substituem `TenantBootstrapBehavior<,>`/`TenantTransactionBehavior<,>` para `RefreshTokenCommand`/`LogoutCommand` especificamente, evitando que ambos os behaviors abram uma Unit of Work para a mesma mensagem). `ValidationBehavior<,>` permanece seguro como único registro open-generic, por não ter efeito colateral de tenant/transação para colidir.
+- **Lifetime do Mediator:** cada Bounded Context registra o `Mediator` via seu próprio `AddXxxApplicationMediator()` (chamado no assembly onde os handlers são definidos, pois `Mediator.SourceGenerator` descobre o que registrar analisando a compilação do ponto de chamada) com `ServiceLifetime.Scoped` — nunca o padrão gerado (`Singleton`), que faria o `RequestHandlerWrapper` cachear a resolução do handler e de cada pipeline behavior uma única vez a partir do provider raiz, transformando silenciosamente qualquer dependência Scoped alcançada por um handler (ex.: o `DbContext` do contexto) em um singleton de fato compartilhado entre requisições concorrentes.
 
 ---
 
@@ -169,6 +171,7 @@ Nem todo Domain Event vira um Integration Event — apenas os que representam fa
 - **RabbitMQ** é o transporte físico, configurado desde a Fase 0 (não in-memory), por ser o backbone de toda a arquitetura orientada a eventos da plataforma.
 - Tarefas puramente cronológicas não disparadas por evento de negócio (ex.: gatilho noturno de backup) usam um `BackgroundService` leve com a biblioteca `Cronos`, sem introduzir uma segunda plataforma de agendamento.
 - **MassTransit (8.x e 9.x), Hangfire, Quartz.NET, NServiceBus, Rebus, Brighter e uma implementação própria sobre `RabbitMQ.Client` foram avaliados e descartados** — ver ADR-004 para a justificativa completa de cada um, incluindo o motivo da substituição do MassTransit (decisão original) pelo Wolverine (decisão atual).
+- **Roteamento RabbitMQ:** um exchange `topic` por Bounded Context (`<contexto>-events`), routing key = nome do evento em `snake_case`, versionamento no nome do tipo do evento (nunca na routing key) — ver ADR-013 para a decisão completa e o roteamento já registrado para os seis primeiros eventos reais (Identity & Access, Documento 07 §13.2).
 
 ### Isolamento do Wolverine (obrigatório)
 
@@ -179,6 +182,8 @@ O Wolverine é tratado como um **detalhe de infraestrutura substituível**, nunc
 - Cada módulo expõe, em sua própria camada de `Infrastructure`, um adaptador mínimo e mecânico (sem lógica de negócio) que o Wolverine descobre por convenção e que apenas delega para a implementação de `IIntegrationEventHandler<TEvent>` resolvida via injeção de dependência.
 - Publicação de eventos ocorre exclusivamente através de `IEventPublisher` (`BuildingBlocks.Messaging.Abstractions`); nenhum código de negócio injeta `IMessageBus` do Wolverine diretamente.
 - Essa regra é validada automaticamente por teste de arquitetura (NetArchTest), não apenas por convenção.
+
+**Exceção estreita e deliberada (Incremento 2 plan, Etapa 15A):** a `Infrastructure` de um Bounded Context (não `Domain`/`Application`) pode referenciar exclusivamente o assembly `Wolverine.EntityFrameworkCore` — nunca `Wolverine`, `Wolverine.Postgresql`, `Wolverine.RabbitMQ` ou `Wolverine.RuntimeCompilation` — quando precisar publicar um Integration Event de forma transacional a partir de código que não é um handler Wolverine (ex.: um comando HTTP), usando `IDbContextOutbox<TDbContext>`, o mecanismo oficialmente suportado pelo Wolverine para esse cenário (ver `IdentityOutboxTransactionExecutor`). Toda configuração de transporte, broker e message store (schema, `MessageStoreRole`, `AutoBuildMessageStorageOnStartup`) permanece exclusiva de `BuildingBlocks.Infrastructure`/`Host`, sem exceção.
 
 ---
 
@@ -197,7 +202,7 @@ Conteúdo aprovado de `BuildingBlocks`:
 - `BuildingBlocks.Domain`: `Entity`, `AggregateRoot<TId>`, `ValueObject`, `IDomainEvent` (marcador), `Result<T>`/`Error`.
 - `BuildingBlocks.Application`: `ICommand`/`IQuery`/handlers (marcadores para o `Mediator`), `IIntegrationEventHandler<TEvent>` (contrato de reação a eventos consumidos, sem qualquer tipo do Wolverine), pipeline behaviors genéricos, `IUnitOfWork`.
 - `BuildingBlocks.Messaging.Abstractions`: envelope genérico `IntegrationEvent` (campos comuns do Documento 07 §3 — EventId, TenantId, CorrelationId, CausationId, Timestamp, Version) e `IEventPublisher`.
-- `BuildingBlocks.Infrastructure`: `ITenantContext`/`TenantContextAccessor`, `AuditInterceptor` (EF Core `SaveChangesInterceptor` genérico), `BaseDbContext` com convenções comuns, implementação do `IEventPublisher` sobre o Wolverine e extension methods de registro (Outbox/Mensageria/Serilog/OpenTelemetry) — único ponto da plataforma, além do `Host`, autorizado a referenciar `WolverineFx.*`.
+- `BuildingBlocks.Infrastructure`: `ITenantContext`/`TenantContextAccessor`, `AuditInterceptor` (EF Core `SaveChangesInterceptor` genérico), `BaseDbContext` com convenções comuns, implementação do `IEventPublisher` sobre o Wolverine e extension methods de registro (Outbox/Mensageria/Serilog/OpenTelemetry) — o ponto da plataforma, além do `Host`, autorizado a referenciar qualquer assembly `WolverineFx.*` (transporte, broker, message store). A `Infrastructure` de um Bounded Context individual tem uma permissão estritamente mais estreita — ver a exceção documentada na Seção 11 (`Wolverine.EntityFrameworkCore` apenas, apenas para `IDbContextOutbox<TDbContext>`).
 
 **Nunca pertence a `BuildingBlocks`:** contratos concretos de Integration Events (`ReservationConfirmed` etc. — vão para `<Contexto>.Contracts`), clientes de integrações externas, implementações concretas de storage, qualquer regra de validação de negócio usada por menos de 3 contextos.
 

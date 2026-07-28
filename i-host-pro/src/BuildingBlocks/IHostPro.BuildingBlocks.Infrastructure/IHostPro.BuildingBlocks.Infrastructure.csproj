@@ -11,6 +11,7 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="WolverineFx" Version="6.22.0" />
     <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.22.0" />
+    <PackageReference Include="WolverineFx.Postgresql" Version="6.22.0" />
     <PackageReference Include="WolverineFx.RabbitMQ" Version="6.22.0" />
     <PackageReference Include="WolverineFx.RuntimeCompilation" Version="6.22.0" />
   </ItemGroup>

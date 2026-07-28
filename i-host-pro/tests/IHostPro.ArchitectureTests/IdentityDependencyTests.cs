@@ -1,5 +1,6 @@
 using FluentAssertions;
 using IHostPro.Contexts.Identity.Application;
+using IHostPro.Contexts.Identity.Contracts;
 using IHostPro.Contexts.Identity.Domain;
 using IHostPro.Contexts.Identity.Infrastructure;
 using NetArchTest.Rules;
@@ -50,6 +51,47 @@ public class IdentityDependencyTests
         var result = Types.InAssembly(typeof(ITenantBootstrapReader).Assembly)
             .Should()
             .NotHaveDependencyOnAny(
+                "IHostPro.Contexts.Identity.Infrastructure",
+                "Microsoft.AspNetCore.Identity",
+                "Microsoft.Extensions.Identity.Core",
+                "Microsoft.EntityFrameworkCore",
+                "Wolverine")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(BuildFailureMessage(result));
+    }
+
+    [Fact]
+    public void Infrastructure_Should_Not_Depend_On_Wolverine_Transport_Or_Broker_Packages()
+    {
+        // Narrow, deliberate exception (Incremento 2 plan, Etapa 15A; Architecture
+        // Principles §11): Identity.Infrastructure may reference
+        // Wolverine.EntityFrameworkCore (IDbContextOutbox<TDbContext>) only —
+        // never transport/broker/message-store configuration, which stays
+        // exclusive to BuildingBlocks.Infrastructure and the Host processes.
+        var result = Types.InAssembly(typeof(IdentityModuleExtensions).Assembly)
+            .Should()
+            .NotHaveDependencyOnAny(
+                "Wolverine.RabbitMQ",
+                "Wolverine.Postgresql",
+                "Wolverine.RuntimeCompilation")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(BuildFailureMessage(result));
+    }
+
+    [Fact]
+    public void Contracts_Should_Not_Depend_On_Domain_Infrastructure_Or_Wolverine()
+    {
+        // Incremento 2 plan, Etapa 15: Identity.Contracts holds the six real
+        // Integration Events (UserLoggedIn, etc.) — Architecture Principles
+        // §13 requires it to be an immutable-DTO-only project other contexts
+        // can safely reference directly, so it must never pull in Domain,
+        // Infrastructure or any Wolverine assembly transitively.
+        var result = Types.InAssembly(typeof(UserLoggedIn).Assembly)
+            .Should()
+            .NotHaveDependencyOnAny(
+                "IHostPro.Contexts.Identity.Domain",
                 "IHostPro.Contexts.Identity.Infrastructure",
                 "Microsoft.AspNetCore.Identity",
                 "Microsoft.Extensions.Identity.Core",

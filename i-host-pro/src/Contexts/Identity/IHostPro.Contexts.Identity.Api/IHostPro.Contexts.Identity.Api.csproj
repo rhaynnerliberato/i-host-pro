@@ -1,31 +1,34 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Structural placeholder (Architecture Principles, Section 16): no
-    controllers/endpoints exist yet — login, refresh and administrative
-    endpoints are scoped to later increments. Referenced here only so the
-    project exists and the Host can eventually register it.
+    HTTP endpoints for the Identity & Access context (Incremento 2 plan,
+    Etapa 14). References ONLY Identity.Application (Commands/AuthTokensResult)
+    and BuildingBlocks.Domain (Result/Error) — never Identity.Infrastructure
+    ("API não pode depender de tipos concretos de Infrastructure"). The
+    previous placeholder version of this project referenced
+    Identity.Infrastructure directly; that reference is removed here — every
+    concrete handler/executor/pipeline behavior is wired up by
+    Identity.Infrastructure's AddIdentityCommandDispatch/
+    AddIdentityJwtBearerAuthentication, called only from IHostPro.Api's
+    composition root, never from this project.
   -->
   <ItemGroup>
     <ProjectReference Include="..\IHostPro.Contexts.Identity.Application\IHostPro.Contexts.Identity.Application.csproj" />
-    <ProjectReference Include="..\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
-  </ItemGroup>
-
-  <!--
-    Explicit pin, matching Identity.Infrastructure's own version: without it,
-    Npgsql.EntityFrameworkCore.PostgreSQL's transitive floor requirement
-    ([10.0.4, 11.0.0)) and Identity.Infrastructure's direct 10.0.10 reference
-    resolve inconsistently across this project's own multi-hop transitive
-    graph, producing an MSB3277 assembly version conflict warning.
-  -->
-  <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Domain\IHostPro.BuildingBlocks.Domain.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- ControllerBase/[ApiController]/IActionResult/[Authorize] etc.
+         without pulling in the full Web SDK — this stays a plain class
+         library, matching every other per-context project; the standard way
+         a class library references ASP.NET Core's framework assemblies. -->
   </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
 
 </Project>

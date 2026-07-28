@@ -10,13 +10,30 @@
 
   <ItemGroup>
     <PackageReference Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <!-- Abstractions only (IHostedService) — for DevelopmentIdentitySeeder
+         (Incremento 2 plan, ajuste 3-4). Both IHostPro.Api and IHostPro.Worker
+         already depend on hosting (directly or via Microsoft.NET.Sdk.Web), so
+         this adds no new runtime surface, only the interface this library
+         needs to implement. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.0" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.21.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="StackExchange.Redis" Version="3.0.17" />
+    <!-- Only WolverineFx.EntityFrameworkCore — IDbContextOutbox<T>, the SDK's
+         own supported way to publish transactionally from code outside a
+         Wolverine message handler (Incremento 2 plan, Etapa 15A). Never
+         WolverineFx/WolverineFx.RabbitMQ/WolverineFx.RuntimeCompilation —
+         transport/broker/message-store configuration stays exclusively in
+         BuildingBlocks.Infrastructure and the Host processes (Architecture
+         Principles, Section 11). -->
+    <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.22.0" />
   </ItemGroup>
 
   <PropertyGroup>
