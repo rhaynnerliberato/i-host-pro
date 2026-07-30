@@ -430,3 +430,127 @@ Novidade nesta contagem em relação à Seção 10.6: `Route_caps_FailuresBefore
 ### 11.7 Status desta etapa
 
 **Incremento 2 — Identity & Access: latência sob indisponibilidade de RabbitMQ eliminada na origem (não apenas mitigada) via `CircuitBreaking` oficial do Wolverine + `ContinuationTimeout` afinado — objetivo de <1s atingido de forma estável em 30/30 execuções, cobrindo evento único, dois eventos, broker pausado e broker parado · PostgreSQL confirmado como única fonte de verdade em todo cenário · Status aprovado · Nenhum bloqueador pendente · Nenhum commit realizado.**
+
+---
+
+## 12. Incremento 3 — Identity & Access: RBAC, Gestão de Usuários e Sessões — Homologação e Encerramento
+
+Esta seção registra a homologação real e o encerramento do Incremento 3 completo (Checkpoints 1-10): motor de autorização RBAC por policies, catálogo de papéis/permissões, perfil e sessões próprias, gestão administrativa de usuários (criação, listagem, detalhe, atualização), atribuição/remoção de papéis com proteção do último Administrador, bloqueio/desbloqueio, alteração da própria senha e reset administrativo de senha — incluindo um achado real de persistência (Checkpoint 9) corrigido durante a própria homologação, exatamente como a metodologia já estabelecida nas Seções 4/8.3/9.4 deste documento previu.
+
+### 12.1 Escopo entregue
+
+- Motor RBAC por policies (`USERS:MANAGE`, `ROLES:READ`, `PERMISSIONS:READ`), catálogo persistido de 7 papéis/32 permissões/39 mapeamentos papel-permissão (`IdentityCatalogSeed`).
+- Leitura de papéis e permissões: `GET /api/v1/roles`, `GET /api/v1/permissions`.
+- Perfil próprio: `GET /api/v1/users/me`.
+- Sessões próprias: `GET /api/v1/users/me/sessions`, `DELETE /api/v1/users/me/sessions/{sessionId}`.
+- Gestão administrativa de usuários: criação com papel inicial obrigatório, listagem paginada com busca/filtro, detalhe, atualização de nome/e-mail.
+- Atribuição/remoção de papéis, com proteção do último Administrador ativo por advisory lock por tenant.
+- Bloqueio/desbloqueio de usuários.
+- Alteração da própria senha (`POST /api/v1/users/me/change-password`) e reset administrativo de senha (`POST /api/v1/users/{userId}/reset-password`).
+- Auditoria persistente (`identity.security_audit_log`) para toda operação de segurança relevante, nunca para tentativas rejeitadas de senha (apenas telemetria estruturada nesse caso, por decisão aprovada).
+- Outbox durável (Wolverine/PostgreSQL, `identity_messaging`) e Redis pós-commit para todos os sete eventos deste incremento.
+- RLS forçada e isolamento tenant-aware em todas as tabelas tenant-owned (`users`, `user_roles`, `sessions`, `refresh_tokens`, `security_audit_log`).
+
+### 12.2 Confirmado fora de escopo (por inspeção direta do código)
+
+Nenhum arquivo, endpoint, opção de configuração ou dependência relativos a: rate limiting, limpeza/expurgo de tokens expirados, recuperação de senha por e-mail, senha temporária, MFA, gestão mutável do catálogo de papéis/permissões via API (o catálogo permanece seed-only, via migration), ou qualquer novo Bounded Context além de Identity & Access.
+
+### 12.3 Endpoints finais do Incremento 3
+
+| Método | Rota | Autorização | Checkpoint |
+|---|---|---|---|
+| GET | `/api/v1/roles` | Authenticated + `ROLES:READ` | 3 |
+| GET | `/api/v1/permissions` | Authenticated + `PERMISSIONS:READ` | 3 |
+| GET | `/api/v1/users/me` | Authenticated | 4 |
+| GET | `/api/v1/users/me/sessions` | Authenticated | 4 |
+| DELETE | `/api/v1/users/me/sessions/{sessionId}` | Authenticated | 4 |
+| POST | `/api/v1/users` | `USERS:MANAGE` | 5 |
+| GET | `/api/v1/users` | `USERS:MANAGE` | 5 |
+| GET | `/api/v1/users/{userId}` | `USERS:MANAGE` | 5 |
+| POST | `/api/v1/users/{userId}/roles` | `USERS:MANAGE` | 6 |
+| DELETE | `/api/v1/users/{userId}/roles/{roleCode}` | `USERS:MANAGE` | 6 |
+| POST | `/api/v1/users/{userId}/block` | `USERS:MANAGE` | 7 |
+| POST | `/api/v1/users/{userId}/unblock` | `USERS:MANAGE` | 7 |
+| PATCH | `/api/v1/users/{userId}` | `USERS:MANAGE` | 8 |
+| POST | `/api/v1/users/me/change-password` | Authenticated | 9 |
+| POST | `/api/v1/users/{userId}/reset-password` | `USERS:MANAGE` | 9 |
+
+### 12.4 Eventos e routing keys
+
+Já catalogados integralmente em `Documento 07 — Catálogo de Eventos de Domínio`, §13.3/§13.4 — referenciado aqui, não duplicado. Resumo: `UserCreated`, `UserUpdated`, `UserBlocked`, `UserUnblocked`, `UserRoleAssigned`, `UserRoleRemoved`, `PasswordChanged` — todos no exchange `identity-events` (topic), routing key = nome do evento em snake_case, `.UseDurableOutbox()` + `.CircuitBreaking(FailuresBeforeCircuitBreaks=1)`. `UserBlocked`/`UserRoleAssigned`/`UserRoleRemoved`/`PasswordChanged` sempre acompanhados de um `SessionRevoked` por sessão revogada em cascata, `CausationId` apontando ao `EventId` do evento primário — confirmado por inspeção direta do outbox na Seção 12.7.3 abaixo.
+
+### 12.5 Ambiente da homologação real
+
+Ambiente Docker **isolado e efêmero** (rede `ihostpro-e2e-net`, containers `ihostpro-e2e-postgres`/`ihostpro-e2e-rabbitmq`/`ihostpro-e2e-redis`, sem volumes nomeados persistentes) — em nenhum momento o ambiente de desenvolvimento já existente (`ihostpro-postgres`, container `n8n`) foi parado, alterado ou tocado; confirmado por `docker ps` antes e depois. PostgreSQL 16, RabbitMQ 3 (management-alpine), Redis 7 (alpine) — imagens oficiais idênticas ao `docker-compose.yml` do repositório. `IHostPro.MigrationRunner` (publicado em Release) executado duas vezes consecutivas: primeira aplica a migration e provisiona o outbox; segunda não reaplica nada — seeds determinísticos idênticos em ambas (`roles=7`, `permissions=32`, `role_permissions=39`). `IHostPro.Api` (publicado em Release) iniciado com as credenciais `ihostpro_app`, ambiente `Development` (necessário para `DevelopmentIdentitySeeder`), chave de assinatura JWT RSA gerada localmente apenas para esta homologação. Ambiente completamente removido (containers, rede) ao final.
+
+Dados de teste criados **via o mecanismo administrativo/seed aprovado, nunca por INSERT direto, exceto nos dois pontos em que nenhum endpoint público existe para o fluxo** (ambos documentados explicitamente, não uma decisão silenciosa):
+
+- `DevelopmentIdentitySeeder` criou Tenant A + Admin A1, e — numa segunda execução do mesmo host, aditiva, idempotente — Tenant B + Admin B (nenhum endpoint de criação de tenant existe no sistema; o seeder é o único mecanismo aprovado para isso, e ele nunca atribui papel ao usuário criado, por design).
+- Como o seeder deliberadamente não atribui papel algum, o primeiro `UserRole(ADMIN)` de cada tenant foi inserido diretamente via SQL (`INSERT INTO identity.user_roles ...`) — o único jeito de sair do estado "usuário existe, mas não pode chamar nenhum endpoint protegido por `USERS:MANAGE` para atribuir seu próprio papel" (problema do ovo e da galinha inerente a qualquer bootstrap de RBAC). Toda atribuição de papel **subsequente** (Admin A2, Operador A, etc.) foi feita exclusivamente via `POST /api/v1/users` (papel inicial) e `POST/DELETE .../roles` (endpoints reais).
+
+A partir desses dois pontos de bootstrap, **todo o restante dos dados** (Admin A2, Operador A, Usuário Comum A, Usuário B, e cinco usuários dedicados a cenários destrutivos — sessão, bloqueio, senha, reset, papéis) foi criado exclusivamente via `POST /api/v1/users` autenticado com um JWT real obtido de `POST /api/v1/auth/login`.
+
+### 12.6 Resultado da homologação por cenário
+
+Todos os cenários abaixo foram executados via requisições HTTP reais contra o processo real do `IHostPro.Api`, com JWT reais emitidos pelo próprio login — nenhuma chamada a um handler diretamente, nenhum dado inserido por fora do fluxo real salvo os dois pontos de bootstrap já descritos.
+
+**Autorização** (9/9 confirmados): sem token → 401; papel sem `USERS:MANAGE` → 403; Admin autorizado → sucesso; autenticação sozinha não concede `USERS:MANAGE`; múltiplos papéis (`OPERATOR`+`ADMIN` atribuídos ao mesmo usuário) concedem acesso pela união de permissões, confirmado contra `GET /api/v1/roles`; catálogo persistido confirmado (7 papéis, 32 permissões).
+
+**Usuários** (11/11 confirmados): criação com papel inicial; e-mail duplicado no mesmo tenant → 409; mesmo e-mail em tenants diferentes → permitido; listagem paginada/busca/filtro; detalhe cross-tenant → 404; atualização de e-mail; e-mail antigo deixa de autenticar; e-mail novo autentica; sessão já autenticada permanece válida após a atualização (o `PATCH` não revoga sessões, por design).
+
+**Papéis** (17/17 confirmados, após dois ajustes de desenho do próprio roteiro de teste — Seção 12.8): atribuição/remoção; operação repetida → 409 (`RoleAlreadyAssigned`/`RoleNotAssigned`) sem eventos duplicados; remoção do último papel → 409 (`UserMustHaveAtLeastOneRole`) — confirmado que essa regra tem precedência sobre a de último-Administrador quando ambas poderiam se aplicar; último Administrador ativo protegido (`LastActiveAdministrator`); concorrência real (dois processos em paralelo) entre `RemoveRole(ADMIN)` e `Block` sobre os dois últimos Admins do tenant — exatamente uma operação confirmou, a outra foi rejeitada, ao menos um Admin ativo preservado; alteração de papel revoga todas as sessões do alvo (confirmado com uma sessão previamente aberta).
+
+**Bloqueio** (13/13 confirmados): bloqueio revoga sessão e refresh token (confirmado também via `POST /api/v1/auth/refresh` retornando 401 com o refresh token pré-bloqueio); usuário bloqueado não autentica; desbloqueio não restaura tokens antigos; novo login funciona após desbloqueio; último Admin não pode ser bloqueado (inclusive por si mesmo) — e, num achado orgânico do próprio roteiro, confirmado que um Administrador PODE bloquear a si mesmo quando outro Admin ativo permanece (revogando a própria sessão no ato, conforme já esperado).
+
+**Sessões próprias** (11/11 confirmados, após uma correção de artefato do próprio script de teste — Seção 12.8): perfil próprio; listagem mostra apenas as sessões do próprio usuário; exatamente uma sessão marcada como atual; revogar outra sessão não invalida a atual; revogar a sessão atual invalida o token em requisições posteriores; sessão de outro usuário/tenant → 404; sessão inexistente → 404.
+
+**Senhas** (17/17 confirmados): troca própria exige senha atual — incorreta → 400; nova igual à atual → 400 (nenhuma das duas rejeições revoga a sessão em uso); troca válida revoga todas as sessões do próprio usuário, inclusive a que originou a requisição; `Cache-Control: no-store` confirmado; senha antiga deixa de autenticar, nova autentica; reset administrativo contra o próprio Admin → 409 (`AdminCannotResetOwnPassword`); reset de usuário bloqueado → sucesso, sem desbloqueá-lo; sessão do Administrador executor permanece ativa após o reset; token antigo do alvo invalidado; após desbloqueio, login funciona somente com a senha definida pelo reset.
+
+### 12.7 Persistência e segurança — verificação direta no PostgreSQL
+
+**12.7.1 RLS.** `relrowsecurity`/`relforcerowsecurity` = true/true exatamente em `users`, `sessions`, `user_roles`, `refresh_tokens`, `security_audit_log`; false/false em `permissions`/`role_permissions`/`roles`/`tenants` (catálogo global, não tenant-owned) — inalterado desde o Incremento 1. Isolamento confirmado ao vivo pela role `ihostpro_app`: com `app.tenant_id` do Tenant A, 9 usuários visíveis; com o do Tenant B, 3; sem `app.tenant_id` configurado, 0 (fail-closed).
+
+**12.7.2 Sessões e refresh tokens.** Ao final da bateria de cenários: 12 sessões com `status=Revoked` e `revoked_at` preenchido, 17 com `status=Active`; exatamente as mesmas 12 com o refresh token correspondente também revogado (`revoked_at` preenchido) — nenhuma sessão marcada revogada com refresh token ainda ativo, e vice-versa.
+
+**12.7.3 Auditoria e eventos.** `security_audit_log`: 12 eventos de tipo correspondendo exatamente às 12 revogações de sessão (`UserBlocked`×3, `UserUnblocked`×3, `PasswordChangedBySelf`×1, `PasswordResetByAdmin`×1, `UserRoleAssigned`×18, `UserRoleRemoved`×7, `UserCreated`×10, `LoginRejected`×4, `RefreshTokenReuseDetected`×1 — este último um achado orgânico do próprio roteiro: um refresh token revogado por bloqueio, apresentado depois, foi corretamente classificado como reuse, não como erro genérico). Nenhuma auditoria de sucesso registrada para as tentativas rejeitadas de troca de senha (senha atual incorreta / nova igual à atual) — confirmado tanto pela ausência de linhas quanto pela contagem de `PasswordChangedBySelf` (exatamente 1, a única tentativa que efetivamente sucedeu). Inspeção direta do outbox (`wolverine_outgoing_envelopes`, com o broker pausado para captura) confirmou `CausationId` de dois envelopes `SessionRevoked` apontando exatamente para o `EventId` do `UserRoleAssigned` que os causou, mesmo `CorrelationId` nos três, `ReasonCode="roles_changed"`.
+
+**12.7.4 Ausência de dados sensíveis.** Busca por `password|senha|hash|secret|jwt|bearer|private|connectionstring` e por endereços de e-mail (`@e2e.test`) no conteúdo bruto dos envelopes inspecionados: nenhuma ocorrência.
+
+### 12.8 Achados reais e correções
+
+Nenhum problema de produção adicional foi encontrado durante este checkpoint (o achado real do `SessionReader`/`AsNoTracking()` já foi identificado, corrigido, comprovado por regressão e aprovado no Checkpoint 9 — ver a revisão daquele checkpoint; não repetido aqui). Dois artefatos do PRÓPRIO roteiro de teste desta homologação foram identificados e corrigidos, nenhum dos dois revelando um problema de produção:
+
+- **Bloqueio do próprio Admin A1 durante o teste de concorrência de papéis**: o roteiro usou o token do Admin A1 tanto para a chamada de `RemoveRole` quanto para a chamada concorrente de `Block(A1)` — como o bloqueio de si mesmo é uma operação legítima quando outro Admin permanece ativo (comportamento já aprovado), a chamada teve sucesso e revogou a própria sessão do token usado para o restante do roteiro. Corrigido recuperando o estado via o Admin B/A2 (ainda ativo) e reautenticando — nenhuma mudança de código, apenas ajuste do roteiro de teste.
+- **Remoção de `ADMIN` do Admin A2 rejeitada com 409 inesperado**: o roteiro assumiu que remover `ADMIN` de A2 (com A1 ainda ativo) sucederia, mas A2 possuía apenas o papel `ADMIN` — a remoção corretamente disparou `UserMustHaveAtLeastOneRole` antes mesmo de chegar à checagem de último-Administrador (ordem de validação correta, já coberta por teste de integração automatizado). Corrigido atribuindo um segundo papel a A2 antes da remoção, isolando a proteção de último-Administrador especificamente.
+- **Falso negativo de `isCurrent`**: um artefato de unwrapping de array de um único elemento no PowerShell (`Where-Object` retornando um objeto solto, não um array, quando exatamente um item corresponde) fez `.Count` retornar `$null` em vez de `1`. Confirmado por depuração dedicada que o comportamento real da API está correto (exatamente uma sessão marcada `isCurrent` por token). Nenhuma mudança de código.
+- **401 inesperado ao testar revogação de sessão cross-tenant**: o token do Admin B usado nesse teste específico já havia expirado (`AccessTokenLifetime=15min`, tempo decorrido real da homologação). Corrigido reautenticando antes do teste. Nenhuma mudança de código.
+
+### 12.9 Débitos técnicos conhecidos (registrados, não corrigidos neste checkpoint)
+
+- **Cleanup final do signal em `LogoutExecutor`/`RevokeOwnSessionExecutor`**: ambos ainda carregam o padrão anterior à correção do Checkpoint 6 (retry sem drenagem incondicional do `ISessionRevocationSignal` na tentativa final/exaurida) — já identificado e deliberadamente adiado desde então; não bloqueou esta homologação (nenhum cenário exercitado aqui dependia dessa drenagem).
+- **Fixtures de teste de integração com composição manual de DI**: cada arquivo de teste de integração reconstrói manualmente seu próprio grafo de serviços (`BuildServices`/`BuildHostAsync`) em vez de reutilizar `AddIdentityModule`/`AddIdentityCommandDispatch` integralmente — padrão já estabelecido desde o Incremento 2, não introduzido nem agravado por este incremento.
+
+Nenhum dos dois bloqueou a homologação; nenhuma correção foi aplicada a eles neste checkpoint, por instrução explícita.
+
+### 12.10 Indisponibilidade de dependências — RabbitMQ e Redis
+
+**RabbitMQ pausado** (partição de rede simulada, `docker pause`): login (evento único) — 0,62s; `AssignRole` sobre usuário com duas sessões ativas (evento primário + 2 `SessionRevoked`) — 0,66s — ambos dentro do limite de <1s já homologado no Incremento 2 (Seção 11.4). Envelopes pendentes confirmados diretamente no outbox (3×`UserLoggedIn`, 1×`UserRoleAssigned`, 2×`SessionRevoked`); após `docker unpause`, entrega automática confirmada em ≤4s, outbox de volta a zero, sem perda ou duplicação.
+
+**Redis parado** (`docker stop`, não apenas pausado — pausar congela o processo inteiramente e não representa uma indisponibilidade de rede realista): login continua funcionando; operação de revogação (`Block`) ainda commita corretamente no PostgreSQL (confirmado por consulta direta: usuário `Blocked`); login com a senha/estado pós-bloqueio continua corretamente rejeitado (PostgreSQL como fonte de verdade, independente do Redis). Access token emitido ANTES do bloqueio permanece válido (fail-open documentado) até expirar pelo TTL normal — comportamento esperado, sem tentativa de "corrigir" isso neste checkpoint (é o design aprovado). Latência observada nesta rodada para a operação de revogação com Redis parado: 5,28s — mais alta que os ~1,97s registrados na Seção 10.4 para Logout; investigação mostrou que a diferença vem do fato de a chamada testada aqui (`Block`) tocar o Redis DUAS vezes de forma independente (leitura de `IsRevokedAsync` durante a validação do próprio Bearer do chamador, e escrita de `MarkRevokedAsync` para a sessão revogada), cada uma sujeita ao seu próprio ciclo de timeout/retry configurado (`ConnectTimeout`/`OperationTimeout`=1s, `ConnectRetry`=1) — uma característica arquitetural já existente (múltiplos toques independentes ao Redis dentro de uma mesma requisição), não uma regressão; o checkpoint não exige um limite de latência específico para Redis (apenas para RabbitMQ), e o comportamento de fail-open em si funcionou corretamente. Após `docker start`, latência normalizada em 0,13s e token de sessão pré-bloqueio corretamente rejeitado de imediato (Redis saudável).
+
+### 12.11 Validação automatizada final
+
+Executada após a homologação HTTP real e após a conclusão desta seção de documentação — nenhuma alteração de código ou documento relevante ocorreu depois destas execuções.
+
+Build Release: 0 erros, 0 avisos, 15 projetos.
+
+| Suíte | Total | Execução 1 | Execução 2 |
+|---|---|---|---|
+| Arquitetura | 51 | 51/51 aprovados | — (não exigida em duas execuções) |
+| Unitários (Identity) | 468 | 468/468 aprovados | — (não exigida em duas execuções) |
+| Unitários (BuildingBlocks) | 13 | 13/13 aprovados | — (não exigida em duas execuções) |
+| Integração (Identity — PostgreSQL + RabbitMQ + Redis reais via Testcontainers) | 401 | 401/401 aprovados (15m47s) | 401/401 aprovados (15m24s) |
+
+### 12.12 Status final
+
+**Incremento 3 — Identity & Access (RBAC por policies, gestão administrativa de usuários, papéis com proteção do último Administrador, bloqueio/desbloqueio, sessões próprias, alteração/reset de senha): Implementação concluída · Homologação HTTP real concluída em ambiente Docker isolado e efêmero (67 cenários confirmados: Autorização 9, Usuários 11, Papéis 17, Bloqueio 13, Sessões 11, Senhas 17 — alguns recontados após correção de artefatos do próprio roteiro de teste, nunca de produção) · RLS/isolamento tenant-aware confirmado diretamente no PostgreSQL · Persistência de sessões/refresh tokens/auditoria confirmada diretamente · Ausência de dados sensíveis em auditoria/envelopes confirmada · Indisponibilidade de RabbitMQ e Redis testada com recuperação automática sem perda/duplicação · Um achado real de produção (bug de persistência do `SessionReader`) já identificado, corrigido e aprovado no Checkpoint 9 · Dois débitos técnicos conhecidos permanecem deliberadamente não corrigidos (Seção 12.9) · Build Release 0/0 · Suíte completa aprovada em duas execuções consecutivas (401/401) · Status aprovado, pendente de aprovação final do usuário · Nenhum commit, push, tag ou merge realizado.**

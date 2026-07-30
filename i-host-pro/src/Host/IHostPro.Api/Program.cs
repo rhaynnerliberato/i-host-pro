@@ -3,6 +3,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
+using IHostPro.Contexts.Identity.Api.Authorization;
 using IHostPro.Contexts.Identity.Contracts;
 using IHostPro.Contexts.Identity.Infrastructure;
 using IHostPro.Contexts.Identity.Infrastructure.Authentication;
@@ -86,6 +87,15 @@ try
     // AddIdentityJwtBearerAuthentication's own doc comment).
     builder.Services.AddIdentityJwtBearerAuthentication();
 
+    // Permission-code authorization policies (Incremento 3 plan, Checkpoint
+    // 1) — USERS:MANAGE, ROLES:READ, PERMISSIONS:READ. No IAuthorizationHandler
+    // is registered for PermissionRequirement yet (Checkpoint 2); no endpoint
+    // references these policies yet either (Checkpoints 3+), so this is
+    // inert until then. Registered here, never in IHostPro.Worker's
+    // Program.cs, for the same reason as JWT Bearer authentication above:
+    // the Worker never serves HTTP requests.
+    builder.Services.AddIdentityAuthorization();
+
     // Mediator + the three auth commands' handlers/validators/pipeline
     // behaviors (Incremento 2 plan, Etapa 14) — registered ONLY here, never
     // in IHostPro.Worker's Program.cs: dispatching these commands is an
@@ -159,6 +169,32 @@ try
         RouteIdentityEvent<UserLoggedOut>("user_logged_out");
         RouteIdentityEvent<RefreshTokenReuseDetected>("refresh_token_reuse_detected");
         RouteIdentityEvent<SessionRevoked>("session_revoked");
+
+        // Incremento 3, Checkpoint 5: CreateUserCommand is the first command
+        // to publish these two (Documento 07 §13.3/§13.4) — registered only
+        // now that real code actually emits them, never in advance.
+        RouteIdentityEvent<UserCreated>("user_created");
+        RouteIdentityEvent<UserRoleAssigned>("user_role_assigned");
+
+        // Incremento 3, Checkpoint 6: RemoveRoleCommand is the first command
+        // to publish UserRoleRemoved (Documento 07 §13.3/§13.4).
+        // UserRoleAssigned above is now ALSO published by AssignRoleCommand,
+        // reusing the same route — never registered twice.
+        RouteIdentityEvent<UserRoleRemoved>("user_role_removed");
+
+        // Incremento 3, Checkpoint 7: BlockUserCommand/UnblockUserCommand are
+        // the first commands to publish these two (Documento 07 §13.3/§13.4).
+        RouteIdentityEvent<UserBlocked>("user_blocked");
+        RouteIdentityEvent<UserUnblocked>("user_unblocked");
+
+        // Incremento 3, Checkpoint 8: UpdateUserCommand is the first command
+        // to publish this one (Documento 07 §13.3/§13.4).
+        RouteIdentityEvent<UserUpdated>("user_updated");
+
+        // Incremento 3, Checkpoint 9: ChangeOwnPasswordCommand/AdminResetPasswordCommand
+        // are the first commands to publish this one (Documento 07 §13.3/§13.4)
+        // — both reuse the same route, never registered twice.
+        RouteIdentityEvent<PasswordChanged>("password_changed");
     });
 
     builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();

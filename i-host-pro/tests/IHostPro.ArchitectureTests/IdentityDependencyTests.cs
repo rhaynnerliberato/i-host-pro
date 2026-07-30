@@ -1,4 +1,5 @@
 using FluentAssertions;
+using IHostPro.Contexts.Identity.Api.Controllers;
 using IHostPro.Contexts.Identity.Application;
 using IHostPro.Contexts.Identity.Contracts;
 using IHostPro.Contexts.Identity.Domain;
@@ -115,6 +116,77 @@ public class IdentityDependencyTests
             .GetTypes();
 
         typesDependingOnIdentityCore.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Application_Should_Not_Depend_On_AspNetCoreAuthorization()
+    {
+        // Incremento 3 plan, Checkpoint 1, approved layering: permission
+        // reading and business rules live in Application, but the
+        // ASP.NET Core authorization framework itself (IAuthorizationHandler,
+        // IAuthorizationRequirement, AddAuthorizationBuilder) is exclusive to
+        // Api — Application must stay just as framework-free for
+        // authorization as it already is for ASP.NET Core Identity/EF Core/
+        // Wolverine (see the other tests in this class).
+        var result = Types.InAssembly(typeof(ITenantBootstrapReader).Assembly)
+            .Should()
+            .NotHaveDependencyOn("Microsoft.AspNetCore.Authorization")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(BuildFailureMessage(result));
+    }
+
+    [Fact]
+    public void Infrastructure_Should_Not_Depend_On_AspNetCoreAuthorization()
+    {
+        // Incremento 3 plan, Checkpoint 1, approved layering: no
+        // IAuthorizationHandler, IAuthorizationRequirement or
+        // AddAuthorizationBuilder call may live in Identity.Infrastructure —
+        // those belong exclusively to Identity.Api, which is the only project
+        // allowed to depend on the ASP.NET Core authorization framework
+        // (confirmed by Api_Does_Reference_AspNetCoreAuthorization below).
+        var result = Types.InAssembly(typeof(IdentityModuleExtensions).Assembly)
+            .Should()
+            .NotHaveDependencyOn("Microsoft.AspNetCore.Authorization")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(BuildFailureMessage(result));
+    }
+
+    [Fact]
+    public void Api_Does_Reference_AspNetCoreAuthorization()
+    {
+        // Confirms the isolation asserted by the two tests above is real (not
+        // merely absent from Application/Infrastructure by accident):
+        // PermissionRequirement/IdentityAuthorizationExtensions (Incremento 3
+        // plan, Checkpoint 1) are expected to reference the framework
+        // directly from Identity.Api.
+        var typesDependingOnAuthorization = Types.InAssembly(typeof(AuthController).Assembly)
+            .That()
+            .HaveDependencyOn("Microsoft.AspNetCore.Authorization")
+            .GetTypes();
+
+        typesDependingOnAuthorization.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Api_Should_Not_Depend_On_IdentityDbContext_Directly()
+    {
+        // Incremento 3 plan, Checkpoint 2, approved design: PermissionAuthorizationHandler
+        // (and every other Api-layer type) reaches persisted data exclusively
+        // through IPermissionReader (Application) — never by querying
+        // IdentityDbContext itself, which would collapse the Api/Infrastructure
+        // boundary Checkpoint 1 already established. Already impossible today
+        // because Identity.Api does not even reference Identity.Infrastructure
+        // as a project — this test makes that guarantee explicit and
+        // self-enforcing even if a future change adds that project reference
+        // for an unrelated reason.
+        var result = Types.InAssembly(typeof(AuthController).Assembly)
+            .Should()
+            .NotHaveDependencyOn("IHostPro.Contexts.Identity.Infrastructure.Persistence.IdentityDbContext")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(BuildFailureMessage(result));
     }
 
     private static string BuildFailureMessage(TestResult result) =>

@@ -6,6 +6,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Application;
+using IHostPro.Contexts.Identity.Application.Users;
 using IHostPro.Contexts.Identity.Domain;
 using IHostPro.Contexts.Identity.Domain.ValueObjects;
 using IHostPro.Contexts.Identity.Infrastructure;
@@ -36,7 +37,7 @@ namespace IHostPro.Contexts.Identity.Tests.Integration;
 /// that a Redis outage never fails either use case, and that nothing
 /// sensitive is ever stored.
 /// </summary>
-public class SessionRevocationCacheTests : IClassFixture<SessionRevocationCacheTests.Fixture>
+public class SessionRevocationCacheTests : IClassFixture<SessionRevocationCacheTests.Fixture>, IDisposable
 {
     private const string OutboxSchema = "identity_messaging";
     private const string KnownSecret = "known-secret-segment-for-tests";
@@ -47,12 +48,31 @@ public class SessionRevocationCacheTests : IClassFixture<SessionRevocationCacheT
     private readonly string _migratorConnectionString;
     private readonly string _appConnectionString;
 
+    // Lazily created by ConnectToRedis(), disposed by Dispose() below — fixes
+    // a real test-lifecycle defect (Incremento 3, Checkpoint 2 stabilization):
+    // every one of the seven call sites of ConnectToRedis() previously created
+    // its own ConnectionMultiplexer.Connect(...) and never disposed it. xUnit
+    // constructs a new SessionRevocationCacheTests instance per [Fact] (see
+    // the Fixture doc comment below), so this was never a single leak but one
+    // per affected test method — each leaked multiplexer keeps its own TCP
+    // connection and background reconnect/heartbeat threads alive against the
+    // one Redis container this whole class shares via IClassFixture for the
+    // remainder of the test run. Reproduced and confirmed as the cause of the
+    // intermittent `ObjectDisposedException` on `PhysicalConnection.ReadAllAsync`
+    // (StackExchange.Redis's own internal socket teardown racing an in-flight
+    // read once enough accumulated background activity destabilized the
+    // connection) — never a production code defect; RedisSessionRevocationCache
+    // itself already manages its own connection correctly and was not changed.
+    private ConnectionMultiplexer? _redisMultiplexer;
+
     public SessionRevocationCacheTests(Fixture fixture)
     {
         _redisContainer = fixture.RedisContainer;
         _migratorConnectionString = fixture.MigratorConnectionString;
         _appConnectionString = fixture.AppConnectionString;
     }
+
+    public void Dispose() => _redisMultiplexer?.Dispose();
 
     /// <summary>
     /// Started once per test class, not once per test method — see
@@ -182,8 +202,15 @@ public class SessionRevocationCacheTests : IClassFixture<SessionRevocationCacheT
         hostBuilder.Services.AddScoped<IIdentityTransactionExecutor, IdentityOutboxTransactionExecutor>();
         hostBuilder.Services.AddScoped<IRefreshTokenExchangeExecutor, RefreshTokenExchangeExecutor>();
         hostBuilder.Services.AddScoped<ILogoutExecutor, LogoutExecutor>();
+        hostBuilder.Services.AddScoped<IAssignRoleExecutor, AssignRoleExecutor>();
+        hostBuilder.Services.AddScoped<IRemoveRoleExecutor, RemoveRoleExecutor>();
+        hostBuilder.Services.AddScoped<IBlockUserExecutor, BlockUserExecutor>();
         hostBuilder.Services.AddScoped<LogoutCommandHandler>();
         hostBuilder.Services.AddScoped<RefreshTokenCommandHandler>();
+        hostBuilder.Services.AddScoped<AssignRoleCommandHandler>();
+        hostBuilder.Services.AddScoped<RemoveRoleCommandHandler>();
+        hostBuilder.Services.AddScoped<BlockUserCommandHandler>();
+        hostBuilder.Services.AddScoped<UnblockUserCommandHandler>();
 
         hostBuilder.UseWolverine(opts =>
         {
@@ -227,6 +254,50 @@ public class SessionRevocationCacheTests : IClassFixture<SessionRevocationCacheT
             CancellationToken.None);
     }
 
+    private static async Task<Result> ExecuteAssignRoleAsync(IHost root, AssignRoleCommand command)
+    {
+        using var scope = root.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(command.TenantId);
+
+        return await sp.GetRequiredService<IAssignRoleExecutor>().ExecuteAsync(
+            () => sp.GetRequiredService<AssignRoleCommandHandler>().Handle(command, CancellationToken.None).AsTask(),
+            CancellationToken.None);
+    }
+
+    private static async Task<Result> ExecuteRemoveRoleAsync(IHost root, RemoveRoleCommand command)
+    {
+        using var scope = root.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(command.TenantId);
+
+        return await sp.GetRequiredService<IRemoveRoleExecutor>().ExecuteAsync(
+            () => sp.GetRequiredService<RemoveRoleCommandHandler>().Handle(command, CancellationToken.None).AsTask(),
+            CancellationToken.None);
+    }
+
+    private static async Task<Result> ExecuteBlockUserAsync(IHost root, BlockUserCommand command)
+    {
+        using var scope = root.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(command.TenantId);
+
+        return await sp.GetRequiredService<IBlockUserExecutor>().ExecuteAsync(
+            () => sp.GetRequiredService<BlockUserCommandHandler>().Handle(command, CancellationToken.None).AsTask(),
+            CancellationToken.None);
+    }
+
+    private static async Task<Result> ExecuteUnblockUserAsync(IHost root, UnblockUserCommand command)
+    {
+        using var scope = root.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(command.TenantId);
+
+        return await sp.GetRequiredService<IIdentityTransactionExecutor>().ExecuteAsync(
+            () => sp.GetRequiredService<UnblockUserCommandHandler>().Handle(command, CancellationToken.None).AsTask(),
+            CancellationToken.None);
+    }
+
     // ---- Seeding --------------------------------------------------------
 
     private async Task<Guid> SeedTenantAsync()
@@ -263,6 +334,18 @@ public class SessionRevocationCacheTests : IClassFixture<SessionRevocationCacheT
         await transaction.CommitAsync();
 
         return user.Id;
+    }
+
+    private async Task SeedUserRoleAsync(Guid tenantId, Guid userId, string roleCode, Guid assignedByUserId)
+    {
+        await using var dbContext = CreateMigratorDbContextWithTenant(tenantId);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetPostgresTenantAsync(dbContext, tenantId);
+
+        dbContext.UserRoles.Add(new UserRole(tenantId, userId, roleCode, DateTimeOffset.UtcNow, assignedByUserId));
+
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
     private async Task<Guid> SeedSessionAsync(Guid tenantId, Guid userId, Guid? sessionId = null)
@@ -312,8 +395,8 @@ public class SessionRevocationCacheTests : IClassFixture<SessionRevocationCacheT
 
     private IDatabase ConnectToRedis()
     {
-        var multiplexer = ConnectionMultiplexer.Connect(_redisContainer.GetConnectionString());
-        return multiplexer.GetDatabase();
+        _redisMultiplexer ??= ConnectionMultiplexer.Connect(_redisContainer.GetConnectionString());
+        return _redisMultiplexer.GetDatabase();
     }
 
     // ---- Tests: writes on the real revocation paths ------------------------
@@ -354,6 +437,81 @@ public class SessionRevocationCacheTests : IClassFixture<SessionRevocationCacheT
         var redis = ConnectToRedis();
         var value = await redis.StringGetAsync(CacheKeyFor(tenantId, sessionId));
         value.HasValue.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AssignRole_writes_the_session_revocation_cache_entry_for_the_targets_active_session_after_commit()
+    {
+        var tenantId = await SeedTenantAsync();
+        var actorId = await SeedUserAsync(tenantId);
+        var targetUserId = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+        var sessionId = await SeedSessionAsync(tenantId, targetUserId);
+        using var services = await BuildServices();
+
+        var result = await ExecuteAssignRoleAsync(services, new AssignRoleCommand(tenantId, actorId, targetUserId, "OPERATOR"));
+        result.IsSuccess.Should().BeTrue();
+
+        var redis = ConnectToRedis();
+        var value = await redis.StringGetAsync(CacheKeyFor(tenantId, sessionId));
+        value.HasValue.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RemoveRole_writes_the_session_revocation_cache_entry_for_the_targets_active_session_after_commit()
+    {
+        var tenantId = await SeedTenantAsync();
+        var actorId = await SeedUserAsync(tenantId);
+        var targetUserId = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "OPERATOR", actorId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+        var sessionId = await SeedSessionAsync(tenantId, targetUserId);
+        using var services = await BuildServices();
+
+        var result = await ExecuteRemoveRoleAsync(services, new RemoveRoleCommand(tenantId, actorId, targetUserId, "HOUSEKEEPER"));
+        result.IsSuccess.Should().BeTrue();
+
+        var redis = ConnectToRedis();
+        var value = await redis.StringGetAsync(CacheKeyFor(tenantId, sessionId));
+        value.HasValue.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task BlockUser_writes_the_session_revocation_cache_entry_for_the_targets_active_session_after_commit()
+    {
+        var tenantId = await SeedTenantAsync();
+        var actorId = await SeedUserAsync(tenantId);
+        var targetUserId = await SeedUserAsync(tenantId);
+        var sessionId = await SeedSessionAsync(tenantId, targetUserId);
+        using var services = await BuildServices();
+
+        var result = await ExecuteBlockUserAsync(services, new BlockUserCommand(tenantId, actorId, targetUserId));
+        result.IsSuccess.Should().BeTrue();
+
+        var redis = ConnectToRedis();
+        var value = await redis.StringGetAsync(CacheKeyFor(tenantId, sessionId));
+        value.HasValue.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UnblockUser_never_writes_a_session_revocation_cache_entry()
+    {
+        var tenantId = await SeedTenantAsync();
+        var actorId = await SeedUserAsync(tenantId);
+        var targetUserId = await SeedUserAsync(tenantId);
+        var sessionId = await SeedSessionAsync(tenantId, targetUserId);
+        using var services = await BuildServices();
+        // Block first (writes its own cache entry, unrelated to what's under
+        // test) so the target is genuinely Blocked when Unblock runs.
+        (await ExecuteBlockUserAsync(services, new BlockUserCommand(tenantId, actorId, targetUserId))).IsSuccess.Should().BeTrue();
+        var redis = ConnectToRedis();
+        await redis.KeyDeleteAsync(CacheKeyFor(tenantId, sessionId)); // isolate Unblock's own effect
+
+        var result = await ExecuteUnblockUserAsync(services, new UnblockUserCommand(tenantId, actorId, targetUserId));
+        result.IsSuccess.Should().BeTrue();
+
+        var value = await redis.StringGetAsync(CacheKeyFor(tenantId, sessionId));
+        value.HasValue.Should().BeFalse();
     }
 
     // ---- Tests: TTL ---------------------------------------------------------
@@ -499,6 +657,54 @@ public class SessionRevocationCacheTests : IClassFixture<SessionRevocationCacheT
         using var services = await BuildServices(redisConnectionStringOverride: "127.0.0.1:1,connectTimeout=1000,connectRetry=1");
 
         var act = async () => await ExecuteLogoutAsync(services, new LogoutCommand(tenantId, userId, sessionId));
+
+        var result = await act.Should().NotThrowAsync();
+        result.Subject.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AssignRole_still_succeeds_when_Redis_is_unreachable()
+    {
+        var tenantId = await SeedTenantAsync();
+        var actorId = await SeedUserAsync(tenantId);
+        var targetUserId = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+        await SeedSessionAsync(tenantId, targetUserId);
+        using var services = await BuildServices(redisConnectionStringOverride: "127.0.0.1:1,connectTimeout=1000,connectRetry=1");
+
+        var act = async () => await ExecuteAssignRoleAsync(services, new AssignRoleCommand(tenantId, actorId, targetUserId, "OPERATOR"));
+
+        var result = await act.Should().NotThrowAsync();
+        result.Subject.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RemoveRole_still_succeeds_when_Redis_is_unreachable()
+    {
+        var tenantId = await SeedTenantAsync();
+        var actorId = await SeedUserAsync(tenantId);
+        var targetUserId = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "OPERATOR", actorId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+        await SeedSessionAsync(tenantId, targetUserId);
+        using var services = await BuildServices(redisConnectionStringOverride: "127.0.0.1:1,connectTimeout=1000,connectRetry=1");
+
+        var act = async () => await ExecuteRemoveRoleAsync(services, new RemoveRoleCommand(tenantId, actorId, targetUserId, "HOUSEKEEPER"));
+
+        var result = await act.Should().NotThrowAsync();
+        result.Subject.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task BlockUser_still_succeeds_when_Redis_is_unreachable()
+    {
+        var tenantId = await SeedTenantAsync();
+        var actorId = await SeedUserAsync(tenantId);
+        var targetUserId = await SeedUserAsync(tenantId);
+        await SeedSessionAsync(tenantId, targetUserId);
+        using var services = await BuildServices(redisConnectionStringOverride: "127.0.0.1:1,connectTimeout=1000,connectRetry=1");
+
+        var act = async () => await ExecuteBlockUserAsync(services, new BlockUserCommand(tenantId, actorId, targetUserId));
 
         var result = await act.Should().NotThrowAsync();
         result.Subject.IsSuccess.Should().BeTrue();

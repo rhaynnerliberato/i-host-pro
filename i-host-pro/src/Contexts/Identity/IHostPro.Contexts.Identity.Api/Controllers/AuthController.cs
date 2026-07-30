@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using IHostPro.Contexts.Identity.Api.Contracts;
 using IHostPro.Contexts.Identity.Api.Http;
 using IHostPro.Contexts.Identity.Application;
@@ -64,14 +63,10 @@ public sealed class AuthController : ControllerBase
         // that THIS action can blindly trust User.Claims for its own
         // authorization-sensitive use (Incremento 2 plan, Etapa 14: "claims
         // de logout devem ser lidas após autenticação e validadas novamente").
-        if (!TryGetExactlyOneCanonicalGuidClaim(SubClaimType, out var userId) ||
-            !TryGetExactlyOneCanonicalGuidClaim(TenantIdClaimType, out var tenantId) ||
-            !TryGetExactlyOneCanonicalGuidClaim(SessionIdClaimType, out var sessionId))
-        {
+        if (!AuthenticatedIdentityReader.TryRead(User, out var identity))
             return Unauthorized();
-        }
 
-        var command = new LogoutCommand(tenantId, userId, sessionId);
+        var command = new LogoutCommand(identity.TenantId, identity.UserId, identity.SessionId);
         var result = await _sender.Send(command, cancellationToken);
 
         return result.IsSuccess ? NoContent() : ResultHttpMapper.ToActionResult(result.Error);
@@ -104,20 +99,4 @@ public sealed class AuthController : ControllerBase
 
     private static AuthTokensResponse ToResponse(AuthTokensResult result) => new(
         result.AccessToken, result.AccessTokenExpiresAt, result.RefreshToken, result.RefreshTokenExpiresAt, result.TokenType);
-
-    private const string SubClaimType = "sub";
-    private const string TenantIdClaimType = "tenant_id";
-    private const string SessionIdClaimType = "session_id";
-
-    /// <summary>Mirrors ConfigureJwtBearerOptions's own claim check exactly (duplicated deliberately — this project cannot reference Infrastructure).</summary>
-    private bool TryGetExactlyOneCanonicalGuidClaim(string claimType, out Guid value)
-    {
-        value = Guid.Empty;
-
-        var matches = User.Claims.Where(c => c.Type == claimType).ToArray();
-        if (matches.Length != 1)
-            return false;
-
-        return Guid.TryParseExact(matches[0].Value, "D", out value);
-    }
 }

@@ -33,6 +33,12 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Domain\IHostPro.Contexts.Identity.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
+    <!-- Added for PermissionAuthorizationHandlerTests (Incremento 3, Checkpoint
+         2 stabilization): PermissionAuthorizationHandler/PermissionRequirement
+         live in Identity.Api and have no database/HTTP dependency of their
+         own, so they belong in true unit tests here rather than only in
+         Identity.Tests.Integration. -->
+    <ProjectReference Include="..\..\..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Api\IHostPro.Contexts.Identity.Api.csproj" />
   </ItemGroup>
 
 </Project>

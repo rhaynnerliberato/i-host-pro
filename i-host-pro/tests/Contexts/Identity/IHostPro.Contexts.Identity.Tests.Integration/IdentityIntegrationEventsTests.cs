@@ -7,8 +7,12 @@ using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Application;
+using IHostPro.Contexts.Identity.Application.Errors;
+using IHostPro.Contexts.Identity.Application.Sessions;
+using IHostPro.Contexts.Identity.Application.Users;
 using IHostPro.Contexts.Identity.Contracts;
 using IHostPro.Contexts.Identity.Domain;
+using IHostPro.Contexts.Identity.Domain.Enums;
 using IHostPro.Contexts.Identity.Domain.ValueObjects;
 using IHostPro.Contexts.Identity.Infrastructure;
 using IHostPro.Contexts.Identity.Infrastructure.Caching;
@@ -152,7 +156,10 @@ public class IdentityIntegrationEventsTests : IClassFixture<IdentityIntegrationE
     // ---- Service graph -----------------------------------------------
 
     private async Task<IHost> BuildHostAsync(
-        int maxFailedAccessAttempts = 5, TimeSpan? graceWindow = null, RabbitMqContainer? rabbitMqContainer = null)
+        int maxFailedAccessAttempts = 5,
+        TimeSpan? graceWindow = null,
+        RabbitMqContainer? rabbitMqContainer = null,
+        Action<IServiceCollection>? overrides = null)
     {
         rabbitMqContainer ??= _fixture.RabbitMqContainer;
         using var signingKey = RSA.Create(2048);
@@ -183,9 +190,26 @@ public class IdentityIntegrationEventsTests : IClassFixture<IdentityIntegrationE
         hostBuilder.Services.AddScoped<IIdentityTransactionExecutor, IdentityOutboxTransactionExecutor>();
         hostBuilder.Services.AddScoped<IRefreshTokenExchangeExecutor, RefreshTokenExchangeExecutor>();
         hostBuilder.Services.AddScoped<ILogoutExecutor, LogoutExecutor>();
+        hostBuilder.Services.AddScoped<IRevokeOwnSessionExecutor, RevokeOwnSessionExecutor>();
+        hostBuilder.Services.AddScoped<ICreateUserExecutor, CreateUserExecutor>();
+        hostBuilder.Services.AddScoped<IAssignRoleExecutor, AssignRoleExecutor>();
+        hostBuilder.Services.AddScoped<IRemoveRoleExecutor, RemoveRoleExecutor>();
+        hostBuilder.Services.AddScoped<IBlockUserExecutor, BlockUserExecutor>();
+        hostBuilder.Services.AddScoped<IUpdateUserExecutor, UpdateUserExecutor>();
+        hostBuilder.Services.AddScoped<IChangeOwnPasswordExecutor, ChangeOwnPasswordExecutor>();
+        hostBuilder.Services.AddScoped<ChangeOwnPasswordCommandHandler>();
         hostBuilder.Services.AddScoped<LoginCommandHandler>();
         hostBuilder.Services.AddScoped<LogoutCommandHandler>();
         hostBuilder.Services.AddScoped<RefreshTokenCommandHandler>();
+        hostBuilder.Services.AddScoped<RevokeOwnSessionCommandHandler>();
+        hostBuilder.Services.AddScoped<CreateUserCommandHandler>();
+        hostBuilder.Services.AddScoped<AssignRoleCommandHandler>();
+        hostBuilder.Services.AddScoped<RemoveRoleCommandHandler>();
+        hostBuilder.Services.AddScoped<BlockUserCommandHandler>();
+        hostBuilder.Services.AddScoped<UnblockUserCommandHandler>();
+        hostBuilder.Services.AddScoped<UpdateUserCommandHandler>();
+
+        overrides?.Invoke(hostBuilder.Services);
 
         hostBuilder.UseWolverine(opts =>
         {
@@ -228,6 +252,13 @@ public class IdentityIntegrationEventsTests : IClassFixture<IdentityIntegrationE
             RouteIdentityEvent<UserLoggedOut>("user_logged_out");
             RouteIdentityEvent<RefreshTokenReuseDetected>("refresh_token_reuse_detected");
             RouteIdentityEvent<SessionRevoked>("session_revoked");
+            RouteIdentityEvent<UserCreated>("user_created");
+            RouteIdentityEvent<UserRoleAssigned>("user_role_assigned");
+            RouteIdentityEvent<UserRoleRemoved>("user_role_removed");
+            RouteIdentityEvent<UserBlocked>("user_blocked");
+            RouteIdentityEvent<UserUnblocked>("user_unblocked");
+            RouteIdentityEvent<UserUpdated>("user_updated");
+            RouteIdentityEvent<PasswordChanged>("password_changed");
         });
 
         var host = hostBuilder.Build();
@@ -281,6 +312,104 @@ public class IdentityIntegrationEventsTests : IClassFixture<IdentityIntegrationE
 
         return await sp.GetRequiredService<IRefreshTokenExchangeExecutor>().ExecuteAsync(
             () => sp.GetRequiredService<RefreshTokenCommandHandler>().Handle(command, cancellationToken).AsTask(),
+            cancellationToken);
+    }
+
+    private static async Task<Result> ExecuteRevokeOwnSessionAsync(
+        IHost root, RevokeOwnSessionCommand command, CancellationToken cancellationToken = default)
+    {
+        using var scope = root.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(command.TenantId);
+
+        return await sp.GetRequiredService<IRevokeOwnSessionExecutor>().ExecuteAsync(
+            () => sp.GetRequiredService<RevokeOwnSessionCommandHandler>().Handle(command, cancellationToken).AsTask(),
+            cancellationToken);
+    }
+
+    private static async Task<Result<UserResult>> ExecuteCreateUserAsync(
+        IHost root, CreateUserCommand command, CancellationToken cancellationToken = default)
+    {
+        using var scope = root.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(command.TenantId);
+
+        return await sp.GetRequiredService<ICreateUserExecutor>().ExecuteAsync(
+            () => sp.GetRequiredService<CreateUserCommandHandler>().Handle(command, cancellationToken).AsTask(),
+            cancellationToken);
+    }
+
+    private static async Task<Result> ExecuteAssignRoleAsync(
+        IHost root, AssignRoleCommand command, CancellationToken cancellationToken = default)
+    {
+        using var scope = root.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(command.TenantId);
+
+        return await sp.GetRequiredService<IAssignRoleExecutor>().ExecuteAsync(
+            () => sp.GetRequiredService<AssignRoleCommandHandler>().Handle(command, cancellationToken).AsTask(),
+            cancellationToken);
+    }
+
+    private static async Task<Result> ExecuteRemoveRoleAsync(
+        IHost root, RemoveRoleCommand command, CancellationToken cancellationToken = default)
+    {
+        using var scope = root.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(command.TenantId);
+
+        return await sp.GetRequiredService<IRemoveRoleExecutor>().ExecuteAsync(
+            () => sp.GetRequiredService<RemoveRoleCommandHandler>().Handle(command, cancellationToken).AsTask(),
+            cancellationToken);
+    }
+
+    private static async Task<Result> ExecuteBlockUserAsync(
+        IHost root, BlockUserCommand command, CancellationToken cancellationToken = default)
+    {
+        using var scope = root.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(command.TenantId);
+
+        return await sp.GetRequiredService<IBlockUserExecutor>().ExecuteAsync(
+            () => sp.GetRequiredService<BlockUserCommandHandler>().Handle(command, cancellationToken).AsTask(),
+            cancellationToken);
+    }
+
+    private static async Task<Result> ExecuteUnblockUserAsync(
+        IHost root, UnblockUserCommand command, CancellationToken cancellationToken = default)
+    {
+        using var scope = root.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(command.TenantId);
+
+        // No command-specific executor — mirrors ExecuteLoginAsync's shape
+        // (see UnblockUserTenantAwareBehavior's doc comment for why).
+        return await sp.GetRequiredService<IIdentityTransactionExecutor>().ExecuteAsync(
+            () => sp.GetRequiredService<UnblockUserCommandHandler>().Handle(command, cancellationToken).AsTask(),
+            cancellationToken);
+    }
+
+    private static async Task<Result<UserResult>> ExecuteUpdateUserAsync(
+        IHost root, UpdateUserCommand command, CancellationToken cancellationToken = default)
+    {
+        using var scope = root.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(command.TenantId);
+
+        return await sp.GetRequiredService<IUpdateUserExecutor>().ExecuteAsync(
+            () => sp.GetRequiredService<UpdateUserCommandHandler>().Handle(command, cancellationToken).AsTask(),
+            cancellationToken);
+    }
+
+    private static async Task<Result> ExecuteChangeOwnPasswordAsync(
+        IHost root, ChangeOwnPasswordCommand command, CancellationToken cancellationToken = default)
+    {
+        using var scope = root.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(command.TenantId);
+
+        return await sp.GetRequiredService<IChangeOwnPasswordExecutor>().ExecuteAsync(
+            () => sp.GetRequiredService<ChangeOwnPasswordCommandHandler>().Handle(command, cancellationToken).AsTask(),
             cancellationToken);
     }
 
@@ -360,6 +489,24 @@ public class IdentityIntegrationEventsTests : IClassFixture<IdentityIntegrationE
         await transaction.CommitAsync();
 
         return session.Id;
+    }
+
+    /// <summary>
+    /// Assigns <paramref name="roleCode"/> to <paramref name="userId"/>
+    /// directly (bypassing AssignRoleCommand) — used to set up the
+    /// PRE-CONDITION state RemoveRole/AssignRole tests need (a role already
+    /// held, or not), never to exercise the command under test itself.
+    /// </summary>
+    private async Task SeedUserRoleAsync(Guid tenantId, Guid userId, string roleCode, Guid assignedByUserId)
+    {
+        await using var dbContext = CreateMigratorDbContextWithTenant(tenantId);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetPostgresTenantAsync(dbContext, tenantId);
+
+        dbContext.UserRoles.Add(new UserRole(tenantId, userId, roleCode, DateTimeOffset.UtcNow, assignedByUserId));
+
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
     private static (string Presented, Guid TokenId, string TokenHash) BuildPresentedToken(
@@ -775,6 +922,282 @@ public class IdentityIntegrationEventsTests : IClassFixture<IdentityIntegrationE
         }
     }
 
+    // ---- Tests: RevokeOwnSession (Incremento 3, Checkpoint 4) ------------------
+
+    [Fact]
+    public async Task Successful_RevokeOwnSession_publishes_exactly_one_SessionRevoked_with_user_requested_revocation_reason()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (userId, _) = await SeedUserAsync(tenantId);
+        var sessionId = await SeedSessionAsync(tenantId, userId);
+        var host = await BuildHostAsync();
+        try
+        {
+            var result = await WithBrokerPausedAsync(
+                () => ExecuteRevokeOwnSessionAsync(host, new RevokeOwnSessionCommand(tenantId, userId, sessionId)));
+            result.IsSuccess.Should().BeTrue();
+
+            var revoked = await FindSingleEnvelopeForTenantAsync<SessionRevoked>(tenantId);
+            var root = revoked.RootElement;
+            GetProperty(root, "SessionId")!.Value.GetString().Should().Be(sessionId.ToString());
+            GetProperty(root, "AggregateId")!.Value.GetString().Should().Be(userId.ToString());
+            GetProperty(root, "AggregateType")!.Value.GetString().Should().Be("User");
+            GetProperty(root, "ActorType")!.Value.GetString().Should().Be("User");
+            GetProperty(root, "ActorId")!.Value.GetString().Should().Be(userId.ToString());
+            GetProperty(root, "ReasonCode")!.Value.GetString().Should().Be(SessionRevokedReasonCodes.UserRequestedRevocation);
+
+            // Never one event per refresh token, and no UserLoggedOut-style
+            // companion event — RevokeOwnSession publishes only the one
+            // SessionRevoked (Incremento 3, Checkpoint 4, Section 5).
+            await AssertNoEnvelopeAsync<UserLoggedOut>(tenantId);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task RevokeOwnSession_for_a_session_not_owned_by_the_caller_publishes_no_event()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (userId, _) = await SeedUserAsync(tenantId);
+        var host = await BuildHostAsync();
+        try
+        {
+            var result = await WithBrokerPausedAsync(() => ExecuteRevokeOwnSessionAsync(
+                host, new RevokeOwnSessionCommand(tenantId, userId, Guid.NewGuid())));
+            result.IsFailure.Should().BeTrue();
+
+            await AssertNoEnvelopeAsync<SessionRevoked>(tenantId);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    // ---- Tests: CreateUser (Incremento 3, Checkpoint 5) ------------------------
+
+    [Fact]
+    public async Task Successful_CreateUser_publishes_exactly_one_UserCreated_and_one_UserRoleAssigned_correctly_chained()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var host = await BuildHostAsync();
+        try
+        {
+            var command = new CreateUserCommand(
+                tenantId, actorId, "Test User", $"{Guid.NewGuid():N}@ihostpro.com",
+                "Correct-Horse-Battery-Staple-42!", "ADMIN");
+
+            var result = await WithBrokerPausedAsync(() => ExecuteCreateUserAsync(host, command));
+            result.IsSuccess.Should().BeTrue();
+            var newUserId = result.Value.Id;
+
+            var userCreated = await FindSingleEnvelopeForTenantAsync<UserCreated>(tenantId);
+            var createdRoot = userCreated.RootElement;
+            GetProperty(createdRoot, "AggregateId")!.Value.GetString().Should().Be(newUserId.ToString());
+            GetProperty(createdRoot, "AggregateType")!.Value.GetString().Should().Be("User");
+            GetProperty(createdRoot, "ActorType")!.Value.GetString().Should().Be("User");
+            GetProperty(createdRoot, "ActorId")!.Value.GetString().Should().Be(actorId.ToString());
+
+            var userRoleAssigned = await FindSingleEnvelopeForTenantAsync<UserRoleAssigned>(tenantId);
+            var assignedRoot = userRoleAssigned.RootElement;
+            GetProperty(assignedRoot, "AggregateId")!.Value.GetString().Should().Be(newUserId.ToString());
+            GetProperty(assignedRoot, "RoleCode")!.Value.GetString().Should().Be("ADMIN");
+            GetProperty(assignedRoot, "ActorId")!.Value.GetString().Should().Be(actorId.ToString());
+            GetProperty(assignedRoot, "CausationId")!.Value.GetString()
+                .Should().Be(GetProperty(createdRoot, "EventId")!.Value.GetString());
+
+            createdRoot.ToString().Should().NotContain("Correct-Horse-Battery-Staple-42!");
+            assignedRoot.ToString().Should().NotContain("Correct-Horse-Battery-Staple-42!");
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task CreateUser_for_a_nonexistent_role_publishes_neither_event()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var host = await BuildHostAsync();
+        try
+        {
+            var command = new CreateUserCommand(
+                tenantId, actorId, "Test User", $"{Guid.NewGuid():N}@ihostpro.com",
+                "Correct-Horse-Battery-Staple-42!", "NOT_A_REAL_ROLE");
+
+            var result = await WithBrokerPausedAsync(() => ExecuteCreateUserAsync(host, command));
+            result.IsFailure.Should().BeTrue();
+
+            await AssertNoEnvelopeAsync<UserCreated>(tenantId);
+            await AssertNoEnvelopeAsync<UserRoleAssigned>(tenantId);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    // ---- Tests: AssignRole / RemoveRole (Incremento 3, Checkpoint 6) --------------
+
+    [Fact]
+    public async Task Successful_AssignRole_publishes_exactly_one_UserRoleAssigned_with_correct_actor()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+        var host = await BuildHostAsync();
+        try
+        {
+            var result = await WithBrokerPausedAsync(
+                () => ExecuteAssignRoleAsync(host, new AssignRoleCommand(tenantId, actorId, targetUserId, "OPERATOR")));
+            result.IsSuccess.Should().BeTrue();
+
+            var assigned = await FindSingleEnvelopeForTenantAsync<UserRoleAssigned>(tenantId);
+            var root = assigned.RootElement;
+            GetProperty(root, "AggregateId")!.Value.GetString().Should().Be(targetUserId.ToString());
+            GetProperty(root, "AggregateType")!.Value.GetString().Should().Be("User");
+            GetProperty(root, "ActorType")!.Value.GetString().Should().Be("User");
+            GetProperty(root, "ActorId")!.Value.GetString().Should().Be(actorId.ToString());
+            GetProperty(root, "RoleCode")!.Value.GetString().Should().Be("OPERATOR");
+
+            // No active session for the target — no cascade to trigger.
+            await AssertNoEnvelopeAsync<SessionRevoked>(tenantId);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task AssignRole_for_a_role_already_assigned_publishes_no_event()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "OPERATOR", actorId);
+        var host = await BuildHostAsync();
+        try
+        {
+            var result = await WithBrokerPausedAsync(
+                () => ExecuteAssignRoleAsync(host, new AssignRoleCommand(tenantId, actorId, targetUserId, "OPERATOR")));
+            result.IsFailure.Should().BeTrue();
+
+            await AssertNoEnvelopeAsync<UserRoleAssigned>(tenantId);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task Successful_AssignRole_for_a_user_with_an_active_session_also_publishes_a_chained_SessionRevoked()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+        var sessionId = await SeedSessionAsync(tenantId, targetUserId);
+        var host = await BuildHostAsync();
+        try
+        {
+            var result = await WithBrokerPausedAsync(
+                () => ExecuteAssignRoleAsync(host, new AssignRoleCommand(tenantId, actorId, targetUserId, "OPERATOR")));
+            result.IsSuccess.Should().BeTrue();
+
+            var assigned = await FindSingleEnvelopeForTenantAsync<UserRoleAssigned>(tenantId);
+            var revoked = await FindSingleEnvelopeForTenantAsync<SessionRevoked>(tenantId);
+            GetProperty(revoked.RootElement, "SessionId")!.Value.GetString().Should().Be(sessionId.ToString());
+            GetProperty(revoked.RootElement, "ReasonCode")!.Value.GetString().Should().Be(SessionRevokedReasonCodes.RolesChanged);
+            GetProperty(revoked.RootElement, "CausationId")!.Value.GetString()
+                .Should().Be(GetProperty(assigned.RootElement, "EventId")!.Value.GetString());
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task Successful_RemoveRole_publishes_exactly_one_UserRoleRemoved_with_correct_actor()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "OPERATOR", actorId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+        var host = await BuildHostAsync();
+        try
+        {
+            var result = await WithBrokerPausedAsync(
+                () => ExecuteRemoveRoleAsync(host, new RemoveRoleCommand(tenantId, actorId, targetUserId, "HOUSEKEEPER")));
+            result.IsSuccess.Should().BeTrue();
+
+            var removed = await FindSingleEnvelopeForTenantAsync<UserRoleRemoved>(tenantId);
+            var root = removed.RootElement;
+            GetProperty(root, "AggregateId")!.Value.GetString().Should().Be(targetUserId.ToString());
+            GetProperty(root, "ActorId")!.Value.GetString().Should().Be(actorId.ToString());
+            GetProperty(root, "RoleCode")!.Value.GetString().Should().Be("HOUSEKEEPER");
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task RemoveRole_for_a_role_not_assigned_publishes_no_event()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "OPERATOR", actorId);
+        var host = await BuildHostAsync();
+        try
+        {
+            var result = await WithBrokerPausedAsync(
+                () => ExecuteRemoveRoleAsync(host, new RemoveRoleCommand(tenantId, actorId, targetUserId, "HOUSEKEEPER")));
+            result.IsFailure.Should().BeTrue();
+
+            await AssertNoEnvelopeAsync<UserRoleRemoved>(tenantId);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task RemoveRole_of_the_tenants_last_active_Administrator_publishes_no_event()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "ADMIN", actorId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "OPERATOR", actorId); // 2 roles, so the "last role" guard does not fire first
+        var host = await BuildHostAsync();
+        try
+        {
+            var result = await WithBrokerPausedAsync(
+                () => ExecuteRemoveRoleAsync(host, new RemoveRoleCommand(tenantId, actorId, targetUserId, "ADMIN")));
+            result.IsFailure.Should().BeTrue();
+
+            await AssertNoEnvelopeAsync<UserRoleRemoved>(tenantId);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
     // ---- Tests: Refresh Token reuse ------------------------------------------
 
     [Fact]
@@ -880,6 +1303,158 @@ public class IdentityIntegrationEventsTests : IClassFixture<IdentityIntegrationE
         }
     }
 
+    [Fact]
+    public async Task A_failure_after_RevokeOwnSession_staged_its_writes_rolls_back_and_leaves_no_envelope()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (userId, _) = await SeedUserAsync(tenantId);
+        var sessionId = await SeedSessionAsync(tenantId, userId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var executor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var handler = sp.GetRequiredService<RevokeOwnSessionCommandHandler>();
+            var envelopesBefore = await CountOutgoingEnvelopesAsync();
+
+            var act = () => executor.ExecuteAsync<Result>(async () =>
+            {
+                var result = await handler.Handle(new RevokeOwnSessionCommand(tenantId, userId, sessionId), CancellationToken.None);
+                result.IsSuccess.Should().BeTrue(); // SessionRevoked was staged by this point
+                throw new InvalidOperationException("Simulated failure after RevokeOwnSession staged its writes.");
+            }, CancellationToken.None);
+
+            await act.Should().ThrowAsync<InvalidOperationException>();
+
+            (await CountOutgoingEnvelopesAsync()).Should().Be(envelopesBefore);
+            await using var verifyDbContext = CreateMigratorDbContextWithTenant(tenantId);
+            await using var verifyTransaction = await verifyDbContext.Database.BeginTransactionAsync();
+            await SetPostgresTenantAsync(verifyDbContext, tenantId);
+            var session = await verifyDbContext.Sessions.SingleAsync(s => s.Id == sessionId);
+            session.Status.Should().Be(SessionStatus.Active); // never committed
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task A_failure_after_CreateUser_staged_its_writes_rolls_back_and_leaves_no_envelope()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var executor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var handler = sp.GetRequiredService<CreateUserCommandHandler>();
+            var envelopesBefore = await CountOutgoingEnvelopesAsync();
+            var command = new CreateUserCommand(
+                tenantId, actorId, "Test User", $"{Guid.NewGuid():N}@ihostpro.com",
+                "Correct-Horse-Battery-Staple-42!", "ADMIN");
+
+            var act = () => executor.ExecuteAsync<Result<UserResult>>(async () =>
+            {
+                var result = await handler.Handle(command, CancellationToken.None);
+                result.IsSuccess.Should().BeTrue(); // UserCreated/UserRoleAssigned were staged by this point
+                throw new InvalidOperationException("Simulated failure after CreateUser staged its writes.");
+            }, CancellationToken.None);
+
+            await act.Should().ThrowAsync<InvalidOperationException>();
+
+            (await CountOutgoingEnvelopesAsync()).Should().Be(envelopesBefore);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task A_failure_after_AssignRole_staged_its_writes_rolls_back_and_leaves_no_envelope()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var executor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var handler = sp.GetRequiredService<AssignRoleCommandHandler>();
+            var envelopesBefore = await CountOutgoingEnvelopesAsync();
+            var command = new AssignRoleCommand(tenantId, actorId, targetUserId, "OPERATOR");
+
+            var act = () => executor.ExecuteAsync<Result>(async () =>
+            {
+                var result = await handler.Handle(command, CancellationToken.None);
+                result.IsSuccess.Should().BeTrue(); // UserRoleAssigned was staged by this point
+                throw new InvalidOperationException("Simulated failure after AssignRole staged its writes.");
+            }, CancellationToken.None);
+
+            await act.Should().ThrowAsync<InvalidOperationException>();
+
+            (await CountOutgoingEnvelopesAsync()).Should().Be(envelopesBefore);
+            await using var verifyDbContext = CreateMigratorDbContextWithTenant(tenantId);
+            await using var verifyTransaction = await verifyDbContext.Database.BeginTransactionAsync();
+            await SetPostgresTenantAsync(verifyDbContext, tenantId);
+            (await verifyDbContext.UserRoles.CountAsync(ur => ur.UserId == targetUserId && ur.RoleCode == "OPERATOR")).Should().Be(0);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task A_failure_after_RemoveRole_staged_its_writes_rolls_back_and_leaves_no_envelope()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "OPERATOR", actorId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var executor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var handler = sp.GetRequiredService<RemoveRoleCommandHandler>();
+            var envelopesBefore = await CountOutgoingEnvelopesAsync();
+            var command = new RemoveRoleCommand(tenantId, actorId, targetUserId, "HOUSEKEEPER");
+
+            var act = () => executor.ExecuteAsync<Result>(async () =>
+            {
+                var result = await handler.Handle(command, CancellationToken.None);
+                result.IsSuccess.Should().BeTrue(); // UserRoleRemoved was staged by this point
+                throw new InvalidOperationException("Simulated failure after RemoveRole staged its writes.");
+            }, CancellationToken.None);
+
+            await act.Should().ThrowAsync<InvalidOperationException>();
+
+            (await CountOutgoingEnvelopesAsync()).Should().Be(envelopesBefore);
+            await using var verifyDbContext = CreateMigratorDbContextWithTenant(tenantId);
+            await using var verifyTransaction = await verifyDbContext.Database.BeginTransactionAsync();
+            await SetPostgresTenantAsync(verifyDbContext, tenantId);
+            (await verifyDbContext.UserRoles.CountAsync(ur => ur.UserId == targetUserId && ur.RoleCode == "HOUSEKEEPER")).Should().Be(1); // never removed
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
     // ---- Tests: concurrency ------------------------------------------------
 
     [Fact]
@@ -926,6 +1501,785 @@ public class IdentityIntegrationEventsTests : IClassFixture<IdentityIntegrationE
             attempt.Should().Be(2);
             await FindSingleEnvelopeForTenantAsync<RefreshTokenReuseDetected>(tenantId); // exactly one — HasCount(1) inside the helper
             await FindSingleEnvelopeForTenantAsync<SessionRevoked>(tenantId);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    // ---- Tests: AssignRole / RemoveRole retry safety (Checkpoint 6 review) --------
+
+    /// <summary>
+    /// Records every <see cref="MarkRevokedAsync"/> call instead of touching
+    /// Redis — precise, deterministic proof of "exactly one signal per
+    /// session, only from the winning attempt" without needing a real Redis
+    /// container in this file's Fixture.
+    /// </summary>
+    private sealed class RecordingSessionRevocationCache : ISessionRevocationCache
+    {
+        public List<(Guid TenantId, Guid SessionId)> MarkedCalls { get; } = [];
+
+        public Task MarkRevokedAsync(Guid tenantId, Guid sessionId, CancellationToken cancellationToken)
+        {
+            MarkedCalls.Add((tenantId, sessionId));
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> IsRevokedAsync(Guid tenantId, Guid sessionId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Not exercised by the retry-safety tests.");
+    }
+
+    [Fact]
+    public async Task AssignRole_retry_after_a_reverted_concurrency_conflict_confirms_once_on_the_winning_attempt()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+        var sessionId = await SeedSessionAsync(tenantId, targetUserId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var dbContext = sp.GetRequiredService<IdentityDbContext>();
+            var transactionExecutor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var collector = sp.GetRequiredService<IIntegrationEventCollector>();
+            // Resolved from the SAME DI scope, not manually constructed:
+            // AssignRoleCommandHandler's IUserSessionRevoker dependency (via
+            // UserSessionRevoker) also resolves ISessionRevocationSignal from
+            // this scope — a standalone `new SessionRevocationSignal()` here
+            // would be a second, disconnected instance the handler never
+            // writes to, silently making every signal-related assertion below
+            // vacuous (empty for the wrong reason).
+            var signal = sp.GetRequiredService<ISessionRevocationSignal>();
+            var cache = new RecordingSessionRevocationCache();
+            var executor = new AssignRoleExecutor(transactionExecutor, dbContext, collector, signal, cache);
+            var attempt = 0;
+            var command = new AssignRoleCommand(tenantId, actorId, targetUserId, "OPERATOR");
+
+            var result = await WithBrokerPausedAsync(() => executor.ExecuteAsync(async () =>
+            {
+                attempt++;
+                var handlerResult = await sp.GetRequiredService<AssignRoleCommandHandler>().Handle(command, CancellationToken.None);
+
+                if (attempt == 1)
+                    throw new DbUpdateConcurrencyException("Simulated xmin conflict.");
+
+                return handlerResult;
+            }, CancellationToken.None));
+
+            attempt.Should().Be(2); // one reverted attempt, one winning attempt — never more
+            result.IsSuccess.Should().BeTrue();
+
+            var roleAssigned = await FindSingleEnvelopeForTenantAsync<UserRoleAssigned>(tenantId);
+            var sessionRevoked = await FindSingleEnvelopeForTenantAsync<SessionRevoked>(tenantId);
+            GetProperty(sessionRevoked.RootElement, "CausationId")!.Value.GetString()
+                .Should().Be(GetProperty(roleAssigned.RootElement, "EventId")!.Value.GetString(),
+                    "CausationId must point only at the WINNING attempt's own primary event, never a discarded one");
+
+            await using (var verifyDbContext = CreateMigratorDbContextWithTenant(tenantId))
+            await using (var verifyTransaction = await verifyDbContext.Database.BeginTransactionAsync())
+            {
+                await SetPostgresTenantAsync(verifyDbContext, tenantId);
+                (await verifyDbContext.SecurityAuditLog.CountAsync(e => e.UserId == targetUserId)).Should().Be(1);
+                (await verifyDbContext.UserRoles.CountAsync(ur => ur.UserId == targetUserId && ur.RoleCode == "OPERATOR")).Should().Be(1);
+            }
+
+            cache.MarkedCalls.Should().Equal((tenantId, sessionId)); // exactly one signal, never one per attempt
+
+            // No leftover/duplicate tracked entity from the reverted attempt —
+            // if ChangeTracker.Clear() had not run between attempts, the
+            // second attempt's Add() of a UserRole with the same (UserId,
+            // RoleCode) key as the still-tracked first attempt's would have
+            // thrown InvalidOperationException before ever reaching here.
+            dbContext.ChangeTracker.Entries<UserRole>().Count(e => e.Entity.RoleCode == "OPERATOR").Should().Be(1);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task AssignRole_when_every_attempt_hits_a_concurrency_conflict_the_exception_propagates_and_nothing_is_left_behind()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+        await SeedSessionAsync(tenantId, targetUserId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var dbContext = sp.GetRequiredService<IdentityDbContext>();
+            var transactionExecutor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var collector = sp.GetRequiredService<IIntegrationEventCollector>();
+            // Resolved from the SAME DI scope, not manually constructed:
+            // AssignRoleCommandHandler's IUserSessionRevoker dependency (via
+            // UserSessionRevoker) also resolves ISessionRevocationSignal from
+            // this scope — a standalone `new SessionRevocationSignal()` here
+            // would be a second, disconnected instance the handler never
+            // writes to, silently making every signal-related assertion below
+            // vacuous (empty for the wrong reason).
+            var signal = sp.GetRequiredService<ISessionRevocationSignal>();
+            var cache = new RecordingSessionRevocationCache();
+            var executor = new AssignRoleExecutor(transactionExecutor, dbContext, collector, signal, cache);
+            var attempt = 0;
+            var command = new AssignRoleCommand(tenantId, actorId, targetUserId, "OPERATOR");
+
+            var act = () => executor.ExecuteAsync(async () =>
+            {
+                attempt++;
+                await sp.GetRequiredService<AssignRoleCommandHandler>().Handle(command, CancellationToken.None);
+                throw new DbUpdateConcurrencyException("Simulated persistent xmin conflict.");
+            }, CancellationToken.None);
+
+            await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
+
+            attempt.Should().Be(3); // exactly MaxConcurrencyRetryAttempts, never more
+            await AssertNoEnvelopeAsync<UserRoleAssigned>(tenantId);
+            await AssertNoEnvelopeAsync<SessionRevoked>(tenantId);
+            await using (var verifyDbContext = CreateMigratorDbContextWithTenant(tenantId))
+            await using (var verifyTransaction = await verifyDbContext.Database.BeginTransactionAsync())
+            {
+                await SetPostgresTenantAsync(verifyDbContext, tenantId);
+                (await verifyDbContext.SecurityAuditLog.CountAsync(e => e.UserId == targetUserId)).Should().Be(0);
+                (await verifyDbContext.UserRoles.CountAsync(ur => ur.UserId == targetUserId && ur.RoleCode == "OPERATOR")).Should().Be(0);
+            }
+            cache.MarkedCalls.Should().BeEmpty();
+            // The exact invariant the Checkpoint 6 review flagged: even on the
+            // final, non-retried failure, cleanup must have run — collector
+            // and signal must both end up empty, not just on retry-eligible
+            // attempts.
+            collector.Drain().Should().BeEmpty();
+            signal.Drain().Should().BeEmpty();
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task AssignRole_RoleAlreadyAssigned_rejection_completes_on_the_first_attempt_without_retrying()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "OPERATOR", actorId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var dbContext = sp.GetRequiredService<IdentityDbContext>();
+            var transactionExecutor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var collector = sp.GetRequiredService<IIntegrationEventCollector>();
+            // Resolved from the SAME DI scope, not manually constructed:
+            // AssignRoleCommandHandler's IUserSessionRevoker dependency (via
+            // UserSessionRevoker) also resolves ISessionRevocationSignal from
+            // this scope — a standalone `new SessionRevocationSignal()` here
+            // would be a second, disconnected instance the handler never
+            // writes to, silently making every signal-related assertion below
+            // vacuous (empty for the wrong reason).
+            var signal = sp.GetRequiredService<ISessionRevocationSignal>();
+            var cache = new RecordingSessionRevocationCache();
+            var executor = new AssignRoleExecutor(transactionExecutor, dbContext, collector, signal, cache);
+            var attempt = 0;
+            var command = new AssignRoleCommand(tenantId, actorId, targetUserId, "OPERATOR"); // already assigned
+
+            var result = await executor.ExecuteAsync(async () =>
+            {
+                attempt++;
+                return await sp.GetRequiredService<AssignRoleCommandHandler>().Handle(command, CancellationToken.None);
+            }, CancellationToken.None);
+
+            // A Result.Failure is a normal return value, never a thrown
+            // DbUpdateConcurrencyException — the retry catch clause cannot
+            // and does not match it.
+            attempt.Should().Be(1);
+            result.IsFailure.Should().BeTrue();
+            result.Error.Code.Should().Be(IdentityErrorCodes.RoleAlreadyAssigned);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task RemoveRole_retry_after_a_reverted_concurrency_conflict_confirms_once_on_the_winning_attempt()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        var (otherAdminId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "ADMIN", actorId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "OPERATOR", actorId);
+        await SeedUserRoleAsync(tenantId, otherAdminId, "ADMIN", actorId); // so removal is legal
+        var sessionId = await SeedSessionAsync(tenantId, targetUserId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var dbContext = sp.GetRequiredService<IdentityDbContext>();
+            var transactionExecutor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var collector = sp.GetRequiredService<IIntegrationEventCollector>();
+            // Resolved from the SAME DI scope, not manually constructed:
+            // AssignRoleCommandHandler's IUserSessionRevoker dependency (via
+            // UserSessionRevoker) also resolves ISessionRevocationSignal from
+            // this scope — a standalone `new SessionRevocationSignal()` here
+            // would be a second, disconnected instance the handler never
+            // writes to, silently making every signal-related assertion below
+            // vacuous (empty for the wrong reason).
+            var signal = sp.GetRequiredService<ISessionRevocationSignal>();
+            var cache = new RecordingSessionRevocationCache();
+            var executor = new RemoveRoleExecutor(transactionExecutor, dbContext, collector, signal, cache);
+            var attempt = 0;
+            // Removing ADMIN specifically forces ILastAdministratorGuard to
+            // run on EVERY attempt, including the retried one — proving the
+            // guard (and every other read) genuinely re-executes from
+            // scratch, never reusing a stale outcome from the reverted
+            // attempt.
+            var command = new RemoveRoleCommand(tenantId, actorId, targetUserId, "ADMIN");
+
+            var result = await WithBrokerPausedAsync(() => executor.ExecuteAsync(async () =>
+            {
+                attempt++;
+                var handlerResult = await sp.GetRequiredService<RemoveRoleCommandHandler>().Handle(command, CancellationToken.None);
+
+                if (attempt == 1)
+                    throw new DbUpdateConcurrencyException("Simulated xmin conflict.");
+
+                return handlerResult;
+            }, CancellationToken.None));
+
+            attempt.Should().Be(2);
+            result.IsSuccess.Should().BeTrue();
+
+            var roleRemoved = await FindSingleEnvelopeForTenantAsync<UserRoleRemoved>(tenantId);
+            var sessionRevoked = await FindSingleEnvelopeForTenantAsync<SessionRevoked>(tenantId);
+            GetProperty(sessionRevoked.RootElement, "CausationId")!.Value.GetString()
+                .Should().Be(GetProperty(roleRemoved.RootElement, "EventId")!.Value.GetString());
+
+            await using (var verifyDbContext = CreateMigratorDbContextWithTenant(tenantId))
+            await using (var verifyTransaction = await verifyDbContext.Database.BeginTransactionAsync())
+            {
+                await SetPostgresTenantAsync(verifyDbContext, tenantId);
+                (await verifyDbContext.SecurityAuditLog.CountAsync(e => e.UserId == targetUserId)).Should().Be(1);
+                (await verifyDbContext.UserRoles.CountAsync(ur => ur.UserId == targetUserId && ur.RoleCode == "ADMIN")).Should().Be(0);
+            }
+
+            cache.MarkedCalls.Should().Equal((tenantId, sessionId));
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task RemoveRole_when_every_attempt_hits_a_concurrency_conflict_the_exception_propagates_and_nothing_is_left_behind()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "OPERATOR", actorId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+        await SeedSessionAsync(tenantId, targetUserId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var dbContext = sp.GetRequiredService<IdentityDbContext>();
+            var transactionExecutor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var collector = sp.GetRequiredService<IIntegrationEventCollector>();
+            // Resolved from the SAME DI scope, not manually constructed:
+            // AssignRoleCommandHandler's IUserSessionRevoker dependency (via
+            // UserSessionRevoker) also resolves ISessionRevocationSignal from
+            // this scope — a standalone `new SessionRevocationSignal()` here
+            // would be a second, disconnected instance the handler never
+            // writes to, silently making every signal-related assertion below
+            // vacuous (empty for the wrong reason).
+            var signal = sp.GetRequiredService<ISessionRevocationSignal>();
+            var cache = new RecordingSessionRevocationCache();
+            var executor = new RemoveRoleExecutor(transactionExecutor, dbContext, collector, signal, cache);
+            var attempt = 0;
+            var command = new RemoveRoleCommand(tenantId, actorId, targetUserId, "HOUSEKEEPER");
+
+            var act = () => executor.ExecuteAsync(async () =>
+            {
+                attempt++;
+                await sp.GetRequiredService<RemoveRoleCommandHandler>().Handle(command, CancellationToken.None);
+                throw new DbUpdateConcurrencyException("Simulated persistent xmin conflict.");
+            }, CancellationToken.None);
+
+            await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
+
+            attempt.Should().Be(3);
+            await AssertNoEnvelopeAsync<UserRoleRemoved>(tenantId);
+            await AssertNoEnvelopeAsync<SessionRevoked>(tenantId);
+            await using (var verifyDbContext = CreateMigratorDbContextWithTenant(tenantId))
+            await using (var verifyTransaction = await verifyDbContext.Database.BeginTransactionAsync())
+            {
+                await SetPostgresTenantAsync(verifyDbContext, tenantId);
+                (await verifyDbContext.SecurityAuditLog.CountAsync(e => e.UserId == targetUserId)).Should().Be(0);
+                (await verifyDbContext.UserRoles.CountAsync(ur => ur.UserId == targetUserId && ur.RoleCode == "HOUSEKEEPER")).Should().Be(1); // never removed
+            }
+            cache.MarkedCalls.Should().BeEmpty();
+            collector.Drain().Should().BeEmpty();
+            signal.Drain().Should().BeEmpty();
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task RemoveRole_LastActiveAdministrator_rejection_completes_on_the_first_attempt_without_retrying()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "ADMIN", actorId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "OPERATOR", actorId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var dbContext = sp.GetRequiredService<IdentityDbContext>();
+            var transactionExecutor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var collector = sp.GetRequiredService<IIntegrationEventCollector>();
+            // Resolved from the SAME DI scope, not manually constructed:
+            // AssignRoleCommandHandler's IUserSessionRevoker dependency (via
+            // UserSessionRevoker) also resolves ISessionRevocationSignal from
+            // this scope — a standalone `new SessionRevocationSignal()` here
+            // would be a second, disconnected instance the handler never
+            // writes to, silently making every signal-related assertion below
+            // vacuous (empty for the wrong reason).
+            var signal = sp.GetRequiredService<ISessionRevocationSignal>();
+            var cache = new RecordingSessionRevocationCache();
+            var executor = new RemoveRoleExecutor(transactionExecutor, dbContext, collector, signal, cache);
+            var attempt = 0;
+            var command = new RemoveRoleCommand(tenantId, actorId, targetUserId, "ADMIN"); // sole active admin
+
+            var result = await executor.ExecuteAsync(async () =>
+            {
+                attempt++;
+                return await sp.GetRequiredService<RemoveRoleCommandHandler>().Handle(command, CancellationToken.None);
+            }, CancellationToken.None);
+
+            attempt.Should().Be(1);
+            result.IsFailure.Should().BeTrue();
+            result.Error.Code.Should().Be(IdentityErrorCodes.LastActiveAdministrator);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    // ---- Tests: BlockUser retry safety (Checkpoint 7 review) ----------------------
+
+    [Fact]
+    public async Task BlockUser_retry_after_a_reverted_concurrency_conflict_confirms_once_on_the_winning_attempt()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        var (otherAdminId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "ADMIN", actorId);
+        await SeedUserRoleAsync(tenantId, otherAdminId, "ADMIN", actorId); // so the block is legal
+        var sessionId = await SeedSessionAsync(tenantId, targetUserId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var dbContext = sp.GetRequiredService<IdentityDbContext>();
+            var transactionExecutor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var collector = sp.GetRequiredService<IIntegrationEventCollector>();
+            // Resolved from the SAME DI scope, not manually constructed — see
+            // the identical note on the AssignRole/RemoveRole retry-safety
+            // tests above.
+            var signal = sp.GetRequiredService<ISessionRevocationSignal>();
+            var cache = new RecordingSessionRevocationCache();
+            var executor = new BlockUserExecutor(transactionExecutor, dbContext, collector, signal, cache);
+            var attempt = 0;
+            // Blocking an ADMIN specifically forces ILastAdministratorGuard to
+            // run on EVERY attempt, including the retried one — proving the
+            // guard (and every other read) genuinely re-executes from
+            // scratch, never reusing a stale outcome from the reverted
+            // attempt, exactly as already proven for RemoveRole.
+            var command = new BlockUserCommand(tenantId, actorId, targetUserId);
+
+            var result = await WithBrokerPausedAsync(() => executor.ExecuteAsync(async () =>
+            {
+                attempt++;
+                var handlerResult = await sp.GetRequiredService<BlockUserCommandHandler>().Handle(command, CancellationToken.None);
+
+                if (attempt == 1)
+                    throw new DbUpdateConcurrencyException("Simulated xmin conflict.");
+
+                return handlerResult;
+            }, CancellationToken.None));
+
+            attempt.Should().Be(2); // one reverted attempt, one winning attempt — never more
+            // If ChangeTracker.Clear() had not run between attempts, the
+            // second attempt's GetByIdAsync would resolve the SAME tracked
+            // User instance the reverted first attempt already called
+            // Block() on — whose Status is already Blocked — and the
+            // handler's own UserAlreadyBlocked guard would reject it with a
+            // Result.Failure instead of succeeding. Success here is direct
+            // proof the entity was reloaded fresh, not reused stale.
+            result.IsSuccess.Should().BeTrue();
+
+            var userBlocked = await FindSingleEnvelopeForTenantAsync<UserBlocked>(tenantId);
+            var sessionRevoked = await FindSingleEnvelopeForTenantAsync<SessionRevoked>(tenantId);
+            GetProperty(sessionRevoked.RootElement, "CausationId")!.Value.GetString()
+                .Should().Be(GetProperty(userBlocked.RootElement, "EventId")!.Value.GetString(),
+                    "CausationId must point only at the WINNING attempt's own primary event, never a discarded one");
+
+            await using (var verifyDbContext = CreateMigratorDbContextWithTenant(tenantId))
+            await using (var verifyTransaction = await verifyDbContext.Database.BeginTransactionAsync())
+            {
+                await SetPostgresTenantAsync(verifyDbContext, tenantId);
+                (await verifyDbContext.SecurityAuditLog.CountAsync(e => e.UserId == targetUserId)).Should().Be(1);
+                (await verifyDbContext.Users.Where(u => u.Id == targetUserId).Select(u => u.Status).SingleAsync())
+                    .Should().Be(UserStatus.Blocked);
+            }
+
+            cache.MarkedCalls.Should().Equal((tenantId, sessionId)); // exactly one signal, never one per attempt
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task BlockUser_when_every_attempt_hits_a_concurrency_conflict_the_exception_propagates_and_nothing_is_left_behind()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedSessionAsync(tenantId, targetUserId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var dbContext = sp.GetRequiredService<IdentityDbContext>();
+            var transactionExecutor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var collector = sp.GetRequiredService<IIntegrationEventCollector>();
+            var signal = sp.GetRequiredService<ISessionRevocationSignal>();
+            var cache = new RecordingSessionRevocationCache();
+            var executor = new BlockUserExecutor(transactionExecutor, dbContext, collector, signal, cache);
+            var attempt = 0;
+            var command = new BlockUserCommand(tenantId, actorId, targetUserId);
+
+            var act = () => executor.ExecuteAsync(async () =>
+            {
+                attempt++;
+                await sp.GetRequiredService<BlockUserCommandHandler>().Handle(command, CancellationToken.None);
+                throw new DbUpdateConcurrencyException("Simulated persistent xmin conflict.");
+            }, CancellationToken.None);
+
+            await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
+
+            attempt.Should().Be(3); // exactly MaxConcurrencyRetryAttempts, never more
+            await AssertNoEnvelopeAsync<UserBlocked>(tenantId);
+            await AssertNoEnvelopeAsync<SessionRevoked>(tenantId);
+            await using (var verifyDbContext = CreateMigratorDbContextWithTenant(tenantId))
+            await using (var verifyTransaction = await verifyDbContext.Database.BeginTransactionAsync())
+            {
+                await SetPostgresTenantAsync(verifyDbContext, tenantId);
+                (await verifyDbContext.SecurityAuditLog.CountAsync(e => e.UserId == targetUserId)).Should().Be(0);
+                (await verifyDbContext.Users.Where(u => u.Id == targetUserId).Select(u => u.Status).SingleAsync())
+                    .Should().Be(UserStatus.Active); // never persisted as Blocked
+            }
+            cache.MarkedCalls.Should().BeEmpty();
+            // The exact invariant the Checkpoint 6 review flagged, applied to
+            // BlockUserExecutor from the start: even on the final,
+            // non-retried failure, cleanup must have run — collector and
+            // signal must both end up empty, not just on retry-eligible
+            // attempts.
+            collector.Drain().Should().BeEmpty();
+            signal.Drain().Should().BeEmpty();
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task BlockUser_UserAlreadyBlocked_rejection_completes_on_the_first_attempt_without_retrying()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId, blocked: true);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var dbContext = sp.GetRequiredService<IdentityDbContext>();
+            var transactionExecutor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var collector = sp.GetRequiredService<IIntegrationEventCollector>();
+            var signal = sp.GetRequiredService<ISessionRevocationSignal>();
+            var cache = new RecordingSessionRevocationCache();
+            var executor = new BlockUserExecutor(transactionExecutor, dbContext, collector, signal, cache);
+            var attempt = 0;
+            var command = new BlockUserCommand(tenantId, actorId, targetUserId); // already blocked
+
+            var result = await executor.ExecuteAsync(async () =>
+            {
+                attempt++;
+                return await sp.GetRequiredService<BlockUserCommandHandler>().Handle(command, CancellationToken.None);
+            }, CancellationToken.None);
+
+            // A Result.Failure is a normal return value, never a thrown
+            // DbUpdateConcurrencyException — the retry catch clause cannot
+            // and does not match it.
+            attempt.Should().Be(1);
+            result.IsFailure.Should().BeTrue();
+            result.Error.Code.Should().Be(IdentityErrorCodes.UserAlreadyBlocked);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    [Fact]
+    public async Task BlockUser_LastActiveAdministrator_rejection_completes_on_the_first_attempt_without_retrying()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "ADMIN", actorId); // sole active admin
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var dbContext = sp.GetRequiredService<IdentityDbContext>();
+            var transactionExecutor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var collector = sp.GetRequiredService<IIntegrationEventCollector>();
+            var signal = sp.GetRequiredService<ISessionRevocationSignal>();
+            var cache = new RecordingSessionRevocationCache();
+            var executor = new BlockUserExecutor(transactionExecutor, dbContext, collector, signal, cache);
+            var attempt = 0;
+            var command = new BlockUserCommand(tenantId, actorId, targetUserId);
+
+            var result = await executor.ExecuteAsync(async () =>
+            {
+                attempt++;
+                return await sp.GetRequiredService<BlockUserCommandHandler>().Handle(command, CancellationToken.None);
+            }, CancellationToken.None);
+
+            attempt.Should().Be(1);
+            result.IsFailure.Should().BeTrue();
+            result.Error.Code.Should().Be(IdentityErrorCodes.LastActiveAdministrator);
+        }
+        finally
+        {
+            await StopGracefullyAsync(host);
+        }
+    }
+
+    // ---- Tests: ChangeOwnPassword concurrency (Checkpoint 9 follow-up review) ----
+
+    /// <summary>
+    /// Forces genuine PostgreSQL transaction overlap between two concurrent
+    /// password changes of the SAME user — unlike
+    /// <c>UpdateUserCommandHandlerTests.BarrierSecurityAuditWriter</c> (which
+    /// only synchronizes, since that test never asserts on the audit row),
+    /// this one ALSO stages the entry exactly like the real
+    /// <see cref="SecurityAuditWriter"/> does before waiting at the barrier —
+    /// required here because this test's own audit-count assertion
+    /// (Checkpoint 9 follow-up review, Section 3: "somente uma auditoria
+    /// PasswordChanged") would otherwise always see zero rows, having swapped
+    /// out the real writer entirely.
+    /// </summary>
+    private sealed class BarrierSecurityAuditWriter : ISecurityAuditWriter
+    {
+        private readonly IdentityDbContext _dbContext;
+        private readonly Barrier _barrier;
+
+        public BarrierSecurityAuditWriter(IdentityDbContext dbContext, Barrier barrier)
+        {
+            _dbContext = dbContext;
+            _barrier = barrier;
+        }
+
+        public void Record(SecurityAuditEntry entry)
+        {
+            _dbContext.SecurityAuditLog.Add(entry);
+            _barrier.SignalAndWait(TimeSpan.FromSeconds(10));
+        }
+    }
+
+    /// <summary>
+    /// Mandatory regression from the Checkpoint 9 follow-up review, Section 3:
+    /// two GENUINELY concurrent <see cref="ChangeOwnPasswordCommand"/>
+    /// executions on the SAME user, forced to overlap via
+    /// <see cref="BarrierSecurityAuditWriter"/> (both read the same row before
+    /// either commits — a bare <c>Task.WhenAll</c> alone does not guarantee
+    /// this, confirmed empirically by <c>UpdateUserCommandHandlerTests</c>'s
+    /// own equivalent test). Verifies every outcome the review demanded in one
+    /// pass: exactly one confirms, the other returns
+    /// <see cref="IdentityErrorCodes.UserConcurrencyConflict"/> with no retry
+    /// (the executor has none), only the winning password authenticates
+    /// afterward, exactly one <see cref="SecurityAuditEventType.PasswordChangedBySelf"/>
+    /// audit entry, exactly one <see cref="PasswordChanged"/> envelope (the
+    /// winner's — a second, losing envelope would make
+    /// <see cref="FindSingleEnvelopeForTenantAsync{TEvent}"/> fail with count
+    /// 2), and exactly one <see cref="SessionRevoked"/> envelope chained to it.
+    /// </summary>
+    [Fact]
+    public async Task Two_concurrent_own_password_changes_of_the_same_user_allow_only_one_to_succeed()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (userId, email) = await SeedUserAsync(tenantId);
+        var slug = await GetTenantSlugAsync(tenantId);
+        await SeedSessionAsync(tenantId, userId);
+        using var barrier = new Barrier(2);
+        var hostA = await BuildHostAsync(
+            overrides: sc => sc.AddScoped<ISecurityAuditWriter>(
+                sp => new BarrierSecurityAuditWriter(sp.GetRequiredService<IdentityDbContext>(), barrier)));
+        var hostB = await BuildHostAsync(
+            overrides: sc => sc.AddScoped<ISecurityAuditWriter>(
+                sp => new BarrierSecurityAuditWriter(sp.GetRequiredService<IdentityDbContext>(), barrier)));
+        try
+        {
+            var results = await WithBrokerPausedAsync(async () =>
+            {
+                var taskA = ExecuteChangeOwnPasswordAsync(hostA, new ChangeOwnPasswordCommand(tenantId, userId, KnownPassword, "Password-A-42!"));
+                var taskB = ExecuteChangeOwnPasswordAsync(hostB, new ChangeOwnPasswordCommand(tenantId, userId, KnownPassword, "Password-B-42!"));
+                return await Task.WhenAll(taskA, taskB);
+            });
+
+            results.Count(r => r.IsSuccess).Should().Be(1);
+            var failure = results.Single(r => r.IsFailure);
+            failure.Error.Code.Should().Be(IdentityErrorCodes.UserConcurrencyConflict);
+
+            // Only the winning password authenticates afterward — the other
+            // attempt's password never took effect, and the original password
+            // is gone either way.
+            var loginWithA = await ExecuteLoginAsync(hostA, LoginAs(slug, email, "Password-A-42!"), tenantId);
+            var loginWithB = await ExecuteLoginAsync(hostA, LoginAs(slug, email, "Password-B-42!"), tenantId);
+            var loginWithOld = await ExecuteLoginAsync(hostA, LoginAs(slug, email, KnownPassword), tenantId);
+            new[] { loginWithA.IsSuccess, loginWithB.IsSuccess }.Count(success => success).Should().Be(1);
+            loginWithOld.IsSuccess.Should().BeFalse();
+
+            await using var dbContext = CreateMigratorDbContextWithTenant(tenantId);
+            await using var transaction = await dbContext.Database.BeginTransactionAsync();
+            await SetPostgresTenantAsync(dbContext, tenantId);
+            (await dbContext.SecurityAuditLog.CountAsync(
+                e => e.UserId == userId && e.EventType == SecurityAuditEventType.PasswordChangedBySelf))
+                .Should().Be(1);
+
+            var passwordChanged = await FindSingleEnvelopeForTenantAsync<PasswordChanged>(tenantId);
+            var sessionRevoked = await FindSingleEnvelopeForTenantAsync<SessionRevoked>(tenantId);
+            GetProperty(sessionRevoked.RootElement, "CausationId")!.Value.GetString()
+                .Should().Be(GetProperty(passwordChanged.RootElement, "EventId")!.Value.GetString(),
+                    "CausationId must point only at the WINNING attempt's own PasswordChanged, never a discarded one");
+        }
+        finally
+        {
+            await StopGracefullyAsync(hostA);
+            await StopGracefullyAsync(hostB);
+        }
+    }
+
+    /// <summary>
+    /// Mandatory regression from the Checkpoint 9 follow-up review, Section 3
+    /// ("cenário em que a concorrência é injetada antes do commit"): unlike
+    /// the genuine two-host race above (which cannot inspect either
+    /// participant's collector/signal/ChangeTracker after the fact — each
+    /// uses its own disposed scope), this test keeps a handle to a single
+    /// scope's <see cref="IdentityDbContext"/>/<see cref="IIntegrationEventCollector"/>/
+    /// <see cref="ISessionRevocationSignal"/> and forces the SAME
+    /// <see cref="DbUpdateConcurrencyException"/> <see cref="ChangeOwnPasswordExecutor"/>
+    /// would see from a real <c>xmin</c> race — mirrors
+    /// <see cref="AssignRole_when_every_attempt_hits_a_concurrency_conflict_the_exception_propagates_and_nothing_is_left_behind"/>'s
+    /// technique, adapted to this executor's shape: no retry loop (Section 8 of
+    /// the Checkpoint 9 decision), so the conflict is translated to a returned
+    /// <see cref="Result.Failure"/> on the FIRST and only attempt, never
+    /// re-thrown.
+    /// </summary>
+    [Fact]
+    public async Task ChangeOwnPassword_a_concurrency_conflict_injected_before_commit_translates_once_without_retry_and_writes_no_Redis_signal()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (userId, _) = await SeedUserAsync(tenantId);
+        var sessionId = await SeedSessionAsync(tenantId, userId);
+        var host = await BuildHostAsync();
+        try
+        {
+            using var scope = host.Services.CreateScope();
+            var sp = scope.ServiceProvider;
+            sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+            var dbContext = sp.GetRequiredService<IdentityDbContext>();
+            var transactionExecutor = sp.GetRequiredService<IIdentityTransactionExecutor>();
+            var collector = sp.GetRequiredService<IIntegrationEventCollector>();
+            var signal = sp.GetRequiredService<ISessionRevocationSignal>();
+            var cache = new RecordingSessionRevocationCache();
+            var executor = new ChangeOwnPasswordExecutor(transactionExecutor, dbContext, collector, signal, cache);
+            var attempt = 0;
+            var command = new ChangeOwnPasswordCommand(tenantId, userId, KnownPassword, "New-Password-42!");
+
+            var result = await executor.ExecuteAsync(async () =>
+            {
+                attempt++;
+                await sp.GetRequiredService<ChangeOwnPasswordCommandHandler>().Handle(command, CancellationToken.None);
+                throw new DbUpdateConcurrencyException("Simulated xmin conflict.");
+            }, CancellationToken.None);
+
+            attempt.Should().Be(1); // no retry, unlike AssignRole/RemoveRole/Block
+            result.IsFailure.Should().BeTrue();
+            result.Error.Code.Should().Be(IdentityErrorCodes.UserConcurrencyConflict);
+
+            await AssertNoEnvelopeAsync<PasswordChanged>(tenantId);
+            await AssertNoEnvelopeAsync<SessionRevoked>(tenantId);
+
+            await using (var verifyDbContext = CreateMigratorDbContextWithTenant(tenantId))
+            await using (var verifyTransaction = await verifyDbContext.Database.BeginTransactionAsync())
+            {
+                await SetPostgresTenantAsync(verifyDbContext, tenantId);
+                (await verifyDbContext.SecurityAuditLog.CountAsync(e => e.UserId == userId)).Should().Be(0);
+                (await verifyDbContext.Sessions.Where(s => s.Id == sessionId).Select(s => s.Status).SingleAsync())
+                    .Should().Be(SessionStatus.Active); // untouched — the whole transaction rolled back
+            }
+
+            // The exact invariants the Checkpoint 9 follow-up review flagged:
+            // no Redis write from the conflicted attempt, and collector/signal/
+            // ChangeTracker all end up empty rather than leaking into the next
+            // operation on this scope.
+            cache.MarkedCalls.Should().BeEmpty();
+            collector.Drain().Should().BeEmpty();
+            signal.Drain().Should().BeEmpty();
+            dbContext.ChangeTracker.Entries().Should().BeEmpty();
         }
         finally
         {
@@ -1024,6 +2378,346 @@ public class IdentityIntegrationEventsTests : IClassFixture<IdentityIntegrationE
                 await WaitUntilAsync(async () =>
                 {
                     var envelopes = await FindEnvelopesAsync<SessionRevoked>();
+                    return envelopes.All(doc => GetProperty(doc.RootElement, "TenantId")?.GetString() != tenantId.ToString());
+                }, TimeSpan.FromSeconds(30));
+            }
+            finally
+            {
+                await StopGracefullyAsync(recoveryHost);
+            }
+        }
+        finally
+        {
+            await rabbitMqContainer.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Broker_unavailable_keeps_RevokeOwnSession_SessionRevoked_pending_and_recovery_delivers_it()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (userId, _) = await SeedUserAsync(tenantId);
+        var sessionId = await SeedSessionAsync(tenantId, userId);
+
+        var rabbitMqContainer = new RabbitMqBuilder().WithImage("rabbitmq:3-management-alpine").Build();
+        await rabbitMqContainer.StartAsync();
+        try
+        {
+            var host = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await rabbitMqContainer.StopAsync();
+                var result = await ExecuteRevokeOwnSessionAsync(host, new RevokeOwnSessionCommand(tenantId, userId, sessionId));
+                result.IsSuccess.Should().BeTrue();
+
+                await FindSingleEnvelopeForTenantAsync<SessionRevoked>(tenantId); // still durably persisted
+            }
+            finally
+            {
+                await StopGracefullyAsync(host);
+            }
+
+            await rabbitMqContainer.StartAsync();
+
+            var recoveryHost = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await WaitUntilAsync(async () =>
+                {
+                    var envelopes = await FindEnvelopesAsync<SessionRevoked>();
+                    return envelopes.All(doc => GetProperty(doc.RootElement, "TenantId")?.GetString() != tenantId.ToString());
+                }, TimeSpan.FromSeconds(30));
+            }
+            finally
+            {
+                await StopGracefullyAsync(recoveryHost);
+            }
+        }
+        finally
+        {
+            await rabbitMqContainer.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Broker_unavailable_keeps_both_CreateUser_events_pending_and_recovery_delivers_them()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+
+        var rabbitMqContainer = new RabbitMqBuilder().WithImage("rabbitmq:3-management-alpine").Build();
+        await rabbitMqContainer.StartAsync();
+        try
+        {
+            var host = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await rabbitMqContainer.StopAsync();
+                var command = new CreateUserCommand(
+                    tenantId, actorId, "Test User", $"{Guid.NewGuid():N}@ihostpro.com",
+                    "Correct-Horse-Battery-Staple-42!", "ADMIN");
+                var result = await ExecuteCreateUserAsync(host, command);
+                result.IsSuccess.Should().BeTrue(); // commit succeeds regardless of broker reachability
+
+                await FindSingleEnvelopeForTenantAsync<UserCreated>(tenantId); // still durably persisted
+                await FindSingleEnvelopeForTenantAsync<UserRoleAssigned>(tenantId);
+            }
+            finally
+            {
+                await StopGracefullyAsync(host);
+            }
+
+            await rabbitMqContainer.StartAsync();
+
+            var recoveryHost = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await WaitUntilAsync(async () =>
+                {
+                    var createdEnvelopes = await FindEnvelopesAsync<UserCreated>();
+                    var roleAssignedEnvelopes = await FindEnvelopesAsync<UserRoleAssigned>();
+                    return createdEnvelopes.All(doc => GetProperty(doc.RootElement, "TenantId")?.GetString() != tenantId.ToString())
+                        && roleAssignedEnvelopes.All(doc => GetProperty(doc.RootElement, "TenantId")?.GetString() != tenantId.ToString());
+                }, TimeSpan.FromSeconds(30));
+            }
+            finally
+            {
+                await StopGracefullyAsync(recoveryHost);
+            }
+        }
+        finally
+        {
+            await rabbitMqContainer.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Broker_unavailable_keeps_AssignRole_UserRoleAssigned_pending_and_recovery_delivers_it()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+
+        var rabbitMqContainer = new RabbitMqBuilder().WithImage("rabbitmq:3-management-alpine").Build();
+        await rabbitMqContainer.StartAsync();
+        try
+        {
+            var host = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await rabbitMqContainer.StopAsync();
+                var result = await ExecuteAssignRoleAsync(
+                    host, new AssignRoleCommand(tenantId, actorId, targetUserId, "OPERATOR"));
+                result.IsSuccess.Should().BeTrue(); // commit succeeds regardless of broker reachability
+
+                await FindSingleEnvelopeForTenantAsync<UserRoleAssigned>(tenantId); // still durably persisted
+            }
+            finally
+            {
+                await StopGracefullyAsync(host);
+            }
+
+            await rabbitMqContainer.StartAsync();
+
+            var recoveryHost = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await WaitUntilAsync(async () =>
+                {
+                    var envelopes = await FindEnvelopesAsync<UserRoleAssigned>();
+                    return envelopes.All(doc => GetProperty(doc.RootElement, "TenantId")?.GetString() != tenantId.ToString());
+                }, TimeSpan.FromSeconds(30));
+            }
+            finally
+            {
+                await StopGracefullyAsync(recoveryHost);
+            }
+        }
+        finally
+        {
+            await rabbitMqContainer.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Broker_unavailable_keeps_RemoveRole_UserRoleRemoved_pending_and_recovery_delivers_it()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "OPERATOR", actorId);
+        await SeedUserRoleAsync(tenantId, targetUserId, "HOUSEKEEPER", actorId);
+
+        var rabbitMqContainer = new RabbitMqBuilder().WithImage("rabbitmq:3-management-alpine").Build();
+        await rabbitMqContainer.StartAsync();
+        try
+        {
+            var host = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await rabbitMqContainer.StopAsync();
+                var result = await ExecuteRemoveRoleAsync(
+                    host, new RemoveRoleCommand(tenantId, actorId, targetUserId, "HOUSEKEEPER"));
+                result.IsSuccess.Should().BeTrue();
+
+                await FindSingleEnvelopeForTenantAsync<UserRoleRemoved>(tenantId); // still durably persisted
+            }
+            finally
+            {
+                await StopGracefullyAsync(host);
+            }
+
+            await rabbitMqContainer.StartAsync();
+
+            var recoveryHost = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await WaitUntilAsync(async () =>
+                {
+                    var envelopes = await FindEnvelopesAsync<UserRoleRemoved>();
+                    return envelopes.All(doc => GetProperty(doc.RootElement, "TenantId")?.GetString() != tenantId.ToString());
+                }, TimeSpan.FromSeconds(30));
+            }
+            finally
+            {
+                await StopGracefullyAsync(recoveryHost);
+            }
+        }
+        finally
+        {
+            await rabbitMqContainer.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Broker_unavailable_keeps_BlockUser_UserBlocked_pending_and_recovery_delivers_it()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+
+        var rabbitMqContainer = new RabbitMqBuilder().WithImage("rabbitmq:3-management-alpine").Build();
+        await rabbitMqContainer.StartAsync();
+        try
+        {
+            var host = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await rabbitMqContainer.StopAsync();
+                var result = await ExecuteBlockUserAsync(host, new BlockUserCommand(tenantId, actorId, targetUserId));
+                result.IsSuccess.Should().BeTrue();
+
+                await FindSingleEnvelopeForTenantAsync<UserBlocked>(tenantId); // still durably persisted
+            }
+            finally
+            {
+                await StopGracefullyAsync(host);
+            }
+
+            await rabbitMqContainer.StartAsync();
+
+            var recoveryHost = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await WaitUntilAsync(async () =>
+                {
+                    var envelopes = await FindEnvelopesAsync<UserBlocked>();
+                    return envelopes.All(doc => GetProperty(doc.RootElement, "TenantId")?.GetString() != tenantId.ToString());
+                }, TimeSpan.FromSeconds(30));
+            }
+            finally
+            {
+                await StopGracefullyAsync(recoveryHost);
+            }
+        }
+        finally
+        {
+            await rabbitMqContainer.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Broker_unavailable_keeps_UnblockUser_UserUnblocked_pending_and_recovery_delivers_it()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId, blocked: true);
+
+        var rabbitMqContainer = new RabbitMqBuilder().WithImage("rabbitmq:3-management-alpine").Build();
+        await rabbitMqContainer.StartAsync();
+        try
+        {
+            var host = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await rabbitMqContainer.StopAsync();
+                var result = await ExecuteUnblockUserAsync(host, new UnblockUserCommand(tenantId, actorId, targetUserId));
+                result.IsSuccess.Should().BeTrue();
+
+                await FindSingleEnvelopeForTenantAsync<UserUnblocked>(tenantId); // still durably persisted
+            }
+            finally
+            {
+                await StopGracefullyAsync(host);
+            }
+
+            await rabbitMqContainer.StartAsync();
+
+            var recoveryHost = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await WaitUntilAsync(async () =>
+                {
+                    var envelopes = await FindEnvelopesAsync<UserUnblocked>();
+                    return envelopes.All(doc => GetProperty(doc.RootElement, "TenantId")?.GetString() != tenantId.ToString());
+                }, TimeSpan.FromSeconds(30));
+            }
+            finally
+            {
+                await StopGracefullyAsync(recoveryHost);
+            }
+        }
+        finally
+        {
+            await rabbitMqContainer.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Broker_unavailable_keeps_UpdateUser_UserUpdated_pending_and_recovery_delivers_it()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (actorId, _) = await SeedUserAsync(tenantId);
+        var (targetUserId, _) = await SeedUserAsync(tenantId);
+
+        var rabbitMqContainer = new RabbitMqBuilder().WithImage("rabbitmq:3-management-alpine").Build();
+        await rabbitMqContainer.StartAsync();
+        try
+        {
+            var host = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await rabbitMqContainer.StopAsync();
+                var result = await ExecuteUpdateUserAsync(
+                    host, new UpdateUserCommand(tenantId, actorId, targetUserId, "New Name", null));
+                result.IsSuccess.Should().BeTrue();
+
+                await FindSingleEnvelopeForTenantAsync<UserUpdated>(tenantId); // still durably persisted
+            }
+            finally
+            {
+                await StopGracefullyAsync(host);
+            }
+
+            await rabbitMqContainer.StartAsync();
+
+            var recoveryHost = await BuildHostAsync(rabbitMqContainer: rabbitMqContainer);
+            try
+            {
+                await WaitUntilAsync(async () =>
+                {
+                    var envelopes = await FindEnvelopesAsync<UserUpdated>();
                     return envelopes.All(doc => GetProperty(doc.RootElement, "TenantId")?.GetString() != tenantId.ToString());
                 }, TimeSpan.FromSeconds(30));
             }

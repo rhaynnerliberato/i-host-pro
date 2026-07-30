@@ -1,4 +1,5 @@
 using IHostPro.Contexts.Identity.Application;
+using IHostPro.Contexts.Identity.Domain;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,4 +20,8 @@ public sealed class UserRoleReader : IUserRoleReader
             .Where(ur => ur.UserId == userId)
             .Select(ur => ur.RoleCode)
             .ToListAsync(cancellationToken);
+
+    public async Task<UserRole?> FindAsync(Guid userId, string roleCode, CancellationToken cancellationToken) =>
+        await _dbContext.UserRoles
+            .FirstOrDefaultAsync(ur => ur.UserId == userId && ur.RoleCode == roleCode, cancellationToken);
 }

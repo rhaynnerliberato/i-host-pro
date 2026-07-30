@@ -242,6 +242,9 @@ AIConfigurationUpdated
 UserCreated
 UserUpdated
 UserBlocked
+UserUnblocked
+UserRoleAssigned
+UserRoleRemoved
 UserLoggedIn
 UserLoggedOut
 PasswordChanged
@@ -325,11 +328,15 @@ SessionRevoked
 | SessionId | Guid | Sessão revogada |
 | ReasonCode | string | Código ASCII estável — ver tabela de códigos abaixo |
 
-Códigos de ReasonCode para SessionRevoked (únicos gatilhos existentes neste incremento):
-| Código | Situação |
-|---|---|
-| logout_requested | Revogação por logout explícito |
-| refresh_token_reuse_detected | Revogação por reutilização de refresh token já rotacionado, fora da janela de graça |
+Códigos de ReasonCode para SessionRevoked:
+| Código | Situação | Publicado desde |
+|---|---|---|
+| logout_requested | Revogação por logout explícito | Incremento 2 |
+| refresh_token_reuse_detected | Revogação por reutilização de refresh token já rotacionado, fora da janela de graça | Incremento 2 |
+| user_blocked | Revogação em cascata de todas as sessões ativas ao bloquear um usuário | Incremento 3, Checkpoint 7 — publicado por BlockUserCommand (POST /api/v1/users/{userId}/block) |
+| roles_changed | Revogação em cascata de todas as sessões ativas ao atribuir ou remover um papel | Incremento 3, Checkpoint 6 — publicado por AssignRoleCommand (POST /api/v1/users/{userId}/roles) e RemoveRoleCommand (DELETE /api/v1/users/{userId}/roles/{roleCode}) |
+| password_changed | Revogação em cascata de todas as sessões ativas ao alterar ou redefinir a senha | Incremento 3, Checkpoint 9 — publicado por ChangeOwnPasswordCommand (POST /api/v1/users/me/change-password) e AdminResetPasswordCommand (POST /api/v1/users/{userId}/reset-password) |
+| user_requested_revocation | Revogação de uma sessão específica, solicitada pelo próprio usuário | Incremento 3, Checkpoint 4 — publicado por RevokeOwnSessionCommand (DELETE /api/v1/users/me/sessions/{sessionId}) |
 
 13.2 Roteamento RabbitMQ dos Eventos do Incremento 2
 
@@ -343,6 +350,73 @@ Ver ADR-013 (Convenção de Roteamento RabbitMQ para Integration Events) para a 
 | UserLoggedOut | identity-events | user_logged_out |
 | RefreshTokenReuseDetected | identity-events | refresh_token_reuse_detected |
 | SessionRevoked | identity-events | session_revoked |
+
+13.3 Payloads dos Eventos do Incremento 3, Checkpoint 1 (Gestão de Usuários e Sessões)
+
+Contratos e vocabulário de códigos definidos no Checkpoint 1 do Incremento 3 do contexto Identity & Access (autorização RBAC+ABAC e gestão de usuários/sessões). UserCreated é publicado desde o Checkpoint 5, pelo CreateUserCommand (POST /api/v1/users). UserRoleAssigned é publicado desde o Checkpoint 5 (pelo mesmo CreateUserCommand, para o papel inicial obrigatório) e também desde o Checkpoint 6, pelo AssignRoleCommand (POST /api/v1/users/{userId}/roles). UserRoleRemoved é publicado desde o Checkpoint 6, pelo RemoveRoleCommand (DELETE /api/v1/users/{userId}/roles/{roleCode}). UserBlocked é publicado desde o Checkpoint 7, pelo BlockUserCommand (POST /api/v1/users/{userId}/block); UserUnblocked também desde o Checkpoint 7, pelo UnblockUserCommand (POST /api/v1/users/{userId}/unblock). UserUpdated é publicado desde o Checkpoint 8, pelo UpdateUserCommand (PATCH /api/v1/users/{userId}) — somente quando pelo menos um campo efetivamente muda (Seção 4 da decisão do Checkpoint 8: idempotência). PasswordChanged é publicado desde o Checkpoint 9, pelo ChangeOwnPasswordCommand (POST /api/v1/users/me/change-password, ChangeType = self) e pelo AdminResetPasswordCommand (POST /api/v1/users/{userId}/reset-password, ChangeType = admin_reset). Nenhum destes eventos inclui e-mail, endereço IP, User-Agent, senha, hash de senha, access token, refresh token, hash de token ou qualquer outro segredo — apenas identificadores e códigos estáveis, mesma regra do §13.1.
+
+Convenção comum aos sete:
+
+- AggregateType/AggregateId representam o Usuário afetado (AggregateId = userId) em todos os sete eventos.
+- ActorType é sempre "User". ActorId é o id do Administrador que executou a ação — exceto em PasswordChanged com ChangeType = self, em que ActorId é o próprio usuário afetado (o mesmo valor de AggregateId). É por isso que nenhum destes sete eventos possui um campo próprio como CreatedByUserId, BlockedByUserId, AssignedByUserId ou equivalente — ActorId já é o campo padrão do envelope (Seção 3) para "quem executou a ação"; repeti-lo com outro nome em cada evento seria duplicação.
+- UserCreated é sempre publicado na mesma transação que um UserRoleAssigned para o papel inicial obrigatório (Seção 5 da decisão do Incremento 3: não é permitido criar usuário sem papel) — o CausationId de UserRoleAssigned preenche o EventId de UserCreated.
+- UserBlocked, UserRoleAssigned, UserRoleRemoved e PasswordChanged são sempre publicados na mesma transação que um SessionRevoked por sessão ativa revogada em cascata (ver §13.1) — cada SessionRevoked preenche CausationId com o EventId do evento primário correspondente.
+- Nenhum destes eventos é publicado quando a operação não altera estado efetivamente (ex.: atribuir um papel já atribuído, bloquear um usuário já bloqueado) — ver as regras de idempotência aprovadas no planejamento do Incremento 3.
+
+UserCreated
+| Campo | Tipo | Descrição |
+|---|---|---|
+| (nenhum campo próprio) | — | AggregateId já identifica o usuário criado; o papel inicial é informado pelo UserRoleAssigned publicado na mesma transação |
+
+UserUpdated
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ChangedFields | string[] | Códigos estáveis dos campos efetivamente alterados: "full_name", "email" — nunca o valor novo nem o anterior |
+
+UserBlocked
+| Campo | Tipo | Descrição |
+|---|---|---|
+| (nenhum campo próprio) | — | AggregateId já identifica o usuário bloqueado |
+
+UserUnblocked
+| Campo | Tipo | Descrição |
+|---|---|---|
+| (nenhum campo próprio) | — | AggregateId já identifica o usuário desbloqueado; nunca restaura sessões revogadas pelo UserBlocked anterior |
+
+UserRoleAssigned
+| Campo | Tipo | Descrição |
+|---|---|---|
+| RoleCode | string | Código estável do papel (ex.: "ADMIN") — nunca o nome de exibição |
+
+UserRoleRemoved
+| Campo | Tipo | Descrição |
+|---|---|---|
+| RoleCode | string | Código estável do papel removido |
+
+PasswordChanged
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ChangeType | string | Código ASCII estável — ver tabela de códigos abaixo |
+
+Códigos de ChangeType para PasswordChanged:
+| Código | Situação |
+|---|---|
+| self | Alteração pelo próprio usuário, mediante confirmação da senha atual |
+| admin_reset | Redefinição por um Administrador, sem exigir a senha atual — o Administrador não pode usar este fluxo para alterar a própria senha |
+
+13.4 Roteamento RabbitMQ dos Eventos do Incremento 3
+
+Convenção já registrada em ADR-013 (exchange único por Bounded Context, tipo topic, routing key = nome do evento em snake_case). O roteamento em Program.cs (IHostPro.Api) só é registrado no checkpoint que implementa o primeiro comando a publicar aquele evento — nunca antecipadamente, para não registrar rota RabbitMQ para um evento que nenhum código ainda emite. UserCreated/UserRoleAssigned já estão registrados desde o Checkpoint 5; UserRoleRemoved desde o Checkpoint 6 (AssignRoleCommand reutiliza a rota já existente de UserRoleAssigned, sem duplicar configuração); UserBlocked/UserUnblocked desde o Checkpoint 7; UserUpdated desde o Checkpoint 8; PasswordChanged desde o Checkpoint 9 (ChangeOwnPasswordCommand e AdminResetPasswordCommand reutilizam a mesma rota, sem duplicar configuração).
+
+| Evento | Exchange | Routing Key | Registrado desde |
+|---|---|---|---|
+| UserCreated | identity-events | user_created | Checkpoint 5 |
+| UserUpdated | identity-events | user_updated | Checkpoint 8 |
+| UserBlocked | identity-events | user_blocked | Checkpoint 7 |
+| UserUnblocked | identity-events | user_unblocked | Checkpoint 7 |
+| UserRoleAssigned | identity-events | user_role_assigned | Checkpoint 5 |
+| UserRoleRemoved | identity-events | user_role_removed | Checkpoint 6 |
+| PasswordChanged | identity-events | password_changed | Checkpoint 9 |
 
 14. Eventos da Auditoria
 AuditRecordCreated
@@ -543,4 +617,4 @@ IA	AIConversationStarted, AIDecisionMade, AIEscalatedToHuman
 Agenda	ScheduleUpdated, CalendarBlocked, CalendarReleased
 Financeiro	PixPaymentConfirmed, RefundRequested
 Sistema	JobStarted, JobFinished, BackupCompleted
-Identity & Access	UserLoggedIn, LoginFailed, AccountLockedOut, UserLoggedOut, RefreshTokenReuseDetected, SessionRevoked
+Identity & Access	UserLoggedIn, LoginFailed, AccountLockedOut, UserLoggedOut, RefreshTokenReuseDetected, SessionRevoked, UserCreated, UserUpdated, UserBlocked, UserUnblocked, UserRoleAssigned, UserRoleRemoved, PasswordChanged

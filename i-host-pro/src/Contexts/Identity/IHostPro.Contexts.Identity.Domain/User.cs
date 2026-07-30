@@ -74,6 +74,15 @@ public sealed class User : AggregateRoot<Guid>, ITenantOwned
         Touch(now);
     }
 
+    public void ChangeFullName(string newFullName, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(newFullName))
+            throw new ArgumentException("Full name cannot be empty.", nameof(newFullName));
+
+        FullName = newFullName.Trim();
+        Touch(now);
+    }
+
     public void SetPasswordHash(PasswordHash newHash, DateTimeOffset now)
     {
         PasswordHash = newHash;

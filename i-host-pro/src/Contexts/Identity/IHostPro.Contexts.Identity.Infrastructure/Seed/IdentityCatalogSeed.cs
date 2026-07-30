@@ -1,3 +1,4 @@
+using IHostPro.Contexts.Identity.Application.Authorization;
 using IHostPro.Contexts.Identity.Domain;
 
 namespace IHostPro.Contexts.Identity.Infrastructure.Seed;
@@ -82,9 +83,9 @@ public static class IdentityCatalogSeed
         new Permission("REPORTS:READ:OWN_OWNER", "REPORTS", "READ", "OWN_OWNER"),
         new Permission("REPORTS:USE", "REPORTS", "USE"),
 
-        new Permission("USERS:MANAGE", "USERS", "MANAGE"),
-        new Permission("ROLES:READ", "ROLES", "READ"),
-        new Permission("PERMISSIONS:READ", "PERMISSIONS", "READ"),
+        new Permission(IdentityPermissionCodes.UsersManage, "USERS", "MANAGE"),
+        new Permission(IdentityPermissionCodes.RolesRead, "ROLES", "READ"),
+        new Permission(IdentityPermissionCodes.PermissionsRead, "PERMISSIONS", "READ"),
     ];
 
     public static IReadOnlyList<RolePermission> RolePermissions { get; } =
@@ -100,9 +101,9 @@ public static class IdentityCatalogSeed
         new RolePermission("ADMIN", "AUDIT:READ"), // override — §5 "Não poderá: Alterar/Excluir auditoria"
         new RolePermission("ADMIN", "DASHBOARD:MANAGE"),
         new RolePermission("ADMIN", "REPORTS:MANAGE"),
-        new RolePermission("ADMIN", "USERS:MANAGE"),
-        new RolePermission("ADMIN", "ROLES:READ"),
-        new RolePermission("ADMIN", "PERMISSIONS:READ"),
+        new RolePermission("ADMIN", IdentityPermissionCodes.UsersManage),
+        new RolePermission("ADMIN", IdentityPermissionCodes.RolesRead),
+        new RolePermission("ADMIN", IdentityPermissionCodes.PermissionsRead),
 
         // OPERATOR — Documento 09 §6.
         new RolePermission("OPERATOR", "PROPERTIES:READ"),

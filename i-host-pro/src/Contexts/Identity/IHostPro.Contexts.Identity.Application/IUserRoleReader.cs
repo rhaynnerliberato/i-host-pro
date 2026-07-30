@@ -1,3 +1,5 @@
+using IHostPro.Contexts.Identity.Domain;
+
 namespace IHostPro.Contexts.Identity.Application;
 
 /// <summary>
@@ -13,4 +15,14 @@ namespace IHostPro.Contexts.Identity.Application;
 public interface IUserRoleReader
 {
     Task<IReadOnlyCollection<string>> GetRoleCodesAsync(Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The tracked <see cref="UserRole"/> row for this exact (userId,
+    /// roleCode) pair, or null if that role is not currently assigned
+    /// (Incremento 3, Checkpoint 6) — the entity
+    /// <see cref="IUserRoleWriter.Remove"/> needs, mirroring how
+    /// <c>IRepository{TAggregate,TId}.GetByIdAsync</c> hands back a tracked
+    /// instance ready for a domain mutator, never a detached stub.
+    /// </summary>
+    Task<UserRole?> FindAsync(Guid userId, string roleCode, CancellationToken cancellationToken);
 }

@@ -6,8 +6,12 @@ using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Application;
+using IHostPro.Contexts.Identity.Application.Profile;
+using IHostPro.Contexts.Identity.Application.Sessions;
+using IHostPro.Contexts.Identity.Application.Users;
 using IHostPro.Contexts.Identity.Infrastructure;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
+using IHostPro.Contexts.Identity.Infrastructure.Sessions;
 using JasperFx;
 using Mediator;
 using Microsoft.Extensions.Configuration;
@@ -139,6 +143,215 @@ public class IdentityCommandDispatchExtensionsTests
     }
 
     [Fact]
+    public void RevokeOwnSessionCommand_pipeline_is_exactly_validation_then_its_own_tenant_aware_behavior()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        var behaviors = scope.ServiceProvider
+            .GetServices<IPipelineBehavior<RevokeOwnSessionCommand, Result>>()
+            .ToList();
+
+        behaviors.Should().HaveCount(2);
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(ValidationBehavior<RevokeOwnSessionCommand, Result>));
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(RevokeOwnSessionTenantAwareBehavior));
+
+        // The plain, shared TenantTransactionBehavior<,> must never also be
+        // registered for this command (Incremento 3, Checkpoint 4, approved
+        // design) — it does not drain ISessionRevocationSignal/write
+        // ISessionRevocationCache after commit, unlike RevokeOwnSessionExecutor.
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<RevokeOwnSessionCommand, Result>));
+    }
+
+    [Fact]
+    public void GetOwnProfileQuery_pipeline_uses_the_shared_tenant_transaction_behavior()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        var behaviors = scope.ServiceProvider
+            .GetServices<IPipelineBehavior<GetOwnProfileQuery, Result<OwnProfileResult>>>()
+            .ToList();
+
+        behaviors.Should().HaveCount(2);
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(ValidationBehavior<GetOwnProfileQuery, Result<OwnProfileResult>>));
+        behaviors.Should().ContainSingle(
+            b => b.GetType() == typeof(TenantTransactionBehavior<GetOwnProfileQuery, Result<OwnProfileResult>>));
+    }
+
+    [Fact]
+    public void ListOwnSessionsQuery_pipeline_uses_the_shared_tenant_transaction_behavior()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        var behaviors = scope.ServiceProvider
+            .GetServices<IPipelineBehavior<ListOwnSessionsQuery, Result<IReadOnlyCollection<OwnSessionResult>>>>()
+            .ToList();
+
+        behaviors.Should().HaveCount(2);
+        behaviors.Should().ContainSingle(
+            b => b.GetType() == typeof(ValidationBehavior<ListOwnSessionsQuery, Result<IReadOnlyCollection<OwnSessionResult>>>));
+        behaviors.Should().ContainSingle(
+            b => b.GetType() == typeof(TenantTransactionBehavior<ListOwnSessionsQuery, Result<IReadOnlyCollection<OwnSessionResult>>>));
+    }
+
+    [Fact]
+    public void CreateUserCommand_pipeline_is_exactly_validation_then_its_own_tenant_aware_behavior()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        var behaviors = scope.ServiceProvider
+            .GetServices<IPipelineBehavior<CreateUserCommand, Result<UserResult>>>()
+            .ToList();
+
+        behaviors.Should().HaveCount(2);
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(ValidationBehavior<CreateUserCommand, Result<UserResult>>));
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(CreateUserTenantAwareBehavior));
+
+        // The plain, shared TenantTransactionBehavior<,> must never also be
+        // registered for this command (Incremento 3, Checkpoint 5, approved
+        // design) — it does not translate a unique-email DbUpdateException
+        // into Result.Failure after commit, unlike CreateUserExecutor.
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<CreateUserCommand, Result<UserResult>>));
+    }
+
+    [Fact]
+    public void AssignRoleCommand_pipeline_is_exactly_validation_then_its_own_tenant_aware_behavior()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        var behaviors = scope.ServiceProvider
+            .GetServices<IPipelineBehavior<AssignRoleCommand, Result>>()
+            .ToList();
+
+        behaviors.Should().HaveCount(2);
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(ValidationBehavior<AssignRoleCommand, Result>));
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(AssignRoleTenantAwareBehavior));
+
+        // The plain, shared TenantTransactionBehavior<,> must never also be
+        // registered for this command (Incremento 3, Checkpoint 6, approved
+        // design) — it does not drain ISessionRevocationSignal/write
+        // ISessionRevocationCache after commit, unlike AssignRoleExecutor.
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<AssignRoleCommand, Result>));
+    }
+
+    [Fact]
+    public void RemoveRoleCommand_pipeline_is_exactly_validation_then_its_own_tenant_aware_behavior()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        var behaviors = scope.ServiceProvider
+            .GetServices<IPipelineBehavior<RemoveRoleCommand, Result>>()
+            .ToList();
+
+        behaviors.Should().HaveCount(2);
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(ValidationBehavior<RemoveRoleCommand, Result>));
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(RemoveRoleTenantAwareBehavior));
+
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<RemoveRoleCommand, Result>));
+    }
+
+    [Fact]
+    public void BlockUserCommand_pipeline_is_exactly_validation_then_its_own_tenant_aware_behavior()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        var behaviors = scope.ServiceProvider
+            .GetServices<IPipelineBehavior<BlockUserCommand, Result>>()
+            .ToList();
+
+        behaviors.Should().HaveCount(2);
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(ValidationBehavior<BlockUserCommand, Result>));
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(BlockUserTenantAwareBehavior));
+
+        // The plain, shared TenantTransactionBehavior<,> must never also be
+        // registered for this command (Incremento 3, Checkpoint 7, approved
+        // design) — it does not drain ISessionRevocationSignal/write
+        // ISessionRevocationCache after commit, unlike BlockUserExecutor.
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<BlockUserCommand, Result>));
+    }
+
+    [Fact]
+    public void UnblockUserCommand_pipeline_is_exactly_validation_then_its_own_tenant_aware_behavior()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        var behaviors = scope.ServiceProvider
+            .GetServices<IPipelineBehavior<UnblockUserCommand, Result>>()
+            .ToList();
+
+        behaviors.Should().HaveCount(2);
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(ValidationBehavior<UnblockUserCommand, Result>));
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(UnblockUserTenantAwareBehavior));
+
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<UnblockUserCommand, Result>));
+    }
+
+    [Fact]
+    public void UnblockUserTenantAwareBehavior_delegates_directly_to_the_shared_transaction_executor_with_no_command_specific_executor()
+    {
+        // Incremento 3, Checkpoint 7, Section 7: UnblockUser needs no bounded
+        // concurrency retry, so — unlike BlockUserTenantAwareBehavior, which
+        // wraps IBlockUserExecutor — this behavior's only dependency is the
+        // shared IIdentityTransactionExecutor, mirroring
+        // LoginTenantAwareBehavior's exact shape. Checked structurally via the
+        // constructor signature since, by design, no IUnblockUserExecutor
+        // interface exists to resolve.
+        var constructor = typeof(UnblockUserTenantAwareBehavior).GetConstructors().Single();
+        var parameterTypes = constructor.GetParameters().Select(p => p.ParameterType).ToArray();
+
+        parameterTypes.Should().Equal([typeof(IIdentityTransactionExecutor)]);
+    }
+
+    [Fact]
+    public void ListUsersQuery_pipeline_uses_the_shared_tenant_transaction_behavior()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        var behaviors = scope.ServiceProvider
+            .GetServices<IPipelineBehavior<ListUsersQuery, Result<PagedResult<UserResult>>>>()
+            .ToList();
+
+        behaviors.Should().HaveCount(2);
+        behaviors.Should().ContainSingle(
+            b => b.GetType() == typeof(ValidationBehavior<ListUsersQuery, Result<PagedResult<UserResult>>>));
+        behaviors.Should().ContainSingle(
+            b => b.GetType() == typeof(TenantTransactionBehavior<ListUsersQuery, Result<PagedResult<UserResult>>>));
+    }
+
+    [Fact]
+    public void GetUserByIdQuery_pipeline_uses_the_shared_tenant_transaction_behavior()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        var behaviors = scope.ServiceProvider
+            .GetServices<IPipelineBehavior<GetUserByIdQuery, Result<UserResult>>>()
+            .ToList();
+
+        behaviors.Should().HaveCount(2);
+        behaviors.Should().ContainSingle(b => b.GetType() == typeof(ValidationBehavior<GetUserByIdQuery, Result<UserResult>>));
+        behaviors.Should().ContainSingle(
+            b => b.GetType() == typeof(TenantTransactionBehavior<GetUserByIdQuery, Result<UserResult>>));
+    }
+
+    [Fact]
+    public void ICreateUserExecutor_resolves_from_the_container_to_the_expected_implementation()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        scope.ServiceProvider.GetRequiredService<ICreateUserExecutor>().Should().BeOfType<CreateUserExecutor>();
+    }
+
+    [Fact]
     public void IIdentityTransactionExecutor_resolves_from_the_container_to_the_expected_implementation()
     {
         using var host = BuildHost();
@@ -157,6 +370,35 @@ public class IdentityCommandDispatchExtensionsTests
 
         scope.ServiceProvider.GetRequiredService<IRefreshTokenExchangeExecutor>().Should().BeOfType<RefreshTokenExchangeExecutor>();
         scope.ServiceProvider.GetRequiredService<ILogoutExecutor>().Should().BeOfType<LogoutExecutor>();
+    }
+
+    [Fact]
+    public void IRevokeOwnSessionExecutor_resolves_from_the_container_to_the_expected_implementation()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        scope.ServiceProvider.GetRequiredService<IRevokeOwnSessionExecutor>().Should().BeOfType<RevokeOwnSessionExecutor>();
+    }
+
+    [Fact]
+    public void IAssignRoleExecutor_and_IRemoveRoleExecutor_resolve_from_the_container_to_the_expected_implementation()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        scope.ServiceProvider.GetRequiredService<IAssignRoleExecutor>().Should().BeOfType<AssignRoleExecutor>();
+        scope.ServiceProvider.GetRequiredService<IRemoveRoleExecutor>().Should().BeOfType<RemoveRoleExecutor>();
+    }
+
+    [Fact]
+    public void ILastAdministratorGuard_and_IUserSessionRevoker_resolve_from_the_container_to_the_expected_implementation()
+    {
+        using var host = BuildHost();
+        using var scope = host.Services.CreateScope();
+
+        scope.ServiceProvider.GetRequiredService<ILastAdministratorGuard>().Should().BeOfType<LastAdministratorGuard>();
+        scope.ServiceProvider.GetRequiredService<IUserSessionRevoker>().Should().BeOfType<UserSessionRevoker>();
     }
 
     [Fact]

@@ -1,13 +1,21 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
 using IHostPro.Contexts.Identity.Application;
+using IHostPro.Contexts.Identity.Application.Authorization;
+using IHostPro.Contexts.Identity.Application.Catalog;
+using IHostPro.Contexts.Identity.Application.Sessions;
+using IHostPro.Contexts.Identity.Application.Users;
 using IHostPro.Contexts.Identity.Domain;
+using IHostPro.Contexts.Identity.Infrastructure.Authorization;
 using IHostPro.Contexts.Identity.Infrastructure.Caching;
+using IHostPro.Contexts.Identity.Infrastructure.Catalog;
 using IHostPro.Contexts.Identity.Infrastructure.Identity;
 using IHostPro.Contexts.Identity.Infrastructure.Multitenancy;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Infrastructure.Security;
 using IHostPro.Contexts.Identity.Infrastructure.Seed;
+using IHostPro.Contexts.Identity.Infrastructure.Sessions;
+using IHostPro.Contexts.Identity.Infrastructure.Users;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -180,18 +188,99 @@ public static class IdentityModuleExtensions
         services.AddScoped<ISessionRevocationSignal, SessionRevocationSignal>();
         services.AddScoped<ISessionRevocationCache, NullSessionRevocationCache>();
 
-        // LoginCommandHandler/RefreshTokenCommandHandler/LogoutCommandHandler
-        // (Logout: Incremento 2 plan, Etapa 11 — IRepository<Session, Guid>,
-        // IRefreshTokenReader and ISecurityAuditWriter above already cover
-        // everything it depends on, no new registrations needed for it)
-        // are not registered here at all, concrete type included: no
-        // AddMediator() call exists anywhere in this solution yet (confirmed
-        // by inspection) — wiring them is a dependency of the future
-        // endpoints step, which is the first point something actually needs
-        // to call IMediator/ISender.Send(...). Each is registered ad hoc by
-        // the tests that exercise it directly in the meantime (see
-        // LoginCommandHandlerTests/RefreshTokenCommandHandlerTests/
-        // LogoutCommandHandlerTests).
+        // Permission resolver (Incremento 3, Checkpoint 2) — RolePermissionCache
+        // is a Singleton (the actual cross-request cache storage); PermissionReader
+        // is Scoped, matching IdentityDbContext's own lifetime. Registered for
+        // both hosts: the reader itself has no HTTP dependency (only
+        // IdentityDbContext, already shared), mirroring IUserRoleReader/
+        // IRefreshTokenReader above — only PermissionAuthorizationHandler,
+        // which consumes it, is Api-only (AddIdentityAuthorization,
+        // Identity.Api).
+        services.AddOptions<PermissionCacheOptions>()
+            .Bind(configuration.GetSection(PermissionCacheOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<PermissionCacheOptions>, PermissionCacheOptionsValidator>();
+        services.AddSingleton<RolePermissionCache>();
+        services.AddScoped<IPermissionReader, PermissionReader>();
+
+        // Administrative catalog listing (Incremento 3, Checkpoint 3) —
+        // GET /api/v1/roles and GET /api/v1/permissions. Deliberately NOT
+        // IPermissionReader above: that one resolves permissions for
+        // authorization and may cache; this one lists the whole catalog for
+        // an administrative client and always re-reads PostgreSQL directly
+        // (no cache introduced here). Registered for both hosts — the reader
+        // itself has no HTTP dependency, mirroring IPermissionReader.
+        services.AddScoped<IIdentityCatalogReader, IdentityCatalogReader>();
+
+        // Self-service profile/session listing (Incremento 3, Checkpoint 4) —
+        // GET /api/v1/users/me and GET /api/v1/users/me/sessions.
+        // GetOwnProfileQueryHandler needs no new reader (reuses
+        // IUserAuthenticationService/IUserRoleReader below); ISessionReader is
+        // the one genuinely new read capability this checkpoint adds — a
+        // plain, uncached list-by-criteria query, registered for both hosts
+        // like every other reader in this module (no HTTP dependency of its
+        // own).
+        services.AddScoped<ISessionReader, SessionReader>();
+
+        // Administrative user creation/listing/detail (Incremento 3,
+        // Checkpoint 5) — POST /api/v1/users, GET /api/v1/users, GET
+        // /api/v1/users/{userId}. IUserProvisioningService wraps
+        // IPasswordValidator<User>/IPasswordHasher<User> directly (never
+        // UserManager<User>.CreateAsync — see its own doc comment for why).
+        // IRepository<User,Guid> is the first write path for User itself
+        // (Login/Refresh only ever read one, via IUserAuthenticationService).
+        // IUserRoleWriter is UserRole's write-side counterpart to
+        // IUserRoleReader — UserRole is not an AggregateRoot, so it cannot use
+        // the generic IRepository<,>. All registered for both hosts, mirroring
+        // every other reader/writer in this module (no HTTP dependency of
+        // their own).
+        services.AddScoped<IUserProvisioningService, UserProvisioningService>();
+        services.AddScoped<IRepository<User, Guid>, UserRepository>();
+        services.AddScoped<IUserRoleWriter, UserRoleWriter>();
+        services.AddScoped<IUserAdministrationReader, UserAdministrationReader>();
+
+        services.AddOptions<UserListingOptions>()
+            .Bind(configuration.GetSection(UserListingOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<UserListingOptions>, UserListingOptionsValidator>();
+        services.AddScoped<IUserListingSettingsProvider, UserListingSettingsProvider>();
+
+        // Role assignment/removal (Incremento 3, Checkpoint 6) — POST/DELETE
+        // /api/v1/users/{userId}/roles(/{roleCode}). ILastAdministratorGuard
+        // is consulted only when removing ADMIN specifically; its PostgreSQL
+        // advisory-lock mechanics live entirely in the Infrastructure
+        // implementation (Application stays framework-neutral).
+        // IUserSessionRevoker generalizes RevokeOwnSessionCommandHandler's own
+        // single-session cascade to every active session of a user — reused
+        // as-is by both AssignRole/RemoveRole and, per Section 7, intended for
+        // reuse by the block/password-change checkpoints still to come. Both
+        // registered for both hosts, mirroring every other reader/writer in
+        // this module (no HTTP dependency of their own).
+        services.AddScoped<ILastAdministratorGuard, LastAdministratorGuard>();
+        services.AddScoped<IUserSessionRevoker, UserSessionRevoker>();
+
+        // LoginCommandHandler/RefreshTokenCommandHandler/LogoutCommandHandler/
+        // ListRolesQueryHandler/ListPermissionsQueryHandler/
+        // GetOwnProfileQueryHandler/ListOwnSessionsQueryHandler/
+        // RevokeOwnSessionCommandHandler/CreateUserCommandHandler/
+        // ListUsersQueryHandler/GetUserByIdQueryHandler/AssignRoleCommandHandler/
+        // RemoveRoleCommandHandler/BlockUserCommandHandler/
+        // UnblockUserCommandHandler/UpdateUserCommandHandler/
+        // ChangeOwnPasswordCommandHandler/AdminResetPasswordCommandHandler are
+        // not registered here, concrete type included: AddIdentityApplicationMediator()
+        // (called from AddIdentityCommandDispatch, Api-only — dispatching a
+        // Command/Query is an HTTP-request concern) discovers and registers
+        // every handler in the Application assembly automatically. Each is
+        // also registered ad hoc by the unit tests that exercise it directly
+        // (see LoginCommandHandlerTests/RefreshTokenCommandHandlerTests/
+        // LogoutCommandHandlerTests/ListRolesQueryHandlerTests/
+        // ListPermissionsQueryHandlerTests/GetOwnProfileQueryHandlerTests/
+        // ListOwnSessionsQueryHandlerTests/RevokeOwnSessionCommandHandlerTests/
+        // CreateUserCommandHandlerTests/ListUsersQueryHandlerTests/
+        // GetUserByIdQueryHandlerTests/AssignRoleCommandHandlerTests/
+        // RemoveRoleCommandHandlerTests/BlockUserCommandHandlerTests/
+        // UnblockUserCommandHandlerTests/UpdateUserCommandHandlerTests/
+        // ChangeOwnPasswordCommandHandlerTests/AdminResetPasswordCommandHandlerTests).
 
         // Development-only tenant/user bootstrap data (Incremento 2 plan,
         // ajuste 3-4). Registered — and therefore bound/validated, and the
