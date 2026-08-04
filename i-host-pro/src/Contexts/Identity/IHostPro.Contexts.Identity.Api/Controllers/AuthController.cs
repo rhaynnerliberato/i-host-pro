@@ -1,7 +1,6 @@
 using IHostPro.Contexts.Identity.Api.Contracts;
 using IHostPro.Contexts.Identity.Api.Http;
 using IHostPro.Contexts.Identity.Application;
-using Mediator;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,8 +9,8 @@ namespace IHostPro.Contexts.Identity.Api.Controllers;
 /// <summary>
 /// Login/refresh/logout HTTP endpoints (Incremento 2 plan, Etapa 14). Every
 /// action only builds a Command from already-validated/captured input and
-/// dispatches it through <see cref="ISender"/> — never calls a concrete
-/// handler directly, never touches Infrastructure. <see cref="ResultHttpMapper"/>
+/// dispatches it through <see cref="IIdentityRequestDispatcher"/> — never
+/// calls a concrete handler directly, never touches Infrastructure. <see cref="ResultHttpMapper"/>
 /// is the single place a failed <see cref="IHostPro.BuildingBlocks.Domain.Result"/>
 /// becomes an HTTP response.
 /// </summary>
@@ -19,9 +18,9 @@ namespace IHostPro.Contexts.Identity.Api.Controllers;
 [Route("api/v1/auth")]
 public sealed class AuthController : ControllerBase
 {
-    private readonly ISender _sender;
+    private readonly IIdentityRequestDispatcher _sender;
 
-    public AuthController(ISender sender) => _sender = sender;
+    public AuthController(IIdentityRequestDispatcher sender) => _sender = sender;
 
     [HttpPost("login")]
     [AllowAnonymous]

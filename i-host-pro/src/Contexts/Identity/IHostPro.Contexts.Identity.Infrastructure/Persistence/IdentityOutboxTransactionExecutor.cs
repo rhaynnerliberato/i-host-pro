@@ -2,6 +2,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Application;
 using Wolverine.EntityFrameworkCore;
+using Wolverine.Runtime;
 
 namespace IHostPro.Contexts.Identity.Infrastructure.Persistence;
 
@@ -36,6 +37,29 @@ namespace IHostPro.Contexts.Identity.Infrastructure.Persistence;
 /// afterward throws (`NpgsqlTransaction has completed`). On any exception
 /// before that point, the transaction was never committed, so <c>await
 /// using</c> disposing it below still rolls it back correctly.
+///
+/// <see cref="MessageContext.OverrideStorage"/> (Checkpoint 6 homologação,
+/// third production defect, second root cause): <c>DbContextOutbox&lt;T&gt;</c>
+/// — the concrete type behind <see cref="IDbContextOutbox{T}"/> — inherits
+/// <c>MessageBus</c>'s constructor, which unconditionally sets
+/// <c>Storage = runtime.Storage</c> (confirmed by reading Wolverine 6.22.0's
+/// own source: <c>Wolverine.Runtime.MessageBus</c>'s constructor), i.e. the
+/// Main store (<c>platform_messaging</c>), regardless of which Ancillary
+/// Store <c>IdentityDbContext</c> is enrolled to. Every outgoing envelope's
+/// <c>Store</c> property is stamped from that same field
+/// (<c>MessageBus.TrackEnvelopeCorrelation</c>: <c>outbound.Store = Storage</c>).
+/// <c>Wolverine.Persistence.Durability.DelegatingMessageOutbox</c> — used
+/// automatically whenever any Ancillary Store is registered — routes
+/// <c>DeleteOutgoingAsync</c> via <c>envelope.Store</c>. Without this
+/// override, every "mark successful" DELETE after a real RabbitMQ publish
+/// silently targeted <c>platform_messaging</c> (0 rows affected, no
+/// exception — confirmed empirically with a bound test queue: the message
+/// reached RabbitMQ correctly, but the <c>identity_messaging</c> outbox row
+/// was never removed). <c>OverrideStorage(IMessageStore)</c> is
+/// <c>MessageContext</c>'s own public, purpose-built API for exactly this —
+/// the cast below never fails given Wolverine's own DI registration
+/// (<c>services.TryAddScoped(typeof(IDbContextOutbox&lt;&gt;), typeof(DbContextOutbox&lt;&gt;))</c>
+/// in <c>WolverineEntityCoreExtensions</c>), so this needs no reflection.
 /// </remarks>
 public sealed class IdentityOutboxTransactionExecutor : IIdentityTransactionExecutor
 {
@@ -48,12 +72,22 @@ public sealed class IdentityOutboxTransactionExecutor : IIdentityTransactionExec
         IdentityDbContext dbContext,
         ITenantContext tenantContext,
         IIntegrationEventCollector collector,
-        IDbContextOutbox<IdentityDbContext> outbox)
+        IDbContextOutbox<IdentityDbContext> outbox,
+        IWolverineRuntime runtime)
     {
         _dbContext = dbContext;
         _tenantContext = tenantContext;
         _collector = collector;
         _outbox = outbox;
+
+        if (_outbox is not MessageContext messageContext)
+        {
+            throw new InvalidOperationException(
+                "The configured Wolverine DbContext outbox does not support explicit message store selection.");
+        }
+
+        var identityStore = runtime.FindAncillaryStoreForMarkerType(typeof(IdentityDbContext));
+        messageContext.OverrideStorage(identityStore);
     }
 
     public async Task<TResponse> ExecuteAsync<TResponse>(

@@ -1,9 +1,9 @@
 using IHostPro.Contexts.Identity.Api.Contracts;
 using IHostPro.Contexts.Identity.Api.Http;
+using IHostPro.Contexts.Identity.Application;
 using IHostPro.Contexts.Identity.Application.Profile;
 using IHostPro.Contexts.Identity.Application.Sessions;
 using IHostPro.Contexts.Identity.Application.Users;
-using Mediator;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,7 +14,7 @@ namespace IHostPro.Contexts.Identity.Api.Controllers;
 /// authenticated caller acting only on their own resources, never on another
 /// user's. Every action reads <see cref="AuthenticatedIdentityReader"/>
 /// (never a route/body-supplied user or tenant id) and only builds a
-/// Query/Command from it before dispatching through <see cref="ISender"/> —
+/// Query/Command from it before dispatching through <see cref="IIdentityRequestDispatcher"/> —
 /// never touches Infrastructure. <c>[Authorize]</c> alone (no policy):
 /// unlike <c>RolesController</c>/<c>PermissionsController</c>, these are
 /// operations on the caller's own resource, not permission-gated
@@ -24,9 +24,9 @@ namespace IHostPro.Contexts.Identity.Api.Controllers;
 [Route("api/v1/users")]
 public sealed class UsersController : ControllerBase
 {
-    private readonly ISender _sender;
+    private readonly IIdentityRequestDispatcher _sender;
 
-    public UsersController(ISender sender) => _sender = sender;
+    public UsersController(IIdentityRequestDispatcher sender) => _sender = sender;
 
     [HttpGet("me")]
     [Authorize]

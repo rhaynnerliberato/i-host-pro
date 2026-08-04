@@ -2,6 +2,7 @@ using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
 using IHostPro.Contexts.Identity.Application;
 using IHostPro.Contexts.Identity.Application.Authorization;
+using IHostPro.Contexts.Identity.Contracts;
 using IHostPro.Contexts.Identity.Application.Catalog;
 using IHostPro.Contexts.Identity.Application.Sessions;
 using IHostPro.Contexts.Identity.Application.Users;
@@ -258,6 +259,15 @@ public static class IdentityModuleExtensions
         // this module (no HTTP dependency of their own).
         services.AddScoped<ILastAdministratorGuard, LastAdministratorGuard>();
         services.AddScoped<IUserSessionRevoker, UserSessionRevoker>();
+
+        // Property Management's Ownership eligibility check (Fase 2,
+        // Incremento 1, Checkpoint 5 plan, item 5) — the one synchronous
+        // cross-context query Property Management is authorized to make.
+        // Registered for both hosts, mirroring every other reader in this
+        // module (no HTTP dependency of its own); Property Management may
+        // depend only on the Identity.Contracts interface, never this
+        // concrete Infrastructure type.
+        services.AddScoped<IIdentityUserEligibilityReader, IdentityUserEligibilityReader>();
 
         // LoginCommandHandler/RefreshTokenCommandHandler/LogoutCommandHandler/
         // ListRolesQueryHandler/ListPermissionsQueryHandler/

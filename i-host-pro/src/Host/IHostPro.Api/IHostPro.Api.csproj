@@ -30,6 +30,12 @@
          AddControllers() discovers AuthController; Identity.Api itself
          never references Identity.Infrastructure. -->
     <ProjectReference Include="..\..\Contexts\Identity\IHostPro.Contexts.Identity.Api\IHostPro.Contexts.Identity.Api.csproj" />
+    <!-- Property Management module (Fase 2, Incremento 1, Checkpoint 1). -->
+    <ProjectReference Include="..\..\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Infrastructure\IHostPro.Contexts.PropertyManagement.Infrastructure.csproj" />
+    <!-- HTTP endpoints (Checkpoint 2) — referenced so AddControllers()
+         discovers CondominiumsController; PropertyManagement.Api itself
+         never references PropertyManagement.Infrastructure. -->
+    <ProjectReference Include="..\..\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Api\IHostPro.Contexts.PropertyManagement.Api.csproj" />
   </ItemGroup>
 
 </Project>

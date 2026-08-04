@@ -1,4 +1,4 @@
-using IHostPro.Contexts.Identity.Application.Authorization;
+using IHostPro.Contexts.Identity.Contracts.Authorization;
 using IHostPro.Contexts.Identity.Domain;
 
 namespace IHostPro.Contexts.Identity.Infrastructure.Seed;
@@ -36,7 +36,7 @@ public static class IdentityCatalogSeed
         new Role("ADMIN", "Administrador"),
         new Role("OPERATOR", "Operador"),
         new Role("HOUSEKEEPER", "Faxineira"),
-        new Role("PROPERTY_OWNER", "Proprietário"),
+        new Role(IdentityRoleCodes.PropertyOwner, "Proprietário"),
         new Role("SYSTEM", "Sistema"),
         new Role("AI_AGENT", "Agente IA"),
         new Role("INTEGRATION", "Integração"),
@@ -120,12 +120,12 @@ public static class IdentityCatalogSeed
         new RolePermission("HOUSEKEEPER", "CLEANINGS:MANAGE:OWN_CLEANING"),
 
         // PROPERTY_OWNER — Documento 09 §8.
-        new RolePermission("PROPERTY_OWNER", "PROPERTIES:READ:OWN_OWNER"),
-        new RolePermission("PROPERTY_OWNER", "RESERVATIONS:READ:OWN_OWNER"),
-        new RolePermission("PROPERTY_OWNER", "SCHEDULE:READ:OWN_OWNER"),
-        new RolePermission("PROPERTY_OWNER", "CLEANINGS:READ:OWN_OWNER"),
-        new RolePermission("PROPERTY_OWNER", "DASHBOARD:READ:OWN_OWNER"),
-        new RolePermission("PROPERTY_OWNER", "REPORTS:READ:OWN_OWNER"),
+        new RolePermission(IdentityRoleCodes.PropertyOwner, "PROPERTIES:READ:OWN_OWNER"),
+        new RolePermission(IdentityRoleCodes.PropertyOwner, "RESERVATIONS:READ:OWN_OWNER"),
+        new RolePermission(IdentityRoleCodes.PropertyOwner, "SCHEDULE:READ:OWN_OWNER"),
+        new RolePermission(IdentityRoleCodes.PropertyOwner, "CLEANINGS:READ:OWN_OWNER"),
+        new RolePermission(IdentityRoleCodes.PropertyOwner, "DASHBOARD:READ:OWN_OWNER"),
+        new RolePermission(IdentityRoleCodes.PropertyOwner, "REPORTS:READ:OWN_OWNER"),
 
         // AI_AGENT — Documento 09 §9.
         new RolePermission("AI_AGENT", "PROPERTIES:READ"),

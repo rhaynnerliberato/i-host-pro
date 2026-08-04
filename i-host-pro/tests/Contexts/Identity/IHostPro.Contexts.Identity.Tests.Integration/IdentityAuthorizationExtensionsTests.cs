@@ -1,6 +1,6 @@
 using FluentAssertions;
 using IHostPro.Contexts.Identity.Api.Authorization;
-using IHostPro.Contexts.Identity.Application.Authorization;
+using IHostPro.Contexts.Identity.Contracts.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -8,8 +8,10 @@ namespace IHostPro.Contexts.Identity.Tests.Integration;
 
 /// <summary>
 /// Confirms <see cref="IdentityAuthorizationExtensions.AddIdentityAuthorization"/>
-/// (Incremento 3 plan, Checkpoints 1-2) registers exactly the three policies
-/// this increment's endpoints need, each backed by a
+/// (Incremento 3 plan, Checkpoints 1-2; Fase 2 Incremento 1 Checkpoint 1
+/// adds the two Property Management policies) registers a policy for each
+/// permission code Identity's own endpoints or Property Management's future
+/// ones need, each backed by a
 /// <see cref="PermissionRequirement"/> carrying the matching permission code
 /// from <see cref="IdentityPermissionCodes"/> — the single, framework-neutral
 /// source of truth also used by <c>IdentityCatalogSeed</c> (Checkpoint 1
@@ -37,6 +39,8 @@ public class IdentityAuthorizationExtensionsTests
     [InlineData(IdentityPermissionCodes.UsersManage)]
     [InlineData(IdentityPermissionCodes.RolesRead)]
     [InlineData(IdentityPermissionCodes.PermissionsRead)]
+    [InlineData(IdentityPermissionCodes.PropertiesManage)]
+    [InlineData(IdentityPermissionCodes.PropertiesReadOwnOwner)]
     public async Task AddIdentityAuthorization_registers_a_policy_requiring_the_matching_permission_code(
         string permissionCode)
     {

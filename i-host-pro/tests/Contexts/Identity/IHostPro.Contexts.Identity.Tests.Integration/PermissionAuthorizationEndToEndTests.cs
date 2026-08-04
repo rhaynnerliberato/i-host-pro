@@ -7,7 +7,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Api.Authorization;
 using IHostPro.Contexts.Identity.Application;
-using IHostPro.Contexts.Identity.Application.Authorization;
+using IHostPro.Contexts.Identity.Contracts.Authorization;
 using IHostPro.Contexts.Identity.Infrastructure;
 using IHostPro.Contexts.Identity.Infrastructure.Authentication;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;

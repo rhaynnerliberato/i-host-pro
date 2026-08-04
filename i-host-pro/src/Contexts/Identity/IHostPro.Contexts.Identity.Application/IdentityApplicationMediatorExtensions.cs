@@ -32,6 +32,19 @@ namespace IHostPro.Contexts.Identity.Application;
 /// </summary>
 public static class IdentityApplicationMediatorExtensions
 {
-    public static IServiceCollection AddIdentityApplicationMediator(this IServiceCollection services) =>
+    /// <summary>
+    /// Registers this project's own generated <c>Mediator.Mediator</c> AND
+    /// <see cref="IIdentityRequestDispatcher"/> (Checkpoint 6 homologação —
+    /// cross-context <c>ISender</c> ambiguity fix; see
+    /// <see cref="IIdentityRequestDispatcher"/>'s own doc comment). The
+    /// dispatcher registration must come after <c>AddMediator()</c> so its
+    /// constructor can resolve the concrete <c>Mediator.Mediator</c> type
+    /// <c>AddMediator()</c> just registered.
+    /// </summary>
+    public static IServiceCollection AddIdentityApplicationMediator(this IServiceCollection services)
+    {
         services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
+        services.AddScoped<IIdentityRequestDispatcher, IdentityRequestDispatcher>();
+        return services;
+    }
 }

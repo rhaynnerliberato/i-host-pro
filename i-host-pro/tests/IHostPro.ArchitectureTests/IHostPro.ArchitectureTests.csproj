@@ -48,6 +48,11 @@
     <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Application\IHostPro.Contexts.Identity.Application.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Api\IHostPro.Contexts.Identity.Api.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Domain\IHostPro.Contexts.PropertyManagement.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Contracts\IHostPro.Contexts.PropertyManagement.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Application\IHostPro.Contexts.PropertyManagement.Application.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Infrastructure\IHostPro.Contexts.PropertyManagement.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Api\IHostPro.Contexts.PropertyManagement.Api.csproj" />
   </ItemGroup>
 
 </Project>

@@ -3,6 +3,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
+using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 using JasperFx;
 using JasperFx.Resources;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,10 @@ using Npgsql;
 using Serilog;
 using Wolverine;
 using Wolverine.EntityFrameworkCore;
+using Wolverine.Postgresql;
+using Wolverine.RabbitMQ;
+using Wolverine.Runtime;
+using Wolverine.Transports;
 
 Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
@@ -51,6 +56,7 @@ try
     var moduleAssemblies = new List<Assembly>
     {
         typeof(IdentityDbContext).Assembly,
+        typeof(PropertyManagementDbContext).Assembly,
         // typeof(ReservationsDbContext).Assembly, // added when Reservation & Scheduling exists
     };
 
@@ -109,6 +115,64 @@ try
             await dbContext.Database.MigrateAsync();
         }
     }
+
+    // Wolverine's own Main message store (Fase 2, Incremento 1, Checkpoint 6
+    // homologação — found and fixed during real-host startup validation):
+    // IHostPro.Api registers Identity's and Property Management's outboxes as
+    // MessageStoreRole.Ancillary, and Wolverine requires exactly one store
+    // designated MessageStoreRole.Main whenever any Ancillary store exists —
+    // with none, the real host fails to start with
+    // InvalidWolverineStorageConfigurationException. platform_messaging is
+    // deliberately NOT a Bounded Context: it holds only Wolverine's own
+    // runtime coordination tables (node/agent registration, scheduled-job
+    // locking) — no DbContext is ever .Enroll()-ed into it, so no domain
+    // event/Integration Event is ever routed here. Provisioned here (as
+    // ihostpro_migrator) exactly like Identity's/Property Management's own
+    // outboxes below — IHostPro.Api never creates/alters it at runtime
+    // (AutoBuildMessageStorageOnStartup = AutoCreate.None, same as the other
+    // two).
+    var platformMessagingMigratorConnectionString = builder.Configuration.GetConnectionString("Platform")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Platform'.");
+
+    log.LogInformation("Provisioning Wolverine's Main message store (schema platform_messaging)");
+
+    var platformMessagingHostBuilder = Host.CreateApplicationBuilder();
+    platformMessagingHostBuilder.UseWolverine(opts =>
+    {
+        // MessageStoreRole defaults to Main — deliberately not passed
+        // explicitly, mirroring IHostPro.Api's own registration of this same
+        // store.
+        opts.PersistMessagesWithPostgresql(platformMessagingMigratorConnectionString, "platform_messaging");
+        opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+        opts.UseEntityFrameworkCoreTransactions();
+    });
+
+    using (var platformMessagingHost = platformMessagingHostBuilder.Build())
+    {
+        await platformMessagingHost.SetupResources();
+    }
+
+    // Same least-privilege grant shape as Identity's/Property Management's
+    // outbox schemas below (Incremento 2 plan, Etapa 15A) — ihostpro_app gets
+    // only SELECT/INSERT/UPDATE/DELETE on tables and USAGE/SELECT on
+    // sequences, never CREATE/ALTER/DROP/TRUNCATE, never schema ownership.
+    await using (var connection = new NpgsqlConnection(platformMessagingMigratorConnectionString))
+    {
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            GRANT USAGE ON SCHEMA platform_messaging TO ihostpro_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA platform_messaging TO ihostpro_app;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA platform_messaging TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA platform_messaging
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA platform_messaging
+              GRANT USAGE, SELECT ON SEQUENCES TO ihostpro_app;
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    log.LogInformation("Wolverine's Main message store provisioned");
 
     // Identity's own durable outbox (Incremento 2 plan, Etapa 15A; ADR-004;
     // Architecture Principles §11) — provisioned via Wolverine/Weasel's own
@@ -175,6 +239,108 @@ try
     }
 
     log.LogInformation("Identity's durable outbox provisioned");
+
+    // Property Management's own durable outbox (Fase 2, Incremento 1,
+    // Checkpoint 1 plan, item 6) — mirrors Identity's provisioning above
+    // exactly, in its own schema (property_management_messaging), never
+    // sharing identity_messaging. No Integration Event is routed/published
+    // yet (Checkpoint 1 restriction) — this only provisions the schema/
+    // tables so a future checkpoint's first real event has them ready.
+    var propertyManagementMigratorConnectionString = builder.Configuration.GetConnectionString("PropertyManagement")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:PropertyManagement'.");
+
+    log.LogInformation("Provisioning Property Management's durable outbox (schema property_management_messaging)");
+
+    var propertyManagementOutboxHostBuilder = Host.CreateApplicationBuilder();
+    propertyManagementOutboxHostBuilder.UseWolverine(opts =>
+    {
+        opts.EnrollAncillaryPostgresqlOutbox(
+            propertyManagementMigratorConnectionString, "property_management_messaging", typeof(PropertyManagementDbContext));
+        opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+        opts.UseEntityFrameworkCoreTransactions();
+    });
+
+    using (var propertyManagementOutboxHost = propertyManagementOutboxHostBuilder.Build())
+    {
+        await propertyManagementOutboxHost.SetupResources();
+    }
+
+    await using (var connection = new NpgsqlConnection(propertyManagementMigratorConnectionString))
+    {
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            GRANT USAGE ON SCHEMA property_management_messaging TO ihostpro_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA property_management_messaging TO ihostpro_app;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA property_management_messaging TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA property_management_messaging
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA property_management_messaging
+              GRANT USAGE, SELECT ON SEQUENCES TO ihostpro_app;
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    log.LogInformation("Property Management's durable outbox provisioned");
+
+    // RabbitMQ messaging topology (Checkpoint 6 homologação, third production
+    // defect: neither IHostPro.Api nor IHostPro.Worker ever declared the
+    // topic exchanges they publish/route to — AutoProvision defaults to
+    // false on WolverineOptions.UseRabbitMq and is deliberately never
+    // enabled in either Host's own Program.cs; confirmed via
+    // rabbitmqctl list_exchanges against the homologação broker that
+    // identity-events/property-management-events genuinely did not exist).
+    // Declared here through Wolverine's own public IStatefulResource
+    // mechanism — RabbitMqTransportExpression.DeclareExchange(...) +
+    // host.SetupResources() — the SAME public API this file already uses
+    // for the three PostgreSQL message stores above; never a raw
+    // RabbitMQ.Client ExchangeDeclare call. DeclareExchange's own doc
+    // comment: "Declare a new exchange without impacting message routing or
+    // listening" — it only ensures the exchange itself exists, matching
+    // exactly what Program.cs's own ToRabbitRoutingKey(...) calls configure
+    // (ExchangeType.Topic; IsDurable=true/AutoDelete=false are
+    // RabbitMqExchange's own defaults, identical to what those routes
+    // produce). Reuses UseIHostProRabbitMq(...) — the SAME connection wiring
+    // IHostPro.Api/IHostPro.Worker use — so host/vhost/user/password/
+    // timeouts can never drift between this provisioning step and the real
+    // runtime connection.
+    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events exchanges)");
+
+    var messagingTopologyHostBuilder = Host.CreateApplicationBuilder();
+    messagingTopologyHostBuilder.UseWolverine(opts =>
+    {
+        opts.UseIHostProRabbitMq(builder.Configuration, listen: false)
+            .DeclareExchange("identity-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .DeclareExchange("property-management-events", exchange => exchange.ExchangeType = ExchangeType.Topic);
+    });
+
+    using (var messagingTopologyHost = messagingTopologyHostBuilder.Build())
+    {
+        // SetupResources() logs and swallows a per-endpoint setup failure
+        // rather than throwing (confirmed by reading Wolverine's own
+        // BrokerResource.Setup()) — this platform's own constitution forbids
+        // reporting a silent partial success, so this explicitly verifies
+        // every declared exchange with CheckAsync() (the same call
+        // BrokerResource.Check() itself makes) and fails the whole process
+        // if any is missing, rather than trusting SetupResources() alone.
+        await messagingTopologyHost.SetupResources();
+
+        var messagingRuntime = messagingTopologyHost.Services.GetRequiredService<IWolverineRuntime>();
+        foreach (var transport in messagingRuntime.Options.Transports)
+        {
+            foreach (var endpoint in transport.Endpoints().OfType<IBrokerEndpoint>())
+            {
+                var exists = await endpoint.CheckAsync();
+                if (!exists)
+                {
+                    throw new InvalidOperationException(
+                        $"RabbitMQ messaging topology provisioning failed: endpoint '{endpoint.Uri}' does not exist after SetupResources().");
+                }
+            }
+        }
+    }
+
+    log.LogInformation("RabbitMQ messaging topology provisioned");
 
     log.LogInformation("IHostPro.MigrationRunner finished");
 }

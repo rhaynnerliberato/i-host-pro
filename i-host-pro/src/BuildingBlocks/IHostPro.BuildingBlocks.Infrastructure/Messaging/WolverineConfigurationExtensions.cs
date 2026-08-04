@@ -3,6 +3,7 @@ using Wolverine;
 using Wolverine.Persistence.Durability;
 using Wolverine.Postgresql;
 using Wolverine.RabbitMQ;
+using Wolverine.RabbitMQ.Internal;
 
 namespace IHostPro.BuildingBlocks.Infrastructure.Messaging;
 
@@ -14,7 +15,16 @@ namespace IHostPro.BuildingBlocks.Infrastructure.Messaging;
 /// </summary>
 public static class WolverineConfigurationExtensions
 {
-    public static void UseIHostProRabbitMq(this WolverineOptions opts, IConfiguration configuration, bool listen)
+    /// <summary>
+    /// Returns the transport expression (widened from <c>void</c> for
+    /// Checkpoint 6 homologação's messaging-topology provisioning fix) so
+    /// <c>IHostPro.MigrationRunner</c> can chain <c>.DeclareExchange(...)</c>
+    /// on the SAME connection configuration <c>IHostPro.Api</c>/<c>IHostPro.Worker</c>
+    /// use — one source of truth for host/vhost/user/password/timeouts,
+    /// never duplicated. Existing callers that used this as a statement are
+    /// unaffected: discarding a non-void return value is legal C#.
+    /// </summary>
+    public static RabbitMqTransportExpression UseIHostProRabbitMq(this WolverineOptions opts, IConfiguration configuration, bool listen)
     {
         var clientTimeouts = configuration.GetSection(RabbitMqClientTimeoutOptions.SectionName)
             .Get<RabbitMqClientTimeoutOptions>() ?? new RabbitMqClientTimeoutOptions();
@@ -47,6 +57,8 @@ public static class WolverineConfigurationExtensions
         {
             transport.UseSenderConnectionOnly();
         }
+
+        return transport;
     }
 
     /// <summary>

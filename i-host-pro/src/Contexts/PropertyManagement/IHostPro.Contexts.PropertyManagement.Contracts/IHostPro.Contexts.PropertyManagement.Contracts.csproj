@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Checkpoint 2 (Condominiums): first Integration Events (CondominiumCreated,
+    CondominiumUpdated) — see Checkpoint 2 plan, item 11, and ADR-013
+    (RabbitMQ routing convention).
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Messaging.Abstractions\IHostPro.BuildingBlocks.Messaging.Abstractions.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

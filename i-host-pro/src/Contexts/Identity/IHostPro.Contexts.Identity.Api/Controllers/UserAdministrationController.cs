@@ -1,10 +1,10 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.Contexts.Identity.Api.Contracts;
 using IHostPro.Contexts.Identity.Api.Http;
-using IHostPro.Contexts.Identity.Application.Authorization;
+using IHostPro.Contexts.Identity.Application;
 using IHostPro.Contexts.Identity.Application.Users;
+using IHostPro.Contexts.Identity.Contracts.Authorization;
 using IHostPro.Contexts.Identity.Domain.Enums;
-using Mediator;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -21,15 +21,15 @@ namespace IHostPro.Contexts.Identity.Api.Controllers;
 /// distinction. Every action reads the actor exclusively from
 /// <see cref="AuthenticatedIdentityReader"/> — never a request-body-supplied
 /// actor/tenant id — and only builds a Query/Command before dispatching
-/// through <see cref="ISender"/>; never touches Infrastructure.
+/// through <see cref="IIdentityRequestDispatcher"/>; never touches Infrastructure.
 /// </summary>
 [ApiController]
 [Route("api/v1/users")]
 public sealed class UserAdministrationController : ControllerBase
 {
-    private readonly ISender _sender;
+    private readonly IIdentityRequestDispatcher _sender;
 
-    public UserAdministrationController(ISender sender) => _sender = sender;
+    public UserAdministrationController(IIdentityRequestDispatcher sender) => _sender = sender;
 
     [HttpPost]
     [Authorize(Policy = IdentityPermissionCodes.UsersManage)]

@@ -418,11 +418,111 @@ Convenção já registrada em ADR-013 (exchange único por Bounded Context, tipo
 | UserRoleRemoved | identity-events | user_role_removed | Checkpoint 6 |
 | PasswordChanged | identity-events | password_changed | Checkpoint 9 |
 
-14. Eventos da Auditoria
+14. Eventos do Módulo Property Management
+CondominiumCreated
+CondominiumUpdated
+PropertyCreated
+PropertyUpdated
+PropertyActivated
+PropertyDeactivated
+PropertyArchived
+PropertyOwnerLinked
+PropertyOwnerUnlinked
+
+14.1 Payloads dos Eventos do Incremento 1 (Fase 2), Checkpoints 2, 3 e 4 (Condomínios, Imóveis administrativos e Lifecycle de Imóveis)
+
+Implementados nos Checkpoints 2 (Condomínios), 3 (Imóveis administrativos) e 4 (Lifecycle de Imóveis) do Incremento 1 da Fase 2 (Property Management). Nenhum destes sete eventos inclui nome, endereço, CEP, capacidade, código do imóvel, id do condomínio (antigo ou novo), status anterior ou qualquer outro dado de negócio — apenas identificadores e, quando aplicável, códigos estáveis de campo alterado, mesma regra do §13.1/§13.3.
+
+Convenção comum aos sete:
+
+- AggregateType/AggregateId representam o Condomínio (CondominiumCreated/CondominiumUpdated) ou o Imóvel (todos os demais) afetado.
+- ActorType é sempre "User". ActorId é o id do Administrador que executou a ação (PROPERTIES:MANAGE).
+- CondominiumUpdated/PropertyUpdated nunca são publicados quando a operação não altera estado efetivamente (PATCH idempotente — nenhum campo suprido difere, após normalização, do valor atual) — ver regras de idempotência aprovadas nos Checkpoints 2 e 3.
+- PropertyActivated/PropertyDeactivated/PropertyArchived são publicados exatamente uma vez por transição de estado efetivamente confirmada — nunca em uma rejeição (transição inválida, estado já no destino, conflito de concorrência) — ver Checkpoint 4, §3/§4.
+
+CondominiumCreated
+| Campo | Tipo | Descrição |
+|---|---|---|
+| CondominiumId | Guid | Redundante com AggregateId — mantido por explicitação, mesma convenção de CondominiumUpdated |
+
+CondominiumUpdated
+| Campo | Tipo | Descrição |
+|---|---|---|
+| CondominiumId | Guid | Redundante com AggregateId |
+| ChangedFields | string[] | Códigos estáveis dos campos efetivamente alterados, na ordem: "name", "address" — nunca o valor novo nem o anterior |
+
+PropertyCreated
+| Campo | Tipo | Descrição |
+|---|---|---|
+| PropertyId | Guid | Redundante com AggregateId |
+| Status | string | Código estável do status inicial — sempre "draft" neste checkpoint (todo Imóvel nasce em Draft); nunca o nome bruto do enum |
+
+PropertyUpdated
+| Campo | Tipo | Descrição |
+|---|---|---|
+| PropertyId | Guid | Redundante com AggregateId |
+| ChangedFields | string[] | Códigos estáveis dos campos efetivamente alterados, na ordem: "code", "name", "capacity", "condominium_id", "address" — nunca o valor novo nem o anterior |
+
+PropertyActivated
+| Campo | Tipo | Descrição |
+|---|---|---|
+| PropertyId | Guid | Redundante com AggregateId |
+
+PropertyDeactivated
+| Campo | Tipo | Descrição |
+|---|---|---|
+| PropertyId | Guid | Redundante com AggregateId |
+
+PropertyArchived
+| Campo | Tipo | Descrição |
+|---|---|---|
+| PropertyId | Guid | Redundante com AggregateId — Archived é terminal neste incremento, sem evento de restauração |
+
+14.2 Roteamento RabbitMQ dos Eventos do Incremento 1 (Fase 2)
+
+Convenção já registrada em ADR-013 (exchange único por Bounded Context, tipo topic, routing key = nome do evento em snake_case) — mesmo padrão do contexto Identity & Access (§13.2/§13.4), aplicado aqui ao seu próprio exchange, nunca reaproveitando identity-events. O roteamento em Program.cs (IHostPro.Api) só é registrado no checkpoint que implementa o primeiro comando a publicar aquele evento.
+
+| Evento | Exchange | Routing Key | Registrado desde |
+|---|---|---|---|
+| CondominiumCreated | property-management-events | condominium_created | Checkpoint 2 |
+| CondominiumUpdated | property-management-events | condominium_updated | Checkpoint 2 |
+| PropertyCreated | property-management-events | property_created | Checkpoint 3 |
+| PropertyUpdated | property-management-events | property_updated | Checkpoint 3 |
+| PropertyActivated | property-management-events | property_activated | Checkpoint 4 |
+| PropertyDeactivated | property-management-events | property_deactivated | Checkpoint 4 |
+| PropertyArchived | property-management-events | property_archived | Checkpoint 4 |
+| PropertyOwnerLinked | property-management-events | property_owner_linked | Checkpoint 5 |
+| PropertyOwnerUnlinked | property-management-events | property_owner_unlinked | Checkpoint 5 |
+
+14.3 Payloads dos Eventos do Checkpoint 5 (Ownership de Imóveis)
+
+Implementados no Checkpoint 5 do Incremento 1 da Fase 2 (Property Management) — vínculo/desvínculo entre um usuário do contexto Identity & Access e um Imóvel. Nenhum destes dois eventos inclui nome, e-mail, papel, status ou qualquer outro dado pessoal do proprietário, nem qualquer dado do Imóvel (código, nome, endereço) — apenas identificadores, mesma regra do §13.1/§13.3/§14.1.
+
+Convenção comum aos dois:
+
+- AggregateType/AggregateId representam o Imóvel afetado (AggregateId = PropertyId), nunca o Owner.
+- TenantId (envelope, Seção 3) já identifica o tenant — nenhum campo próprio redundante.
+- ActorType é sempre "User". ActorId é o id do Administrador que executou o vínculo/desvínculo (PROPERTIES:MANAGE) — nunca o próprio Owner (este Checkpoint não expõe nenhuma ação de escrita ao Owner).
+- Publicados exatamente uma vez por vínculo/desvínculo efetivamente confirmado — nunca em uma rejeição (usuário inexistente/inelegível, Imóvel inexistente, vínculo já existente/inexistente) — ver Checkpoint 5, item 15.
+- O vínculo/desvínculo é permitido para um Imóvel em qualquer status (Draft/Active/Inactive/Archived) — estes dois eventos nunca alteram, e nunca dependem de, PropertyStatus.
+
+PropertyOwnerLinked
+| Campo | Tipo | Descrição |
+|---|---|---|
+| PropertyId | Guid | Redundante com AggregateId |
+| OwnerUserId | Guid | Identificador opaco do usuário do contexto Identity & Access vinculado como proprietário — nunca nome/e-mail/papel |
+
+PropertyOwnerUnlinked
+| Campo | Tipo | Descrição |
+|---|---|---|
+| PropertyId | Guid | Redundante com AggregateId |
+| OwnerUserId | Guid | Identificador opaco do usuário desvinculado |
+
+15. Eventos da Auditoria
 AuditRecordCreated
 SensitiveOperationExecuted
 PermissionChanged
-15. Eventos das Integrações
+16. Eventos das Integrações
 AirbnbSyncStarted
 AirbnbReservationImported
 AirbnbReservationUpdated
@@ -430,7 +530,7 @@ AirbnbReservationCancelled
 WhatsAppMessageReceived
 WhatsAppMessageSent
 WhatsAppWebhookFailed
-16. Eventos do Sistema
+17. Eventos do Sistema
 SystemStarted
 JobStarted
 JobFinished
@@ -438,7 +538,7 @@ JobFailed
 BackupCompleted
 CacheInvalidated
 HealthCheckFailed
-17. Cadeias de Eventos
+18. Cadeias de Eventos
 Exemplo 1
 
 Nova Reserva
@@ -515,7 +615,7 @@ GuestNotified
 
 AuditRecordCreated
 
-18. Eventos Compostos
+19. Eventos Compostos
 
 Um único evento poderá originar diversos outros.
 
@@ -545,7 +645,7 @@ AuditCreated
 
 Todos deverão possuir CorrelationId comum.
 
-19. Versionamento
+20. Versionamento
 
 Eventos nunca poderão ser alterados após publicação.
 
@@ -559,13 +659,13 @@ ReservationCreatedV2
 
 Preservando compatibilidade.
 
-20. Idempotência
+21. Idempotência
 
 Todo consumidor deverá suportar o processamento repetido do mesmo evento.
 
 Processar o mesmo evento duas vezes nunca poderá produzir efeitos duplicados.
 
-21. Garantias
+22. Garantias
 
 A plataforma deverá garantir:
 
@@ -575,7 +675,7 @@ rastreabilidade;
 reprocessamento;
 ordenação quando necessária;
 isolamento entre consumidores.
-22. Eventos Proibidos
+23. Eventos Proibidos
 
 Nunca criar eventos que representem:
 
@@ -586,7 +686,7 @@ validações intermediárias.
 
 Eventos representam apenas fatos consumados.
 
-23. Auditoria
+24. Auditoria
 
 Todo evento deverá gerar automaticamente um registo de auditoria contendo:
 
@@ -597,7 +697,7 @@ utilizador;
 entidade afetada;
 resultado;
 correlação.
-24. Evolução do Catálogo
+25. Evolução do Catálogo
 
 Novos eventos deverão:
 
@@ -608,7 +708,7 @@ manter compatibilidade com versões anteriores.
 
 Nenhum evento poderá ser introduzido diretamente no código sem atualização deste documento.
 
-25. Catálogo Resumido
+26. Catálogo Resumido
 Domínio	Eventos Principais
 Reservas	ReservationCreated, ReservationConfirmed, ReservationUpdated, ReservationCancelled, GuestCheckedIn, GuestCheckedOut, ReservationClosed
 Faxinas	CleaningCreated, CleaningAssigned, CleaningStarted, CleaningCompleted, CleaningCancelled, CleaningDelayed
@@ -618,3 +718,4 @@ Agenda	ScheduleUpdated, CalendarBlocked, CalendarReleased
 Financeiro	PixPaymentConfirmed, RefundRequested
 Sistema	JobStarted, JobFinished, BackupCompleted
 Identity & Access	UserLoggedIn, LoginFailed, AccountLockedOut, UserLoggedOut, RefreshTokenReuseDetected, SessionRevoked, UserCreated, UserUpdated, UserBlocked, UserUnblocked, UserRoleAssigned, UserRoleRemoved, PasswordChanged
+Property Management	CondominiumCreated, CondominiumUpdated, PropertyCreated, PropertyUpdated, PropertyActivated, PropertyDeactivated, PropertyArchived, PropertyOwnerLinked, PropertyOwnerUnlinked

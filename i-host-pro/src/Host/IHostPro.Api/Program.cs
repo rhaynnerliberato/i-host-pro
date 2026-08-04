@@ -9,6 +9,9 @@ using IHostPro.Contexts.Identity.Infrastructure;
 using IHostPro.Contexts.Identity.Infrastructure.Authentication;
 using IHostPro.Contexts.Identity.Infrastructure.Caching;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
+using IHostPro.Contexts.PropertyManagement.Contracts;
+using IHostPro.Contexts.PropertyManagement.Infrastructure;
+using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 using JasperFx;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -16,6 +19,7 @@ using OpenTelemetry.Trace;
 using Serilog;
 using Wolverine;
 using Wolverine.EntityFrameworkCore;
+using Wolverine.Postgresql;
 using Wolverine.RabbitMQ;
 
 Log.Logger = new LoggerConfiguration()
@@ -104,6 +108,36 @@ try
     // ever calls ISender.Send(...) — never a concrete handler.
     builder.Services.AddIdentityCommandDispatch();
 
+    // Property Management module (Fase 2, Incremento 1, Checkpoint 1) —
+    // DbContext registration.
+    builder.Services.AddPropertyManagementModule(builder.Configuration);
+
+    // Property Management's Commands/Queries/handlers/validators/pipeline
+    // behaviors (Fase 2, Incremento 1, Checkpoint 2) — mirrors
+    // AddIdentityCommandDispatch's placement exactly: dispatching a
+    // Command/Query is an HTTP-request concern, never registered in
+    // IHostPro.Worker's Program.cs.
+    builder.Services.AddPropertyManagementCommandDispatch();
+
+    // Wolverine's own Main message store (Fase 2, Incremento 1, Checkpoint 6
+    // homologação — found and fixed during real-host startup validation):
+    // Identity's and Property Management's outboxes are both registered as
+    // MessageStoreRole.Ancillary (EnrollAncillaryPostgresqlOutbox below), and
+    // Wolverine requires exactly one store designated MessageStoreRole.Main
+    // whenever any Ancillary store exists — with zero Main store, hosting
+    // fails to start with InvalidWolverineStorageConfigurationException
+    // ("...none has been designated as the 'Main' store"). platform_messaging
+    // is deliberately NOT a Bounded Context and never carries a domain event:
+    // it exists purely to satisfy Wolverine's own runtime coordination
+    // (node/agent registration, scheduled-job locking) — no DbContext is ever
+    // .Enroll()-ed into it, so no Integration Event can ever be routed here by
+    // construction. Provisioned exclusively by IHostPro.MigrationRunner
+    // (Weasel resource setup, ihostpro_migrator role), never by this process
+    // (AutoBuildMessageStorageOnStartup = AutoCreate.None below still applies
+    // to every store, Main included).
+    var platformMessagingConnectionString = builder.Configuration.GetConnectionString("Platform")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Platform'.");
+
     // IHostPro.Api only publishes Integration Events (via IEventPublisher); it never
     // consumes messages — consumers/handlers live exclusively in IHostPro.Worker
     // (Architecture Principles, Section 2). "listen: false" means this process
@@ -111,6 +145,11 @@ try
     builder.Host.UseWolverine(opts =>
     {
         opts.UseIHostProRabbitMq(builder.Configuration, listen: false);
+
+        // MessageStoreRole defaults to Main — deliberately not passed
+        // explicitly here, so this reads the same way PersistMessagesWithPostgresql
+        // is documented (Wolverine.Postgresql 6.22.0): the default role IS Main.
+        opts.PersistMessagesWithPostgresql(platformMessagingConnectionString, "platform_messaging");
 
         // Identity's own durable outbox (Incremento 2 plan, Etapa 15A; ADR-004)
         // — an "ancillary" store enrolled only to IdentityDbContext, in its own
@@ -135,6 +174,17 @@ try
         // resource management (host.SetupResources()), never a plain EF Core
         // migration and never UseResourceSetupOnStartup.
         opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+
+        // Property Management's own durable outbox (Fase 2, Incremento 1,
+        // Checkpoint 1 plan, item 6) — an "ancillary" store enrolled only to
+        // PropertyManagementDbContext, in its own property_management_messaging
+        // schema, never shared with identity_messaging. No route is
+        // registered here yet — no Integration Event exists in this context
+        // until a later checkpoint publishes its first one.
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("PropertyManagement")!,
+            "property_management_messaging",
+            typeof(PropertyManagementDbContext));
 
         // Identity & Access's first six Integration Events (Incremento 2 plan,
         // Etapa 15; Documento 07 §13.2; ADR-013): one topic exchange per
@@ -195,6 +245,39 @@ try
         // are the first commands to publish this one (Documento 07 §13.3/§13.4)
         // — both reuse the same route, never registered twice.
         RouteIdentityEvent<PasswordChanged>("password_changed");
+
+        // Property Management's first Integration Events (Fase 2, Incremento
+        // 1, Checkpoint 2 plan, item 11) — its own topic exchange, never
+        // identity-events. CreateCondominiumCommand/UpdateCondominiumCommand
+        // are the first commands to publish these two.
+        const string propertyManagementEventsExchange = "property-management-events";
+
+        void RoutePropertyManagementEvent<TEvent>(string routingKey) where TEvent : IntegrationEvent =>
+            opts.PublishMessage(typeof(TEvent))
+                .ToRabbitRoutingKey(propertyManagementEventsExchange, routingKey, exchange => exchange.ExchangeType = ExchangeType.Topic)
+                .UseDurableOutbox()
+                .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        RoutePropertyManagementEvent<CondominiumCreated>("condominium_created");
+        RoutePropertyManagementEvent<CondominiumUpdated>("condominium_updated");
+
+        // Property's own Integration Events (Fase 2, Incremento 1, Checkpoint
+        // 3 plan, item 11) — same exchange.
+        RoutePropertyManagementEvent<PropertyCreated>("property_created");
+        RoutePropertyManagementEvent<PropertyUpdated>("property_updated");
+
+        // Property's lifecycle Integration Events (Fase 2, Incremento 1,
+        // Checkpoint 4 plan, item 11) — same exchange, same shared
+        // CircuitBreaking(FailuresBeforeCircuitBreaks = 1).
+        RoutePropertyManagementEvent<PropertyActivated>("property_activated");
+        RoutePropertyManagementEvent<PropertyDeactivated>("property_deactivated");
+        RoutePropertyManagementEvent<PropertyArchived>("property_archived");
+
+        // Property Ownership's Integration Events (Fase 2, Incremento 1,
+        // Checkpoint 5 plan, item 15) — same exchange, same shared
+        // CircuitBreaking(FailuresBeforeCircuitBreaks = 1).
+        RoutePropertyManagementEvent<PropertyOwnerLinked>("property_owner_linked");
+        RoutePropertyManagementEvent<PropertyOwnerUnlinked>("property_owner_unlinked");
     });
 
     builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();

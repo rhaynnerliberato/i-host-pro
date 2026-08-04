@@ -1,8 +1,8 @@
 using IHostPro.Contexts.Identity.Api.Contracts;
 using IHostPro.Contexts.Identity.Api.Http;
-using IHostPro.Contexts.Identity.Application.Authorization;
+using IHostPro.Contexts.Identity.Application;
 using IHostPro.Contexts.Identity.Application.Catalog;
-using Mediator;
+using IHostPro.Contexts.Identity.Contracts.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,7 +11,7 @@ namespace IHostPro.Contexts.Identity.Api.Controllers;
 /// <summary>
 /// Read-only listing of the platform's fixed permission catalog (Incremento
 /// 3, Checkpoint 3) — for the future administrative interface. Only builds a
-/// Query from the request and dispatches it through <see cref="ISender"/>,
+/// Query from the request and dispatches it through <see cref="IIdentityRequestDispatcher"/>,
 /// never touches <c>IdentityDbContext</c>, <c>IdentityCatalogSeed</c> or any
 /// other Infrastructure type directly (this project does not even reference
 /// <c>Identity.Infrastructure</c>). No endpoint here creates, edits or
@@ -22,9 +22,9 @@ namespace IHostPro.Contexts.Identity.Api.Controllers;
 [Route("api/v1/permissions")]
 public sealed class PermissionsController : ControllerBase
 {
-    private readonly ISender _sender;
+    private readonly IIdentityRequestDispatcher _sender;
 
-    public PermissionsController(ISender sender) => _sender = sender;
+    public PermissionsController(IIdentityRequestDispatcher sender) => _sender = sender;
 
     [HttpGet]
     [Authorize(Policy = IdentityPermissionCodes.PermissionsRead)]

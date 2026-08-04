@@ -1,7 +1,7 @@
 using System.Reflection;
 using FluentAssertions;
 using IHostPro.Contexts.Identity.Api.Controllers;
-using IHostPro.Contexts.Identity.Application.Authorization;
+using IHostPro.Contexts.Identity.Contracts.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Xunit;

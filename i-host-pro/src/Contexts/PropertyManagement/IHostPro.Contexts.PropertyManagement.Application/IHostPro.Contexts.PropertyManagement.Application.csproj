@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Checkpoint 2 (Condominiums): first Commands/Queries — BuildingBlocks.Application
+    (ICommand/IQuery/PagedResult/ValidationBehavior), Mediator.SourceGenerator
+    (source-generator discovery must run in this compilation) and
+    BuildingBlocks.Messaging.Abstractions (IntegrationEvent, referenced
+    transitively via Contracts already, kept explicit here since
+    IIntegrationEventCollector.Enqueue takes an IntegrationEvent) are now
+    needed.
+
+    Checkpoint 5 (Ownership): Identity.Contracts referenced for the first
+    time from Application — solely for IIdentityUserEligibilityReader/
+    IdentityUserEligibility/IdentityRoleCodes (Checkpoint 5 plan, item 3/11:
+    "Application pode referenciar: Identity.Contracts"). Never
+    Identity.Application/Infrastructure/Api.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\IHostPro.Contexts.PropertyManagement.Domain\IHostPro.Contexts.PropertyManagement.Domain.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.PropertyManagement.Contracts\IHostPro.Contexts.PropertyManagement.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="..\..\Identity\IHostPro.Contexts.Identity.Contracts\IHostPro.Contexts.Identity.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mediator.SourceGenerator" Version="3.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
