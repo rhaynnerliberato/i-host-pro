@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\IHostPro.Contexts.Reservations.Domain\IHostPro.Contexts.Reservations.Domain.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.Reservations.Application\IHostPro.Contexts.Reservations.Application.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Domain\IHostPro.BuildingBlocks.Domain.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!-- Only WolverineFx.EntityFrameworkCore (IDbContextOutbox<T>) — never
+         WolverineFx/WolverineFx.RabbitMQ/WolverineFx.RuntimeCompilation, which
+         stay exclusive to BuildingBlocks.Infrastructure and the Host
+         processes, mirroring Identity's/Property Management's own
+         Infrastructure projects exactly. -->
+    <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.22.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

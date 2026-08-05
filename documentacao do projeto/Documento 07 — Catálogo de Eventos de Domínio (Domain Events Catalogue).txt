@@ -719,3 +719,49 @@ Financeiro	PixPaymentConfirmed, RefundRequested
 Sistema	JobStarted, JobFinished, BackupCompleted
 Identity & Access	UserLoggedIn, LoginFailed, AccountLockedOut, UserLoggedOut, RefreshTokenReuseDetected, SessionRevoked, UserCreated, UserUpdated, UserBlocked, UserUnblocked, UserRoleAssigned, UserRoleRemoved, PasswordChanged
 Property Management	CondominiumCreated, CondominiumUpdated, PropertyCreated, PropertyUpdated, PropertyActivated, PropertyDeactivated, PropertyArchived, PropertyOwnerLinked, PropertyOwnerUnlinked
+
+27. Eventos do Módulo Reservations — Payloads e Roteamento (Fase 3, Incremento 1)
+
+Complementa a lista prospectiva do §5 ("Eventos do Módulo Reservas") com o payload e roteamento reais dos três eventos já implementados no Incremento 1 da Fase 3 (Reservation Management) — ReservationCreated, ReservationUpdated, ReservationCancelled. Os demais eventos listados no §5 (ReservationConfirmed, GuestCheckedIn, GuestCheckedOut, ReservationClosed) permanecem prospectivos, sem payload/roteamento definidos até serem implementados em fase futura (ver Plano Executivo de Desenvolvimento por Fases, Fase 10).
+
+Anexado como seção nova ao final do documento — deliberadamente não inserido como subseção do §14 (que é específico do módulo Property Management) e sem renumerar nenhuma seção existente, preservando as referências já registradas em outros documentos (ex.: ADR-013 cita §13.2/§19).
+
+27.1 Payloads dos Eventos do Incremento 1 (Fase 3)
+
+Nenhum dos três eventos inclui nome do hóspede, telefone do hóspede, datas de check-in/check-out, quantidade de hóspedes, ou qualquer valor anterior/posterior de campo alterado — apenas identificadores e, para ReservationUpdated, códigos estáveis de campo alterado — mesma regra do §13.1/§13.3/§14.1/§14.3.
+
+Convenção comum aos três:
+
+- AggregateType/AggregateId representam a Reserva afetada (AggregateId = ReservationId).
+- ActorType é sempre "User". ActorId é o id do Administrador/Operador que executou a ação (RESERVATIONS:MANAGE).
+- ReservationUpdated nunca é publicado quando a operação não altera estado efetivamente (PATCH idempotente — nenhum campo suprido difere, após normalização, do valor atual), nem quando a atualização é rejeitada por conflito de concorrência (snapshot desatualizado) — ver Fase 3 §3.
+- ReservationCancelled é publicado exatamente uma vez por cancelamento efetivamente confirmado — nunca em uma rejeição (reserva inexistente, já cancelada).
+
+ReservationCreated
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ReservationId | Guid | Redundante com AggregateId |
+| PropertyId | Guid | Identificador opaco do Imóvel — nunca código/nome/endereço |
+| Status | string | Código estável do status inicial — sempre "confirmed" neste incremento (toda Reserva nasce Confirmed) |
+
+ReservationUpdated
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ReservationId | Guid | Redundante com AggregateId |
+| ChangedFields | string[] | Códigos estáveis dos campos efetivamente alterados, na ordem: "property_id", "guest_name", "guest_phone", "check_in_at", "check_out_at", "guest_count" — nunca o valor novo nem o anterior |
+
+ReservationCancelled
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ReservationId | Guid | Redundante com AggregateId |
+| PropertyId | Guid | Identificador opaco do Imóvel no momento do cancelamento |
+
+27.2 Roteamento RabbitMQ dos Eventos do Incremento 1 (Fase 3)
+
+Convenção já registrada em ADR-013 (exchange único por Bounded Context, tipo topic, routing key = nome do evento em snake_case) — mesmo padrão dos contextos Identity & Access (§13.2/§13.4) e Property Management (§14.2), aplicado aqui ao próprio exchange reservation-events, nunca reaproveitando identity-events/property-management-events.
+
+| Evento | Exchange | Routing Key | Registrado desde |
+|---|---|---|---|
+| ReservationCreated | reservation-events | reservation_created | Incremento 1 (Fase 3) |
+| ReservationUpdated | reservation-events | reservation_updated | Incremento 1 (Fase 3) |
+| ReservationCancelled | reservation-events | reservation_cancelled | Incremento 1 (Fase 3) |

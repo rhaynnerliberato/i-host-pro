@@ -35,4 +35,13 @@ public static class IdentityPermissionCodes
     public const string PermissionsRead = "PERMISSIONS:READ";
     public const string PropertiesManage = "PROPERTIES:MANAGE";
     public const string PropertiesReadOwnOwner = "PROPERTIES:READ:OWN_OWNER";
+
+    /// <summary>
+    /// Fase 3, Incremento 1 plan, item 5. Already seeded into the persisted
+    /// catalog since <c>IdentityCatalogSeed</c>'s original migration (ADMIN
+    /// and OPERATOR — Documento 09 §5-§6); this constant is only now
+    /// promoted here because Reservations' controller needs to reference it
+    /// by value for the first time. No new migration required.
+    /// </summary>
+    public const string ReservationsManage = "RESERVATIONS:MANAGE";
 }

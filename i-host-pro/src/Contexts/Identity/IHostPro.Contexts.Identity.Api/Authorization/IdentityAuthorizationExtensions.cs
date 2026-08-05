@@ -47,6 +47,10 @@ namespace IHostPro.Contexts.Identity.Api.Authorization;
 /// other permission code, since that handler is already fully generic — it
 /// resolves any code present in the persisted catalog, not just Identity's
 /// own resources.
+///
+/// <see cref="IdentityPermissionCodes.ReservationsManage"/> follows the
+/// exact same pattern (Fase 3, Incremento 1 plan, item 5) — Reservations'
+/// controller references it as a policy name string only.
 /// </summary>
 public static class IdentityAuthorizationExtensions
 {
@@ -62,7 +66,9 @@ public static class IdentityAuthorizationExtensions
             .AddPolicy(IdentityPermissionCodes.PropertiesManage, policy =>
                 policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.PropertiesManage)))
             .AddPolicy(IdentityPermissionCodes.PropertiesReadOwnOwner, policy =>
-                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.PropertiesReadOwnOwner)));
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.PropertiesReadOwnOwner)))
+            .AddPolicy(IdentityPermissionCodes.ReservationsManage, policy =>
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.ReservationsManage)));
 
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

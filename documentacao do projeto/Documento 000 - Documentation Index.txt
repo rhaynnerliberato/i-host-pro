@@ -1,8 +1,8 @@
 # Documentation Index
 
-Version: 1.0
+Version: 1.1
 
-Status: Official
+Status: Official — Section 4 corrected to reference the real filenames present in `documentacao do projeto/` (the previous version mapped every subject 02-20 to a generic English title that did not correspond to any real file — confirmed by the continuity audit of 2026-08-04). A new Section 4A (Phase Planning and Closure) was added.
 
 ---
 
@@ -46,64 +46,152 @@ The remaining documents shall be consulted according to the requested work.
 
 # 4. Product Documentation
 
+Every entry below references the real filename present in `documentacao do projeto/`. Corrected 2026-08-04 — the previous version referenced generic English titles/numbers that matched no actual file.
+
+## Project Charter
+
+Consult when:
+
+- understanding what the product is/is not;
+- understanding the non-negotiable architectural principles.
+
+Authoritative document:
+
+`Documento 00 — Constituição do Projeto (Project Charter).txt`
+
+---
+
 ## Product Vision
 
 Consult when:
 
 - understanding the system;
 - understanding project goals;
-- understanding business objectives.
+- understanding the MVP scope vs. long-term scope.
 
 Authoritative document:
 
-01 - Product Vision
+`Documento 01 — Visão Geral do Produto (Product Vision).txt`
 
 ---
 
-## Functional Requirements
+## Business Problem
 
 Consult when:
 
-- implementing features;
-- validating requested behavior;
-- understanding acceptance criteria.
+- understanding why the product exists;
+- understanding the pain points it must solve.
 
 Authoritative document:
 
-02 - Functional Requirements
+`Documento 02 — Problema de Negócio.txt`
 
 ---
 
-## Business Rules
+## Product Objectives and Success Indicators
 
 Consult when:
 
-- implementing business logic;
-- changing workflows;
-- validating domain behavior.
+- prioritizing features;
+- validating whether a feature belongs in the MVP.
 
 Authoritative document:
 
-03 - Business Rules
+`Documento 03 — Objetivos do Produto e Indicadores de Sucesso.txt`
 
 ---
 
-## Domain Model
+## Domain Model (Conceptual Business Architecture)
 
 Consult when:
 
-- creating entities;
-- changing relationships;
-- understanding aggregates;
-- implementing repositories.
+- understanding core business entities and their glossary;
+- understanding the configuration/decision hierarchy.
 
 Authoritative document:
 
-04 - Domain Model
+`Documento 04 — Arquitetura Conceitual do Negócio.txt`
 
 ---
 
-## System Architecture
+## Functional Decomposition / Module Map
+
+Consult when:
+
+- creating modules;
+- understanding allowed/forbidden dependencies between modules.
+
+Authoritative document:
+
+`Documento 05 — Arquitetura Funcional (Functional Decomposition).txt`
+
+---
+
+## State Machines
+
+Consult when:
+
+- implementing status transitions (Reserva, Faxina, Atendimento IA, Solicitações, Intercorrência, Comunicação, Workflow, Integração).
+
+Authoritative document:
+
+`Documento 06 — Modelo de Estados e Máquina de Estados (State Machine).txt`
+
+---
+
+## Domain Events Catalogue
+
+Consult when:
+
+- publishing or consuming an Integration Event;
+- checking a specific event's payload/PII rules/RabbitMQ routing.
+
+Authoritative document:
+
+`Documento 07 — Catálogo de Eventos de Domínio (Domain Events Catalogue).txt`
+
+---
+
+## Configuration & Policy Engine
+
+Consult when:
+
+- implementing configurable/policy-driven behavior;
+- understanding the configuration hierarchy (Platform > Tenant > Group > Property).
+
+Authoritative document:
+
+`Documento 08 — Motor de Configuração e Hierarquia de Regras (Configuration & Policy Engine).txt`
+
+---
+
+## Actors and Permissions
+
+Consult when:
+
+- implementing authorization;
+- checking which role has access to which resource (the permission matrix).
+
+Authoritative document:
+
+`Documento 09 — Catálogo Completo de Atores e Permissões.txt` — complemented by `ADR-005 - Autenticação e Autorização.md` (JWT/RBAC/ABAC mechanism) and `ADR-012 - Assinatura e Gestão de Chaves JWT.md`.
+
+---
+
+## Feature Map (Functional Backlog)
+
+Consult when:
+
+- checking whether a feature is in scope;
+- understanding a feature's operational flow.
+
+Authoritative document:
+
+`Documento 10 - Mapa Funcional do Sistema (Feature Map).txt`
+
+---
+
+## Technical/System Architecture
 
 Consult when:
 
@@ -112,9 +200,35 @@ Consult when:
 - introducing infrastructure;
 - organizing components.
 
+Authoritative documents:
+
+`Documento 11 - Arquitetura Técnica da Plataforma.txt` (conceptual/aspirational) and `Architecture Principles.md` (authoritative, frozen for the current architecture — Bounded Contexts, Clean Architecture, CQRS, cross-context communication rules, messaging, naming conventions). When the two conflict, `Architecture Principles.md` prevails (more specific/current, per Section 2 of this index).
+
+---
+
+## Data Model
+
+Consult when:
+
+- creating entities;
+- understanding conceptual entity relationships.
+
 Authoritative document:
 
-05 - System Architecture
+`Documento 12 - Modelo de Dados Conceitual.txt` — deliberately conceptual/technology-agnostic; the REAL, physical schema per Bounded Context is documented in that phase's own `Fase N - ... - Validacao e Homologacao.md` and in the actual EF Core migrations, never retroactively back-filled into this document.
+
+---
+
+## API and Integrations Architecture
+
+Consult when:
+
+- implementing APIs;
+- understanding integration/adapter conventions.
+
+Authoritative document:
+
+`Documento 13 - Arquitetura de APIs e Integrações.txt` — principles only; it explicitly does not define specific endpoints (own §1). No document currently enumerates concrete endpoint contracts; the closest to a real specification is each Bounded Context's own `Api/Controllers` source and its phase's homologation document.
 
 ---
 
@@ -124,60 +238,15 @@ Consult when:
 
 - implementing tenant-aware features;
 - creating repositories;
-- handling authentication;
-- isolating tenant data.
+- isolating tenant data (RLS).
 
-Authoritative document:
+Authoritative documents:
 
-06 - Multi-Tenant Architecture
-
----
-
-## Authorization
-
-Consult when:
-
-- implementing authentication;
-- implementing permissions;
-- creating policies;
-- protecting endpoints.
-
-Authoritative document:
-
-07 - Authentication and Authorization
+`Architecture Principles.md` §7 and `ADR-003 - Persistência e Multi-Tenant.md`.
 
 ---
 
-## API Specification
-
-Consult when:
-
-- implementing APIs;
-- consuming APIs;
-- validating contracts.
-
-Authoritative document:
-
-08 - API Specification
-
----
-
-## Database
-
-Consult when:
-
-- creating tables;
-- creating migrations;
-- changing schema;
-- creating indexes.
-
-Authoritative document:
-
-09 - Database Design
-
----
-
-## UI / UX
+## UI / UX Guidelines
 
 Consult when:
 
@@ -185,9 +254,35 @@ Consult when:
 - changing layouts;
 - designing user flows.
 
+Authoritative documents:
+
+`Documento 14 - Diretrizes de UXUI (User Experience & Interface Guidelines).txt` and `ADR-008 - Frontend e Design System.md` (Angular/Angular Material/Transloco/NSwag).
+
+---
+
+## Non-Functional Requirements
+
+Consult when:
+
+- validating performance/scalability/availability/security/LGPD/accessibility requirements.
+
 Authoritative document:
 
-10 - UI Guidelines
+`Documento 15 - Requisitos Não Funcionais.txt`
+
+---
+
+## Artificial Intelligence
+
+Consult when:
+
+- implementing the AI Agent module;
+- integrating LLMs;
+- creating prompts/Tools.
+
+Authoritative documents:
+
+`Documento 16 - Arquitetura do Agente de Inteligência Artificial.txt` and `ADR-009 - Inteligência Artificial.md`.
 
 ---
 
@@ -196,119 +291,40 @@ Authoritative document:
 Consult when:
 
 - implementing workflows;
-- changing state machines;
-- creating approvals.
+- creating orchestration between contexts.
 
 Authoritative document:
 
-11 - Workflow Engine
+`Documento 17 — Catálogo de Workflows e Orquestração.txt`
 
 ---
 
-## Configuration System
+## Dashboards and Business Intelligence
 
 Consult when:
 
-- implementing configurable behavior;
-- creating feature flags;
-- adding settings.
+- implementing dashboards/indicators/reports.
 
 Authoritative document:
 
-12 - Configuration Model
+`Documento 18 - Dashboards, Indicadores e Business Intelligence.txt`
 
 ---
 
-## Notification System
+## External Integrations
 
 Consult when:
 
-- sending notifications;
-- implementing email;
-- implementing SMS;
-- implementing WhatsApp.
+- integrating external systems (Airbnb, WhatsApp, PIX, etc.);
+- creating connectors.
 
 Authoritative document:
 
-13 - Notification Architecture
+`Documento 19 - Arquitetura de Integrações.txt`
 
 ---
 
-## Artificial Intelligence
-
-Consult when:
-
-- implementing AI modules;
-- integrating LLMs;
-- creating prompts;
-- storing AI history.
-
-Authoritative document:
-
-14 - AI Architecture
-
----
-
-## Integrations
-
-Consult when:
-
-- integrating external systems;
-- creating connectors;
-- consuming third-party APIs.
-
-Authoritative document:
-
-15 - External Integrations
-
----
-
-## Infrastructure
-
-Consult when:
-
-- creating Docker configuration;
-- configuring cloud resources;
-- changing deployment.
-
-Authoritative document:
-
-16 - Infrastructure
-
----
-
-## Logging
-
-Consult when:
-
-- implementing logs;
-- observability;
-- monitoring;
-- auditing.
-
-Authoritative document:
-
-17 - Logging & Observability
-
----
-
-## Security
-
-Consult when:
-
-- handling credentials;
-- encryption;
-- LGPD;
-- secrets;
-- auditing.
-
-Authoritative document:
-
-18 - Security
-
----
-
-## Testing
+## Testing Strategy
 
 Consult when:
 
@@ -316,23 +332,24 @@ Consult when:
 - validating behavior;
 - regression testing.
 
-Authoritative document:
+Authoritative documents:
 
-19 - Testing Strategy
+`Documento 20 - Estratégia de Qualidade, Testes e Homologação.txt` and `ADR-010 - Estratégia de Testes.md`.
 
 ---
 
-## Deployment
+## DevOps, Operation and Deployment
 
 Consult when:
 
 - preparing releases;
 - CI/CD;
-- environments.
+- environments;
+- infrastructure/observability.
 
-Authoritative document:
+Authoritative documents:
 
-20 - Deployment
+`Documento 21 - DevOps, Operação e Estratégia de Deploy.txt`, `ADR-011 - Ambiente de Desenvolvimento e CI-CD.md`, `ADR-007 - Observabilidade.md` and `ADR-006 - Cache e Armazenamento de Arquivos.md`.
 
 ---
 
@@ -346,7 +363,47 @@ Consult when:
 
 Directory:
 
-documentation/ADRs/
+`documentacao do projeto/ADRs/`
+
+---
+
+# 4A. Phase Planning and Closure
+
+## Executive Development Plan
+
+Consult when:
+
+- determining the official phase sequence;
+- checking whether work belongs to an approved phase;
+- checking when the frontend is authorized to start.
+
+Authoritative document:
+
+`Plano Executivo de Desenvolvimento por Fases.md` — the ONLY document in this workspace that registers a phase sequence. No other document (including this index, `Documento 99`, or any phase's own homologation document) should be treated as a phase plan.
+
+---
+
+## Development Authorization (meta-instruction)
+
+Consult when:
+
+- understanding the AI's overall mandate and workspace rules.
+
+Authoritative document:
+
+`Documento 99 - Development Authorization.txt` — a meta-instruction authorizing development and requiring a phase plan to be built and approved; it does not itself contain phase content (that is `Plano Executivo de Desenvolvimento por Fases.md`'s role).
+
+---
+
+## Phase Homologation Records (retrospective)
+
+Consult when:
+
+- checking a phase's closure status, commit hash, delivered scope or known technical debts.
+
+Authoritative documents:
+
+`Fase 1 - Identity and Access - Validacao e Homologacao.md`, `Fase 2 - Property Management - Validacao e Homologacao.md`, `Fase 3 - Reservation Management - Validacao e Homologacao.md`. Purely retrospective — never treat these as a forward-looking plan.
 
 ---
 

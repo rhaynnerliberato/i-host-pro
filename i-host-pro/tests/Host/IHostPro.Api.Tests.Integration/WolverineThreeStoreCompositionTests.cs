@@ -16,6 +16,9 @@ using IHostPro.Contexts.Identity.Infrastructure.Security;
 using IHostPro.Contexts.PropertyManagement.Api.Contracts;
 using IHostPro.Contexts.PropertyManagement.Application;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
+using IHostPro.Contexts.Reservations.Application;
+using IHostPro.Contexts.Reservations.Application.Reservations;
+using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 using JasperFx;
 using JasperFx.Resources;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -87,8 +90,25 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
 {
     private const string IdentityOutboxSchema = "identity_messaging";
     private const string PropertyManagementOutboxSchema = "property_management_messaging";
+    private const string ReservationsOutboxSchema = "reservations_messaging";
     private const string PlatformMessagingSchema = "platform_messaging";
     private const string KnownPassword = "Correct-Horse-Battery-Staple-42!";
+
+    /// <summary>
+    /// Dedicated RabbitMQ virtual host, on the SAME broker container as the
+    /// default "/" vhost, used exclusively by
+    /// <see cref="Reservations_events_survive_a_rabbitmq_outage_and_deliver_on_recovery_through_the_same_provisioned_topology"/>.
+    /// Exchanges are scoped per-vhost in RabbitMQ, so this test's own
+    /// <c>reservation-events</c> exchange never exists in, and never leaks
+    /// into, the default vhost the topology test
+    /// (<see cref="MigrationRunner_provisions_rabbitmq_topology_idempotently_and_the_real_host_delivers_through_it"/>)
+    /// asserts against — the two tests are isolated regardless of execution
+    /// order, without requiring a second container (infeasible here: the
+    /// real, unmodified <c>Program.cs</c> has no RabbitMQ port override, so
+    /// the shared container already owns the fixed host port 5672 for the
+    /// whole class lifetime).
+    /// </summary>
+    private const string ReservationsOutageVirtualHost = "/reservations-outage-test";
 
     private readonly Fixture _fixture;
 
@@ -130,6 +150,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
                 .WithPortBinding(5672, 5672)
                 .Build();
             await _rabbitMqContainer.StartAsync();
+            await CreateReservationsOutageVirtualHostAsync();
 
             var adminConnectionString = _postgresContainer.GetConnectionString();
 
@@ -159,19 +180,24 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
             {
                 await pmDbContext.Database.MigrateAsync();
             }
+            await using (var reservationsDbContext = CreateReservationsDbContext(MigratorConnectionString))
+            {
+                await reservationsDbContext.Database.MigrateAsync();
+            }
 
             // Mirrors IHostPro.MigrationRunner exactly: platform_messaging
-            // (Main) provisioned first, then the two Ancillary stores — same
+            // (Main) provisioned first, then the three Ancillary stores — same
             // SetupResources()/GRANT shape.
             await ProvisionMessageStoreSchemaAsync(PlatformMessagingSchema, dbContextType: null);
             await ProvisionMessageStoreSchemaAsync(IdentityOutboxSchema, typeof(IdentityDbContext));
             await ProvisionMessageStoreSchemaAsync(PropertyManagementOutboxSchema, typeof(PropertyManagementDbContext));
+            await ProvisionMessageStoreSchemaAsync(ReservationsOutboxSchema, typeof(ReservationsDbContext));
 
             await using (var verifyConnection = new NpgsqlConnection(MigratorConnectionString))
             {
                 await verifyConnection.OpenAsync();
                 await using var verifyCommand = verifyConnection.CreateCommand();
-                verifyCommand.CommandText = "SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema IN ('platform_messaging','identity_messaging','property_management_messaging') ORDER BY table_schema, table_name";
+                verifyCommand.CommandText = "SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema IN ('platform_messaging','identity_messaging','property_management_messaging','reservations_messaging') ORDER BY table_schema, table_name";
                 await using var reader = await verifyCommand.ExecuteReaderAsync();
                 var found = new List<string>();
                 while (await reader.ReadAsync())
@@ -187,6 +213,29 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         {
             await _rabbitMqContainer.DisposeAsync();
             await _postgresContainer.DisposeAsync();
+        }
+
+        /// <summary>
+        /// Creates <see cref="ReservationsOutageVirtualHost"/> on the shared
+        /// broker container via <c>rabbitmqctl</c> (executed inside the
+        /// container — no dependency on the management HTTP port being
+        /// mapped) and grants the default test user full configure/write/read
+        /// permissions on it. Runs once, at fixture start, before any test
+        /// connects.
+        /// </summary>
+        private async Task CreateReservationsOutageVirtualHostAsync()
+        {
+            var addVhost = await _rabbitMqContainer.ExecAsync(
+                ["rabbitmqctl", "add_vhost", ReservationsOutageVirtualHost]);
+            if (addVhost.ExitCode != 0)
+                throw new InvalidOperationException(
+                    $"Failed to create RabbitMQ vhost '{ReservationsOutageVirtualHost}': {addVhost.Stderr}");
+
+            var setPermissions = await _rabbitMqContainer.ExecAsync(
+                ["rabbitmqctl", "set_permissions", "-p", ReservationsOutageVirtualHost, RabbitMqBuilder.DefaultUsername, ".*", ".*", ".*"]);
+            if (setPermissions.ExitCode != 0)
+                throw new InvalidOperationException(
+                    $"Failed to grant permissions on RabbitMQ vhost '{ReservationsOutageVirtualHost}': {setPermissions.Stderr}");
         }
 
         private static IdentityDbContext CreateIdentityDbContext(string connectionString)
@@ -205,6 +254,15 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
                     npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "property_management"))
                 .Options;
             return new PropertyManagementDbContext(options, new TenantContext());
+        }
+
+        private static ReservationsDbContext CreateReservationsDbContext(string connectionString)
+        {
+            var options = new DbContextOptionsBuilder<ReservationsDbContext>()
+                .UseNpgsql(connectionString, npgsqlOptions =>
+                    npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "reservations"))
+                .Options;
+            return new ReservationsDbContext(options, new TenantContext());
         }
 
         private async Task ProvisionMessageStoreSchemaAsync(string schema, Type? dbContextType)
@@ -271,7 +329,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
     /// </summary>
     private static readonly string[] EnvironmentKeys =
     [
-        "ConnectionStrings__Identity", "ConnectionStrings__PropertyManagement", "ConnectionStrings__Platform",
+        "ConnectionStrings__Identity", "ConnectionStrings__PropertyManagement", "ConnectionStrings__Reservations", "ConnectionStrings__Platform",
         "Identity__Jwt__Issuer", "Identity__Jwt__Audience", "Identity__Jwt__AccessTokenLifetime", "Identity__Jwt__ClockSkew",
         "Identity__Jwt__SigningKey__PrivateKeyPem",
         "Identity__AccountLockout__MaxFailedAccessAttempts", "Identity__AccountLockout__DefaultLockoutDuration", "Identity__AccountLockout__AllowedForNewUsers",
@@ -281,7 +339,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         "ASPNETCORE_ENVIRONMENT",
     ];
 
-    private WebApplicationFactory<Program> BuildFactory()
+    private WebApplicationFactory<Program> BuildFactory(string rabbitMqVirtualHost = "/")
     {
         using var signingKey = System.Security.Cryptography.RSA.Create(2048);
         var signingKeyPem = signingKey.ExportRSAPrivateKeyPem();
@@ -290,6 +348,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         {
             ["ConnectionStrings__Identity"] = _fixture.AppConnectionString,
             ["ConnectionStrings__PropertyManagement"] = _fixture.AppConnectionString,
+            ["ConnectionStrings__Reservations"] = _fixture.AppConnectionString,
             ["ConnectionStrings__Platform"] = _fixture.AppConnectionString,
             ["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test",
             ["Identity__Jwt__Audience"] = "ihostpro-api-test",
@@ -303,7 +362,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
             ["Identity__RefreshToken__SecretSizeBytes"] = "32",
             ["Identity__RefreshToken__ConcurrentRotationGraceWindow"] = "00:00:10",
             ["RabbitMq__Host"] = _fixture.RabbitMq.Hostname,
-            ["RabbitMq__VirtualHost"] = "/",
+            ["RabbitMq__VirtualHost"] = rabbitMqVirtualHost,
             ["RabbitMq__Username"] = RabbitMqBuilder.DefaultUsername,
             ["RabbitMq__Password"] = RabbitMqBuilder.DefaultPassword,
             // Wolverine.RabbitMQ has no separate Port config key
@@ -425,16 +484,22 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         pmStore.Role.Should().Be(MessageStoreRole.Ancillary);
         pmStore.Uri.ToString().Should().Contain(PropertyManagementOutboxSchema);
 
-        new[] { runtime.Storage.Uri.ToString(), identityStore.Uri.ToString(), pmStore.Uri.ToString() }
-            .Should().OnlyHaveUniqueItems("the three stores must live in three genuinely distinct schemas");
+        var reservationsStore = runtime.FindAncillaryStoreForMarkerType(typeof(ReservationsDbContext));
+        reservationsStore.Should().NotBeNull();
+        reservationsStore.Role.Should().Be(MessageStoreRole.Ancillary);
+        reservationsStore.Uri.ToString().Should().Contain(ReservationsOutboxSchema);
 
-        // ---- Both dispatchers are registered, unambiguously, in the real container ----
-        // (both are Scoped — resolved from a scope, never the root provider,
+        new[] { runtime.Storage.Uri.ToString(), identityStore.Uri.ToString(), pmStore.Uri.ToString(), reservationsStore.Uri.ToString() }
+            .Should().OnlyHaveUniqueItems("the four stores must live in four genuinely distinct schemas");
+
+        // ---- All three dispatchers are registered, unambiguously, in the real container ----
+        // (all Scoped — resolved from a scope, never the root provider,
         // exactly like every real request would.)
         using (var scope = factory.Services.CreateScope())
         {
             scope.ServiceProvider.GetRequiredService<IHostPro.Contexts.Identity.Application.IIdentityRequestDispatcher>().Should().NotBeNull();
             scope.ServiceProvider.GetRequiredService<IHostPro.Contexts.PropertyManagement.Application.IPropertyManagementRequestDispatcher>().Should().NotBeNull();
+            scope.ServiceProvider.GetRequiredService<IReservationsRequestDispatcher>().Should().NotBeNull();
         }
 
         using var client = factory.CreateClient();
@@ -533,7 +598,14 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
 
     // ---- RabbitMQ messaging topology provisioning (Checkpoint 6, third defect root cause) ----
 
-    private static readonly string[] MessagingExchangeNames = ["identity-events", "property-management-events"];
+    // Checked against the default "/" vhost only. This test's own "before"
+    // assertion requires a broker with NOTHING provisioned yet in that vhost;
+    // Reservations_events_survive_a_rabbitmq_outage_and_deliver_on_recovery_through_the_same_provisioned_topology
+    // never touches "/" — it provisions and asserts entirely inside its own
+    // ReservationsOutageVirtualHost — so the two tests share no exchange
+    // state and this array is order-independent regardless of which test
+    // runs first.
+    private static readonly string[] MessagingExchangeNames = ["identity-events", "property-management-events", "reservation-events"];
 
     /// <summary>
     /// Confirms MigrationRunner provisions the RabbitMQ topology idempotently
@@ -746,6 +818,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
             var runtime = factory.Services.GetRequiredService<IWolverineRuntime>();
             var identityStore = runtime.FindAncillaryStoreForMarkerType(typeof(IdentityDbContext));
             var pmStore = runtime.FindAncillaryStoreForMarkerType(typeof(PropertyManagementDbContext));
+            var reservationsStore = runtime.FindAncillaryStoreForMarkerType(typeof(ReservationsDbContext));
 
             using (var identityScope = factory.Services.CreateScope())
             {
@@ -766,11 +839,217 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
                 pmMessageContext.Storage.Should().BeSameAs(pmStore, "Property Management's executor must select property_management_messaging, never the Main store");
                 pmMessageContext.Storage.Should().NotBeSameAs(runtime.Storage, "property_management_messaging must never resolve to platform_messaging");
             }
+
+            using (var reservationsScope = factory.Services.CreateScope())
+            {
+                reservationsScope.ServiceProvider.GetRequiredService<IReservationsTransactionExecutor>(); // triggers OverrideStorage in its constructor
+                var reservationsOutbox = reservationsScope.ServiceProvider.GetRequiredService<IDbContextOutbox<ReservationsDbContext>>();
+                var reservationsMessageContext = reservationsOutbox.Should().BeAssignableTo<MessageContext>().Subject;
+
+                reservationsMessageContext.Storage.Should().BeSameAs(reservationsStore, "Reservations' executor must select reservations_messaging, never the Main store");
+                reservationsMessageContext.Storage.Should().NotBeSameAs(runtime.Storage, "reservations_messaging must never resolve to platform_messaging");
+                reservationsMessageContext.Storage.Should().NotBeSameAs(identityStore, "reservations_messaging must never resolve to identity_messaging");
+                reservationsMessageContext.Storage.Should().NotBeSameAs(pmStore, "reservations_messaging must never resolve to property_management_messaging");
+            }
         }
         finally
         {
             ResetEnvironment();
         }
+    }
+
+    // ---- Reservations: outage/recovery for one real event (Fase 3, Incremento 1 plan, item 16.9) ----
+
+    /// <summary>
+    /// Mirrors <see cref="MigrationRunner_provisions_rabbitmq_topology_idempotently_and_the_real_host_delivers_through_it"/>'s
+    /// outage/recovery shape, scoped to a single Reservations event
+    /// (<c>ReservationCreated</c>) — proportional coverage per the
+    /// Incremento 1 plan: the general outage/recovery mechanism is already
+    /// exhaustively proven for Identity/Property Management above; this
+    /// confirms Reservations' own <c>reservations_messaging</c> Ancillary
+    /// Store and <c>reservation-events</c> exchange participate correctly in
+    /// the SAME mechanism, never falling back to the Main store or another
+    /// context's schema. Dispatches <see cref="CreateReservationCommand"/>
+    /// directly through the real <see cref="IReservationsRequestDispatcher"/>
+    /// resolved from the real composition root (no HTTP/JWT needed — the
+    /// controller-to-dispatcher wiring is already covered by
+    /// <c>ReservationsEndpointsArchitectureTests</c> and the command
+    /// handler's own business logic by <c>ReservationCommandHandlerTests</c>).
+    ///
+    /// Runs entirely inside <see cref="ReservationsOutageVirtualHost"/>, a
+    /// RabbitMQ virtual host dedicated to this test on the same shared
+    /// broker container (Host configuration, exchange provisioning,
+    /// administrative connection, temporary test queue, publish and
+    /// consume, and the outage/recovery assertions themselves). RabbitMQ
+    /// exchanges are scoped per-vhost, so this test's own
+    /// <c>reservation-events</c> exchange never exists in, and can never be
+    /// observed from, the default "/" vhost that
+    /// <see cref="MigrationRunner_provisions_rabbitmq_topology_idempotently_and_the_real_host_delivers_through_it"/>
+    /// asserts against — the two tests share no exchange state and are
+    /// independent of execution order (xUnit does not guarantee declaration
+    /// order), without narrowing that other test's own coverage of all
+    /// three exchanges. This test still uses
+    /// <see cref="ProvisionReservationEventsExchangeOnlyAsync"/> rather than
+    /// the full <c>IHostPro.MigrationRunner</c> subprocess: the subprocess's
+    /// own RabbitMQ wiring targets the default vhost, and re-pointing it at
+    /// a dedicated vhost is out of scope for this test-only isolation fix
+    /// (no production/tooling code is touched here).
+    /// </summary>
+    [Fact]
+    public async Task Reservations_events_survive_a_rabbitmq_outage_and_deliver_on_recovery_through_the_same_provisioned_topology()
+    {
+        try
+        {
+            await ProvisionReservationEventsExchangeOnlyAsync();
+
+            var tenantId = Guid.NewGuid();
+            var propertyId = await SeedActivePropertyAsync(tenantId);
+
+            using var factory = BuildFactory(ReservationsOutageVirtualHost);
+            var runtime = factory.Services.GetRequiredService<IWolverineRuntime>();
+
+            var reservationDestinations = new[] { new Uri("rabbitmq://exchange/reservation-events/routing/reservation_created") };
+
+            await using var probe = await DeclareTemporaryReservationsTestQueueAsync();
+
+            var ready = await WaitForSendingAgentsReadyAsync(runtime, reservationDestinations, TimeSpan.FromSeconds(30));
+            ready.Should().BeTrue("the sending agent for reservation-events/reservation_created must become unlatched within 30s");
+
+            (await CountAllEnvelopesAsync(ReservationsOutboxSchema)).Should().Be(0, "no command has run yet");
+
+            // ---- Outage begins BEFORE the command runs — persistence must not
+            // depend on broker reachability. ----
+            await _fixture.RabbitMq.StopAsync();
+
+            var reservationId = await DispatchCreateReservationAsync(factory, tenantId, propertyId);
+
+            var pendingDuringOutage = await DumpAllEnvelopesAsync(ReservationsOutboxSchema);
+            pendingDuringOutage.Should().Contain("IHostPro.Contexts.Reservations.Contracts.ReservationCreated");
+            (await CountAllEnvelopesAsync(PlatformMessagingSchema)).Should().Be(0, "no domain event is ever routed to the Main store");
+            (await CountEnvelopesAsync(IdentityOutboxSchema, "IHostPro.Contexts.Reservations.Contracts.ReservationCreated")).Should().Be(0);
+            (await CountEnvelopesAsync(PropertyManagementOutboxSchema, "IHostPro.Contexts.Reservations.Contracts.ReservationCreated")).Should().Be(0);
+
+            await _fixture.RabbitMq.StartAsync();
+
+            var recovered = await WaitUntilAsync(
+                async () => (await CountAllEnvelopesAsync(ReservationsOutboxSchema)) == 0, TimeSpan.FromSeconds(30));
+            recovered.Should().BeTrue("with reservation-events already provisioned and a bound test queue, the envelope published during the outage should be delivered once the broker recovers");
+
+            var messages = await DrainQueueAsync(probe.Channel, probe.Queue);
+            messages.Should().ContainSingle(m => m.RoutingKey == "reservation_created" && m.MessageType == "IHostPro.Contexts.Reservations.Contracts.ReservationCreated");
+
+            reservationId.Should().NotBe(Guid.Empty);
+        }
+        finally
+        {
+            ResetEnvironment();
+        }
+    }
+
+    /// <summary>
+    /// Declares the <c>reservation-events</c> exchange, inside
+    /// <see cref="ReservationsOutageVirtualHost"/>, via Wolverine's own
+    /// public <c>DeclareExchange</c>/<c>SetupResources()</c> mechanism — the
+    /// SAME public API <see cref="RunMigrationRunnerAsync"/> exercises
+    /// indirectly through the real subprocess, but scoped to exactly one
+    /// exchange in the dedicated vhost so this test never provisions (and
+    /// never depends on) identity-events/property-management-events on the
+    /// default vhost. Idempotent — safe to call even if another run already
+    /// provisioned it.
+    /// </summary>
+    private async Task ProvisionReservationEventsExchangeOnlyAsync()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["RabbitMq:Host"] = _fixture.RabbitMq.Hostname,
+            ["RabbitMq:VirtualHost"] = ReservationsOutageVirtualHost,
+            ["RabbitMq:Username"] = RabbitMqBuilder.DefaultUsername,
+            ["RabbitMq:Password"] = RabbitMqBuilder.DefaultPassword,
+        }).Build();
+
+        var hostBuilder = Host.CreateApplicationBuilder();
+        hostBuilder.UseWolverine(opts =>
+            opts.UseIHostProRabbitMq(configuration, listen: false)
+                .DeclareExchange("reservation-events", ex => ex.ExchangeType = ExchangeType.Topic));
+
+        using var host = hostBuilder.Build();
+        await host.SetupResources();
+    }
+
+    private async Task<Guid> SeedActivePropertyAsync(Guid tenantId)
+    {
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        var address = IHostPro.Contexts.PropertyManagement.Domain.ValueObjects.Address.Create(
+            "59090-000", "Rua Exemplo", "100", null, "Ponta Negra", "Natal", "RN", "BR");
+        var property = IHostPro.Contexts.PropertyManagement.Domain.Property.Create(
+            Guid.NewGuid(), tenantId,
+            IHostPro.Contexts.PropertyManagement.Domain.ValueObjects.PropertyCode.Create($"P-{Guid.NewGuid():N}"[..12]),
+            "Outage Test Property", 4, condominiumId: null, address, DateTimeOffset.UtcNow);
+        property.Activate(DateTimeOffset.UtcNow);
+
+        var options = new DbContextOptionsBuilder<PropertyManagementDbContext>()
+            .UseNpgsql(_fixture.AppConnectionString, npgsqlOptions =>
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "property_management"))
+            .Options;
+        await using var dbContext = new PropertyManagementDbContext(options, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('app.tenant_id', {tenantId.ToString()}, true)");
+
+        dbContext.Properties.Add(property);
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return property.Id;
+    }
+
+    private static async Task<Guid> DispatchCreateReservationAsync(WebApplicationFactory<Program> factory, Guid tenantId, Guid propertyId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+
+        var command = new CreateReservationCommand(
+            tenantId, Guid.NewGuid(), propertyId, "Outage Test Guest", null,
+            new DateTimeOffset(2027, 3, 1, 14, 0, 0, TimeSpan.Zero), new DateTimeOffset(2027, 3, 3, 11, 0, 0, TimeSpan.Zero), 2);
+
+        var result = await sp.GetRequiredService<IReservationsRequestDispatcher>().Send(command, CancellationToken.None);
+        result.IsSuccess.Should().BeTrue("the durable outbox must persist the command's own write even with the broker unreachable");
+        return result.Value.Id;
+    }
+
+    private sealed class ReservationsTestQueueProbe : IAsyncDisposable
+    {
+        public required RabbitMQ.Client.IConnection Connection { get; init; }
+        public required RabbitMQ.Client.IChannel Channel { get; init; }
+        public required string Queue { get; init; }
+
+        public async ValueTask DisposeAsync()
+        {
+            await Channel.DisposeAsync();
+            await Connection.DisposeAsync();
+        }
+    }
+
+    private async Task<ReservationsTestQueueProbe> DeclareTemporaryReservationsTestQueueAsync()
+    {
+        var connectionFactory = new RabbitMQ.Client.ConnectionFactory
+        {
+            HostName = _fixture.RabbitMq.Hostname,
+            UserName = RabbitMqBuilder.DefaultUsername,
+            Password = RabbitMqBuilder.DefaultPassword,
+            VirtualHost = ReservationsOutageVirtualHost,
+        };
+
+        var connection = await connectionFactory.CreateConnectionAsync();
+        var channel = await connection.CreateChannelAsync();
+
+        var queue = $"test-reservations-probe-{Guid.NewGuid():N}";
+        await channel.QueueDeclareAsync(queue, durable: false, exclusive: true, autoDelete: true);
+        await channel.QueueBindAsync(queue, "reservation-events", "reservation_created");
+
+        return new ReservationsTestQueueProbe { Connection = connection, Channel = channel, Queue = queue };
     }
 
     /// <summary>
@@ -930,6 +1209,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         };
         psi.Environment["ConnectionStrings__Identity"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__PropertyManagement"] = _fixture.MigratorConnectionString;
+        psi.Environment["ConnectionStrings__Reservations"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _fixture.MigratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _fixture.RabbitMq.Hostname;
         psi.Environment["RabbitMq__VirtualHost"] = "/";

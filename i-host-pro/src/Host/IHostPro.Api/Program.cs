@@ -12,6 +12,9 @@ using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Contracts;
 using IHostPro.Contexts.PropertyManagement.Infrastructure;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
+using IHostPro.Contexts.Reservations.Contracts;
+using IHostPro.Contexts.Reservations.Infrastructure;
+using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 using JasperFx;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -119,6 +122,18 @@ try
     // IHostPro.Worker's Program.cs.
     builder.Services.AddPropertyManagementCommandDispatch();
 
+    // Reservations module (Fase 3, Incremento 1) — DbContext registration.
+    // Reservations.Application references PropertyManagement.Contracts only
+    // (IPropertyReservationEligibilityReader) — never PropertyManagement.Application/
+    // Infrastructure/Api.
+    builder.Services.AddReservationsModule(builder.Configuration);
+
+    // Reservations' Commands/Queries/handlers/validators/pipeline behaviors
+    // (Fase 3, Incremento 1) — mirrors AddPropertyManagementCommandDispatch's
+    // placement exactly: dispatching a Command/Query is an HTTP-request
+    // concern, never registered in IHostPro.Worker's Program.cs.
+    builder.Services.AddReservationsCommandDispatch();
+
     // Wolverine's own Main message store (Fase 2, Incremento 1, Checkpoint 6
     // homologação — found and fixed during real-host startup validation):
     // Identity's and Property Management's outboxes are both registered as
@@ -185,6 +200,18 @@ try
             builder.Configuration.GetConnectionString("PropertyManagement")!,
             "property_management_messaging",
             typeof(PropertyManagementDbContext));
+
+        // Reservations' own durable outbox (Fase 3, Incremento 1 plan) — a
+        // third "ancillary" store, in its own reservations_messaging schema,
+        // never shared with identity_messaging/property_management_messaging.
+        // Applies the Fase 2, Checkpoint 6 fix (MapWolverineEnvelopeStorage +
+        // MessageContext.OverrideStorage) from this context's very first
+        // checkpoint — see ReservationsDbContext/ReservationsOutboxTransactionExecutor's
+        // own doc comments.
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("Reservations")!,
+            "reservations_messaging",
+            typeof(ReservationsDbContext));
 
         // Identity & Access's first six Integration Events (Incremento 2 plan,
         // Etapa 15; Documento 07 §13.2; ADR-013): one topic exchange per
@@ -278,6 +305,21 @@ try
         // CircuitBreaking(FailuresBeforeCircuitBreaks = 1).
         RoutePropertyManagementEvent<PropertyOwnerLinked>("property_owner_linked");
         RoutePropertyManagementEvent<PropertyOwnerUnlinked>("property_owner_unlinked");
+
+        // Reservations' first Integration Events (Fase 3, Incremento 1 plan,
+        // item 12) — its own topic exchange, never identity-events/
+        // property-management-events.
+        const string reservationEventsExchange = "reservation-events";
+
+        void RouteReservationEvent<TEvent>(string routingKey) where TEvent : IntegrationEvent =>
+            opts.PublishMessage(typeof(TEvent))
+                .ToRabbitRoutingKey(reservationEventsExchange, routingKey, exchange => exchange.ExchangeType = ExchangeType.Topic)
+                .UseDurableOutbox()
+                .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        RouteReservationEvent<ReservationCreated>("reservation_created");
+        RouteReservationEvent<ReservationUpdated>("reservation_updated");
+        RouteReservationEvent<ReservationCancelled>("reservation_cancelled");
     });
 
     builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();
@@ -296,11 +338,6 @@ try
             .AddAspNetCoreInstrumentation()
             .AddRuntimeInstrumentation()
             .AddOtlpExporter(o => o.Endpoint = otlpEndpoint));
-
-    // Future Bounded Context modules (Reservations, etc.) are registered here
-    // through their own single extension method
-    // (e.g. `builder.Services.AddReservationsModule(...)`) as each is
-    // implemented in its corresponding phase, per Architecture Principles §16.
 
     var app = builder.Build();
 

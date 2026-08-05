@@ -36,6 +36,9 @@
          discovers CondominiumsController; PropertyManagement.Api itself
          never references PropertyManagement.Infrastructure. -->
     <ProjectReference Include="..\..\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Api\IHostPro.Contexts.PropertyManagement.Api.csproj" />
+    <ProjectReference Include="..\..\Contexts\Reservations\IHostPro.Contexts.Reservations.Api\IHostPro.Contexts.Reservations.Api.csproj" />
+    <ProjectReference Include="..\..\Contexts\Reservations\IHostPro.Contexts.Reservations.Infrastructure\IHostPro.Contexts.Reservations.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Contexts\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

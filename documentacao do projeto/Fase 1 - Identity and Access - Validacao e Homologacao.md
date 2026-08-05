@@ -1,8 +1,8 @@
 # Fase 1 — Identity & Access — Validação e Homologação
 
-Versão: 1.0
+Versão: 1.1
 
-Status: Oficial — Incremento 1 aprovado · Incremento 2 (Etapa 15) aprovado
+Status: Oficial — Fase 1 encerrada. Incremento 1 aprovado · Incremento 2 (Etapa 15) aprovado · Incremento 3 aprovado, commit `4e726eb461bb48b762006d13bca2f50a6e711e0a` realizado em `master` e publicado em `origin/master`. Dois débitos técnicos conhecidos permanecem deliberadamente não corrigidos (Seção 12.9).
 
 ---
 
@@ -553,4 +553,4 @@ Build Release: 0 erros, 0 avisos, 15 projetos.
 
 ### 12.12 Status final
 
-**Incremento 3 — Identity & Access (RBAC por policies, gestão administrativa de usuários, papéis com proteção do último Administrador, bloqueio/desbloqueio, sessões próprias, alteração/reset de senha): Implementação concluída · Homologação HTTP real concluída em ambiente Docker isolado e efêmero (67 cenários confirmados: Autorização 9, Usuários 11, Papéis 17, Bloqueio 13, Sessões 11, Senhas 17 — alguns recontados após correção de artefatos do próprio roteiro de teste, nunca de produção) · RLS/isolamento tenant-aware confirmado diretamente no PostgreSQL · Persistência de sessões/refresh tokens/auditoria confirmada diretamente · Ausência de dados sensíveis em auditoria/envelopes confirmada · Indisponibilidade de RabbitMQ e Redis testada com recuperação automática sem perda/duplicação · Um achado real de produção (bug de persistência do `SessionReader`) já identificado, corrigido e aprovado no Checkpoint 9 · Dois débitos técnicos conhecidos permanecem deliberadamente não corrigidos (Seção 12.9) · Build Release 0/0 · Suíte completa aprovada em duas execuções consecutivas (401/401) · Status aprovado, pendente de aprovação final do usuário · Nenhum commit, push, tag ou merge realizado.**
+**Incremento 3 — Identity & Access (RBAC por policies, gestão administrativa de usuários, papéis com proteção do último Administrador, bloqueio/desbloqueio, sessões próprias, alteração/reset de senha): Implementação concluída · Homologação HTTP real concluída em ambiente Docker isolado e efêmero (67 cenários confirmados: Autorização 9, Usuários 11, Papéis 17, Bloqueio 13, Sessões 11, Senhas 17 — alguns recontados após correção de artefatos do próprio roteiro de teste, nunca de produção) · RLS/isolamento tenant-aware confirmado diretamente no PostgreSQL · Persistência de sessões/refresh tokens/auditoria confirmada diretamente · Ausência de dados sensíveis em auditoria/envelopes confirmada · Indisponibilidade de RabbitMQ e Redis testada com recuperação automática sem perda/duplicação · Um achado real de produção (bug de persistência do `SessionReader`) já identificado, corrigido e aprovado no Checkpoint 9 · Dois débitos técnicos conhecidos permanecem deliberadamente não corrigidos (Seção 12.9, mesmos ainda em aberto na Fase 2) · Build Release 0/0 · Suíte completa aprovada em duas execuções consecutivas (401/401) · Status aprovado. Commit `4e726eb461bb48b762006d13bca2f50a6e711e0a` realizado em `master` e publicado em `origin/master` · Fase 1 encerrada.**

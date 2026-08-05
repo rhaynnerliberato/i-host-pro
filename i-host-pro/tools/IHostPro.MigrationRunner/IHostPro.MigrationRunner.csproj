@@ -6,6 +6,7 @@
          else in this project changes when a new module's DbContext is added. -->
     <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Infrastructure\IHostPro.Contexts.PropertyManagement.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Reservations\IHostPro.Contexts.Reservations.Infrastructure\IHostPro.Contexts.Reservations.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

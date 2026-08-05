@@ -4,6 +4,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
+using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 using JasperFx;
 using JasperFx.Resources;
 using Microsoft.EntityFrameworkCore;
@@ -57,7 +58,7 @@ try
     {
         typeof(IdentityDbContext).Assembly,
         typeof(PropertyManagementDbContext).Assembly,
-        // typeof(ReservationsDbContext).Assembly, // added when Reservation & Scheduling exists
+        typeof(ReservationsDbContext).Assembly,
     };
 
     var moduleDbContextTypes = moduleAssemblies
@@ -283,6 +284,46 @@ try
 
     log.LogInformation("Property Management's durable outbox provisioned");
 
+    // Reservations' own durable outbox (Fase 3, Incremento 1 plan) — mirrors
+    // Identity's/Property Management's provisioning above exactly, in its
+    // own schema (reservations_messaging), never sharing either.
+    var reservationsMigratorConnectionString = builder.Configuration.GetConnectionString("Reservations")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Reservations'.");
+
+    log.LogInformation("Provisioning Reservations' durable outbox (schema reservations_messaging)");
+
+    var reservationsOutboxHostBuilder = Host.CreateApplicationBuilder();
+    reservationsOutboxHostBuilder.UseWolverine(opts =>
+    {
+        opts.EnrollAncillaryPostgresqlOutbox(
+            reservationsMigratorConnectionString, "reservations_messaging", typeof(ReservationsDbContext));
+        opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+        opts.UseEntityFrameworkCoreTransactions();
+    });
+
+    using (var reservationsOutboxHost = reservationsOutboxHostBuilder.Build())
+    {
+        await reservationsOutboxHost.SetupResources();
+    }
+
+    await using (var connection = new NpgsqlConnection(reservationsMigratorConnectionString))
+    {
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            GRANT USAGE ON SCHEMA reservations_messaging TO ihostpro_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA reservations_messaging TO ihostpro_app;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA reservations_messaging TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA reservations_messaging
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA reservations_messaging
+              GRANT USAGE, SELECT ON SEQUENCES TO ihostpro_app;
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    log.LogInformation("Reservations' durable outbox provisioned");
+
     // RabbitMQ messaging topology (Checkpoint 6 homologação, third production
     // defect: neither IHostPro.Api nor IHostPro.Worker ever declared the
     // topic exchanges they publish/route to — AutoProvision defaults to
@@ -304,14 +345,15 @@ try
     // IHostPro.Api/IHostPro.Worker use — so host/vhost/user/password/
     // timeouts can never drift between this provisioning step and the real
     // runtime connection.
-    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events exchanges)");
+    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events exchanges)");
 
     var messagingTopologyHostBuilder = Host.CreateApplicationBuilder();
     messagingTopologyHostBuilder.UseWolverine(opts =>
     {
         opts.UseIHostProRabbitMq(builder.Configuration, listen: false)
             .DeclareExchange("identity-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
-            .DeclareExchange("property-management-events", exchange => exchange.ExchangeType = ExchangeType.Topic);
+            .DeclareExchange("property-management-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .DeclareExchange("reservation-events", exchange => exchange.ExchangeType = ExchangeType.Topic);
     });
 
     using (var messagingTopologyHost = messagingTopologyHostBuilder.Build())

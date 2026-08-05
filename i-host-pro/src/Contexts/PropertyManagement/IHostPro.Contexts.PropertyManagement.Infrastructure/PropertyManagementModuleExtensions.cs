@@ -1,4 +1,6 @@
+using IHostPro.Contexts.PropertyManagement.Contracts;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
+using IHostPro.Contexts.PropertyManagement.Infrastructure.Reservations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +37,13 @@ public static class PropertyManagementModuleExtensions
         // depend on TimeProvider — mirrors IdentityModuleExtensions'
         // registration exactly.
         services.AddSingleton(TimeProvider.System);
+
+        // Fase 3, Incremento 1 plan, item 4: the single, minimal synchronous
+        // query port Reservations may use to check whether a Property is
+        // eligible to receive a reservation — mirrors
+        // IdentityModuleExtensions' own registration of
+        // IIdentityUserEligibilityReader exactly.
+        services.AddScoped<IPropertyReservationEligibilityReader, PropertyReservationEligibilityReader>();
 
         return services;
     }
