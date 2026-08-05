@@ -1,0 +1,33 @@
+.layout-container {
+  height: 100vh;
+}
+
+.layout-sidenav {
+  width: 240px;
+}
+
+.layout-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.layout-spacer {
+  flex: 1 1 auto;
+}
+
+.layout-user {
+  margin-right: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.layout-content {
+  min-height: calc(100vh - 64px);
+}
+
+.active-nav-item {
+  --mdc-list-list-item-label-text-color: var(--mat-sys-primary);
+  --mdc-list-list-item-leading-icon-color: var(--mat-sys-primary);
+}

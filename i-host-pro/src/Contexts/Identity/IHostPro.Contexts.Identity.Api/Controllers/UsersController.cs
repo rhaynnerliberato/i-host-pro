@@ -5,6 +5,7 @@ using IHostPro.Contexts.Identity.Application.Profile;
 using IHostPro.Contexts.Identity.Application.Sessions;
 using IHostPro.Contexts.Identity.Application.Users;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IHostPro.Contexts.Identity.Api.Controllers;
@@ -30,6 +31,8 @@ public sealed class UsersController : ControllerBase
 
     [HttpGet("me")]
     [Authorize]
+    [ProducesResponseType(typeof(OwnProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetOwnProfile(CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();

@@ -1,0 +1,41 @@
+{
+  "app": {
+    "title": "iHostPro"
+  },
+  "auth": {
+    "login": {
+      "title": "Entrar",
+      "tenant": "Empresa",
+      "email": "E-mail",
+      "password": "Senha",
+      "submit": "Entrar",
+      "invalidCredentials": "E-mail, senha ou empresa inválidos.",
+      "genericError": "Não foi possível entrar. Tente novamente.",
+      "validation": {
+        "tenantRequired": "Informe a empresa.",
+        "emailRequired": "Informe o e-mail.",
+        "emailInvalid": "Informe um e-mail válido.",
+        "passwordRequired": "Informe a senha."
+      }
+    },
+    "logout": "Sair"
+  },
+  "layout": {
+    "nav": {
+      "home": "Início",
+      "users": "Usuários",
+      "properties": "Imóveis",
+      "condominiums": "Condomínios",
+      "reservations": "Reservas"
+    }
+  },
+  "home": {
+    "welcome": "Bem-vindo(a), {{name}}"
+  },
+  "errors": {
+    "forbidden": "Você não tem permissão para acessar este recurso.",
+    "forbiddenTitle": "Acesso negado",
+    "sessionExpired": "Sua sessão expirou. Faça login novamente.",
+    "backToHome": "Voltar ao início"
+  }
+}

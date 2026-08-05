@@ -42,7 +42,28 @@ try
 
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+    // Swashbuckle's default schemaId for generic types is derived only from
+    // the type's own name and its generic arguments (e.g. Optional<string> ->
+    // "StringOptional"), so identically-named generic types declared
+    // independently in different bounded contexts collide (PropertyManagement
+    // and Reservations each declare their own Optional<T>). Prefixing generic
+    // schemaIds with their bounded-context namespace segment keeps ordinary
+    // (non-generic) DTO schema names untouched while making generic
+    // schemaIds collision-proof.
+    builder.Services.AddSwaggerGen(options => options.CustomSchemaIds(SwaggerSchemaIdSelector));
+
+    // CORS for the Angular frontend (Fase 4, Incremento 1) — explicit origin
+    // allowlist only, read from configuration ("Cors:AllowedOrigins"), never
+    // a wildcard. No AllowCredentials(): the frontend authenticates with a
+    // Bearer token attached manually to each request, never a cookie, so the
+    // browser's credentialed-request mode is not needed here.
+    const string FrontendCorsPolicy = "Frontend";
+    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+        ?? ["http://localhost:4200"];
+    builder.Services.AddCors(options => options.AddPolicy(FrontendCorsPolicy, policy => policy
+        .WithOrigins(allowedOrigins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()));
 
     // Multi-tenant: resolved per request by an authentication/authorization
     // middleware once login/JWT exist (Incremento 2). The scoped instance is
@@ -349,6 +370,7 @@ try
 
     app.UseSerilogRequestLogging();
     app.UseHttpsRedirection();
+    app.UseCors(FrontendCorsPolicy);
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapControllers();
@@ -370,4 +392,32 @@ finally
 // WebApplicationFactory<Program> once those tests are written.
 public partial class Program
 {
+    /// <summary>
+    /// Reproduces Swashbuckle's default schemaId algorithm (generic-argument
+    /// names concatenated as a prefix, then the type's own name), but adds a
+    /// bounded-context prefix for generic types declared under
+    /// IHostPro.Contexts.*, so that same-named generics declared
+    /// independently in different contexts (e.g. Optional&lt;T&gt; in both
+    /// PropertyManagement and Reservations) do not collide.
+    /// </summary>
+    internal static string SwaggerSchemaIdSelector(Type type)
+    {
+        if (!type.IsConstructedGenericType)
+        {
+            return type.Name.Replace("[]", "Array");
+        }
+
+        var prefix = type.GetGenericArguments()
+            .Select(SwaggerSchemaIdSelector)
+            .Aggregate((previous, current) => previous + current);
+
+        var baseName = prefix + type.Name.Split('`')[0];
+
+        var segments = type.Namespace?.Split('.');
+        var contextName = segments is { Length: > 2 } && segments[0] == "IHostPro" && segments[1] == "Contexts"
+            ? segments[2]
+            : null;
+
+        return contextName is null ? baseName : contextName + baseName;
+    }
 }

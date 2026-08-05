@@ -1,0 +1,5 @@
+<div class="home-page">
+  @if (userProfile.profile(); as profile) {
+    <h1>{{ 'home.welcome' | transloco: { name: profile.fullName } }}</h1>
+  }
+</div>

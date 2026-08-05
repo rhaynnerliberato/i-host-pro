@@ -1,0 +1,44 @@
+<mat-sidenav-container class="layout-container">
+  <mat-sidenav
+    #sidenav
+    class="layout-sidenav"
+    [mode]="isHandset() ? 'over' : 'side'"
+    [opened]="isHandset() ? sidenavOpened() : true"
+    (closed)="sidenavOpened.set(false)"
+  >
+    <mat-nav-list>
+      @for (item of navItems; track item.path) {
+        <a
+          mat-list-item
+          [routerLink]="item.path"
+          routerLinkActive="active-nav-item"
+          [routerLinkActiveOptions]="{ exact: item.path === '/' }"
+          (click)="isHandset() && sidenav.close()"
+        >
+          <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+          <span matListItemTitle>{{ item.labelKey | transloco }}</span>
+        </a>
+      }
+    </mat-nav-list>
+  </mat-sidenav>
+
+  <mat-sidenav-content>
+    <mat-toolbar color="primary" class="layout-toolbar">
+      @if (isHandset()) {
+        <button mat-icon-button (click)="toggleSidenav()" aria-label="Toggle navigation">
+          <mat-icon>menu</mat-icon>
+        </button>
+      }
+      <span>{{ 'app.title' | transloco }}</span>
+      <span class="layout-spacer"></span>
+      @if (userProfile.profile(); as profile) {
+        <span class="layout-user">{{ profile.fullName }}</span>
+      }
+      <button mat-button (click)="logout()">{{ 'auth.logout' | transloco }}</button>
+    </mat-toolbar>
+
+    <main class="layout-content">
+      <router-outlet />
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

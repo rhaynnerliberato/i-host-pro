@@ -1,0 +1,41 @@
+{
+  "app": {
+    "title": "iHostPro"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "tenant": "Company",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Sign in",
+      "invalidCredentials": "Invalid email, password or company.",
+      "genericError": "Unable to sign in. Please try again.",
+      "validation": {
+        "tenantRequired": "Enter the company.",
+        "emailRequired": "Enter the email.",
+        "emailInvalid": "Enter a valid email.",
+        "passwordRequired": "Enter the password."
+      }
+    },
+    "logout": "Sign out"
+  },
+  "layout": {
+    "nav": {
+      "home": "Home",
+      "users": "Users",
+      "properties": "Properties",
+      "condominiums": "Condominiums",
+      "reservations": "Reservations"
+    }
+  },
+  "home": {
+    "welcome": "Welcome, {{name}}"
+  },
+  "errors": {
+    "forbidden": "You do not have permission to access this resource.",
+    "forbiddenTitle": "Access denied",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "backToHome": "Back to home"
+  }
+}
