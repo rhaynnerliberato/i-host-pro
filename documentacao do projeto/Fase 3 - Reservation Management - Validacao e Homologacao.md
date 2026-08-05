@@ -1,8 +1,8 @@
 # Fase 3 — Reservation Management — Validação e Homologação
 
-Versão: 1.2
+Versão: 1.3
 
-Status: Oficial — Fase 3 concluída. Homologação aprovada tecnicamente (Seção 13) e aprovação final do usuário recebida. Commit funcional `1eb455e89e77fbc3957cc42b2886a613210beb3d` ("feat(reservations): implement reservation management") realizado em `feature/reservations-core`. Push da branch ainda pendente neste momento.
+Status: Oficial — Fase 3 encerrada. Commit funcional `1eb455e89e77fbc3957cc42b2886a613210beb3d` ("feat(reservations): implement reservation management") e commit documental `5c1be7912838531c3cabd1aae2a005e8a0e58c86` ("docs(reservations): record phase 3 completion") realizados em `feature/reservations-core` e publicados via `git push` para `origin/feature/reservations-core`. Branch integrada em `master` por fast-forward (`git merge --ff-only`) e publicada via `git push` para `origin/master` — comparação pós-push `master...origin/master` = `0 0`, working tree limpa. Nenhuma pendência técnica ou documental em aberto para esta fase.
 
 ---
 
@@ -157,4 +157,4 @@ Novos, por diretório: `Reservations.Application` 31, `Reservations.Infrastructu
 
 ## 15. Status final
 
-Incremento 1 da Fase 3 — implementação, correção transacional do `UpdateReservation`, dois defeitos reais encontrados e corrigidos durante a homologação, lacunas mínimas de teste fechadas, documentação sincronizada. Homologação final aprovada tecnicamente (Seção 13) e aprovação final do usuário recebida. **Commit funcional `1eb455e89e77fbc3957cc42b2886a613210beb3d` realizado em `feature/reservations-core` · Fase 3 concluída · push da branch ainda pendente neste momento.** Fase 4 (Frontend) não iniciada.
+Incremento 1 da Fase 3 — implementação, correção transacional do `UpdateReservation`, dois defeitos reais encontrados e corrigidos durante a homologação, lacunas mínimas de teste fechadas, documentação sincronizada. Homologação final aprovada tecnicamente (Seção 13) e aprovação final do usuário recebida. **Commits `1eb455e89e77fbc3957cc42b2886a613210beb3d` e `5c1be7912838531c3cabd1aae2a005e8a0e58c86` publicados em `origin/feature/reservations-core` · branch integrada em `master` por fast-forward e publicada em `origin/master` (`master...origin/master` = `0 0`) · Fase 3 encerrada.** Fase 4 (Frontend) não iniciada nesta fase de encerramento — branch `feature/frontend-foundation` a ser criada na sequência desta mesma instrução.
