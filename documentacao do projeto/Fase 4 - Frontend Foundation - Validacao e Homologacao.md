@@ -2,7 +2,7 @@
 
 Versão: 0.3
 
-Status: Incremento 1 **aprovado e versionado** na branch `feature/frontend-foundation` (quatro commits funcionais, ver Seção 10). Push ainda pendente neste momento. Fase 4 continua em andamento — não integrada em `master`. Incremento 2 (Administração de Usuários) ainda não iniciado.
+Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Fase 4 continua em andamento — não integrada em `master`. Incremento 2 (Administração de Usuários) em andamento.
 
 ---
 
@@ -250,6 +250,10 @@ Critério aplicado: existe uma vulnerabilidade `high` (`undici`), mas exclusivam
 | `ng build --configuration production` | Aprovado |
 | CORS (teste focado) | Aprovado |
 
-### 10.5 Estado neste momento
+### 10.5 Publicação
 
-Incremento 1 concluído e commitado (4 commits funcionais). **Push ainda pendente.** Fase 4 continua em andamento — branch `feature/frontend-foundation` não integrada em `master`. Incremento 2 (Administração de Usuários) ainda não iniciado.
+`git push -u origin feature/frontend-foundation` executado com sucesso — branch remota criada, upstream configurado. Confirmado após o push: `git status` reporta "up to date with 'origin/feature/frontend-foundation'"; `git rev-list --left-right --count origin/feature/frontend-foundation...feature/frontend-foundation` retorna `0 0`; working tree limpa. Os cinco commits (Seção 10.2 + o commit deste registro) estão publicados na branch remota.
+
+### 10.6 Estado neste momento
+
+Incremento 1 concluído, commitado e publicado. Fase 4 continua em andamento — branch `feature/frontend-foundation` não integrada em `master` (nenhum merge realizado). Incremento 2 (Administração de Usuários) em andamento.
