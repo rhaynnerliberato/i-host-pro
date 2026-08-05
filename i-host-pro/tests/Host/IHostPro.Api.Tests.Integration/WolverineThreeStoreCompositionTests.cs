@@ -9,12 +9,14 @@ using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.Contexts.Identity.Api.Contracts;
 using IHostPro.Contexts.Identity.Application;
+using IHostPro.Contexts.Identity.Contracts;
 using IHostPro.Contexts.Identity.Domain;
 using IHostPro.Contexts.Identity.Domain.ValueObjects;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Infrastructure.Security;
 using IHostPro.Contexts.PropertyManagement.Api.Contracts;
 using IHostPro.Contexts.PropertyManagement.Application;
+using IHostPro.Contexts.PropertyManagement.Contracts;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 using IHostPro.Contexts.Reservations.Application;
 using IHostPro.Contexts.Reservations.Application.Reservations;
@@ -707,88 +709,146 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
             pmMessages1.Should().ContainSingle(m => m.RoutingKey == "condominium_created" && m.MessageType == "IHostPro.Contexts.PropertyManagement.Contracts.CondominiumCreated");
 
             // ---- 5. Outage/recovery through the SAME (durable, broker-persisted) exchanges ----
-            // Target user created WHILE the broker is still up — its own
-            // CreateUser-triggered events (UserCreated + the initial OPERATOR
-            // role's UserRoleAssigned) must clear BEFORE the outage begins, so
-            // only the single, explicit AssignRole below is the tracked
-            // Identity event during the outage (confirmed by an earlier run:
-            // creating the user AFTER stopping the broker produced two
-            // legitimate-but-untracked UserRoleAssigned envelopes — the
-            // initial OPERATOR grant plus the explicit HOUSEKEEPER grant —
-            // which is correct behavior, not duplication, but broke this
-            // test's single-event assumption for the outage phase).
-            var assignRoleTargetResponse = await PostAsync(
-                client, "/api/v1/users",
-                new CreateUserRequest("Topology Outage Target", $"{Guid.NewGuid():N}@ihostpro.com", "Correct-Horse-Battery-Staple-99!", "OPERATOR"),
-                token);
-            var targetUserId = (await assignRoleTargetResponse.Content.ReadFromJsonAsync<UserResponse>(JsonWebDefaults))!.Id;
-            var targetUserSetupDelivered = await WaitUntilAsync(async () => (await CountAllEnvelopesAsync(IdentityOutboxSchema)) == 0, TimeSpan.FromSeconds(15));
-            targetUserSetupDelivered.Should().BeTrue("the outage-phase target user's own setup events must clear before the broker goes down");
+            // This probe queue is durable + non-exclusive and declared/bound
+            // BEFORE the broker is stopped — unlike probe1's exclusive/
+            // auto-delete queues (torn down by a restart, so probe1 itself
+            // cannot be reused here), a durable, explicitly-bound queue
+            // survives a `docker stop`/`docker start` of the SAME container.
+            // An earlier version of this test declared the post-outage probe
+            // queue only AFTER recovery — that races Wolverine's own outbox
+            // redelivery, which is not gated by anything this test controls
+            // and can start publishing as soon as it detects the broker is
+            // reachable again, fast enough to beat the queue/binding's own
+            // AMQP round-trips and (per mandatory=false) silently drop the
+            // message. Declaring the queue before the outage begins removes
+            // that race entirely: the binding already exists by the time
+            // anything is republished.
+            //
+            // The declaration itself, however, must NOT happen before the
+            // outage-phase target user is created: that user's own
+            // CreateUser-triggered setup (UserCreated + the initial OPERATOR
+            // role's UserRoleAssigned) is a legitimate delivery that happens
+            // while the broker is still up. A queue bound before that setup
+            // captures it too, so the post-outage drain finds TWO
+            // UserRoleAssigned envelopes (the OPERATOR setup grant plus the
+            // real HOUSEKEEPER outage-phase grant) instead of one — confirmed
+            // by an earlier run of this exact fix. Declaring the queue only
+            // after the target user's setup events are confirmed delivered
+            // (outboxes empty) and immediately before stopping the broker
+            // avoids both races: nothing published before this point can
+            // still land in the queue, and nothing published from here on can
+            // beat the binding.
+            var outageIdentityQueue = $"test-identity-outage-probe-{Guid.NewGuid():N}";
+            var outagePmQueue = $"test-pm-outage-probe-{Guid.NewGuid():N}";
 
-            await _fixture.RabbitMq.StopAsync();
+            try
+            {
+                // Target user created WHILE the broker is still up — its own
+                // CreateUser-triggered events (UserCreated + the initial OPERATOR
+                // role's UserRoleAssigned) must clear BEFORE the outage begins, so
+                // only the single, explicit AssignRole below is the tracked
+                // Identity event during the outage (confirmed by an earlier run:
+                // creating the user AFTER stopping the broker produced two
+                // legitimate-but-untracked UserRoleAssigned envelopes — the
+                // initial OPERATOR grant plus the explicit HOUSEKEEPER grant —
+                // which is correct behavior, not duplication, but broke this
+                // test's single-event assumption for the outage phase).
+                var assignRoleTargetResponse = await PostAsync(
+                    client, "/api/v1/users",
+                    new CreateUserRequest("Topology Outage Target", $"{Guid.NewGuid():N}@ihostpro.com", "Correct-Horse-Battery-Staple-99!", "OPERATOR"),
+                    token);
+                var targetUserId = (await assignRoleTargetResponse.Content.ReadFromJsonAsync<UserResponse>(JsonWebDefaults))!.Id;
+                var targetUserSetupDelivered = await WaitUntilAsync(async () => (await CountAllEnvelopesAsync(IdentityOutboxSchema)) == 0, TimeSpan.FromSeconds(15));
+                targetUserSetupDelivered.Should().BeTrue("the outage-phase target user's own setup events must clear before the broker goes down");
 
-            var assignRoleResponse = await PostAsync(client, $"/api/v1/users/{targetUserId}/roles", new AssignRoleRequest("HOUSEKEEPER"), token);
-            assignRoleResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
-            var createCondominium2Response = await PostAsync(client, "/api/v1/condominiums", new CreateCondominiumRequest("Topology Outage Condo", ValidAddress), token);
-            createCondominium2Response.StatusCode.Should().Be(HttpStatusCode.Created);
+                // Declared only now — after the target user's own setup events
+                // are confirmed delivered — so the queue never observes the
+                // initial OPERATOR UserRoleAssigned, only events published
+                // during (and redelivered after) the outage below.
+                await DeclareDurableOutageProbeQueueAsync(outageIdentityQueue, "identity-events", ["user_logged_in", "user_created", "user_role_assigned"]);
+                await DeclareDurableOutageProbeQueueAsync(outagePmQueue, "property-management-events", ["condominium_created"]);
 
-            var identityPendingDuringOutage = await DumpAllEnvelopesAsync(IdentityOutboxSchema);
-            var pmPendingDuringOutage = await DumpAllEnvelopesAsync(PropertyManagementOutboxSchema);
-            identityPendingDuringOutage.Should().Contain("IHostPro.Contexts.Identity.Contracts.UserRoleAssigned");
-            pmPendingDuringOutage.Should().Contain("IHostPro.Contexts.PropertyManagement.Contracts.CondominiumCreated");
-            (await CountEnvelopesAsync(PropertyManagementOutboxSchema, "IHostPro.Contexts.Identity.Contracts.UserRoleAssigned")).Should().Be(0);
-            (await CountEnvelopesAsync(IdentityOutboxSchema, "IHostPro.Contexts.PropertyManagement.Contracts.CondominiumCreated")).Should().Be(0);
+                await _fixture.RabbitMq.StopAsync();
 
-            await _fixture.RabbitMq.StartAsync();
+                var assignRoleResponse = await PostAsync(client, $"/api/v1/users/{targetUserId}/roles", new AssignRoleRequest("HOUSEKEEPER"), token);
+                assignRoleResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+                var createCondominium2Response = await PostAsync(client, "/api/v1/condominiums", new CreateCondominiumRequest("Topology Outage Condo", ValidAddress), token);
+                createCondominium2Response.StatusCode.Should().Be(HttpStatusCode.Created);
+                var outageCondominiumId = (await createCondominium2Response.Content.ReadFromJsonAsync<CondominiumDetailResponse>(JsonWebDefaults))!.Id;
 
-            // The exclusive/auto-delete test queues from probe1 do NOT survive a
-            // broker restart (exclusive queues are tied to the declaring
-            // connection, which the container restart severed) — the durable
-            // exchanges DO survive (durable=true, persisted by the broker). A
-            // fresh probe re-binds new queues to the SAME already-provisioned
-            // exchanges. Declared BEFORE waiting for sending-agent readiness —
-            // confirmed empirically that redelivery of pending envelopes can
-            // start racing within ~5s of reconnection, fast enough to publish
-            // (and, per mandatory=false, be silently dropped) before a queue
-            // declared only after that wait would have a binding in place.
-            await using var probe2 = await DeclareTemporaryTestQueuesAsync();
+                var identityPendingDuringOutage = await DumpAllEnvelopesAsync(IdentityOutboxSchema);
+                var pmPendingDuringOutage = await DumpAllEnvelopesAsync(PropertyManagementOutboxSchema);
+                identityPendingDuringOutage.Should().Contain("IHostPro.Contexts.Identity.Contracts.UserRoleAssigned");
+                pmPendingDuringOutage.Should().Contain("IHostPro.Contexts.PropertyManagement.Contracts.CondominiumCreated");
+                (await CountEnvelopesAsync(PropertyManagementOutboxSchema, "IHostPro.Contexts.Identity.Contracts.UserRoleAssigned")).Should().Be(0);
+                (await CountEnvelopesAsync(IdentityOutboxSchema, "IHostPro.Contexts.PropertyManagement.Contracts.CondominiumCreated")).Should().Be(0);
 
-            var readiness2 = Stopwatch.StartNew();
-            var ready2 = await WaitForSendingAgentsReadyAsync(runtime, identityDestinations.Concat(pmDestinations), TimeSpan.FromSeconds(30));
-            readiness2.Stop();
+                await _fixture.RabbitMq.StartAsync();
 
-            var recoveredAfterOutage = await WaitUntilAsync(async () =>
-                    (await CountAllEnvelopesAsync(IdentityOutboxSchema)) == 0 &&
-                    (await CountAllEnvelopesAsync(PropertyManagementOutboxSchema)) == 0,
-                TimeSpan.FromSeconds(30));
+                var readiness2 = Stopwatch.StartNew();
+                var ready2 = await WaitForSendingAgentsReadyAsync(runtime, identityDestinations.Concat(pmDestinations), TimeSpan.FromSeconds(30));
+                readiness2.Stop();
 
-            // No duplication a few seconds after apparent delivery, and isolation still holds.
-            await Task.Delay(TimeSpan.FromSeconds(3));
-            var finalIdentityCount = await CountAllEnvelopesAsync(IdentityOutboxSchema);
-            var finalPmCount = await CountAllEnvelopesAsync(PropertyManagementOutboxSchema);
-            var finalPlatformCount = await CountAllEnvelopesAsync(PlatformMessagingSchema);
+                var recoveredAfterOutage = await WaitUntilAsync(async () =>
+                        (await CountAllEnvelopesAsync(IdentityOutboxSchema)) == 0 &&
+                        (await CountAllEnvelopesAsync(PropertyManagementOutboxSchema)) == 0,
+                    TimeSpan.FromSeconds(30));
 
-            var identityMessages2 = await DrainQueueAsync(probe2.Channel, probe2.IdentityQueue);
-            var pmMessages2 = await DrainQueueAsync(probe2.Channel, probe2.PropertyManagementQueue);
+                // No duplication a few seconds after apparent delivery, and isolation still holds.
+                await Task.Delay(TimeSpan.FromSeconds(3));
+                var finalIdentityCount = await CountAllEnvelopesAsync(IdentityOutboxSchema);
+                var finalPmCount = await CountAllEnvelopesAsync(PropertyManagementOutboxSchema);
+                var finalPlatformCount = await CountAllEnvelopesAsync(PlatformMessagingSchema);
 
-            Console.WriteLine(
-                $"Topology check before provisioning: [{string.Join(", ", before.Select(kv => $"{kv.Key}={kv.Value}"))}]. " +
-                $"After first MigrationRunner run: [{string.Join(", ", afterFirstRun.Select(kv => $"{kv.Key}={kv.Value}"))}]. " +
-                $"After second (idempotent) run: [{string.Join(", ", afterSecondRun.Select(kv => $"{kv.Key}={kv.Value}"))}]. " +
-                $"Post-outage sending-agent readiness wait: {readiness2.Elapsed} (ready={ready2}). " +
-                $"Recovered after outage: {recoveredAfterOutage}. " +
-                $"Identity test queue received (post-outage): [{string.Join(", ", identityMessages2.Select(m => $"{m.RoutingKey}/{m.MessageType}"))}]. " +
-                $"PM test queue received (post-outage): [{string.Join(", ", pmMessages2.Select(m => $"{m.RoutingKey}/{m.MessageType}"))}]. " +
-                $"Final counts — identity={finalIdentityCount}, pm={finalPmCount}, platform={finalPlatformCount}.");
-            Console.Out.Flush();
+                // A fresh connection: the one used to declare the durable queues
+                // above was opened before the restart and was severed by it — the
+                // queues and their bindings, being durable and non-exclusive,
+                // survived on the broker; the connection itself did not.
+                await using var recoveryConnection = await OpenTestConnectionAsync();
+                await using var recoveryChannel = await recoveryConnection.CreateChannelAsync();
+                var identityMessages2 = await DrainQueueAsync(recoveryChannel, outageIdentityQueue);
+                var pmMessages2 = await DrainQueueAsync(recoveryChannel, outagePmQueue);
 
-            recoveredAfterOutage.Should().BeTrue("with the topology already provisioned and a bound test queue, envelopes published during the outage should be delivered once the broker recovers");
-            finalIdentityCount.Should().Be(0);
-            finalPmCount.Should().Be(0);
-            finalPlatformCount.Should().Be(0);
+                Console.WriteLine(
+                    $"Topology check before provisioning: [{string.Join(", ", before.Select(kv => $"{kv.Key}={kv.Value}"))}]. " +
+                    $"After first MigrationRunner run: [{string.Join(", ", afterFirstRun.Select(kv => $"{kv.Key}={kv.Value}"))}]. " +
+                    $"After second (idempotent) run: [{string.Join(", ", afterSecondRun.Select(kv => $"{kv.Key}={kv.Value}"))}]. " +
+                    $"Post-outage sending-agent readiness wait: {readiness2.Elapsed} (ready={ready2}). " +
+                    $"Recovered after outage: {recoveredAfterOutage}. " +
+                    $"Identity test queue received (post-outage): [{string.Join(", ", identityMessages2.Select(m => $"{m.RoutingKey}/{m.MessageType}"))}]. " +
+                    $"PM test queue received (post-outage): [{string.Join(", ", pmMessages2.Select(m => $"{m.RoutingKey}/{m.MessageType}"))}]. " +
+                    $"Final counts — identity={finalIdentityCount}, pm={finalPmCount}, platform={finalPlatformCount}.");
+                Console.Out.Flush();
 
-            identityMessages2.Should().ContainSingle(m => m.RoutingKey == "user_role_assigned" && m.MessageType == "IHostPro.Contexts.Identity.Contracts.UserRoleAssigned");
-            pmMessages2.Should().ContainSingle(m => m.RoutingKey == "condominium_created" && m.MessageType == "IHostPro.Contexts.PropertyManagement.Contracts.CondominiumCreated");
+                recoveredAfterOutage.Should().BeTrue("with the topology already provisioned and a bound test queue, envelopes published during the outage should be delivered once the broker recovers");
+                finalIdentityCount.Should().Be(0);
+                finalPmCount.Should().Be(0);
+                finalPlatformCount.Should().Be(0);
+
+                var identityOutageMessage = identityMessages2.Should()
+                    .ContainSingle(m => m.RoutingKey == "user_role_assigned" && m.MessageType == "IHostPro.Contexts.Identity.Contracts.UserRoleAssigned")
+                    .Which;
+                var pmOutageMessage = pmMessages2.Should()
+                    .ContainSingle(m => m.RoutingKey == "condominium_created" && m.MessageType == "IHostPro.Contexts.PropertyManagement.Contracts.CondominiumCreated")
+                    .Which;
+
+                // Count alone would already pass if the queue had (incorrectly)
+                // captured the initial OPERATOR grant instead of the outage-phase
+                // HOUSEKEEPER one — the payload is what actually distinguishes them.
+                var identityOutageEvent = JsonSerializer.Deserialize<UserRoleAssigned>(identityOutageMessage.Body, JsonWebDefaults);
+                identityOutageEvent.Should().NotBeNull();
+                identityOutageEvent!.AggregateId.Should().Be(targetUserId, "the delivered UserRoleAssigned must belong to the outage-phase target user, not the initial OPERATOR grant");
+                identityOutageEvent.RoleCode.Should().Be("HOUSEKEEPER", "the tracked outage-phase assignment was HOUSEKEEPER, not the target user's initial OPERATOR role");
+
+                var pmOutageEvent = JsonSerializer.Deserialize<CondominiumCreated>(pmOutageMessage.Body, JsonWebDefaults);
+                pmOutageEvent.Should().NotBeNull();
+                pmOutageEvent!.CondominiumId.Should().Be(outageCondominiumId, "the delivered CondominiumCreated must match the condominium created during the outage");
+            }
+            finally
+            {
+                await DeleteQueueIfExistsAsync(outageIdentityQueue);
+                await DeleteQueueIfExistsAsync(outagePmQueue);
+            }
         }
     }
 
@@ -1067,7 +1127,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
             timeout);
     }
 
-    private sealed record TestQueueMessage(string RoutingKey, string? MessageType);
+    private sealed record TestQueueMessage(string RoutingKey, string? MessageType, byte[] Body);
 
     /// <summary>
     /// Test-only diagnostic infrastructure: exclusive, auto-delete queues
@@ -1091,7 +1151,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         }
     }
 
-    private async Task<TestQueueProbe> DeclareTemporaryTestQueuesAsync()
+    private async Task<RabbitMQ.Client.IConnection> OpenTestConnectionAsync()
     {
         var connectionFactory = new RabbitMQ.Client.ConnectionFactory
         {
@@ -1101,7 +1161,12 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
             VirtualHost = "/",
         };
 
-        var connection = await connectionFactory.CreateConnectionAsync();
+        return await connectionFactory.CreateConnectionAsync();
+    }
+
+    private async Task<TestQueueProbe> DeclareTemporaryTestQueuesAsync()
+    {
+        var connection = await OpenTestConnectionAsync();
         var channel = await connection.CreateChannelAsync();
 
         var identityQueue = $"test-identity-probe-{Guid.NewGuid():N}";
@@ -1116,7 +1181,39 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         return new TestQueueProbe { Connection = connection, Channel = channel, IdentityQueue = identityQueue, PropertyManagementQueue = pmQueue };
     }
 
-    /// <summary>Reads routing key + AMQP <c>Type</c> property only — never the message body.</summary>
+    /// <summary>
+    /// Declares a durable, non-exclusive, auto-delete=false queue and binds
+    /// it to <paramref name="exchangeName"/> for each of
+    /// <paramref name="routingKeys"/> — unlike <see cref="TestQueueProbe"/>
+    /// (exclusive+auto-delete, torn down the instant its declaring
+    /// connection drops), this queue and its bindings are broker-persisted
+    /// state that survive a `docker stop`/`docker start` of the SAME
+    /// container. Must be declared BEFORE an outage begins, never after
+    /// recovery — see the outage/recovery section of
+    /// <see cref="MigrationRunner_provisions_rabbitmq_topology_idempotently_and_the_real_host_delivers_through_it"/>
+    /// for the race this avoids. The connection used here is intentionally
+    /// short-lived (declare-and-close) since the queue's durability, not the
+    /// connection, is what needs to survive the restart.
+    /// </summary>
+    private async Task DeclareDurableOutageProbeQueueAsync(string queueName, string exchangeName, IEnumerable<string> routingKeys)
+    {
+        await using var connection = await OpenTestConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+
+        await channel.QueueDeclareAsync(queueName, durable: true, exclusive: false, autoDelete: false);
+        foreach (var routingKey in routingKeys)
+            await channel.QueueBindAsync(queueName, exchangeName, routingKey);
+    }
+
+    /// <summary>Best-effort cleanup for a queue declared by <see cref="DeclareDurableOutageProbeQueueAsync"/>.</summary>
+    private async Task DeleteQueueIfExistsAsync(string queueName)
+    {
+        await using var connection = await OpenTestConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+        await channel.QueueDeleteAsync(queueName, ifUnused: false, ifEmpty: false);
+    }
+
+    /// <summary>Reads routing key, AMQP <c>Type</c> property, and the raw message body (for the outage/recovery payload-level assertions only — every other caller ignores <see cref="TestQueueMessage.Body"/>).</summary>
     private static async Task<List<TestQueueMessage>> DrainQueueAsync(RabbitMQ.Client.IChannel channel, string queueName, int maxMessages = 20)
     {
         var results = new List<TestQueueMessage>();
@@ -1124,7 +1221,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         {
             var result = await channel.BasicGetAsync(queueName, autoAck: true);
             if (result is null) break;
-            results.Add(new TestQueueMessage(result.RoutingKey, result.BasicProperties.Type));
+            results.Add(new TestQueueMessage(result.RoutingKey, result.BasicProperties.Type, result.Body.ToArray()));
         }
         return results;
     }
