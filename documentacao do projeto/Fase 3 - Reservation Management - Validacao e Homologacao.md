@@ -1,8 +1,8 @@
 # Fase 3 — Reservation Management — Validação e Homologação
 
-Versão: 1.1
+Versão: 1.2
 
-Status: Homologação técnica concluída e aprovada (Seção 13) — Incremento 1 (reserva manual operacional) implementado, testado e homologado. Nenhum commit, push, tag ou merge realizado; aguardando autorização final do usuário.
+Status: Oficial — Fase 3 concluída. Homologação aprovada tecnicamente (Seção 13) e aprovação final do usuário recebida. Commit funcional `1eb455e89e77fbc3957cc42b2886a613210beb3d` ("feat(reservations): implement reservation management") realizado em `feature/reservations-core`. Push da branch ainda pendente neste momento.
 
 ---
 
@@ -157,4 +157,4 @@ Novos, por diretório: `Reservations.Application` 31, `Reservations.Infrastructu
 
 ## 15. Status final
 
-Incremento 1 da Fase 3 — implementação, correção transacional do `UpdateReservation`, dois defeitos reais encontrados e corrigidos durante a homologação, lacunas mínimas de teste fechadas, documentação sincronizada. Homologação final aprovada tecnicamente (Seção 13). **Nenhum commit, push, tag, merge ou staging foi realizado** — aguardando autorização explícita do usuário para o commit. Fase 4 (Frontend) não iniciada.
+Incremento 1 da Fase 3 — implementação, correção transacional do `UpdateReservation`, dois defeitos reais encontrados e corrigidos durante a homologação, lacunas mínimas de teste fechadas, documentação sincronizada. Homologação final aprovada tecnicamente (Seção 13) e aprovação final do usuário recebida. **Commit funcional `1eb455e89e77fbc3957cc42b2886a613210beb3d` realizado em `feature/reservations-core` · Fase 3 concluída · push da branch ainda pendente neste momento.** Fase 4 (Frontend) não iniciada.
