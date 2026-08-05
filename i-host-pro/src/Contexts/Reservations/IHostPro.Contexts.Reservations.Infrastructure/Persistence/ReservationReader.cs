@@ -9,7 +9,7 @@ namespace IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 /// <inheritdoc cref="IReservationReader"/>
 /// <remarks>
 /// Reads exclusively from <see cref="ReservationsDbContext"/> —
-/// <c>Reservations</c> is <c>ITenantOwned</c>, so the DbContext's Global
+/// <c>Reservations</c> is <c>ITenantOwned</c>, so the ReservationsDbContext's Global
 /// Query Filter already scopes every query here to the current tenant
 /// (mirrors <c>PropertyReader</c>). <see cref="ListAsync"/>'s
 /// <paramref name="from"/>/<paramref name="to"/> filters use the same

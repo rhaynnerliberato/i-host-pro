@@ -111,12 +111,15 @@ public static class PropertyManagementCommandDispatchExtensions
             IPipelineBehavior<UpdateCondominiumCommand, Result<CondominiumResult>>,
             UpdateCondominiumTenantAwareBehavior>();
 
+        // Closed to PropertyManagementDbContext explicitly (Fase 4
+        // homologation fix) — never the ambiguous, unparameterized DbContext
+        // base type.
         services.AddScoped<
             IPipelineBehavior<ListCondominiumsQuery, Result<PagedResult<CondominiumSummaryResult>>>,
-            TenantTransactionBehavior<ListCondominiumsQuery, Result<PagedResult<CondominiumSummaryResult>>>>();
+            TenantTransactionBehavior<ListCondominiumsQuery, Result<PagedResult<CondominiumSummaryResult>>, PropertyManagementDbContext>>();
         services.AddScoped<
             IPipelineBehavior<GetCondominiumDetailQuery, Result<CondominiumResult>>,
-            TenantTransactionBehavior<GetCondominiumDetailQuery, Result<CondominiumResult>>>();
+            TenantTransactionBehavior<GetCondominiumDetailQuery, Result<CondominiumResult>, PropertyManagementDbContext>>();
 
         services.AddScoped<
             IPipelineBehavior<CreatePropertyCommand, Result<PropertyResult>>,
@@ -127,10 +130,10 @@ public static class PropertyManagementCommandDispatchExtensions
 
         services.AddScoped<
             IPipelineBehavior<ListPropertiesQuery, Result<PagedResult<PropertySummaryResult>>>,
-            TenantTransactionBehavior<ListPropertiesQuery, Result<PagedResult<PropertySummaryResult>>>>();
+            TenantTransactionBehavior<ListPropertiesQuery, Result<PagedResult<PropertySummaryResult>>, PropertyManagementDbContext>>();
         services.AddScoped<
             IPipelineBehavior<GetPropertyDetailQuery, Result<PropertyResult>>,
-            TenantTransactionBehavior<GetPropertyDetailQuery, Result<PropertyResult>>>();
+            TenantTransactionBehavior<GetPropertyDetailQuery, Result<PropertyResult>, PropertyManagementDbContext>>();
 
         services.AddScoped<
             IPipelineBehavior<ActivatePropertyCommand, Result<PropertyResult>>,
@@ -150,13 +153,13 @@ public static class PropertyManagementCommandDispatchExtensions
 
         services.AddScoped<
             IPipelineBehavior<ListPropertyOwnersQuery, Result<PagedResult<PropertyOwnerResult>>>,
-            TenantTransactionBehavior<ListPropertyOwnersQuery, Result<PagedResult<PropertyOwnerResult>>>>();
+            TenantTransactionBehavior<ListPropertyOwnersQuery, Result<PagedResult<PropertyOwnerResult>>, PropertyManagementDbContext>>();
         services.AddScoped<
             IPipelineBehavior<ListMyPropertiesQuery, Result<PagedResult<PropertySummaryResult>>>,
-            TenantTransactionBehavior<ListMyPropertiesQuery, Result<PagedResult<PropertySummaryResult>>>>();
+            TenantTransactionBehavior<ListMyPropertiesQuery, Result<PagedResult<PropertySummaryResult>>, PropertyManagementDbContext>>();
         services.AddScoped<
             IPipelineBehavior<GetMyPropertyDetailQuery, Result<PropertyResult>>,
-            TenantTransactionBehavior<GetMyPropertyDetailQuery, Result<PropertyResult>>>();
+            TenantTransactionBehavior<GetMyPropertyDetailQuery, Result<PropertyResult>, PropertyManagementDbContext>>();
 
         return services;
     }

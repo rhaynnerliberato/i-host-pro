@@ -103,7 +103,7 @@ public class IdentityCommandDispatchExtensionsTests
         // again — asserting the exact count above already guards against that, this
         // makes the specific regression explicit (Etapa 15A: Login moved off the
         // shared TenantBootstrapBehavior<,> onto IIdentityTransactionExecutor too).
-        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantBootstrapBehavior<LoginCommand, Result<AuthTokensResult>>));
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantBootstrapBehavior<LoginCommand, Result<AuthTokensResult>, IdentityDbContext>));
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class IdentityCommandDispatchExtensionsTests
         // (it implements IBootstrapRequest) if it were ever registered open-generic
         // again — asserting the exact count above already guards against that, this
         // makes the specific regression explicit.
-        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantBootstrapBehavior<RefreshTokenCommand, Result<AuthTokensResult>>));
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantBootstrapBehavior<RefreshTokenCommand, Result<AuthTokensResult>, IdentityDbContext>));
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public class IdentityCommandDispatchExtensionsTests
         // registered for this command (Incremento 3, Checkpoint 4, approved
         // design) — it does not drain ISessionRevocationSignal/write
         // ISessionRevocationCache after commit, unlike RevokeOwnSessionExecutor.
-        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<RevokeOwnSessionCommand, Result>));
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<RevokeOwnSessionCommand, Result, IdentityDbContext>));
     }
 
     [Fact]
@@ -176,7 +176,7 @@ public class IdentityCommandDispatchExtensionsTests
         behaviors.Should().HaveCount(2);
         behaviors.Should().ContainSingle(b => b.GetType() == typeof(ValidationBehavior<GetOwnProfileQuery, Result<OwnProfileResult>>));
         behaviors.Should().ContainSingle(
-            b => b.GetType() == typeof(TenantTransactionBehavior<GetOwnProfileQuery, Result<OwnProfileResult>>));
+            b => b.GetType() == typeof(TenantTransactionBehavior<GetOwnProfileQuery, Result<OwnProfileResult>, IdentityDbContext>));
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public class IdentityCommandDispatchExtensionsTests
         behaviors.Should().ContainSingle(
             b => b.GetType() == typeof(ValidationBehavior<ListOwnSessionsQuery, Result<IReadOnlyCollection<OwnSessionResult>>>));
         behaviors.Should().ContainSingle(
-            b => b.GetType() == typeof(TenantTransactionBehavior<ListOwnSessionsQuery, Result<IReadOnlyCollection<OwnSessionResult>>>));
+            b => b.GetType() == typeof(TenantTransactionBehavior<ListOwnSessionsQuery, Result<IReadOnlyCollection<OwnSessionResult>>, IdentityDbContext>));
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public class IdentityCommandDispatchExtensionsTests
         // registered for this command (Incremento 3, Checkpoint 5, approved
         // design) — it does not translate a unique-email DbUpdateException
         // into Result.Failure after commit, unlike CreateUserExecutor.
-        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<CreateUserCommand, Result<UserResult>>));
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<CreateUserCommand, Result<UserResult>, IdentityDbContext>));
     }
 
     [Fact]
@@ -235,7 +235,7 @@ public class IdentityCommandDispatchExtensionsTests
         // registered for this command (Incremento 3, Checkpoint 6, approved
         // design) — it does not drain ISessionRevocationSignal/write
         // ISessionRevocationCache after commit, unlike AssignRoleExecutor.
-        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<AssignRoleCommand, Result>));
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<AssignRoleCommand, Result, IdentityDbContext>));
     }
 
     [Fact]
@@ -252,7 +252,7 @@ public class IdentityCommandDispatchExtensionsTests
         behaviors.Should().ContainSingle(b => b.GetType() == typeof(ValidationBehavior<RemoveRoleCommand, Result>));
         behaviors.Should().ContainSingle(b => b.GetType() == typeof(RemoveRoleTenantAwareBehavior));
 
-        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<RemoveRoleCommand, Result>));
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<RemoveRoleCommand, Result, IdentityDbContext>));
     }
 
     [Fact]
@@ -273,7 +273,7 @@ public class IdentityCommandDispatchExtensionsTests
         // registered for this command (Incremento 3, Checkpoint 7, approved
         // design) — it does not drain ISessionRevocationSignal/write
         // ISessionRevocationCache after commit, unlike BlockUserExecutor.
-        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<BlockUserCommand, Result>));
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<BlockUserCommand, Result, IdentityDbContext>));
     }
 
     [Fact]
@@ -290,7 +290,7 @@ public class IdentityCommandDispatchExtensionsTests
         behaviors.Should().ContainSingle(b => b.GetType() == typeof(ValidationBehavior<UnblockUserCommand, Result>));
         behaviors.Should().ContainSingle(b => b.GetType() == typeof(UnblockUserTenantAwareBehavior));
 
-        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<UnblockUserCommand, Result>));
+        behaviors.Should().NotContain(b => b.GetType() == typeof(TenantTransactionBehavior<UnblockUserCommand, Result, IdentityDbContext>));
     }
 
     [Fact]
@@ -323,7 +323,7 @@ public class IdentityCommandDispatchExtensionsTests
         behaviors.Should().ContainSingle(
             b => b.GetType() == typeof(ValidationBehavior<ListUsersQuery, Result<PagedResult<UserResult>>>));
         behaviors.Should().ContainSingle(
-            b => b.GetType() == typeof(TenantTransactionBehavior<ListUsersQuery, Result<PagedResult<UserResult>>>));
+            b => b.GetType() == typeof(TenantTransactionBehavior<ListUsersQuery, Result<PagedResult<UserResult>>, IdentityDbContext>));
     }
 
     [Fact]
@@ -339,7 +339,7 @@ public class IdentityCommandDispatchExtensionsTests
         behaviors.Should().HaveCount(2);
         behaviors.Should().ContainSingle(b => b.GetType() == typeof(ValidationBehavior<GetUserByIdQuery, Result<UserResult>>));
         behaviors.Should().ContainSingle(
-            b => b.GetType() == typeof(TenantTransactionBehavior<GetUserByIdQuery, Result<UserResult>>));
+            b => b.GetType() == typeof(TenantTransactionBehavior<GetUserByIdQuery, Result<UserResult>, IdentityDbContext>));
     }
 
     [Fact]

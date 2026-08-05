@@ -15,7 +15,7 @@ namespace IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 /// is a subclass, so catch-clause order determines which one a concurrency
 /// failure actually matches (mirrors Identity's <c>UpdateUserExecutor</c>
 /// reasoning). Both translated failures clear the
-/// <see cref="DbContext.ChangeTracker"/> and drain the event collector —
+/// <see cref="PropertyManagementDbContext.ChangeTracker"/> and drain the event collector —
 /// mirrors <c>UpdateCondominiumExecutor</c>'s own defensive cleanup.
 /// </remarks>
 public sealed class UpdatePropertyExecutor : IUpdatePropertyExecutor

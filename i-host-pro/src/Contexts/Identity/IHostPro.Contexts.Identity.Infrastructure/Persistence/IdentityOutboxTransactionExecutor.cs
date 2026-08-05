@@ -83,7 +83,7 @@ public sealed class IdentityOutboxTransactionExecutor : IIdentityTransactionExec
         if (_outbox is not MessageContext messageContext)
         {
             throw new InvalidOperationException(
-                "The configured Wolverine DbContext outbox does not support explicit message store selection.");
+                "The configured Wolverine IdentityDbContext outbox does not support explicit message store selection.");
         }
 
         var identityStore = runtime.FindAncillaryStoreForMarkerType(typeof(IdentityDbContext));

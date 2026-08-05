@@ -44,7 +44,7 @@ public sealed class PropertyManagementOutboxTransactionExecutor : IPropertyManag
         if (_outbox is not MessageContext messageContext)
         {
             throw new InvalidOperationException(
-                "The configured Wolverine DbContext outbox does not support explicit message store selection.");
+                "The configured Wolverine PropertyManagementDbContext outbox does not support explicit message store selection.");
         }
 
         var propertyManagementStore = runtime.FindAncillaryStoreForMarkerType(typeof(PropertyManagementDbContext));

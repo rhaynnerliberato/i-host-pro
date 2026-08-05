@@ -26,7 +26,7 @@ namespace IHostPro.Contexts.Identity.Infrastructure.Persistence;
 /// which is exactly why this retry lives here, next to the one use case it
 /// is verified safe for, instead of in the shared executor.
 ///
-/// Each retry discards the tracked entities (<see cref="DbContext.ChangeTracker"/>)
+/// Each retry discards the tracked entities (<see cref="IdentityDbContext.ChangeTracker"/>)
 /// before re-running the operation, so the handler's re-executed queries
 /// reload the token/session's now-current state from the database — the
 /// handler's own existing classification logic (Rotated within/outside the
@@ -47,14 +47,14 @@ public sealed class RefreshTokenExchangeExecutor : IRefreshTokenExchangeExecutor
     private const int MaxConcurrencyRetryAttempts = 3;
 
     private readonly IIdentityTransactionExecutor _transactionExecutor;
-    private readonly DbContext _dbContext;
+    private readonly IdentityDbContext _dbContext;
     private readonly IIntegrationEventCollector _eventCollector;
     private readonly ISessionRevocationSignal _revocationSignal;
     private readonly ISessionRevocationCache _revocationCache;
 
     public RefreshTokenExchangeExecutor(
         IIdentityTransactionExecutor transactionExecutor,
-        DbContext dbContext,
+        IdentityDbContext dbContext,
         IIntegrationEventCollector eventCollector,
         ISessionRevocationSignal revocationSignal,
         ISessionRevocationCache revocationCache)

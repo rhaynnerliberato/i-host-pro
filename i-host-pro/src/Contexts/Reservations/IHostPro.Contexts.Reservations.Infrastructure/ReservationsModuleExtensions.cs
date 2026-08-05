@@ -24,13 +24,6 @@ public static class ReservationsModuleExtensions
                 configuration.GetConnectionString("Reservations"),
                 npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "reservations")));
 
-        // Aliased to the shared, non-generic DbContext service so
-        // BuildingBlocks' generic TenantTransactionBehavior/TenantAwareUnitOfWork
-        // (used by ListReservationsQuery/GetReservationDetailQuery) can
-        // resolve it without knowing ReservationsDbContext exists — mirrors
-        // PropertyManagementModuleExtensions' identical aliasing exactly.
-        services.AddScoped<DbContext>(sp => sp.GetRequiredService<ReservationsDbContext>());
-
         services.AddSingleton(TimeProvider.System);
 
         return services;

@@ -73,12 +73,14 @@ public static class ReservationsCommandDispatchExtensions
         // deliberately no pipeline behavior — see this class's own doc
         // comment and each executor's.
 
+        // Closed to ReservationsDbContext explicitly (Fase 4 homologation
+        // fix) — never the ambiguous, unparameterized DbContext base type.
         services.AddScoped<
             IPipelineBehavior<ListReservationsQuery, Result<PagedResult<ReservationSummaryResult>>>,
-            TenantTransactionBehavior<ListReservationsQuery, Result<PagedResult<ReservationSummaryResult>>>>();
+            TenantTransactionBehavior<ListReservationsQuery, Result<PagedResult<ReservationSummaryResult>>, ReservationsDbContext>>();
         services.AddScoped<
             IPipelineBehavior<GetReservationDetailQuery, Result<ReservationResult>>,
-            TenantTransactionBehavior<GetReservationDetailQuery, Result<ReservationResult>>>();
+            TenantTransactionBehavior<GetReservationDetailQuery, Result<ReservationResult>, ReservationsDbContext>>();
 
         return services;
     }

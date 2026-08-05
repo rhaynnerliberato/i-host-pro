@@ -2,6 +2,7 @@ using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using Mediator;
+using Microsoft.EntityFrameworkCore;
 
 namespace IHostPro.BuildingBlocks.Infrastructure.Persistence;
 
@@ -11,9 +12,9 @@ namespace IHostPro.BuildingBlocks.Infrastructure.Persistence;
 /// <see cref="ITenantBootstrapResolver{TRequest}"/> (touching only the minimal,
 /// non-tenant-owned data needed to identify the tenant), sets
 /// <see cref="ITenantContext"/>, then delegates to the exact same
-/// <see cref="ITenantAwareUnitOfWork"/> primitive
-/// <see cref="TenantTransactionBehavior{TMessage,TResponse}"/> uses for every
-/// other request. No application code runs between tenant resolution and the
+/// <see cref="TenantAwareUnitOfWork{TDbContext}"/> primitive
+/// <see cref="TenantTransactionBehavior{TMessage,TResponse,TDbContext}"/> uses
+/// for every other request. No application code runs between tenant resolution and the
 /// RLS-protected transaction being open — the handler itself never manages a
 /// transactional boundary differently from any other Command/Query handler.
 ///
@@ -22,7 +23,7 @@ namespace IHostPro.BuildingBlocks.Infrastructure.Persistence;
 /// exchange). This mechanism exists only because those two use cases must run
 /// before the caller is authenticated, so no trustworthy tenant claim exists
 /// yet. It is <b>not</b> a general-purpose alternative to
-/// <see cref="TenantTransactionBehavior{TMessage,TResponse}"/>. Any other use
+/// <see cref="TenantTransactionBehavior{TMessage,TResponse,TDbContext}"/>. Any other use
 /// case that appears to need this pattern (resolving tenant from something
 /// other than an authenticated claim) requires a new architectural decision
 /// (Decision Making Policy, Category B) before implementing an
@@ -30,17 +31,18 @@ namespace IHostPro.BuildingBlocks.Infrastructure.Persistence;
 /// convenience alone.
 /// </para>
 /// </summary>
-public sealed class TenantBootstrapBehavior<TMessage, TResponse> : IPipelineBehavior<TMessage, TResponse>
+public sealed class TenantBootstrapBehavior<TMessage, TResponse, TDbContext> : IPipelineBehavior<TMessage, TResponse>
     where TMessage : IMessage, IBootstrapRequest
+    where TDbContext : DbContext
 {
     private readonly ITenantBootstrapResolver<TMessage> _tenantResolver;
     private readonly ITenantContext _tenantContext;
-    private readonly ITenantAwareUnitOfWork _unitOfWork;
+    private readonly TenantAwareUnitOfWork<TDbContext> _unitOfWork;
 
     public TenantBootstrapBehavior(
         ITenantBootstrapResolver<TMessage> tenantResolver,
         ITenantContext tenantContext,
-        ITenantAwareUnitOfWork unitOfWork)
+        TenantAwareUnitOfWork<TDbContext> unitOfWork)
     {
         _tenantResolver = tenantResolver;
         _tenantContext = tenantContext;

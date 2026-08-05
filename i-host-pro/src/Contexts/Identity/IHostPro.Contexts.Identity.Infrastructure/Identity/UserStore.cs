@@ -14,7 +14,7 @@ namespace IHostPro.Contexts.Identity.Infrastructure.Identity;
 /// <para>
 /// <see cref="CreateAsync"/>/<see cref="UpdateAsync"/>/<see cref="DeleteAsync"/>
 /// never call <c>SaveChangesAsync</c>: they only stage changes on the
-/// DbContext's ChangeTracker. The single <c>SaveChangesAsync</c> call for the
+/// IdentityDbContext's ChangeTracker. The single <c>SaveChangesAsync</c> call for the
 /// whole use case happens exclusively inside
 /// <c>ITenantAwareUnitOfWork.ExecuteAsync</c>, at the end of the tenant-aware
 /// transaction — this store, and therefore any <c>UserManager&lt;User&gt;</c>
@@ -80,7 +80,7 @@ public sealed class UserStore :
     public Task<IdentityResult> UpdateAsync(User user, CancellationToken cancellationToken)
     {
         // Defensive: in every realistic path the entity is already tracked
-        // (loaded via this same DbContext instance earlier in the same unit
+        // (loaded via this same IdentityDbContext instance earlier in the same unit
         // of work), so this is a no-op for the change tracker.
         _dbContext.Users.Update(user);
         return Task.FromResult(IdentityResult.Success);
@@ -203,7 +203,7 @@ public sealed class UserStore :
 
     public void Dispose()
     {
-        // Deliberate no-op: the DbContext is a dependency injected into this
+        // Deliberate no-op: the IdentityDbContext is a dependency injected into this
         // store, never created by it — disposing it here would break the
         // shared unit of work (Incremento 1 plan, adendo final, Section 3).
     }

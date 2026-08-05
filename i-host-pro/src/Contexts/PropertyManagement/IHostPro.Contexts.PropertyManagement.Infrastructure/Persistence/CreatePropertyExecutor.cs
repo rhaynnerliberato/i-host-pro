@@ -15,7 +15,7 @@ namespace IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 /// <see cref="PropertyManagementErrorCodes.PropertyCodeAlreadyExists"/>. Any
 /// OTHER <see cref="DbUpdateException"/> is deliberately left to propagate,
 /// mirroring Identity's <c>CreateUserExecutor</c>. On failure, clears the
-/// <see cref="DbContext.ChangeTracker"/> and drains the event collector —
+/// <see cref="PropertyManagementDbContext.ChangeTracker"/> and drains the event collector —
 /// mirrors <c>UpdateCondominiumExecutor</c>'s own defensive cleanup.
 /// </remarks>
 public sealed class CreatePropertyExecutor : ICreatePropertyExecutor

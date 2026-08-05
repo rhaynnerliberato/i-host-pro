@@ -24,7 +24,7 @@ namespace IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 /// inherits <c>Wolverine.Runtime.MessageBus</c>'s constructor, which
 /// unconditionally sets <c>Storage = runtime.Storage</c> (the Main store,
 /// <c>platform_messaging</c>) regardless of which Ancillary Store this
-/// DbContext is enrolled to — every outgoing envelope's persistence AND its
+/// ReservationsDbContext is enrolled to — every outgoing envelope's persistence AND its
 /// post-publish DELETE would silently target the wrong store. Applying the
 /// fix here from day one means this Bounded Context never reproduces either
 /// of the two now-corrected defects.
@@ -51,7 +51,7 @@ public sealed class ReservationsOutboxTransactionExecutor : IReservationsTransac
         if (_outbox is not MessageContext messageContext)
         {
             throw new InvalidOperationException(
-                "The configured Wolverine DbContext outbox does not support explicit message store selection.");
+                "The configured Wolverine ReservationsDbContext outbox does not support explicit message store selection.");
         }
 
         var reservationsStore = runtime.FindAncillaryStoreForMarkerType(typeof(ReservationsDbContext));

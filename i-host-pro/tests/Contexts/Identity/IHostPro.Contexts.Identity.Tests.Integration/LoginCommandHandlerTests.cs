@@ -130,9 +130,10 @@ public class LoginCommandHandlerTests : IClassFixture<LoginCommandHandlerTests.F
         services.AddIdentityJwtIssuance(configuration);
         // LoginCommandHandler stages Integration Events here (Incremento 2
         // plan, Etapa 15) — this test drives it directly through
-        // ITenantAwareUnitOfWork, not IIdentityTransactionExecutor, so
-        // nothing ever drains/publishes the collector; it only needs to be
-        // resolvable for the handler's constructor.
+        // TenantAwareUnitOfWork<IdentityDbContext>, not
+        // IIdentityTransactionExecutor, so nothing ever drains/publishes the
+        // collector; it only needs to be resolvable for the handler's
+        // constructor.
         services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
         services.AddScoped<LoginCommandHandler>();
 
@@ -167,7 +168,7 @@ public class LoginCommandHandlerTests : IClassFixture<LoginCommandHandlerTests.F
 
         sp.GetRequiredService<ITenantContext>().SetTenant(tenantId.Value);
 
-        return await sp.GetRequiredService<ITenantAwareUnitOfWork>().ExecuteAsync(
+        return await sp.GetRequiredService<TenantAwareUnitOfWork<IdentityDbContext>>().ExecuteAsync(
             readOnly: false,
             () => sp.GetRequiredService<LoginCommandHandler>().Handle(command, cancellationToken).AsTask(),
             cancellationToken);

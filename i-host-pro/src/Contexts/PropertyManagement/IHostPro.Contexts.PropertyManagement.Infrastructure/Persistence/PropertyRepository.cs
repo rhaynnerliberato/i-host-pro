@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 
 /// <inheritdoc cref="IRepository{TAggregate,TId}"/>
-/// <remarks>Mirrors <c>CondominiumRepository</c> exactly — no explicit tenant filter needed, the DbContext's Global Query Filter already scopes every query.</remarks>
+/// <remarks>Mirrors <c>CondominiumRepository</c> exactly — no explicit tenant filter needed, the PropertyManagementDbContext's Global Query Filter already scopes every query.</remarks>
 public sealed class PropertyRepository : IRepository<Property, Guid>
 {
     private readonly PropertyManagementDbContext _dbContext;

@@ -10,7 +10,7 @@ namespace IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 /// <remarks>
 /// No retry loop (Checkpoint 2 plan, item 9: "sem retry automático"). On
 /// <see cref="DbUpdateConcurrencyException"/>: clears the
-/// <see cref="DbContext.ChangeTracker"/>, drains the event collector, and
+/// <see cref="PropertyManagementDbContext.ChangeTracker"/>, drains the event collector, and
 /// returns the translated failure instead of re-throwing — mirrors
 /// <c>ChangeOwnPasswordExecutor</c>'s shape (minus the session-revocation
 /// side channel, which Condominium has none of). A second, broader

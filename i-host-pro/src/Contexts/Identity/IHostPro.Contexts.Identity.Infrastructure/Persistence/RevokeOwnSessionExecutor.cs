@@ -28,14 +28,14 @@ public sealed class RevokeOwnSessionExecutor : IRevokeOwnSessionExecutor
     private const int MaxConcurrencyRetryAttempts = 3;
 
     private readonly IIdentityTransactionExecutor _transactionExecutor;
-    private readonly DbContext _dbContext;
+    private readonly IdentityDbContext _dbContext;
     private readonly IIntegrationEventCollector _eventCollector;
     private readonly ISessionRevocationSignal _revocationSignal;
     private readonly ISessionRevocationCache _revocationCache;
 
     public RevokeOwnSessionExecutor(
         IIdentityTransactionExecutor transactionExecutor,
-        DbContext dbContext,
+        IdentityDbContext dbContext,
         IIntegrationEventCollector eventCollector,
         ISessionRevocationSignal revocationSignal,
         ISessionRevocationCache revocationCache)

@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 
 /// <inheritdoc cref="IRepository{TAggregate,TId}"/>
-/// <remarks>Mirrors <c>PropertyRepository</c> exactly — no explicit tenant filter needed, the DbContext's Global Query Filter already scopes every query.</remarks>
+/// <remarks>Mirrors <c>PropertyRepository</c> exactly — no explicit tenant filter needed, the ReservationsDbContext's Global Query Filter already scopes every query.</remarks>
 public sealed class ReservationRepository : IRepository<Reservation, Guid>
 {
     private readonly ReservationsDbContext _dbContext;

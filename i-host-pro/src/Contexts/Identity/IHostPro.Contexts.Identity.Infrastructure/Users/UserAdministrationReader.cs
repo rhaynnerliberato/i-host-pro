@@ -9,7 +9,7 @@ namespace IHostPro.Contexts.Identity.Infrastructure.Users;
 /// <inheritdoc cref="IUserAdministrationReader"/>
 /// <remarks>
 /// Reads exclusively from <see cref="IdentityDbContext"/> — <c>Users</c>/
-/// <c>UserRoles</c> are both <c>ITenantOwned</c>, so the DbContext's Global
+/// <c>UserRoles</c> are both <c>ITenantOwned</c>, so the IdentityDbContext's Global
 /// Query Filter already scopes every query here to the current tenant (same
 /// reasoning as <c>UserRoleReader</c>/<c>SessionReader</c>). Role codes for a
 /// page of users are fetched in exactly one extra query, grouped in memory —

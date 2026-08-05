@@ -13,7 +13,7 @@ namespace IHostPro.Contexts.Identity.Infrastructure.Persistence;
 /// still drains <see cref="ISessionRevocationSignal"/> into
 /// <see cref="ISessionRevocationCache"/> after a successful commit, exactly
 /// like those three. On <see cref="DbUpdateConcurrencyException"/>: clears the
-/// <see cref="DbContext.ChangeTracker"/>, drains the event collector and the
+/// <see cref="IdentityDbContext.ChangeTracker"/>, drains the event collector and the
 /// revocation signal (both must end up empty either way — Section 8: "collector
 /// e signal devem terminar vazios"), then returns the translated failure
 /// instead of re-throwing/retrying.
@@ -40,14 +40,14 @@ public sealed class ChangeOwnPasswordExecutor : IChangeOwnPasswordExecutor
         IdentityErrorCodes.UserConcurrencyConflict, IdentityErrorCodes.UserConcurrencyConflict);
 
     private readonly IIdentityTransactionExecutor _transactionExecutor;
-    private readonly DbContext _dbContext;
+    private readonly IdentityDbContext _dbContext;
     private readonly IIntegrationEventCollector _eventCollector;
     private readonly ISessionRevocationSignal _revocationSignal;
     private readonly ISessionRevocationCache _revocationCache;
 
     public ChangeOwnPasswordExecutor(
         IIdentityTransactionExecutor transactionExecutor,
-        DbContext dbContext,
+        IdentityDbContext dbContext,
         IIntegrationEventCollector eventCollector,
         ISessionRevocationSignal revocationSignal,
         ISessionRevocationCache revocationCache)

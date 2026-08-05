@@ -8,7 +8,7 @@ namespace IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 /// <inheritdoc cref="IPropertyOwnerReader"/>
 /// <remarks>
 /// Reads exclusively from <see cref="PropertyManagementDbContext"/> —
-/// <c>PropertyOwnerLinks</c> is <c>ITenantOwned</c>, so the DbContext's
+/// <c>PropertyOwnerLinks</c> is <c>ITenantOwned</c>, so the PropertyManagementDbContext's
 /// Global Query Filter already scopes every query here to the current
 /// tenant. <see cref="ListByPropertyAsync"/> never queries Identity — the
 /// projected <see cref="PropertyOwnerResult"/> carries only what

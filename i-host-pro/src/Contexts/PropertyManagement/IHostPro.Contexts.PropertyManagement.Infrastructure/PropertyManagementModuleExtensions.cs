@@ -26,13 +26,6 @@ public static class PropertyManagementModuleExtensions
                 configuration.GetConnectionString("PropertyManagement"),
                 npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "property_management")));
 
-        // Aliased to the shared, non-generic DbContext service (Checkpoint 2)
-        // so BuildingBlocks' generic TenantTransactionBehavior/TenantAwareUnitOfWork
-        // (used by ListCondominiumsQuery/GetCondominiumDetailQuery) can
-        // resolve it without knowing PropertyManagementDbContext exists —
-        // mirrors IdentityModuleExtensions' identical aliasing exactly.
-        services.AddScoped<DbContext>(sp => sp.GetRequiredService<PropertyManagementDbContext>());
-
         // Checkpoint 2: CreateCondominiumCommandHandler/UpdateCondominiumCommandHandler
         // depend on TimeProvider — mirrors IdentityModuleExtensions'
         // registration exactly.

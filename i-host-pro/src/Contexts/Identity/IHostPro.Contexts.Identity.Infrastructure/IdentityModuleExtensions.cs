@@ -68,8 +68,6 @@ public static class IdentityModuleExtensions
                 configuration.GetConnectionString("Identity"),
                 npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "identity")));
 
-        services.AddScoped<DbContext>(sp => sp.GetRequiredService<IdentityDbContext>());
-
         services.AddSingleton(TimeProvider.System);
 
         services.Configure<Argon2Options>(configuration.GetSection(Argon2Options.SectionName));

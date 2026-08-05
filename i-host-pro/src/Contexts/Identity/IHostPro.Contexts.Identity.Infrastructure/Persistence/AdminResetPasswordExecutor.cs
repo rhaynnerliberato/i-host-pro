@@ -20,14 +20,14 @@ public sealed class AdminResetPasswordExecutor : IAdminResetPasswordExecutor
         IdentityErrorCodes.UserConcurrencyConflict, IdentityErrorCodes.UserConcurrencyConflict);
 
     private readonly IIdentityTransactionExecutor _transactionExecutor;
-    private readonly DbContext _dbContext;
+    private readonly IdentityDbContext _dbContext;
     private readonly IIntegrationEventCollector _eventCollector;
     private readonly ISessionRevocationSignal _revocationSignal;
     private readonly ISessionRevocationCache _revocationCache;
 
     public AdminResetPasswordExecutor(
         IIdentityTransactionExecutor transactionExecutor,
-        DbContext dbContext,
+        IdentityDbContext dbContext,
         IIntegrationEventCollector eventCollector,
         ISessionRevocationSignal revocationSignal,
         ISessionRevocationCache revocationCache)

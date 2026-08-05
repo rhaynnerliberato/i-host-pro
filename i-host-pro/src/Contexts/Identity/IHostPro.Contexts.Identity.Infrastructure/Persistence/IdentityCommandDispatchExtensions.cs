@@ -223,29 +223,31 @@ public static class IdentityCommandDispatchExtensions
             IPipelineBehavior<AdminResetPasswordCommand, Result>,
             AdminResetPasswordTenantAwareBehavior>();
 
-        // Incremento 3, Checkpoint 3 — see class remarks above.
+        // Incremento 3, Checkpoint 3 — see class remarks above. Closed to
+        // IdentityDbContext explicitly (Fase 4 homologation fix) — never the
+        // ambiguous, unparameterized DbContext base type.
         services.AddScoped<
             IPipelineBehavior<ListRolesQuery, Result<IReadOnlyCollection<CatalogRole>>>,
-            TenantTransactionBehavior<ListRolesQuery, Result<IReadOnlyCollection<CatalogRole>>>>();
+            TenantTransactionBehavior<ListRolesQuery, Result<IReadOnlyCollection<CatalogRole>>, IdentityDbContext>>();
         services.AddScoped<
             IPipelineBehavior<ListPermissionsQuery, Result<IReadOnlyCollection<CatalogPermission>>>,
-            TenantTransactionBehavior<ListPermissionsQuery, Result<IReadOnlyCollection<CatalogPermission>>>>();
+            TenantTransactionBehavior<ListPermissionsQuery, Result<IReadOnlyCollection<CatalogPermission>>, IdentityDbContext>>();
 
         // Incremento 3, Checkpoint 4 — see class remarks above.
         services.AddScoped<
             IPipelineBehavior<GetOwnProfileQuery, Result<OwnProfileResult>>,
-            TenantTransactionBehavior<GetOwnProfileQuery, Result<OwnProfileResult>>>();
+            TenantTransactionBehavior<GetOwnProfileQuery, Result<OwnProfileResult>, IdentityDbContext>>();
         services.AddScoped<
             IPipelineBehavior<ListOwnSessionsQuery, Result<IReadOnlyCollection<OwnSessionResult>>>,
-            TenantTransactionBehavior<ListOwnSessionsQuery, Result<IReadOnlyCollection<OwnSessionResult>>>>();
+            TenantTransactionBehavior<ListOwnSessionsQuery, Result<IReadOnlyCollection<OwnSessionResult>>, IdentityDbContext>>();
 
         // Incremento 3, Checkpoint 5 — see class remarks above.
         services.AddScoped<
             IPipelineBehavior<ListUsersQuery, Result<PagedResult<UserResult>>>,
-            TenantTransactionBehavior<ListUsersQuery, Result<PagedResult<UserResult>>>>();
+            TenantTransactionBehavior<ListUsersQuery, Result<PagedResult<UserResult>>, IdentityDbContext>>();
         services.AddScoped<
             IPipelineBehavior<GetUserByIdQuery, Result<UserResult>>,
-            TenantTransactionBehavior<GetUserByIdQuery, Result<UserResult>>>();
+            TenantTransactionBehavior<GetUserByIdQuery, Result<UserResult>, IdentityDbContext>>();
 
         return services;
     }

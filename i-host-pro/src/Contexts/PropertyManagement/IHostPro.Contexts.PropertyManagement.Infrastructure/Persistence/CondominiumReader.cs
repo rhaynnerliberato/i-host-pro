@@ -7,7 +7,7 @@ namespace IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 /// <inheritdoc cref="ICondominiumReader"/>
 /// <remarks>
 /// Reads exclusively from <see cref="PropertyManagementDbContext"/> —
-/// <c>Condominiums</c> is <c>ITenantOwned</c>, so the DbContext's Global
+/// <c>Condominiums</c> is <c>ITenantOwned</c>, so the PropertyManagementDbContext's Global
 /// Query Filter already scopes every query here to the current tenant
 /// (mirrors <c>UserAdministrationReader</c>). <see cref="ListAsync"/>
 /// projects only <c>Id</c>/<c>Name</c>/<c>CreatedAt</c>/<c>UpdatedAt</c> —

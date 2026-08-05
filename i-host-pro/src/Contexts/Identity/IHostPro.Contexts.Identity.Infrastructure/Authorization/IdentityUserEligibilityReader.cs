@@ -20,7 +20,7 @@ namespace IHostPro.Contexts.Identity.Infrastructure.Authorization;
 /// was constructed with (already resolved identically, from the same JWT
 /// claim, by <c>ConfigureJwtBearerOptions.OnTokenValidatedAsync</c> before
 /// any Command/Query dispatches — the ambient value already scopes this
-/// DbContext's own Global Query Filter). This local scope exists purely to
+/// IdentityDbContext's own Global Query Filter). This local scope exists purely to
 /// satisfy PostgreSQL's OWN Row-Level Security enforcement
 /// (<c>SET LOCAL app.tenant_id</c>), a second, independent layer that does
 /// not consult EF Core's filter at all — mirroring exactly how
