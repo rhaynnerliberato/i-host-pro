@@ -1,8 +1,8 @@
 # Fase 4 — Frontend Foundation — Validação e Homologação
 
-Versão: 0.6
+Versão: 0.9
 
-Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Incremento 2 (Administração de Usuários) **aprovado, versionado e publicado** na mesma branch (Seções 11.11–11.12). Fase 4 continua em andamento — não integrada em `master`.
+Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Incremento 2 (Administração de Usuários) **aprovado, versionado e publicado** na mesma branch (Seções 11.11–11.12). Incremento 3 (Gestão de Condomínios e Imóveis) **aprovado e versionado** (três commits funcionais, Seção 12.9) — publicação (`git push`) ainda pendente neste momento. Fase 4 continua em andamento — não integrada em `master`.
 
 ---
 
@@ -380,6 +380,115 @@ Dois defeitos reais de teste (não de produto) encontrados e corrigidos durante 
 
 ### 11.12 Publicação do Incremento 2
 
-`git push origin feature/frontend-foundation` executado com sucesso — branch remota atualizada (`315e1ca..2f701db`). Confirmado após o push: `git status -sb` reporta apenas o cabeçalho da branch (working tree limpa, nada modificado/não rastreado remanescente); `git rev-list --left-right --count origin/feature/frontend-foundation...feature/frontend-foundation` retorna `0 0`.
+Dois pushes: `git push origin feature/frontend-foundation` (`315e1ca..2f701db`, quatro commits: os três funcionais + `docs(frontend): record increment 2 completion`), seguido do commit documental de encerramento `docs(frontend): close increment 2 publication` (`69b2c9a`) e um segundo push (`2f701db..69b2c9a`). Confirmado após cada push: `git status -sb` reporta apenas o cabeçalho da branch (working tree limpa, nada modificado/não rastreado remanescente); `git rev-list --left-right --count origin/feature/frontend-foundation...feature/frontend-foundation` retorna `0 0`.
 
 **Incremento 2 encerrado.** Fase 4 continua não integrada em `master` (nenhum merge realizado, nenhuma tag criada, nenhuma branch excluída, nenhum force push usado).
+
+## 12. Incremento 3 — Gestão de Condomínios e Imóveis
+
+### 12.1 Escopo
+
+Interface administrativa de condomínios e imóveis (rotas `/condominiums` e `/properties`, hoje placeholders — Checkpoint 4 do Incremento 1) consumindo exclusivamente os endpoints reais já existentes em `CondominiumsController`/`PropertiesController` (Property Management, Fase 2): listagem paginada (sem busca/filtro — o backend não oferece), criação, edição de condomínios; listagem paginada, criação, edição e ciclo de vida (ativar/desativar/arquivar) de imóveis; vínculo/remoção de proprietário. Protegida por `permissionGuard` + `PROPERTIES:MANAGE` (única permissão real que existe para este contexto — Seção 12.3).
+
+### 12.2 Fora de escopo
+
+`MyPropertiesController` (portal do proprietário — usado apenas para validar que o contrato existe, se necessário); exclusão de condomínio/imóvel (endpoint inexistente); restauração de imóvel arquivado (endpoint inexistente); busca/filtro em qualquer listagem (backend não oferece); nome/e-mail do proprietário vinculado (endpoint de ownership não os retorna — apenas `OwnerUserId`); Reservas, Agenda, dashboard completo, Housekeeping, Portal da Faxineira, Comunicação, WhatsApp, workflows, IA, qualquer funcionalidade das Fases 5+ (Documento 00, Plano Executivo).
+
+### 12.3 Permissões reais
+
+Confirmadas em `IdentityCatalogSeed.cs` e nos controllers reais, nunca inferidas: **`PROPERTIES:MANAGE`** é a única permissão que protege toda ação administrativa deste incremento — criação/edição/listagem de condomínios, criação/edição/listagem/lifecycle/ownership de imóveis. Não existe permissão específica de condomínio (`CONDOMINIUM*`) nem de ownership (`*OWNER*MANAGE`) no catálogo — ambos reaproveitam `PROPERTIES:MANAGE`. `PROPERTIES:READ` (concedida a OPERATOR/HOUSEKEEPER/AI_AGENT) existe no catálogo mas **nenhum endpoint a exige hoje** — não há capacidade real de "somente leitura" neste contexto; qualquer usuário sem `PROPERTIES:MANAGE` é bloqueado de toda a área, mesmo para apenas visualizar. `PROPERTIES:READ:OWN_OWNER` (PROPERTY_OWNER) protege apenas `MyPropertiesController`, fora de escopo (Seção 12.2).
+
+Verificado contra Documento 09 (§12 Recursos, §15 Matriz Simplificada): documento conceitual, sem códigos literais de permissão — apenas confirma o recurso "Imóveis" com Admin=Controle total (X), Operador/Faxineira/Proprietário=Leitura (L), consistente com o catálogo real (`PROPERTIES:MANAGE`→ADMIN, `PROPERTIES:READ`→OPERATOR/HOUSEKEEPER, `PROPERTIES:READ:OWN_OWNER`→PROPERTY_OWNER). **Nenhuma divergência encontrada** entre documentação e seed real.
+
+### 12.4 Endpoints consumidos (`CondominiumsController` + `PropertiesController`, confirmados no código-fonte)
+
+| Método | Rota | Permissão | Request | Response |
+|---|---|---|---|---|
+| POST | `/api/v1/condominiums` | `PROPERTIES:MANAGE` | `CreateCondominiumRequest(name, address)` | `CondominiumDetailResponse` (201) |
+| GET | `/api/v1/condominiums` | `PROPERTIES:MANAGE` | query: `page, pageSize` | `PagedCondominiumResponse` |
+| GET | `/api/v1/condominiums/{condominiumId}` | `PROPERTIES:MANAGE` | — | `CondominiumDetailResponse` |
+| PATCH | `/api/v1/condominiums/{condominiumId}` | `PROPERTIES:MANAGE` | `UpdateCondominiumRequest(name?, address?)` | `CondominiumDetailResponse` |
+| POST | `/api/v1/properties` | `PROPERTIES:MANAGE` | `CreatePropertyRequest(code, name, capacity, condominiumId?, address?)` | `PropertyDetailResponse` (201) |
+| GET | `/api/v1/properties` | `PROPERTIES:MANAGE` | query: `page, pageSize` | `PagedPropertyResponse` |
+| GET | `/api/v1/properties/{propertyId}` | `PROPERTIES:MANAGE` | — | `PropertyDetailResponse` |
+| PATCH | `/api/v1/properties/{propertyId}` | `PROPERTIES:MANAGE` | `UpdatePropertyRequest` (campos `Optional<T>` — omitido = não alterar) | `PropertyDetailResponse` |
+| POST | `/api/v1/properties/{propertyId}/activate` | `PROPERTIES:MANAGE` | — | `PropertyDetailResponse` (200) |
+| POST | `/api/v1/properties/{propertyId}/deactivate` | `PROPERTIES:MANAGE` | — | `PropertyDetailResponse` (200) |
+| POST | `/api/v1/properties/{propertyId}/archive` | `PROPERTIES:MANAGE` | — | `PropertyDetailResponse` (200) |
+| POST | `/api/v1/properties/{propertyId}/owners` | `PROPERTIES:MANAGE` | `LinkPropertyOwnerRequest(ownerUserId)` | `PropertyOwnerResponse` (201) |
+| DELETE | `/api/v1/properties/{propertyId}/owners/{ownerUserId}` | `PROPERTIES:MANAGE` | — | 204 |
+| GET | `/api/v1/properties/{propertyId}/owners` | `PROPERTIES:MANAGE` | query: `page, pageSize` | `PagedPropertyOwnerResponse` |
+
+Nenhum endpoint declara hoje `[ProducesResponseType]` — o cliente NSwag atual tipa todos os 14 métodos acima como `Observable<void>` (nenhuma interface de resposta é gerada: `CondominiumDetailResponse`, `PropertyDetailResponse` etc. não existem no `api-client.ts` atual). Corrigido no Gate do OpenAPI (Seção 12.5).
+
+**Lifecycle de imóvel** (`PropertyStatus`: `Draft → Active → Inactive`, `Draft/Inactive → Archived`, terminal — sem restauração): `Activate` permitido de `Draft`/`Inactive`; requer endereço efetivo resolvido (próprio ou do condomínio) — falha com `PropertyAddressRequired`/`CondominiumNotFound` se ausente. `Deactivate` permitido apenas de `Active`. `Archive` permitido de `Draft`/`Inactive` (rejeitado a partir de `Active` — deve desativar primeiro). Imóvel `Archived` rejeita qualquer `PATCH` (`ArchivedPropertyCannotBeModified`), inclusive um PATCH sem mudanças reais.
+
+**Ownership**: vínculo verifica elegibilidade no Identity (usuário existe no tenant, `Status=Active`, possui papel `PROPERTY_OWNER`) antes de abrir a própria transação — falhas retornam `OwnerUserNotFound`/`OwnerUserNotEligible`. Vínculo duplicado retorna `PropertyOwnerAlreadyLinked` (aplicado também por índice único no banco). Remoção de vínculo inexistente retorna `PropertyOwnerNotLinked`. A resposta de ownership **não inclui nome/e-mail do proprietário** — apenas `OwnerUserId`; a tela precisará exibir o GUID cru ou (fora de escopo, a menos que trivial) resolver via um endpoint de Identity já existente.
+
+**Códigos de erro reais** (`PropertyManagementErrorCodes.cs`, mapeamento fechado via `PropertyManagementResultHttpMapper` — mapper próprio deste contexto, não compartilhado com o de Identity): 404 (`CondominiumNotFound`, `PropertyNotFound`, `OwnerUserNotFound`, `PropertyOwnerNotLinked`); 409 (`CondominiumConcurrencyConflict`, `PropertyCodeAlreadyExists`, `PropertyConcurrencyConflict`, `PropertyAlreadyActive`, `PropertyAlreadyInactive`, `PropertyAlreadyArchived`, `InvalidPropertyStatusTransition`, `ArchivedPropertyCannotBeModified`, `OwnerUserNotEligible`, `PropertyOwnerAlreadyLinked`); 400 com `ProblemDetails.Extensions["codes"]` (validação FluentValidation + `NoChangesProvided` + os literais `condominium_name_invalid`/`condominium_address_invalid`/`property_code_invalid`/`property_name_invalid`/`property_address_invalid`).
+
+### 12.5 Checkpoints
+
+1. Gate de permissões e Gate do OpenAPI: confirmação do código `PROPERTIES:MANAGE` (Seção 12.3), `[ProducesResponseType]` nos 14 endpoints acima, regeneração NSwag determinística.
+2. Checkpoint 1 — Condomínios: rota `/condominiums`, listagem (paginação apenas — sem busca/filtro, backend não oferece), criação, edição, estados vazio/carregando/erro.
+3. Checkpoint 2 — Imóveis: rota `/properties`, listagem (paginação apenas), criação, edição, vínculo com condomínio, estados vazio/carregando/erro.
+4. Checkpoint 3 — Lifecycle: ativar/desativar/arquivar, exibição do estado atual, apenas ações válidas para o estado atual, confirmação para ações sensíveis, tratamento de 409.
+5. Checkpoint 4 — Ownership: visualizar/vincular/remover proprietários, confirmação para remoção, tratamento de usuário inelegível (`OwnerUserNotEligible`) e conflito (`PropertyOwnerAlreadyLinked`).
+6. Testes unitários frontend + Playwright (fluxos principais).
+
+### 12.6 Critérios de aceite
+
+Todas as ações usam exclusivamente o cliente NSwag regenerado (nenhum contrato manual); rotas protegidas por `permissionGuard`/`PROPERTIES:MANAGE` (navegação oculta/rota bloqueada sem a permissão, nunca por nome de papel, nunca por JWT decodificado); toda ação sensível (arquivar, remover proprietário) exige confirmação; toda ação produz feedback (sucesso/erro); nenhuma funcionalidade inexistente no backend é inventada (exclusão, restauração, busca/filtro, nome do proprietário); nenhum trabalho em Reservas/Agenda/dashboard/Housekeeping/Fases 5+; testes unitários e Playwright cobrindo os fluxos principais aprovados.
+
+### 12.7 Dependências
+
+Fase 2 (Property Management) homologada, commitada e publicada (pré-condição já satisfeita — `Fase 2 - Property Management - Validacao e Homologacao.md`). Infraestrutura de autorização por permissão real (`OwnProfileResponse.permissions`, `permissionGuard`, Incremento 2) já implementada e reaproveitada sem alteração. Fixture E2E compartilhada (`WebE2EFixtureCollection`) e inicialização direta do Angular via `node ng.js` (Seção 11.8) já estabilizadas e reaproveitadas.
+
+### 12.8 Encerramento do Incremento 3
+
+**Arquitetura entregue**: `frontend/IHostPro.Web/src/app/features/property-management/` — `condominiums.service.ts`, `properties.service.ts`, `property-management-error.ts` (mesmo padrão duck-typing de `users/user-error.ts`), subpastas `condominiums/` (`condominiums-list`, `condominium-form-dialog`), `properties/` (`properties-list`, `property-form-dialog`), `ownership/` (`property-owners-dialog`). Rotas `/condominiums` e `/properties` substituindo os placeholders, protegidas por `permissionGuard` + `PROPERTIES:MANAGE`; item de navegação correspondente também gated. Nenhuma dependência nova (sem NgRx, sem store global, sem biblioteca de tabela/visual nova) — apenas Angular Material + Transloco + o cliente NSwag regenerado, conforme Seção 12.6.
+
+**Testes unitários frontend**: 8 arquivos `.spec.ts` novos (`property-management-error`, `condominiums.service`, `properties.service`, `condominiums-list`, `condominium-form-dialog`, `properties-list`, `property-form-dialog`, `property-owners-dialog`) cobrindo loading/empty/error, criação/edição, paginação, prevenção de duplo-submit, lifecycle (guards `canActivate`/`canDeactivate`/`canArchive`/`canEdit`), vínculo/remoção de proprietário e classificação de erro (404/409/400/genérico). Suíte completa do frontend (incluindo Incrementos 1 e 2, sem regressão): **192/192 aprovados, 25 arquivos de teste**.
+
+**Testes Playwright (.NET)**: 2 classes novas — `PropertyManagementAuthorizationE2ETests` (3 fluxos: acesso negado a Condomínios sem `PROPERTIES:MANAGE`, acesso negado a Imóveis sem `PROPERTIES:MANAGE`, ADMIN acessa ambos) e `PropertyManagementE2ETests` (7 fluxos: listar+criar condomínio, editar condomínio, criar imóvel vinculado a condomínio, editar imóvel, executar as transições de lifecycle permitidas em sequência com verificação de menu por estado, vincular proprietário, remover proprietário). **10/10 aprovados**, reaproveitando a fixture/coleção compartilhada e a inicialização `node ng.js` já estabilizadas (Seção 11.8).
+
+**Defeitos reais encontrados e corrigidos durante a homologação em navegador e a execução dos testes Playwright** (nenhum destes existia antes desta verificação real — nenhum foi presumido):
+
+1. **`condominiums-list.ts`, `openCreateDialog()`** — não passava `data: {}` ao abrir o diálogo de criação, deixando `MAT_DIALOG_DATA` como `null`; `this.data.condominium` lançava `TypeError`. Confirmado via console do navegador. Corrigido adicionando `data: {}`.
+2. **`property-owners-dialog.ts`/`.html`** — o `<form (ngSubmit)="linkOwner()">` do formulário de vínculo de proprietário não declara `[formGroup]` (não usa `FormGroup`, apenas um `FormControl` avulso) e o componente importa apenas `ReactiveFormsModule`, nunca `FormsModule`. Sem `FormsModule`, nenhuma diretiva Angular declara a saída `ngSubmit` para um `<form>` sem `[formGroup]` — Angular não sinaliza isso como erro de compilação (bindings de evento não reconhecidos não são validados como bindings de propriedade), então o binding simplesmente nunca dispara. O clique no botão `type="submit"` caía no comportamento nativo do HTML (submissão da página, recarregando o SPA inteiro) — nenhuma requisição HTTP de vínculo era emitida. Descoberto ao testar manualmente o vínculo de proprietário no navegador (o diálogo "desaparecia" sem motivo aparente); causa raiz confirmada comparando com os outros 3 diálogos do incremento, todos usando `[formGroup]` (que ativa `ReactiveFormsModule`'s `FormGroupDirective`, a fonte real de `ngSubmit` nesses casos). Corrigido importando `FormsModule` (que fornece `NgForm`, cujo seletor casa com qualquer `<form>` sem `[formGroup]`) e adicionando `novalidate` ao elemento, alinhando com o padrão dos demais formulários.
+3. **Contrato OpenAPI de `UpdatePropertyRequest` incorreto para os campos `Optional<T>`** (defeito mais sério encontrado, afetando 100% das edições de imóvel) — o `OptionalJsonConverter<T>` real (Property Management, já existente) lê/escreve, no JSON, o valor bruto de `T` (ou `null` explícito) diretamente na posição da própria propriedade — nunca um objeto `{isSet, value}`; "isSet" é expresso pela presença ou ausência da chave JSON, nunca por um wrapper aninhado. A geração de schema padrão do Swashbuckle, porém, ignora esse `JsonConverter` customizado e reflete a forma pública do struct `Optional<T>` (`IsSet`/`Value`) — produzindo um schema OpenAPI incorreto. O NSwag gerado a partir desse schema errado produzia, portanto, um cliente que serializava `{ code: { isSet: true, value: "..." } }` em vez de `{ code: "..." }`, e todo `PATCH /api/v1/properties/{id}` retornava `400 Bad Request` ("The JSON value could not be converted to System.String. Path: $"). Descoberto ao testar manualmente a edição de um imóvel no navegador. Corrigido na origem — não com um contrato manual no frontend — adicionando `OptionalSchemaFilter` (`src/Host/IHostPro.Api/Swagger/`, único lugar onde Swashbuckle está referenciado) que substitui o schema gerado de qualquer `Optional<T>` pelo schema do próprio `T` (resolvendo também o caso em que `T` é um tipo complexo já registrado como componente nomeado, como `AddressRequest`, via lookup no `SchemaRepository`). NSwag regenerado (determinismo confirmado, duas execuções idênticas); `properties.service.ts.update()` ajustado para enviar valores diretamente (incluindo `null` explícito, preservado via um cast documentado — o parâmetro `nswag.json`'s `"nullValue": "Undefined"`, já existente e usado por todo o resto do cliente, não expõe `| null` nos tipos gerados, mas o valor `null` em tempo de execução continua sendo serializado corretamente pelo `JSON.stringify`). Verificado manualmente nos dois ramos (imóvel com endereço próprio e imóvel usando o endereço do condomínio) e via Playwright.
+4. **`admin-layout.spec.ts`, teste pré-existente do Incremento 1** — um teste ("always shows nav items that declare no required permission...") presumia que o item de navegação "Condomínios" nunca exigia permissão (verdade quando a rota era um placeholder); a gate de permissão real deste incremento (`PROPERTIES:MANAGE`) quebrou essa asserção. Corrigido trocando a asserção para `/reservations` (item real ainda sem gate) e adicionando dois testes dedicados para a gate de `PROPERTIES:MANAGE` em "Condomínios"/"Imóveis".
+5. **Três defeitos nos testes Playwright novos, não no produto** — `GetByLabel("Condomínio")` sem `Exact: true` casava por substring com o rótulo do checkbox "Endereço próprio (diferente do condomínio)"; `GetByRole(Button, Name: "Remover")` sem escopo casava tanto o botão de remoção por proprietário quanto o botão de confirmação do diálogo empilhado; `GetByRole(Menuitem, Name: "Ativar")` sem `Exact: true` casava por substring com "Desativar" (o único item presente no estado Ativo), fazendo a asserção de ausência falhar persistentemente mesmo com o backend e o frontend corretos — confirmado via diagnóstico direto (payload real da API, `outerHTML` da linha, conteúdo do menu reaberto) antes da correção. Todos os três corrigidos com `Exact: true` e/ou escopo ao diálogo mais recente.
+
+**Validação proporcional executada**: build completo da solução (`dotnet build IHostPro.sln`, 0 erros); testes unitários de Property Management focados (180/180); testes de arquitetura (120/120, cobrindo o novo `OptionalSchemaFilter` no Host); build do frontend (`ng build`, limpo); testes unitários do frontend (192/192); suíte completa dos 10 fluxos Playwright deste incremento (10/10); `git diff --check` sem erros de espaço em branco reais (apenas avisos benignos de LF/CRLF). Não foram re-executadas as suítes completas de Identity/Reservations/Wolverine/arquitetura de outros contextos — nenhuma mudança neste incremento as afeta, exceto a arquitetura (executada por precaução, dado o novo arquivo no Host).
+
+**Débito técnico registrado**: `PROPERTIES:READ` existe no catálogo de permissões mas nenhum endpoint o exige hoje — não há capacidade real de "somente leitura" neste contexto (já documentado na Seção 12.3, não é uma decisão tomada nesta implementação). O mesmo defeito de schema do `Optional<T>` (item 3 acima) existe potencialmente em Reservations (`ReservationsInt32Optional`, mesmo padrão de conversor), mas está fora do escopo deste incremento — o frontend de Reservas ainda não foi construído (Seção 12.2) — e não foi corrigido aqui.
+
+**Confirmações finais**: nenhuma autorização foi feita por nome de papel ou por JWT decodificado em nenhum ponto — exclusivamente `OwnProfileResponse.permissions`/`permissionGuard`, backend como autoridade final. Nenhum trabalho de Reservas (frontend), Agenda, dashboard completo, Housekeeping, Portal da Faxineira, Comunicação, WhatsApp, workflows, IA ou qualquer funcionalidade de Fase 5+ foi realizado. Nenhuma operação de versionamento (commit, push, merge, tag) foi realizada após o início deste incremento — o repositório permanece exatamente como estava ao final do Incremento 2, apenas com as mudanças deste incremento não commitadas na árvore de trabalho.
+
+### 12.9 Encerramento do Incremento 3
+
+**Aprovação**: Incremento 3 aprovado tecnicamente pelo usuário e autorizado para versionamento e publicação na branch `feature/frontend-foundation`.
+
+**Commits** (três commits funcionais, cada um isolado ao seu próprio grupo de arquivos, revisado via `git diff --cached` antes de cada commit — nunca `git add .`):
+
+| # | Hash completo | Mensagem | Escopo |
+|---|---|---|---|
+| 1 | `ae814f0387b8f67b2ce1c1a5343ab57921e40d82` | `fix(openapi): describe property management contracts` | `[ProducesResponseType]` nos 14 endpoints de `CondominiumsController`/`PropertiesController`; `OptionalSchemaFilter` (novo, `src/Host/IHostPro.Api/Swagger/`) e seu registro em `Program.cs` — corrige o schema OpenAPI de `Optional<T>` na origem (Seção 12.8, item 3). 4 arquivos. |
+| 2 | `267c939e59b5b004e7d4cf3c67895208d7c2b5c2` | `feat(frontend): add property management` | Cliente NSwag regenerado; rotas `/condominiums`/`/properties` e navegação condicionadas a `PROPERTIES:MANAGE`; feature `features/property-management/` completa (serviços, listagens, diálogos de condomínio/imóvel/ownership, classificação de erro); traduções; testes unitários frontend. 32 arquivos. |
+| 3 | `d188f7e602e71c3a82c274bdbfa5b6b9d949edd7` | `test(frontend): cover property management workflows` | `PropertyManagementAuthorizationE2ETests` (3 fluxos), `PropertyManagementE2ETests` (7 fluxos) — nenhum ajuste na fixture compartilhada foi necessário desta vez. 2 arquivos. |
+
+**Resumo do que cada commit registra, para referência rápida**:
+- Código `PROPERTIES:MANAGE` — única permissão real usada para proteger `/condominiums`, `/properties` e condicionar a navegação (Seção 12.3).
+- **Nenhuma autorização baseada em nome de papel ou JWT decodificado** em nenhum ponto do código de produção ou dos testes (confirmado por revisão de todo o código tocado neste incremento).
+- 14 endpoints reais consumidos (Seção 12.4), nenhum inventado.
+- `OptionalSchemaFilter` — corrige a raiz do defeito de contrato descrito na Seção 12.8, item 3 (nunca um contrato manual no frontend).
+- Funcionalidades concluídas: Condomínios (listar/criar/editar), Imóveis (listar/criar/editar/vínculo com condomínio), lifecycle (ativar/desativar/arquivar com confirmação), ownership (vincular/remover proprietário) — todas com feedback e confirmação onde aplicável (Seções 12.5–12.6).
+- Testes unitários de Property Management (backend): **180/180**. Testes de arquitetura: **120/120**. Testes unitários frontend (25 arquivos, incluindo Incrementos 1–2 sem regressão): **192/192**. `PropertyManagementAuthorizationE2ETests` + `PropertyManagementE2ETests`: **10/10**.
+- `npm run generate:api`: determinístico (duas gerações idênticas byte-a-byte).
+- `dotnet build IHostPro.sln`: aprovado. `ng build`: aprovado.
+- `git diff --check`: sem erros reais (apenas avisos benignos de LF/CRLF).
+- Cinco defeitos reais encontrados e corrigidos durante a homologação, detalhados na Seção 12.8.
+- Stack homolog restaurado ao estado anterior após cada execução que exigiu pará-lo.
+
+**Incremento 3 concluído.** No momento deste registro (antes da publicação): push ainda pendente; Incremento 4 ainda não iniciado.
