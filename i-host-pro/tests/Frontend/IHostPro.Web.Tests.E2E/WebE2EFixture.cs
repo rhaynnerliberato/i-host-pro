@@ -62,6 +62,17 @@ public sealed class WebE2EFixture : IAsyncLifetime
     public const string AdminPassword = "Correct-Horse-Battery-Staple-77!";
     public const string AdminFullName = "E2E Playwright Admin";
 
+    /// <summary>
+    /// OPERATOR — a real seeded role that, per <c>IdentityCatalogSeed</c>, is
+    /// never granted <c>USERS:MANAGE</c>. Used exclusively by the
+    /// authorization-focused tests (Fase 4, Incremento 2) to prove the
+    /// "Usuários" nav item and the <c>/users</c> route are gated on the
+    /// user's real effective permissions, never on being merely authenticated.
+    /// </summary>
+    public const string OperatorEmail = "operator@e2e-playwright.test";
+    public const string OperatorPassword = "Correct-Horse-Battery-Staple-88!";
+    public const string OperatorFullName = "E2E Playwright Operator";
+
     public string ApiBaseUrl { get; } = $"http://localhost:{ApiPort}";
     public string WebBaseUrl { get; } = $"http://localhost:{WebPort}";
 
@@ -126,7 +137,12 @@ public sealed class WebE2EFixture : IAsyncLifetime
         var adminConnectionString = _postgresContainer.GetConnectionString();
         await using (var adminConnection = new NpgsqlConnection(adminConnectionString))
         {
-            await adminConnection.OpenAsync();
+            // Testcontainers' readiness check runs `pg_isready` *inside* the container (over
+            // Docker's own socket), which can report ready a moment before the host↔container
+            // port publish (Docker Desktop/WSL2 NAT) has actually finished converging — a real,
+            // observed race, not a fixture bug. A short bounded retry bridges that gap without
+            // masking a genuinely unreachable database.
+            await OpenWithRetryAsync(adminConnection);
             await using var command = adminConnection.CreateCommand();
             command.CommandText = $"""
                 CREATE ROLE ihostpro_migrator LOGIN PASSWORD '{MigratorRolePassword}';
@@ -259,11 +275,17 @@ public sealed class WebE2EFixture : IAsyncLifetime
         dbContext.Tenants.Add(tenant);
 
         var hasher = new Argon2PasswordHasher(new KonsciousArgon2idPrimitive(), Options.Create(new Argon2Options()));
-        var hash = PasswordHash.FromEncoded(hasher.HashPassword(null!, AdminPassword));
         var now = DateTimeOffset.UtcNow;
-        var user = User.Register(Guid.NewGuid(), tenantId, Email.Create(AdminEmail), AdminFullName, hash, now);
-        dbContext.Users.Add(user);
-        dbContext.UserRoles.Add(new UserRole(tenantId, user.Id, "ADMIN", now, assignedByUserId: null));
+
+        var adminHash = PasswordHash.FromEncoded(hasher.HashPassword(null!, AdminPassword));
+        var admin = User.Register(Guid.NewGuid(), tenantId, Email.Create(AdminEmail), AdminFullName, adminHash, now);
+        dbContext.Users.Add(admin);
+        dbContext.UserRoles.Add(new UserRole(tenantId, admin.Id, "ADMIN", now, assignedByUserId: null));
+
+        var operatorHash = PasswordHash.FromEncoded(hasher.HashPassword(null!, OperatorPassword));
+        var operatorUser = User.Register(Guid.NewGuid(), tenantId, Email.Create(OperatorEmail), OperatorFullName, operatorHash, now);
+        dbContext.Users.Add(operatorUser);
+        dbContext.UserRoles.Add(new UserRole(tenantId, operatorUser.Id, "OPERATOR", now, assignedByUserId: null));
 
         await dbContext.SaveChangesAsync();
         await transaction.CommitAsync();
@@ -370,8 +392,19 @@ public sealed class WebE2EFixture : IAsyncLifetime
         if (!Directory.Exists(webRoot))
             throw new InvalidOperationException($"Frontend project not found at {webRoot}.");
 
-        var npmCommand = OperatingSystem.IsWindows() ? "npm.cmd" : "npm";
-        var psi = new ProcessStartInfo(npmCommand, $"start -- --port {WebPort}")
+        // Invokes the Angular CLI's own script directly via `node`, never `npm start`/`ng.cmd`:
+        // on Windows, Process.Start(FileName = "npm.cmd", UseShellExecute = false) breaks
+        // npm.cmd's own %~dp0-based module resolution (a known Process.Start + .cmd interop
+        // pitfall). Wrapping it in `cmd.exe /c npm.cmd start` worked around that, but introduced
+        // a worse problem: npm's own multi-hop process spawning (cmd.exe → npm.cmd → npm →
+        // ng serve) breaks Process.Kill(entireProcessTree: true) in DisposeAsync below — the
+        // real `ng serve` node.exe (and its esbuild.exe child) routinely survived as an orphan
+        // holding this process's stdout/stderr pipe open forever, making every run *look* hung
+        // long after the actual test run had already finished (observed repeatedly this
+        // session). Calling `node ng.js serve` directly makes the tracked Process the actual,
+        // single, killable process — no intermediate shell hops to lose track of.
+        var ngScript = Path.Combine(webRoot, "node_modules", "@angular", "cli", "bin", "ng.js");
+        var psi = new ProcessStartInfo("node", $"\"{ngScript}\" serve --port {WebPort}")
         {
             WorkingDirectory = webRoot,
             RedirectStandardOutput = true,
@@ -385,6 +418,29 @@ public sealed class WebE2EFixture : IAsyncLifetime
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         return process;
+    }
+
+    /// <summary>
+    /// Opens the given (closed) connection, retrying a bounded number of times with a short
+    /// delay if the very first attempt times out — bridges the readiness-vs-port-publish race
+    /// described where <see cref="StartPostgresAsync"/> calls this. Any other exception, or the
+    /// final attempt's exception, propagates immediately: a genuinely unreachable database must
+    /// still fail the fixture, never be silently retried away.
+    /// </summary>
+    private static async Task OpenWithRetryAsync(NpgsqlConnection connection, int maxAttempts = 5)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await connection.OpenAsync();
+                return;
+            }
+            catch (NpgsqlException) when (attempt < maxAttempts)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(attempt));
+            }
+        }
     }
 
     private static async Task WaitForHttpReadyAsync(string url, TimeSpan timeout)

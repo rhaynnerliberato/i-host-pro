@@ -13,8 +13,14 @@ namespace IHostPro.Web.Tests.E2E;
 /// full composition. Every test gets its own isolated <see cref="IBrowserContext"/>
 /// (fresh cookies/sessionStorage), so tests never leak session state into
 /// each other regardless of execution order.
+///
+/// <see cref="WebE2EFixtureCollection"/>: shares one <see cref="WebE2EFixture"/>
+/// instance with <see cref="UsersAuthorizationE2ETests"/> so xUnit never boots
+/// two fixtures in parallel — both bind the same fixed RabbitMQ host port
+/// (5672), so a second concurrent instance would fail to start.
 /// </summary>
-public sealed class AuthenticationE2ETests : IClassFixture<WebE2EFixture>
+[Collection(WebE2EFixtureCollection.Name)]
+public sealed class AuthenticationE2ETests
 {
     private readonly WebE2EFixture _fixture;
 
