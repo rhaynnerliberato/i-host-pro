@@ -1,8 +1,8 @@
 # Fase 4 — Frontend Foundation — Validação e Homologação
 
-Versão: 0.5
+Versão: 0.6
 
-Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Incremento 2 (Administração de Usuários) **aprovado e commitado** (Seção 11.11) — publicação (`git push`) em andamento nesta mesma etapa (Seção 11.12). Fase 4 continua em andamento — não integrada em `master`.
+Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Incremento 2 (Administração de Usuários) **aprovado, versionado e publicado** na mesma branch (Seções 11.11–11.12). Fase 4 continua em andamento — não integrada em `master`.
 
 ---
 
@@ -377,3 +377,9 @@ Dois defeitos reais de teste (não de produto) encontrados e corrigidos durante 
 - Stack homolog restaurado ao estado anterior após cada execução que exigiu pará-lo.
 
 **Incremento 2 concluído.** No momento deste registro (antes da publicação — Seção 11.12 abaixo): push ainda pendente; Incremento 3 ainda não iniciado.
+
+### 11.12 Publicação do Incremento 2
+
+`git push origin feature/frontend-foundation` executado com sucesso — branch remota atualizada (`315e1ca..2f701db`). Confirmado após o push: `git status -sb` reporta apenas o cabeçalho da branch (working tree limpa, nada modificado/não rastreado remanescente); `git rev-list --left-right --count origin/feature/frontend-foundation...feature/frontend-foundation` retorna `0 0`.
+
+**Incremento 2 encerrado.** Fase 4 continua não integrada em `master` (nenhum merge realizado, nenhuma tag criada, nenhuma branch excluída, nenhum force push usado).
