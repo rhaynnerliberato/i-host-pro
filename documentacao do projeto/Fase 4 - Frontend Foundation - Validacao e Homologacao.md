@@ -2,7 +2,7 @@
 
 Versão: 0.9
 
-Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Incremento 2 (Administração de Usuários) **aprovado, versionado e publicado** na mesma branch (Seções 11.11–11.12). Incremento 3 (Gestão de Condomínios e Imóveis) **aprovado e versionado** (três commits funcionais, Seção 12.9) — publicação (`git push`) ainda pendente neste momento. Fase 4 continua em andamento — não integrada em `master`.
+Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Incremento 2 (Administração de Usuários) **aprovado, versionado e publicado** na mesma branch (Seções 11.11–11.12). Incremento 3 (Gestão de Condomínios e Imóveis) **aprovado, versionado e publicado** na mesma branch (Seções 12.9–12.10). Fase 4 continua em andamento — não integrada em `master`.
 
 ---
 
@@ -492,3 +492,9 @@ Fase 2 (Property Management) homologada, commitada e publicada (pré-condição 
 - Stack homolog restaurado ao estado anterior após cada execução que exigiu pará-lo.
 
 **Incremento 3 concluído.** No momento deste registro (antes da publicação): push ainda pendente; Incremento 4 ainda não iniciado.
+
+### 12.10 Publicação do Incremento 3
+
+Push `git push origin feature/frontend-foundation` (`69b2c9a..fe6d5c9`, quatro commits: os três funcionais desta seção + `docs(frontend): record increment 3 completion`, hash `fe6d5c9`). Confirmado após o push: `git status -sb` reporta apenas o cabeçalho da branch (working tree limpa); `git rev-list --left-right --count origin/feature/frontend-foundation...feature/frontend-foundation` retorna `0 0`.
+
+**Incremento 3 encerrado.** Fase 4 continua não integrada em `master` (nenhum merge realizado, nenhuma tag criada, nenhuma branch excluída, nenhum force push usado).
