@@ -1,0 +1,35 @@
+<h2 mat-dialog-title>{{ 'users.roles.title' | transloco: { name: data.user.fullName } }}</h2>
+
+<mat-dialog-content>
+  <mat-chip-set aria-label="Papéis atribuídos">
+    @for (roleCode of currentRoles(); track roleCode) {
+      <mat-chip [disabled]="busy()" (removed)="confirmRemoveRole(roleCode)">
+        {{ roleName(roleCode) }}
+        <button matChipRemove [attr.aria-label]="'users.roles.remove' | transloco">
+          <mat-icon>cancel</mat-icon>
+        </button>
+      </mat-chip>
+    }
+    @if (currentRoles().length === 0) {
+      <span>{{ 'users.roles.none' | transloco }}</span>
+    }
+  </mat-chip-set>
+
+  @if (assignableRoles().length > 0) {
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'users.roles.addRole' | transloco }}</mat-label>
+      <mat-select [(ngModel)]="selectedRoleToAdd" [disabled]="busy()">
+        @for (role of assignableRoles(); track role.code) {
+          <mat-option [value]="role.code">{{ role.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <button mat-button [disabled]="!selectedRoleToAdd() || busy()" (click)="assignSelectedRole()">
+      {{ 'users.roles.assign' | transloco }}
+    </button>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-flat-button color="primary" (click)="close()">{{ 'common.close' | transloco }}</button>
+</mat-dialog-actions>

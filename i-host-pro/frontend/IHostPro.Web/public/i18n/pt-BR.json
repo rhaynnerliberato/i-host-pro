@@ -2,6 +2,14 @@
   "app": {
     "title": "iHostPro"
   },
+  "common": {
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "save": "Salvar",
+    "close": "Fechar",
+    "remove": "Remover",
+    "retry": "Tentar novamente"
+  },
   "auth": {
     "login": {
       "title": "Entrar",
@@ -37,5 +45,88 @@
     "forbiddenTitle": "Acesso negado",
     "sessionExpired": "Sua sessão expirou. Faça login novamente.",
     "backToHome": "Voltar ao início"
+  },
+  "users": {
+    "list": {
+      "title": "Usuários",
+      "create": "Novo usuário",
+      "search": "Buscar",
+      "statusFilter": "Status",
+      "statusAll": "Todos",
+      "statusActive": "Ativo",
+      "statusBlocked": "Bloqueado",
+      "loadError": "Não foi possível carregar os usuários.",
+      "empty": "Nenhum usuário encontrado.",
+      "columns": {
+        "fullName": "Nome",
+        "email": "E-mail",
+        "status": "Status",
+        "roles": "Papéis",
+        "actions": "Ações"
+      },
+      "actionsFor": "Ações para {{name}}",
+      "edit": "Editar",
+      "manageRoles": "Gerenciar papéis",
+      "resetPassword": "Redefinir senha",
+      "unblock": "Desbloquear",
+      "block": "Bloquear",
+      "blockConfirmTitle": "Bloquear usuário",
+      "blockConfirmMessage": "Tem certeza de que deseja bloquear {{name}}? O usuário perderá acesso imediatamente.",
+      "createdSuccess": "Usuário criado com sucesso.",
+      "updatedSuccess": "Usuário atualizado com sucesso.",
+      "blockedSuccess": "Usuário bloqueado com sucesso.",
+      "unblockedSuccess": "Usuário desbloqueado com sucesso.",
+      "errors": {
+        "conflict": "Não foi possível concluir a ação devido a um conflito com o estado atual do usuário.",
+        "notFound": "Usuário não encontrado.",
+        "generic": "Não foi possível concluir a ação. Tente novamente."
+      }
+    },
+    "form": {
+      "createTitle": "Novo usuário",
+      "editTitle": "Editar usuário",
+      "fullName": "Nome completo",
+      "email": "E-mail",
+      "initialPassword": "Senha inicial",
+      "initialRole": "Papel inicial",
+      "errors": {
+        "fullNameRequired": "Informe o nome completo.",
+        "emailRequired": "Informe o e-mail.",
+        "emailInvalid": "Informe um e-mail válido.",
+        "passwordRequired": "Informe a senha inicial.",
+        "roleRequired": "Selecione o papel inicial.",
+        "conflict": "Já existe um usuário com este e-mail.",
+        "validation": "Verifique os dados informados.",
+        "generic": "Não foi possível salvar. Tente novamente."
+      }
+    },
+    "roles": {
+      "title": "Papéis de {{name}}",
+      "remove": "Remover papel",
+      "none": "Nenhum papel atribuído.",
+      "addRole": "Adicionar papel",
+      "assign": "Atribuir",
+      "removeConfirmTitle": "Remover papel",
+      "removeConfirmMessage": "Tem certeza de que deseja remover o papel {{role}}?",
+      "assignedSuccess": "Papel atribuído com sucesso.",
+      "removedSuccess": "Papel removido com sucesso.",
+      "errors": {
+        "conflict": "Não foi possível concluir a ação devido a um conflito (papel já atribuído, único papel restante ou último administrador ativo).",
+        "notFound": "Usuário ou papel não encontrado.",
+        "generic": "Não foi possível concluir a ação. Tente novamente."
+      }
+    },
+    "resetPassword": {
+      "title": "Redefinir senha de {{name}}",
+      "newPassword": "Nova senha",
+      "confirm": "Redefinir senha",
+      "success": "Senha redefinida com sucesso.",
+      "errors": {
+        "passwordRequired": "Informe a nova senha (mínimo 10 caracteres).",
+        "conflict": "Não foi possível redefinir a senha (a nova senha deve ser diferente da atual, ou você não pode redefinir sua própria senha por aqui).",
+        "validation": "Verifique a senha informada.",
+        "generic": "Não foi possível redefinir a senha. Tente novamente."
+      }
+    }
   }
 }

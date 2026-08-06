@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 
 import { authGuard } from './core/auth/auth.guard';
+import { permissionGuard } from './core/auth/permission.guard';
 
 export const routes: Routes = [
   {
@@ -22,8 +23,9 @@ export const routes: Routes = [
       },
       {
         path: 'users',
-        data: { titleKey: 'layout.nav.users' },
-        loadComponent: () => import('./features/placeholder/placeholder').then((m) => m.Placeholder),
+        canActivate: [permissionGuard],
+        data: { titleKey: 'layout.nav.users', permissions: ['USERS:MANAGE'] },
+        loadComponent: () => import('./features/users/users-list/users-list').then((m) => m.UsersList),
       },
       {
         path: 'condominiums',

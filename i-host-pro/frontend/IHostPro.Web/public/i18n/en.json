@@ -2,6 +2,14 @@
   "app": {
     "title": "iHostPro"
   },
+  "common": {
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "close": "Close",
+    "remove": "Remove",
+    "retry": "Retry"
+  },
   "auth": {
     "login": {
       "title": "Sign in",
@@ -37,5 +45,88 @@
     "forbiddenTitle": "Access denied",
     "sessionExpired": "Your session has expired. Please sign in again.",
     "backToHome": "Back to home"
+  },
+  "users": {
+    "list": {
+      "title": "Users",
+      "create": "New user",
+      "search": "Search",
+      "statusFilter": "Status",
+      "statusAll": "All",
+      "statusActive": "Active",
+      "statusBlocked": "Blocked",
+      "loadError": "Unable to load users.",
+      "empty": "No users found.",
+      "columns": {
+        "fullName": "Name",
+        "email": "Email",
+        "status": "Status",
+        "roles": "Roles",
+        "actions": "Actions"
+      },
+      "actionsFor": "Actions for {{name}}",
+      "edit": "Edit",
+      "manageRoles": "Manage roles",
+      "resetPassword": "Reset password",
+      "unblock": "Unblock",
+      "block": "Block",
+      "blockConfirmTitle": "Block user",
+      "blockConfirmMessage": "Are you sure you want to block {{name}}? Access will be revoked immediately.",
+      "createdSuccess": "User created successfully.",
+      "updatedSuccess": "User updated successfully.",
+      "blockedSuccess": "User blocked successfully.",
+      "unblockedSuccess": "User unblocked successfully.",
+      "errors": {
+        "conflict": "The action could not be completed due to a conflict with the user's current state.",
+        "notFound": "User not found.",
+        "generic": "The action could not be completed. Please try again."
+      }
+    },
+    "form": {
+      "createTitle": "New user",
+      "editTitle": "Edit user",
+      "fullName": "Full name",
+      "email": "Email",
+      "initialPassword": "Initial password",
+      "initialRole": "Initial role",
+      "errors": {
+        "fullNameRequired": "Enter the full name.",
+        "emailRequired": "Enter the email.",
+        "emailInvalid": "Enter a valid email.",
+        "passwordRequired": "Enter the initial password.",
+        "roleRequired": "Select the initial role.",
+        "conflict": "A user with this email already exists.",
+        "validation": "Please check the entered data.",
+        "generic": "Unable to save. Please try again."
+      }
+    },
+    "roles": {
+      "title": "{{name}}'s roles",
+      "remove": "Remove role",
+      "none": "No role assigned.",
+      "addRole": "Add role",
+      "assign": "Assign",
+      "removeConfirmTitle": "Remove role",
+      "removeConfirmMessage": "Are you sure you want to remove the {{role}} role?",
+      "assignedSuccess": "Role assigned successfully.",
+      "removedSuccess": "Role removed successfully.",
+      "errors": {
+        "conflict": "The action could not be completed due to a conflict (role already assigned, the user's last remaining role, or the last active administrator).",
+        "notFound": "User or role not found.",
+        "generic": "The action could not be completed. Please try again."
+      }
+    },
+    "resetPassword": {
+      "title": "Reset {{name}}'s password",
+      "newPassword": "New password",
+      "confirm": "Reset password",
+      "success": "Password reset successfully.",
+      "errors": {
+        "passwordRequired": "Enter the new password (minimum 10 characters).",
+        "conflict": "Unable to reset the password (the new password must differ from the current one, or you cannot reset your own password here).",
+        "validation": "Please check the entered password.",
+        "generic": "Unable to reset the password. Please try again."
+      }
+    }
   }
 }

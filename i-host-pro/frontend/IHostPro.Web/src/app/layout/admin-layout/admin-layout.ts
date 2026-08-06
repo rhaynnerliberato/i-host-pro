@@ -1,5 +1,5 @@
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
@@ -17,11 +17,13 @@ interface NavItem {
   labelKey: string;
   path: string;
   icon: string;
+  /** Real permission code (never a role name) required to show this item — omitted means always visible to an authenticated user. */
+  requiredPermission?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { labelKey: 'layout.nav.home', path: '/', icon: 'home' },
-  { labelKey: 'layout.nav.users', path: '/users', icon: 'group' },
+  { labelKey: 'layout.nav.users', path: '/users', icon: 'group', requiredPermission: 'USERS:MANAGE' },
   { labelKey: 'layout.nav.condominiums', path: '/condominiums', icon: 'apartment' },
   { labelKey: 'layout.nav.properties', path: '/properties', icon: 'villa' },
   { labelKey: 'layout.nav.reservations', path: '/reservations', icon: 'event' },
@@ -49,7 +51,9 @@ export class AdminLayout {
   private readonly breakpointObserver = inject(BreakpointObserver);
 
   protected readonly userProfile = inject(UserProfileService);
-  protected readonly navItems = NAV_ITEMS;
+  protected readonly navItems = computed(() =>
+    NAV_ITEMS.filter((item) => !item.requiredPermission || this.userProfile.hasPermission(item.requiredPermission)),
+  );
 
   protected readonly isHandset = toSignal(
     this.breakpointObserver.observe(Breakpoints.Handset).pipe(map((result) => result.matches)),

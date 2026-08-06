@@ -1,0 +1,104 @@
+<div class="users-list-page">
+  <div class="users-list-header">
+    <h1>{{ 'users.list.title' | transloco }}</h1>
+    <button mat-flat-button color="primary" (click)="openCreateDialog()">
+      <mat-icon>add</mat-icon>
+      {{ 'users.list.create' | transloco }}
+    </button>
+  </div>
+
+  <div class="users-list-filters">
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'users.list.search' | transloco }}</mat-label>
+      <input matInput [formControl]="searchControl" />
+      <mat-icon matPrefix>search</mat-icon>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'users.list.statusFilter' | transloco }}</mat-label>
+      <mat-select [formControl]="statusControl">
+        <mat-option [value]="null">{{ 'users.list.statusAll' | transloco }}</mat-option>
+        <mat-option [value]="UserStatus._1">{{ 'users.list.statusActive' | transloco }}</mat-option>
+        <mat-option [value]="UserStatus._2">{{ 'users.list.statusBlocked' | transloco }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="users-list-state">
+        <mat-progress-spinner diameter="32" mode="indeterminate" />
+      </div>
+    }
+    @case ('error') {
+      <div class="users-list-state">
+        <p>{{ 'users.list.loadError' | transloco }}</p>
+        <button mat-button (click)="loadUsers()">{{ 'common.retry' | transloco }}</button>
+      </div>
+    }
+    @case ('empty') {
+      <div class="users-list-state">
+        <p>{{ 'users.list.empty' | transloco }}</p>
+      </div>
+    }
+    @case ('loaded') {
+      <table mat-table [dataSource]="users()" class="full-width">
+        <ng-container matColumnDef="fullName">
+          <th mat-header-cell *matHeaderCellDef>{{ 'users.list.columns.fullName' | transloco }}</th>
+          <td mat-cell *matCellDef="let user">{{ user.fullName }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="email">
+          <th mat-header-cell *matHeaderCellDef>{{ 'users.list.columns.email' | transloco }}</th>
+          <td mat-cell *matCellDef="let user">{{ user.email }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>{{ 'users.list.columns.status' | transloco }}</th>
+          <td mat-cell *matCellDef="let user">{{ statusLabelKey(user.status) | transloco }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="roles">
+          <th mat-header-cell *matHeaderCellDef>{{ 'users.list.columns.roles' | transloco }}</th>
+          <td mat-cell *matCellDef="let user">
+            <mat-chip-set>
+              @for (roleCode of user.roles ?? []; track roleCode) {
+                <mat-chip>{{ roleName(roleCode) }}</mat-chip>
+              }
+            </mat-chip-set>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>{{ 'users.list.columns.actions' | transloco }}</th>
+          <td mat-cell *matCellDef="let user">
+            <button mat-icon-button [matMenuTriggerFor]="menu" [attr.aria-label]="'users.list.actionsFor' | transloco: { name: user.fullName }">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="openEditDialog(user)">{{ 'users.list.edit' | transloco }}</button>
+              <button mat-menu-item (click)="openRoleManagementDialog(user)">{{ 'users.list.manageRoles' | transloco }}</button>
+              <button mat-menu-item (click)="openResetPasswordDialog(user)">{{ 'users.list.resetPassword' | transloco }}</button>
+              @if (user.status === 'Blocked') {
+                <button mat-menu-item (click)="unblock(user)">{{ 'users.list.unblock' | transloco }}</button>
+              } @else {
+                <button mat-menu-item (click)="confirmBlock(user)">{{ 'users.list.block' | transloco }}</button>
+              }
+            </mat-menu>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+
+      <mat-paginator
+        [length]="totalCount()"
+        [pageIndex]="pageIndex()"
+        [pageSize]="pageSize()"
+        [pageSizeOptions]="[10, 25, 50]"
+        (page)="onPageChange($event)"
+      />
+    }
+  }
+</div>
