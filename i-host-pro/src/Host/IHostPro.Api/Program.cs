@@ -9,6 +9,7 @@ using IHostPro.Contexts.Identity.Infrastructure;
 using IHostPro.Contexts.Identity.Infrastructure.Authentication;
 using IHostPro.Contexts.Identity.Infrastructure.Caching;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
+using IHostPro.Api.Swagger;
 using IHostPro.Contexts.PropertyManagement.Contracts;
 using IHostPro.Contexts.PropertyManagement.Infrastructure;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
@@ -50,7 +51,14 @@ try
     // schemaIds with their bounded-context namespace segment keeps ordinary
     // (non-generic) DTO schema names untouched while making generic
     // schemaIds collision-proof.
-    builder.Services.AddSwaggerGen(options => options.CustomSchemaIds(SwaggerSchemaIdSelector));
+    builder.Services.AddSwaggerGen(options =>
+    {
+        options.CustomSchemaIds(SwaggerSchemaIdSelector);
+        // Without this, Optional<T>'s public CLR shape (isSet/value) leaks into the
+        // schema instead of the bare, nullable T that OptionalJsonConverter<T> actually
+        // reads/writes on the wire — see OptionalSchemaFilter for the full rationale.
+        options.SchemaFilter<OptionalSchemaFilter>();
+    });
 
     // CORS for the Angular frontend (Fase 4, Incremento 1) — explicit origin
     // allowlist only, read from configuration ("Cors:AllowedOrigins"), never

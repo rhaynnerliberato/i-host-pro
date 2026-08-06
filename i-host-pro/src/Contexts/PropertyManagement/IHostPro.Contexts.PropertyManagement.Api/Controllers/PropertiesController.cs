@@ -7,6 +7,7 @@ using IHostPro.Contexts.PropertyManagement.Application.Condominiums;
 using IHostPro.Contexts.PropertyManagement.Application.Owners;
 using IHostPro.Contexts.PropertyManagement.Application.Properties;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IHostPro.Contexts.PropertyManagement.Api.Controllers;
@@ -44,6 +45,10 @@ public sealed class PropertiesController : ControllerBase
 
     [HttpPost]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(PropertyDetailResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Create([FromBody] CreatePropertyRequest request, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -71,6 +76,8 @@ public sealed class PropertiesController : ControllerBase
 
     [HttpGet]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(PagedPropertyResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> List([FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -87,6 +94,9 @@ public sealed class PropertiesController : ControllerBase
 
     [HttpGet("{propertyId:guid}")]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(PropertyDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid propertyId, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -103,6 +113,11 @@ public sealed class PropertiesController : ControllerBase
 
     [HttpPatch("{propertyId:guid}")]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(PropertyDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Update(
         Guid propertyId, [FromBody] UpdatePropertyRequest request, CancellationToken cancellationToken)
     {
@@ -130,6 +145,10 @@ public sealed class PropertiesController : ControllerBase
 
     [HttpPost("{propertyId:guid}/activate")]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(PropertyDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Activate(Guid propertyId, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -146,6 +165,10 @@ public sealed class PropertiesController : ControllerBase
 
     [HttpPost("{propertyId:guid}/deactivate")]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(PropertyDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Deactivate(Guid propertyId, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -162,6 +185,10 @@ public sealed class PropertiesController : ControllerBase
 
     [HttpPost("{propertyId:guid}/archive")]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(PropertyDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Archive(Guid propertyId, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -178,6 +205,11 @@ public sealed class PropertiesController : ControllerBase
 
     [HttpPost("{propertyId:guid}/owners")]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(PropertyOwnerResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> LinkOwner(
         Guid propertyId, [FromBody] LinkPropertyOwnerRequest request, CancellationToken cancellationToken)
     {
@@ -199,6 +231,9 @@ public sealed class PropertiesController : ControllerBase
 
     [HttpDelete("{propertyId:guid}/owners/{ownerUserId:guid}")]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UnlinkOwner(Guid propertyId, Guid ownerUserId, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -217,6 +252,9 @@ public sealed class PropertiesController : ControllerBase
 
     [HttpGet("{propertyId:guid}/owners")]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(PagedPropertyOwnerResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ListOwners(
         Guid propertyId, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken cancellationToken)
     {

@@ -5,6 +5,7 @@ using IHostPro.Contexts.PropertyManagement.Api.Http;
 using IHostPro.Contexts.PropertyManagement.Application;
 using IHostPro.Contexts.PropertyManagement.Application.Condominiums;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IHostPro.Contexts.PropertyManagement.Api.Controllers;
@@ -34,6 +35,9 @@ public sealed class CondominiumsController : ControllerBase
 
     [HttpPost]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(CondominiumDetailResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Create([FromBody] CreateCondominiumRequest request, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -58,6 +62,8 @@ public sealed class CondominiumsController : ControllerBase
 
     [HttpGet]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(PagedCondominiumResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> List([FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -74,6 +80,9 @@ public sealed class CondominiumsController : ControllerBase
 
     [HttpGet("{condominiumId:guid}")]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(CondominiumDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid condominiumId, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -90,6 +99,11 @@ public sealed class CondominiumsController : ControllerBase
 
     [HttpPatch("{condominiumId:guid}")]
     [Authorize(Policy = IdentityPermissionCodes.PropertiesManage)]
+    [ProducesResponseType(typeof(CondominiumDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Update(
         Guid condominiumId, [FromBody] UpdateCondominiumRequest request, CancellationToken cancellationToken)
     {
