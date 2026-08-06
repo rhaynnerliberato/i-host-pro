@@ -1,8 +1,8 @@
 # Fase 4 — Frontend Foundation — Validação e Homologação
 
-Versão: 0.3
+Versão: 0.5
 
-Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Fase 4 continua em andamento — não integrada em `master`. Incremento 2 (Administração de Usuários) em andamento.
+Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Incremento 2 (Administração de Usuários) **aprovado e commitado** (Seção 11.11) — publicação (`git push`) em andamento nesta mesma etapa (Seção 11.12). Fase 4 continua em andamento — não integrada em `master`.
 
 ---
 
@@ -257,3 +257,123 @@ Critério aplicado: existe uma vulnerabilidade `high` (`undici`), mas exclusivam
 ### 10.6 Estado neste momento
 
 Incremento 1 concluído, commitado e publicado. Fase 4 continua em andamento — branch `feature/frontend-foundation` não integrada em `master` (nenhum merge realizado). Incremento 2 (Administração de Usuários) em andamento.
+
+## 11. Incremento 2 — Administração de Usuários
+
+### 11.1 Escopo
+
+Interface administrativa de usuários (rota `/users`, hoje um placeholder — Checkpoint 4) consumindo exclusivamente os endpoints reais já existentes em `UserAdministrationController`/`RolesController` (Identity, Incremento 3): listagem paginada com busca/filtro por status, criação, edição (nome/e-mail), bloqueio/desbloqueio, redefinição administrativa de senha, atribuição/remoção de papel (usando o catálogo real de papéis). Protegida por `permissionGuard` + `USERS:MANAGE`.
+
+### 11.2 Fora de escopo
+
+Gerenciamento das próprias sessões, alteração da própria senha, CRUD de papéis, CRUD de permissões, condomínios, imóveis, reservas, dashboard completo, qualquer funcionalidade das Fases 5+ (Documento 00, Plano Executivo).
+
+### 11.3 Permissões reais
+
+Confirmadas em `IdentityPermissionCodes.cs` e no controller real, nunca inferidas: `USERS:MANAGE` (todas as 9 ações administrativas de usuário) e `ROLES:READ` (catálogo de papéis, necessário para o seletor de papel usado na criação/atribuição). Ambas já expostas por `GET /api/v1/users/me` → `roles`/permissões efetivas resolvidas no backend (nunca decodificação de JWT no cliente, mesma regra do Checkpoint 3).
+
+### 11.4 Endpoints consumidos (`UserAdministrationController` + `RolesController`, confirmados no código-fonte)
+
+| Método | Rota | Permissão | Request | Response |
+|---|---|---|---|---|
+| POST | `/api/v1/users` | `USERS:MANAGE` | `CreateUserRequest(fullName, email, initialPassword, roleCode)` | `UserResponse` (201) |
+| GET | `/api/v1/users` | `USERS:MANAGE` | query: `page, pageSize, search, status` | `PagedUserResponse` |
+| GET | `/api/v1/users/{userId}` | `USERS:MANAGE` | — | `UserResponse` |
+| PATCH | `/api/v1/users/{userId}` | `USERS:MANAGE` | `UpdateUserRequest(fullName?, email?)` | `UserResponse` |
+| POST | `/api/v1/users/{userId}/roles` | `USERS:MANAGE` | `AssignRoleRequest(roleCode)` | 204 |
+| DELETE | `/api/v1/users/{userId}/roles/{roleCode}` | `USERS:MANAGE` | — | 204 |
+| POST | `/api/v1/users/{userId}/block` | `USERS:MANAGE` | — | 204 |
+| POST | `/api/v1/users/{userId}/unblock` | `USERS:MANAGE` | — | 204 |
+| POST | `/api/v1/users/{userId}/reset-password` | `USERS:MANAGE` | `ResetPasswordRequest(newPassword)` | 204 |
+| GET | `/api/v1/roles` | `ROLES:READ` | — | `RoleResponse[]` (`code, name, permissionCodes`) |
+
+Nenhum endpoint declara hoje `[ProducesResponseType]` (mesma lacuna documentada na Seção 5.5) — corrigido no Gate do OpenAPI (Seção 11.5) apenas para os endpoints listados aqui.
+
+Códigos de erro reais (confirmados em `ResultHttpMapper.cs`, mapeamento fechado e centralizado): 404 (`UserNotFound`, `RoleNotFound`); 409 (`EmailAlreadyInUse`, `RoleAlreadyAssigned`, `RoleNotAssigned`, `UserMustHaveAtLeastOneRole`, `LastActiveAdministrator`, `UserAlreadyBlocked`, `UserAlreadyActive`, `UserConcurrencyConflict`, `AdminCannotResetOwnPassword`); 400 com `ProblemDetails.Extensions["codes"]` (validação, `NoChangesProvided`).
+
+### 11.5 Checkpoints
+
+1. Gate do OpenAPI: `[ProducesResponseType]` nos 10 endpoints acima, regeneração NSwag determinística. **Concluído** (Seção 11.7 — ampliado para incluir também `GET /api/v1/users/me`, cujo contrato mudou).
+2. Listagem: rota `/users`, tabela Material (ordenação/paginação/busca/filtro de status conforme Documento 14 §14), estados vazio/carregando/erro. **Concluído.**
+3. Criação e edição de usuário (diálogos Material). **Concluído.**
+4. Bloqueio/desbloqueio com confirmação (ação sensível, Documento 14 §17). **Concluído** (bloqueio exige confirmação; desbloqueio, por não ser destrutivo, não exige — decisão de UX consistente com a ausência de exigência explícita de confirmação para essa ação específica).
+5. Atribuição/remoção de papel usando `GET /api/v1/roles` real. **Concluído** (atribuição não exige confirmação — ação aditiva, reversível por uma remoção; remoção exige confirmação — ação destrutiva).
+6. Redefinição administrativa de senha (diálogo, ação sensível). **Concluído.**
+7. Testes unitários frontend + Playwright (fluxos principais). **Concluído** (Seções 11.9–11.10).
+
+### 11.6 Critérios de aceite
+
+Todas as ações usam exclusivamente o cliente NSwag regenerado (nenhum contrato manual); rota protegida por `permissionGuard`/`USERS:MANAGE` (navegação oculta/rota bloqueada sem a permissão, nunca por nome de papel, nunca por JWT decodificado); toda ação sensível (bloquear, redefinir senha, remover papel) exige confirmação; toda ação produz feedback (sucesso/erro); nenhum CRUD de papéis/permissões; nenhuma funcionalidade de Fases 5+; testes unitários e Playwright cobrindo os fluxos principais aprovados.
+
+### 11.7 Conflito de autorização descoberto durante a implementação — permissões efetivas ausentes do perfil próprio
+
+**Conflito encontrado**: `permissionGuard`/navegação precisam decidir se o usuário autenticado possui `USERS:MANAGE` — mas `GET /api/v1/users/me` (`OwnProfileResponse`, Checkpoint 3) retornava apenas `roles` (nomes de papéis), nunca as permissões efetivas. Derivar permissões no frontend cruzando papéis contra `GET /api/v1/roles` é impossível para um usuário não-administrador: esse próprio endpoint exige `ROLES:READ`, que (confirmado em `IdentityCatalogSeed.cs`) só `ADMIN` possui. Três alternativas foram levantadas e todas rejeitadas pelo usuário: usar `ADMIN` como substituto de `USERS:MANAGE`; derivar permissões no cliente cruzando papéis com o catálogo; depender apenas de um 403 reativo do backend para descobrir a autorização.
+
+**Decisão do usuário**: corrigir minimamente o contrato de `GET /api/v1/users/me` para retornar as permissões efetivas do usuário, calculadas no backend, nunca no cliente.
+
+**Correção aplicada**: `OwnProfileResult`/`OwnProfileResponse` ganharam um campo `Permissions: IReadOnlyCollection<string>`, calculado em `GetOwnProfileQueryHandler` reutilizando `IPermissionReader` — a mesma infraestrutura já usada por `PermissionAuthorizationHandler` para aplicar `[Authorize(Policy = ...)]` em toda a API; nenhuma lógica de autorização duplicada. As permissões retornadas são a união distinta e ordenada (ordinal) dos códigos de permissão de todos os papéis do usuário. Nenhuma nova permissão foi criada para o próprio endpoint — permanece protegido apenas por `[Authorize]` (autenticação), já que expõe apenas o perfil do próprio chamador.
+
+**Frontend**: `UserProfileService.permissions` (computed signal) e `hasPermission(code)` tornaram-se a única fonte de autorização — `roles` permanece disponível apenas para exibição. `permissionGuard` passou a ler `route.data['permissions']` (antes `'roles'`) e comparar contra `hasPermission`, nunca contra nome de papel. O item de navegação "Usuários" (`AdminLayout`) passou a ser filtrado por `requiredPermission: 'USERS:MANAGE'` via `hasPermission`, computado reativamente. Fail-closed by construction: `permissions` cai para array vazio sempre que não há perfil carregado (ainda não logado, limpo no logout, ou falha de refresh) — `hasPermission` sobre array vazio é sempre `false`, nunca "assume liberado".
+
+**Testes de backend**: `GetOwnProfileQueryHandlerTests` (7/7, unitário) — inclui união deduplicada/ordenada de múltiplos papéis e papel sem nenhuma permissão retornando coleção vazia. `UsersEndpointsTests` (20/20, integração, 8 novos) — ADMIN inclui `USERS:MANAGE`; usuário com múltiplos papéis recebe a união; permissões compartilhadas por mais de um papel aparecem uma única vez; ordem determinística; papel sem permissão produz coleção vazia; nenhuma permissão de papel não atribuído vaza; permissões refletem apenas o papel do próprio tenant do chamador; a resposta expõe somente strings de código, sem metadados internos.
+
+**Regeneração NSwag**: `npm run generate:api` executado após a mudança de contrato — `OwnProfileResponse.permissions?: string[]` presente no cliente gerado; segunda geração confirmada byte-a-byte idêntica (determinismo).
+
+### 11.8 Defeito real de infraestrutura de teste E2E — processo órfão do Windows mascarando execuções já concluídas como travadas
+
+**Defeito real encontrado**: `WebE2EFixture.StartWebProcess()` iniciava o `ng serve` via `cmd.exe /c npm.cmd start -- --port {porta}` (uma correção anterior para um problema de resolução de módulo do próprio `npm.cmd` quando invocado diretamente por `Process.Start` no Windows). Essa cadeia de múltiplos processos (`cmd.exe` → `npm.cmd` → `npm` → `ng serve`) quebra `Process.Kill(entireProcessTree: true)` — usado em `DisposeAsync()` para encerrar o processo do Angular ao final de cada execução —, porque nem todo processo intermediário permanece como ancestral direto e rastreável do processo real do `ng serve`. O `node.exe` real do `ng serve` (e seu filho `esbuild.exe`) sobrevivia como órfão, segurando aberto o handle de saída padrão herdado do processo de teste — impedindo que qualquer leitor externo (`tail`, captura de log) jamais visse EOF, mesmo com o `dotnet test` já encerrado havia muito tempo. O sintoma observado repetidas vezes durante a sessão: execuções que na realidade já haviam terminado (com resultado real, positivo ou negativo, já obtido) permaneciam "penduradas" por dezenas de minutos do ponto de vista de qualquer monitoramento externo, levando a diagnósticos incorretos de ambiente/timing quando o problema real era este.
+
+**Correção aplicada**: `StartWebProcess()` passou a invocar `node "<node_modules>/@angular/cli/bin/ng.js" serve --port {porta}` diretamente — sem `cmd.exe`, sem `npm.cmd`, sem hop intermediário. O processo rastreado pelo `.NET Process` é, agora, o próprio `node.exe` do Angular CLI; `Kill(entireProcessTree: true)` alcança corretamente ele e seu único filho (`esbuild.exe`). Verificado isoladamente (fora da suíte, via `Process.Start`/`Kill` diretos): a árvore de processo é rasa (um pai, um filho) e ambos são encerrados de forma confiável.
+
+**Validação da correção**: sem ela, uma execução isolada de um único teste permanecia com o processo `dotnet test` "vivo" por mais de 20 minutos. Com ela, a classe completa `UsersManagementE2ETests` (9 testes) e depois o assembly completo (19 testes: 6 `AuthenticationE2ETests` + 4 `UsersAuthorizationE2ETests` + 9 `UsersManagementE2ETests`, todos compartilhando uma única instância de `WebE2EFixture` via `WebE2EFixtureCollection` — ver Seção 11.10) executaram em primeiro plano, sem intervenção manual, em 1 minuto e 6,48 segundos.
+
+### 11.9 Testes unitários frontend (Incremento 2)
+
+17 arquivos de spec, **108/108 aprovados** (`ng test --watch=false`), cobrindo:
+
+- `UserProfileService` (permissões computadas, `hasPermission`, fail-closed sem perfil, `clear()`).
+- `permissionGuard` (reescrito para `permissions`, não `roles`) e `AdminLayout` (item de navegação mostrado/ocultado por `hasPermission`, fail-closed com permissões vazias, itens sem permissão exigida sempre visíveis).
+- `AuthService` (login carrega o perfil real; logout limpa permissões mesmo com falha do backend; `restoreSession` recarrega o perfil ao restaurar sessão e limpa tudo se o refresh falhar).
+- `UsersService` (delegação 1:1 de cada método para o `Client` gerado).
+- `classifyUserActionError` (mesmo padrão de duck-typing de `login-error.ts`, aplicado às ações de usuário).
+- `ConfirmDialog`, `UserFormDialog` (modo criação vs. edição, validação, prevenção de submissão duplicada, classificação de erro 409/400/genérico), `RoleManagementDialog` (papéis atribuíveis excluem os já atribuídos, atribuição/remoção com confirmação, prevenção de chamada concorrente), `ResetPasswordDialog` (mesmo padrão), `UsersList` (estados carregando/vazio/erro, filtro de status sem debounce, criação/edição com recarga condicionada ao resultado do diálogo, bloqueio com confirmação, desbloqueio direto).
+
+### 11.10 Testes E2E Playwright (.NET) — Incremento 2
+
+Todas as classes de teste E2E deste projeto passaram a compartilhar uma única instância de `WebE2EFixture` via `[Collection(WebE2EFixtureCollection.Name)]`/`ICollectionFixture` — necessário porque, com mais de uma classe usando `IClassFixture<WebE2EFixture>`, o xUnit paraleliza coleções por padrão, e duas instâncias do fixture disputariam a mesma porta fixa do RabbitMQ (5672) simultaneamente (reproduzido e confirmado durante a investigação: erro real do Docker "port is already allocated"). A coleção compartilhada garante execução sequencial e um único boot de Postgres/RabbitMQ/Redis/API/Angular para todo o assembly.
+
+**Autorização (`UsersAuthorizationE2ETests`, 4 testes — obrigatórios antes de continuar o restante do incremento, conforme instrução do usuário)**: ADMIN vê o item "Usuários" e acessa `/users`; usuário autenticado sem `USERS:MANAGE` (papel `OPERATOR`, seedado especificamente para este fim em `WebE2EFixture`, que nunca recebe essa permissão conforme `IdentityCatalogSeed.cs`) não vê o item de navegação; esse mesmo usuário, navegando diretamente para `/users`, é redirecionado para `/forbidden`; chamada direta e real à API com o token do OPERATOR (capturado da requisição real de login, nunca fabricado) recebe 403 do backend — prova que a aplicação da regra não depende do frontend. **4/4 aprovados.**
+
+**Administração de usuários (`UsersManagementE2ETests`, 9 testes)**: listagem exibe os usuários reais seedados (ADMIN e OPERATOR); criação via diálogo aparece na lista com mensagem de sucesso; edição atualiza o nome exibido; bloqueio exige confirmação e atualiza a coluna de status; desbloqueio não exige confirmação e restaura o status; atribuição de papel não exige confirmação e mostra o novo chip; remoção de papel exige confirmação e remove o chip; redefinição de senha mostra mensagem de sucesso; duplo clique rápido no botão "Salvar" da criação cria o usuário uma única vez (botão desabilitado pelo signal `submitting` no primeiro clique). **9/9 aprovados.**
+
+Dois defeitos reais de teste (não de produto) encontrados e corrigidos durante a estabilização: (1) `Removing_a_role...` usava dado de teste inválido — um usuário com um único papel, que o backend corretamente rejeita remover (`UserMustHaveAtLeastOneRole`, Seção 11.7); corrigido seedando um segundo papel antes da remoção. O mesmo teste também tinha dois locators não escopados ao diálogo aberto, que também casavam com a tabela de usuários ao fundo (ainda presente no DOM sob o modal) — corrigidos escopando ao `role="dialog"`. (2) `Submitting_the_create_form_twice...` verificava a tabela imediatamente após o snackbar de sucesso, mas o recarregamento da lista (`loadUsers()`) é disparado depois do snackbar e é assíncrono — corrigido aguardando a própria linha da tabela aparecer antes de contar.
+
+**Autenticação (`AuthenticationE2ETests`, 6 testes, Incremento 1 — revalidados nesta rodada por terem sido afetados pela correção da Seção 11.8, que altera código de fixture compartilhado)**: sem alteração de comportamento; **6/6 aprovados.**
+
+**Resultado final consolidado**: assembly completo, execução única, fixture única compartilhada — **19/19 aprovados**, 1 minuto e 6,48 segundos. Stack homolog (`ihostpro-homolog-postgres`/`-rabbitmq`/`-redis`) parado antes de cada execução (porta 5672 fixa do RabbitMQ efêmero do teste) e restaurado ao estado exato anterior (mesmas portas, mesma restart policy `no`, mesmos volumes nomeados preservados) ao final de cada rodada. Nenhum container Testcontainers/Ryuk órfão; nenhum processo `dotnet`/`node`/`npm`/`ng serve` órfão — confirmado após cada rodada.
+
+### 11.11 Encerramento do Incremento 2
+
+**Aprovação**: Incremento 2 aprovado tecnicamente pelo usuário e autorizado para versionamento e publicação na branch `feature/frontend-foundation`.
+
+**Commits** (três commits funcionais, cada um isolado ao seu próprio grupo de arquivos, revisado via `git diff --cached` antes de cada commit — nunca `git add .`):
+
+| # | Hash completo | Mensagem | Escopo |
+|---|---|---|---|
+| 1 | `1c30117c26b3c27a4f5b97486ce730cc19afc0de` | `feat(identity): expose effective permissions in own profile` | `OwnProfileResult`/`OwnProfileResponse.permissions`, cálculo via `IPermissionReader` em `GetOwnProfileQueryHandler`, `[ProducesResponseType]` nos controllers consumidos pelo Incremento 2, testes backend diretamente relacionados (Seção 11.7). 8 arquivos. |
+| 2 | `9c8a60831138efb5415993fb5fbfd7d4a0d552a6` | `feat(frontend): add user administration` | Cliente NSwag regenerado, `UserProfileService`/`permissionGuard` reescritos para `USERS:MANAGE` (nunca nome de papel, nunca JWT decodificado), navegação condicionada, rota `/users`, feature `features/users/` completa (listagem, 4 diálogos, serviço, classificação de erro), traduções, testes unitários frontend. 35 arquivos. |
+| 3 | `6a1ce90d7c5b7251633ca87eebed5811ed9b1e0c` | `test(frontend): cover user administration workflows` | `UsersAuthorizationE2ETests`, `UsersManagementE2ETests`, `WebE2EFixtureCollection` (fixture compartilhada, Seção 11.10), correção do `WebE2EFixture` (inicialização do Angular via `node ng.js` direto, Seção 11.8), ajuste mínimo em `AuthenticationE2ETests`. 5 arquivos. |
+
+**Resumo do que cada commit registra, para referência rápida**:
+- `OwnProfileResponse.permissions` — permissões efetivas do usuário autenticado, calculadas no backend (Seção 11.7).
+- Cálculo via `IPermissionReader` — mesma infraestrutura de `PermissionAuthorizationHandler`, nenhuma lógica de autorização duplicada.
+- Código `USERS:MANAGE` — única permissão usada para proteger a rota `/users` e condicionar a navegação.
+- **Nenhuma autorização baseada em nome de papel ou JWT decodificado** em nenhum ponto do código de produção ou dos testes (confirmado por revisão de todo o código tocado neste incremento).
+- Funcionalidades concluídas: listagem (busca/filtro/paginação/estados), criação, edição, bloqueio/desbloqueio, redefinição de senha, atribuição/remoção de papel — todas com feedback e confirmação onde aplicável (Seções 11.5–11.6).
+- Testes unitários: **108/108**. `AuthenticationE2ETests`: **6/6**. `UsersAuthorizationE2ETests`: **4/4**. `UsersManagementE2ETests`: **9/9**. Execução combinada (fixture única): **19/19**.
+- `npm run generate:api`: determinístico (duas gerações idênticas byte-a-byte).
+- `ng build --configuration production`: aprovado.
+- Correção do processo órfão no Windows (`cmd.exe`/`npm.cmd` → `node ng.js` direto): Seção 11.8.
+- Stack homolog restaurado ao estado anterior após cada execução que exigiu pará-lo.
+
+**Incremento 2 concluído.** No momento deste registro (antes da publicação — Seção 11.12 abaixo): push ainda pendente; Incremento 3 ainda não iniciado.
