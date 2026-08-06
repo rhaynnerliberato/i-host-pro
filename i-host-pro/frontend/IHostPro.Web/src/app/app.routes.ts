@@ -29,13 +29,16 @@ export const routes: Routes = [
       },
       {
         path: 'condominiums',
-        data: { titleKey: 'layout.nav.condominiums' },
-        loadComponent: () => import('./features/placeholder/placeholder').then((m) => m.Placeholder),
+        canActivate: [permissionGuard],
+        data: { titleKey: 'layout.nav.condominiums', permissions: ['PROPERTIES:MANAGE'] },
+        loadComponent: () =>
+          import('./features/property-management/condominiums/condominiums-list/condominiums-list').then((m) => m.CondominiumsList),
       },
       {
         path: 'properties',
-        data: { titleKey: 'layout.nav.properties' },
-        loadComponent: () => import('./features/placeholder/placeholder').then((m) => m.Placeholder),
+        canActivate: [permissionGuard],
+        data: { titleKey: 'layout.nav.properties', permissions: ['PROPERTIES:MANAGE'] },
+        loadComponent: () => import('./features/property-management/properties/properties-list/properties-list').then((m) => m.PropertiesList),
       },
       {
         path: 'reservations',

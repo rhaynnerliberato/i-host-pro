@@ -128,5 +128,120 @@
         "generic": "Não foi possível redefinir a senha. Tente novamente."
       }
     }
+  },
+  "propertyManagement": {
+    "address": {
+      "zipCode": "CEP",
+      "street": "Rua",
+      "number": "Número",
+      "complement": "Complemento",
+      "neighborhood": "Bairro",
+      "city": "Cidade",
+      "state": "Estado",
+      "country": "País"
+    },
+    "condominiums": {
+      "list": {
+        "title": "Condomínios",
+        "create": "Novo condomínio",
+        "loadError": "Não foi possível carregar os condomínios.",
+        "empty": "Nenhum condomínio encontrado.",
+        "columns": {
+          "name": "Nome",
+          "createdAt": "Criado em",
+          "actions": "Ações"
+        },
+        "edit": "Editar",
+        "createdSuccess": "Condomínio criado com sucesso.",
+        "updatedSuccess": "Condomínio atualizado com sucesso.",
+        "errors": {
+          "generic": "Não foi possível concluir a ação. Tente novamente."
+        }
+      },
+      "form": {
+        "createTitle": "Novo condomínio",
+        "editTitle": "Editar condomínio",
+        "name": "Nome",
+        "errors": {
+          "nameRequired": "Informe o nome.",
+          "conflict": "Não foi possível concluir a ação devido a um conflito com o estado atual do condomínio.",
+          "validation": "Verifique os dados informados.",
+          "generic": "Não foi possível salvar. Tente novamente."
+        }
+      }
+    },
+    "properties": {
+      "list": {
+        "title": "Imóveis",
+        "create": "Novo imóvel",
+        "loadError": "Não foi possível carregar os imóveis.",
+        "empty": "Nenhum imóvel encontrado.",
+        "columns": {
+          "code": "Código",
+          "name": "Nome",
+          "capacity": "Capacidade",
+          "status": "Status",
+          "actions": "Ações"
+        },
+        "actionsFor": "Ações para {{name}}",
+        "edit": "Editar",
+        "manageOwners": "Gerenciar proprietários",
+        "activate": "Ativar",
+        "deactivate": "Desativar",
+        "archive": "Arquivar",
+        "statusDraft": "Rascunho",
+        "statusActive": "Ativo",
+        "statusInactive": "Inativo",
+        "statusArchived": "Arquivado",
+        "archiveConfirmTitle": "Arquivar imóvel",
+        "archiveConfirmMessage": "Tem certeza de que deseja arquivar {{name}}? Um imóvel arquivado não pode mais ser editado.",
+        "createdSuccess": "Imóvel criado com sucesso.",
+        "updatedSuccess": "Imóvel atualizado com sucesso.",
+        "activatedSuccess": "Imóvel ativado com sucesso.",
+        "deactivatedSuccess": "Imóvel desativado com sucesso.",
+        "archivedSuccess": "Imóvel arquivado com sucesso.",
+        "errors": {
+          "conflict": "Não foi possível concluir a ação devido a um conflito com o estado atual do imóvel.",
+          "notFound": "Imóvel não encontrado.",
+          "generic": "Não foi possível concluir a ação. Tente novamente."
+        }
+      },
+      "form": {
+        "createTitle": "Novo imóvel",
+        "editTitle": "Editar imóvel",
+        "code": "Código",
+        "name": "Nome",
+        "capacity": "Capacidade",
+        "condominium": "Condomínio",
+        "noCondominium": "Nenhum",
+        "hasOwnAddress": "Endereço próprio (diferente do condomínio)",
+        "addressRequiredHint": "Sem endereço próprio, o imóvel usará o endereço do condomínio selecionado.",
+        "errors": {
+          "codeRequired": "Informe o código.",
+          "nameRequired": "Informe o nome.",
+          "capacityInvalid": "Informe uma capacidade válida (maior que zero).",
+          "conflict": "Já existe um imóvel com este código, ou a ação conflita com o estado atual.",
+          "validation": "Verifique os dados informados.",
+          "generic": "Não foi possível salvar. Tente novamente."
+        }
+      }
+    },
+    "ownership": {
+      "title": "Proprietários de {{name}}",
+      "loadError": "Não foi possível carregar os proprietários.",
+      "none": "Nenhum proprietário vinculado.",
+      "ownerUserId": "ID do usuário proprietário",
+      "link": "Vincular",
+      "removeConfirmTitle": "Remover proprietário",
+      "removeConfirmMessage": "Tem certeza de que deseja remover o vínculo com o proprietário {{ownerUserId}}?",
+      "linkedSuccess": "Proprietário vinculado com sucesso.",
+      "removedSuccess": "Vínculo removido com sucesso.",
+      "errors": {
+        "ownerUserIdRequired": "Informe o ID do usuário.",
+        "conflict": "Não foi possível concluir a ação (usuário não elegível ou vínculo já existente).",
+        "notFound": "Imóvel, usuário ou vínculo não encontrado.",
+        "generic": "Não foi possível concluir a ação. Tente novamente."
+      }
+    }
   }
 }

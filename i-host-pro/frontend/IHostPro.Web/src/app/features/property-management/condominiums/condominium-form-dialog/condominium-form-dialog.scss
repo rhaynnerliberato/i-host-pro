@@ -1,0 +1,17 @@
+.full-width {
+  width: 100%;
+}
+
+.address-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1rem;
+
+  mat-form-field {
+    width: 100%;
+  }
+}
+
+.form-error {
+  color: var(--mat-sys-error);
+}

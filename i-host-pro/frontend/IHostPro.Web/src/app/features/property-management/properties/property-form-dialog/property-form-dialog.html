@@ -1,0 +1,104 @@
+<h2 mat-dialog-title>{{ (isEditMode ? 'propertyManagement.properties.form.editTitle' : 'propertyManagement.properties.form.createTitle') | transloco }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  <mat-dialog-content>
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'propertyManagement.properties.form.code' | transloco }}</mat-label>
+      <input matInput formControlName="code" />
+      @if (form.controls.code.invalid && form.controls.code.touched) {
+        <mat-error>{{ 'propertyManagement.properties.form.errors.codeRequired' | transloco }}</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'propertyManagement.properties.form.name' | transloco }}</mat-label>
+      <input matInput formControlName="name" />
+      @if (form.controls.name.invalid && form.controls.name.touched) {
+        <mat-error>{{ 'propertyManagement.properties.form.errors.nameRequired' | transloco }}</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'propertyManagement.properties.form.capacity' | transloco }}</mat-label>
+      <input matInput type="number" min="1" formControlName="capacity" />
+      @if (form.controls.capacity.invalid && form.controls.capacity.touched) {
+        <mat-error>{{ 'propertyManagement.properties.form.errors.capacityInvalid' | transloco }}</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'propertyManagement.properties.form.condominium' | transloco }}</mat-label>
+      <mat-select formControlName="condominiumId">
+        <mat-option value="">{{ 'propertyManagement.properties.form.noCondominium' | transloco }}</mat-option>
+        @for (condominium of condominiumOptions(); track condominium.id) {
+          <mat-option [value]="condominium.id">{{ condominium.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-checkbox [checked]="hasOwnAddress()" (change)="toggleOwnAddress($event.checked)">
+      {{ 'propertyManagement.properties.form.hasOwnAddress' | transloco }}
+    </mat-checkbox>
+
+    @if (hasOwnAddress()) {
+      <div class="address-grid">
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'propertyManagement.address.zipCode' | transloco }}</mat-label>
+          <input matInput formControlName="zipCode" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'propertyManagement.address.street' | transloco }}</mat-label>
+          <input matInput formControlName="street" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'propertyManagement.address.number' | transloco }}</mat-label>
+          <input matInput formControlName="number" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'propertyManagement.address.complement' | transloco }}</mat-label>
+          <input matInput formControlName="complement" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'propertyManagement.address.neighborhood' | transloco }}</mat-label>
+          <input matInput formControlName="neighborhood" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'propertyManagement.address.city' | transloco }}</mat-label>
+          <input matInput formControlName="city" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'propertyManagement.address.state' | transloco }}</mat-label>
+          <input matInput formControlName="state" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'propertyManagement.address.country' | transloco }}</mat-label>
+          <input matInput formControlName="country" />
+        </mat-form-field>
+      </div>
+    } @else {
+      <p class="address-hint">{{ 'propertyManagement.properties.form.addressRequiredHint' | transloco }}</p>
+    }
+
+    @if (errorKey(); as key) {
+      <p class="form-error" role="alert">{{ key | transloco }}</p>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" (click)="cancel()">{{ 'common.cancel' | transloco }}</button>
+    <button mat-flat-button color="primary" type="submit" [disabled]="submitting()">
+      @if (submitting()) {
+        <mat-progress-spinner diameter="20" mode="indeterminate" />
+      } @else {
+        {{ 'common.save' | transloco }}
+      }
+    </button>
+  </mat-dialog-actions>
+</form>

@@ -128,5 +128,120 @@
         "generic": "Unable to reset the password. Please try again."
       }
     }
+  },
+  "propertyManagement": {
+    "address": {
+      "zipCode": "ZIP code",
+      "street": "Street",
+      "number": "Number",
+      "complement": "Complement",
+      "neighborhood": "Neighborhood",
+      "city": "City",
+      "state": "State",
+      "country": "Country"
+    },
+    "condominiums": {
+      "list": {
+        "title": "Condominiums",
+        "create": "New condominium",
+        "loadError": "Unable to load condominiums.",
+        "empty": "No condominiums found.",
+        "columns": {
+          "name": "Name",
+          "createdAt": "Created at",
+          "actions": "Actions"
+        },
+        "edit": "Edit",
+        "createdSuccess": "Condominium created successfully.",
+        "updatedSuccess": "Condominium updated successfully.",
+        "errors": {
+          "generic": "The action could not be completed. Please try again."
+        }
+      },
+      "form": {
+        "createTitle": "New condominium",
+        "editTitle": "Edit condominium",
+        "name": "Name",
+        "errors": {
+          "nameRequired": "Enter the name.",
+          "conflict": "The action could not be completed due to a conflict with the condominium's current state.",
+          "validation": "Please check the entered data.",
+          "generic": "Unable to save. Please try again."
+        }
+      }
+    },
+    "properties": {
+      "list": {
+        "title": "Properties",
+        "create": "New property",
+        "loadError": "Unable to load properties.",
+        "empty": "No properties found.",
+        "columns": {
+          "code": "Code",
+          "name": "Name",
+          "capacity": "Capacity",
+          "status": "Status",
+          "actions": "Actions"
+        },
+        "actionsFor": "Actions for {{name}}",
+        "edit": "Edit",
+        "manageOwners": "Manage owners",
+        "activate": "Activate",
+        "deactivate": "Deactivate",
+        "archive": "Archive",
+        "statusDraft": "Draft",
+        "statusActive": "Active",
+        "statusInactive": "Inactive",
+        "statusArchived": "Archived",
+        "archiveConfirmTitle": "Archive property",
+        "archiveConfirmMessage": "Are you sure you want to archive {{name}}? An archived property can no longer be edited.",
+        "createdSuccess": "Property created successfully.",
+        "updatedSuccess": "Property updated successfully.",
+        "activatedSuccess": "Property activated successfully.",
+        "deactivatedSuccess": "Property deactivated successfully.",
+        "archivedSuccess": "Property archived successfully.",
+        "errors": {
+          "conflict": "The action could not be completed due to a conflict with the property's current state.",
+          "notFound": "Property not found.",
+          "generic": "The action could not be completed. Please try again."
+        }
+      },
+      "form": {
+        "createTitle": "New property",
+        "editTitle": "Edit property",
+        "code": "Code",
+        "name": "Name",
+        "capacity": "Capacity",
+        "condominium": "Condominium",
+        "noCondominium": "None",
+        "hasOwnAddress": "Own address (different from the condominium)",
+        "addressRequiredHint": "Without its own address, the property will use the selected condominium's address.",
+        "errors": {
+          "codeRequired": "Enter the code.",
+          "nameRequired": "Enter the name.",
+          "capacityInvalid": "Enter a valid capacity (greater than zero).",
+          "conflict": "A property with this code already exists, or the action conflicts with the current state.",
+          "validation": "Please check the entered data.",
+          "generic": "Unable to save. Please try again."
+        }
+      }
+    },
+    "ownership": {
+      "title": "{{name}}'s owners",
+      "loadError": "Unable to load owners.",
+      "none": "No owner linked.",
+      "ownerUserId": "Owner user ID",
+      "link": "Link",
+      "removeConfirmTitle": "Remove owner",
+      "removeConfirmMessage": "Are you sure you want to remove the link with owner {{ownerUserId}}?",
+      "linkedSuccess": "Owner linked successfully.",
+      "removedSuccess": "Link removed successfully.",
+      "errors": {
+        "ownerUserIdRequired": "Enter the user ID.",
+        "conflict": "The action could not be completed (user not eligible or link already exists).",
+        "notFound": "Property, user, or link not found.",
+        "generic": "The action could not be completed. Please try again."
+      }
+    }
   }
 }

@@ -1,0 +1,59 @@
+<div class="condominiums-list-page">
+  <div class="condominiums-list-header">
+    <h1>{{ 'propertyManagement.condominiums.list.title' | transloco }}</h1>
+    <button mat-flat-button color="primary" (click)="openCreateDialog()">
+      <mat-icon>add</mat-icon>
+      {{ 'propertyManagement.condominiums.list.create' | transloco }}
+    </button>
+  </div>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="condominiums-list-state">
+        <mat-progress-spinner diameter="32" mode="indeterminate" />
+      </div>
+    }
+    @case ('error') {
+      <div class="condominiums-list-state">
+        <p>{{ 'propertyManagement.condominiums.list.loadError' | transloco }}</p>
+        <button mat-button (click)="loadCondominiums()">{{ 'common.retry' | transloco }}</button>
+      </div>
+    }
+    @case ('empty') {
+      <div class="condominiums-list-state">
+        <p>{{ 'propertyManagement.condominiums.list.empty' | transloco }}</p>
+      </div>
+    }
+    @case ('loaded') {
+      <table mat-table [dataSource]="condominiums()" class="full-width">
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>{{ 'propertyManagement.condominiums.list.columns.name' | transloco }}</th>
+          <td mat-cell *matCellDef="let condominium">{{ condominium.name }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="createdAt">
+          <th mat-header-cell *matHeaderCellDef>{{ 'propertyManagement.condominiums.list.columns.createdAt' | transloco }}</th>
+          <td mat-cell *matCellDef="let condominium">{{ condominium.createdAt | date: 'shortDate' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>{{ 'propertyManagement.condominiums.list.columns.actions' | transloco }}</th>
+          <td mat-cell *matCellDef="let condominium">
+            <button mat-button (click)="openEditDialog(condominium.id)">{{ 'propertyManagement.condominiums.list.edit' | transloco }}</button>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+
+      <mat-paginator
+        [length]="totalCount()"
+        [pageIndex]="pageIndex()"
+        [pageSize]="pageSize()"
+        [pageSizeOptions]="[10, 25, 50]"
+        (page)="onPageChange($event)"
+      />
+    }
+  }
+</div>

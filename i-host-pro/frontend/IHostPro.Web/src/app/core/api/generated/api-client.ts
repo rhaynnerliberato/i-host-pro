@@ -204,9 +204,9 @@ export class Client {
 
     /**
      * @param body (optional) 
-     * @return OK
+     * @return Created
      */
-    condominiumsPOST(body?: CreateCondominiumRequest | undefined): Observable<void> {
+    condominiumsPOST(body?: CreateCondominiumRequest | undefined): Observable<CondominiumDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/condominiums";
         url_ = url_.replace(/[?&]$/, "");
 
@@ -218,6 +218,7 @@ export class Client {
             responseType: "blob",
             headers: new HttpHeaders({
                 "Content-Type": "application/json",
+                "Accept": "application/json"
             })
         };
 
@@ -228,23 +229,37 @@ export class Client {
                 try {
                     return this.processCondominiumsPOST(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<CondominiumDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<CondominiumDetailResponse>;
         }));
     }
 
-    protected processCondominiumsPOST(response: HttpResponseBase): Observable<void> {
+    protected processCondominiumsPOST(response: HttpResponseBase): Observable<CondominiumDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
             (response as any).error instanceof Blob ? (response as any).error : undefined;
 
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
-        if (status === 200) {
+        if (status === 201) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as CondominiumDetailResponse;
+            return _observableOf(result201);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -259,7 +274,7 @@ export class Client {
      * @param pageSize (optional) 
      * @return OK
      */
-    condominiumsGET(page?: number | undefined, pageSize?: number | undefined): Observable<void> {
+    condominiumsGET(page?: number | undefined, pageSize?: number | undefined): Observable<PagedCondominiumResponse> {
         let url_ = this.baseUrl + "/api/v1/condominiums?";
         if (page === null)
             throw new globalThis.Error("The parameter 'page' cannot be null.");
@@ -275,6 +290,7 @@ export class Client {
             observe: "response",
             responseType: "blob",
             headers: new HttpHeaders({
+                "Accept": "application/json"
             })
         };
 
@@ -285,14 +301,14 @@ export class Client {
                 try {
                     return this.processCondominiumsGET(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<PagedCondominiumResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<PagedCondominiumResponse>;
         }));
     }
 
-    protected processCondominiumsGET(response: HttpResponseBase): Observable<void> {
+    protected processCondominiumsGET(response: HttpResponseBase): Observable<PagedCondominiumResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -301,7 +317,15 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PagedCondominiumResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -314,7 +338,7 @@ export class Client {
     /**
      * @return OK
      */
-    condominiumsGET2(condominiumId: string): Observable<void> {
+    condominiumsGET2(condominiumId: string): Observable<CondominiumDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/condominiums/{condominiumId}";
         if (condominiumId === undefined || condominiumId === null)
             throw new globalThis.Error("The parameter 'condominiumId' must be defined.");
@@ -325,6 +349,7 @@ export class Client {
             observe: "response",
             responseType: "blob",
             headers: new HttpHeaders({
+                "Accept": "application/json"
             })
         };
 
@@ -335,14 +360,14 @@ export class Client {
                 try {
                     return this.processCondominiumsGET2(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<CondominiumDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<CondominiumDetailResponse>;
         }));
     }
 
-    protected processCondominiumsGET2(response: HttpResponseBase): Observable<void> {
+    protected processCondominiumsGET2(response: HttpResponseBase): Observable<CondominiumDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -351,7 +376,21 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as CondominiumDetailResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -365,7 +404,7 @@ export class Client {
      * @param body (optional) 
      * @return OK
      */
-    condominiumsPATCH(condominiumId: string, body?: UpdateCondominiumRequest | undefined): Observable<void> {
+    condominiumsPATCH(condominiumId: string, body?: UpdateCondominiumRequest | undefined): Observable<CondominiumDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/condominiums/{condominiumId}";
         if (condominiumId === undefined || condominiumId === null)
             throw new globalThis.Error("The parameter 'condominiumId' must be defined.");
@@ -380,6 +419,7 @@ export class Client {
             responseType: "blob",
             headers: new HttpHeaders({
                 "Content-Type": "application/json",
+                "Accept": "application/json"
             })
         };
 
@@ -390,14 +430,14 @@ export class Client {
                 try {
                     return this.processCondominiumsPATCH(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<CondominiumDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<CondominiumDetailResponse>;
         }));
     }
 
-    protected processCondominiumsPATCH(response: HttpResponseBase): Observable<void> {
+    protected processCondominiumsPATCH(response: HttpResponseBase): Observable<CondominiumDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -406,7 +446,33 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as CondominiumDetailResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -572,9 +638,9 @@ export class Client {
 
     /**
      * @param body (optional) 
-     * @return OK
+     * @return Created
      */
-    propertiesPOST(body?: CreatePropertyRequest | undefined): Observable<void> {
+    propertiesPOST(body?: CreatePropertyRequest | undefined): Observable<PropertyDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/properties";
         url_ = url_.replace(/[?&]$/, "");
 
@@ -586,6 +652,7 @@ export class Client {
             responseType: "blob",
             headers: new HttpHeaders({
                 "Content-Type": "application/json",
+                "Accept": "application/json"
             })
         };
 
@@ -596,23 +663,43 @@ export class Client {
                 try {
                     return this.processPropertiesPOST(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<PropertyDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<PropertyDetailResponse>;
         }));
     }
 
-    protected processPropertiesPOST(response: HttpResponseBase): Observable<void> {
+    protected processPropertiesPOST(response: HttpResponseBase): Observable<PropertyDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
             (response as any).error instanceof Blob ? (response as any).error : undefined;
 
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
-        if (status === 200) {
+        if (status === 201) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PropertyDetailResponse;
+            return _observableOf(result201);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -627,7 +714,7 @@ export class Client {
      * @param pageSize (optional) 
      * @return OK
      */
-    propertiesGET(page?: number | undefined, pageSize?: number | undefined): Observable<void> {
+    propertiesGET(page?: number | undefined, pageSize?: number | undefined): Observable<PagedPropertyResponse> {
         let url_ = this.baseUrl + "/api/v1/properties?";
         if (page === null)
             throw new globalThis.Error("The parameter 'page' cannot be null.");
@@ -643,6 +730,7 @@ export class Client {
             observe: "response",
             responseType: "blob",
             headers: new HttpHeaders({
+                "Accept": "application/json"
             })
         };
 
@@ -653,14 +741,14 @@ export class Client {
                 try {
                     return this.processPropertiesGET(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<PagedPropertyResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<PagedPropertyResponse>;
         }));
     }
 
-    protected processPropertiesGET(response: HttpResponseBase): Observable<void> {
+    protected processPropertiesGET(response: HttpResponseBase): Observable<PagedPropertyResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -669,7 +757,15 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PagedPropertyResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -682,7 +778,7 @@ export class Client {
     /**
      * @return OK
      */
-    propertiesGET2(propertyId: string): Observable<void> {
+    propertiesGET2(propertyId: string): Observable<PropertyDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/properties/{propertyId}";
         if (propertyId === undefined || propertyId === null)
             throw new globalThis.Error("The parameter 'propertyId' must be defined.");
@@ -693,6 +789,7 @@ export class Client {
             observe: "response",
             responseType: "blob",
             headers: new HttpHeaders({
+                "Accept": "application/json"
             })
         };
 
@@ -703,14 +800,14 @@ export class Client {
                 try {
                     return this.processPropertiesGET2(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<PropertyDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<PropertyDetailResponse>;
         }));
     }
 
-    protected processPropertiesGET2(response: HttpResponseBase): Observable<void> {
+    protected processPropertiesGET2(response: HttpResponseBase): Observable<PropertyDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -719,7 +816,21 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PropertyDetailResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -733,7 +844,7 @@ export class Client {
      * @param body (optional) 
      * @return OK
      */
-    propertiesPATCH(propertyId: string, body?: UpdatePropertyRequest | undefined): Observable<void> {
+    propertiesPATCH(propertyId: string, body?: UpdatePropertyRequest | undefined): Observable<PropertyDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/properties/{propertyId}";
         if (propertyId === undefined || propertyId === null)
             throw new globalThis.Error("The parameter 'propertyId' must be defined.");
@@ -748,6 +859,7 @@ export class Client {
             responseType: "blob",
             headers: new HttpHeaders({
                 "Content-Type": "application/json",
+                "Accept": "application/json"
             })
         };
 
@@ -758,14 +870,14 @@ export class Client {
                 try {
                     return this.processPropertiesPATCH(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<PropertyDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<PropertyDetailResponse>;
         }));
     }
 
-    protected processPropertiesPATCH(response: HttpResponseBase): Observable<void> {
+    protected processPropertiesPATCH(response: HttpResponseBase): Observable<PropertyDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -774,7 +886,33 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PropertyDetailResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -787,7 +925,7 @@ export class Client {
     /**
      * @return OK
      */
-    activate(propertyId: string): Observable<void> {
+    activate(propertyId: string): Observable<PropertyDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/properties/{propertyId}/activate";
         if (propertyId === undefined || propertyId === null)
             throw new globalThis.Error("The parameter 'propertyId' must be defined.");
@@ -798,6 +936,7 @@ export class Client {
             observe: "response",
             responseType: "blob",
             headers: new HttpHeaders({
+                "Accept": "application/json"
             })
         };
 
@@ -808,14 +947,14 @@ export class Client {
                 try {
                     return this.processActivate(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<PropertyDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<PropertyDetailResponse>;
         }));
     }
 
-    protected processActivate(response: HttpResponseBase): Observable<void> {
+    protected processActivate(response: HttpResponseBase): Observable<PropertyDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -824,7 +963,27 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PropertyDetailResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -837,7 +996,7 @@ export class Client {
     /**
      * @return OK
      */
-    deactivate(propertyId: string): Observable<void> {
+    deactivate(propertyId: string): Observable<PropertyDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/properties/{propertyId}/deactivate";
         if (propertyId === undefined || propertyId === null)
             throw new globalThis.Error("The parameter 'propertyId' must be defined.");
@@ -848,6 +1007,7 @@ export class Client {
             observe: "response",
             responseType: "blob",
             headers: new HttpHeaders({
+                "Accept": "application/json"
             })
         };
 
@@ -858,14 +1018,14 @@ export class Client {
                 try {
                     return this.processDeactivate(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<PropertyDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<PropertyDetailResponse>;
         }));
     }
 
-    protected processDeactivate(response: HttpResponseBase): Observable<void> {
+    protected processDeactivate(response: HttpResponseBase): Observable<PropertyDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -874,7 +1034,27 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PropertyDetailResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -887,7 +1067,7 @@ export class Client {
     /**
      * @return OK
      */
-    archive(propertyId: string): Observable<void> {
+    archive(propertyId: string): Observable<PropertyDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/properties/{propertyId}/archive";
         if (propertyId === undefined || propertyId === null)
             throw new globalThis.Error("The parameter 'propertyId' must be defined.");
@@ -898,6 +1078,7 @@ export class Client {
             observe: "response",
             responseType: "blob",
             headers: new HttpHeaders({
+                "Accept": "application/json"
             })
         };
 
@@ -908,14 +1089,14 @@ export class Client {
                 try {
                     return this.processArchive(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<PropertyDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<PropertyDetailResponse>;
         }));
     }
 
-    protected processArchive(response: HttpResponseBase): Observable<void> {
+    protected processArchive(response: HttpResponseBase): Observable<PropertyDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -924,7 +1105,27 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PropertyDetailResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -936,9 +1137,9 @@ export class Client {
 
     /**
      * @param body (optional) 
-     * @return OK
+     * @return Created
      */
-    ownersPOST(propertyId: string, body?: LinkPropertyOwnerRequest | undefined): Observable<void> {
+    ownersPOST(propertyId: string, body?: LinkPropertyOwnerRequest | undefined): Observable<PropertyOwnerResponse> {
         let url_ = this.baseUrl + "/api/v1/properties/{propertyId}/owners";
         if (propertyId === undefined || propertyId === null)
             throw new globalThis.Error("The parameter 'propertyId' must be defined.");
@@ -953,6 +1154,7 @@ export class Client {
             responseType: "blob",
             headers: new HttpHeaders({
                 "Content-Type": "application/json",
+                "Accept": "application/json"
             })
         };
 
@@ -963,23 +1165,49 @@ export class Client {
                 try {
                     return this.processOwnersPOST(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<PropertyOwnerResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<PropertyOwnerResponse>;
         }));
     }
 
-    protected processOwnersPOST(response: HttpResponseBase): Observable<void> {
+    protected processOwnersPOST(response: HttpResponseBase): Observable<PropertyOwnerResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
             (response as any).error instanceof Blob ? (response as any).error : undefined;
 
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
-        if (status === 200) {
+        if (status === 201) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PropertyOwnerResponse;
+            return _observableOf(result201);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -994,7 +1222,7 @@ export class Client {
      * @param pageSize (optional) 
      * @return OK
      */
-    ownersGET(propertyId: string, page?: number | undefined, pageSize?: number | undefined): Observable<void> {
+    ownersGET(propertyId: string, page?: number | undefined, pageSize?: number | undefined): Observable<PagedPropertyOwnerResponse> {
         let url_ = this.baseUrl + "/api/v1/properties/{propertyId}/owners?";
         if (propertyId === undefined || propertyId === null)
             throw new globalThis.Error("The parameter 'propertyId' must be defined.");
@@ -1013,6 +1241,7 @@ export class Client {
             observe: "response",
             responseType: "blob",
             headers: new HttpHeaders({
+                "Accept": "application/json"
             })
         };
 
@@ -1023,14 +1252,14 @@ export class Client {
                 try {
                     return this.processOwnersGET(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<PagedPropertyOwnerResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<PagedPropertyOwnerResponse>;
         }));
     }
 
-    protected processOwnersGET(response: HttpResponseBase): Observable<void> {
+    protected processOwnersGET(response: HttpResponseBase): Observable<PagedPropertyOwnerResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -1039,7 +1268,21 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PagedPropertyOwnerResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -1050,7 +1293,7 @@ export class Client {
     }
 
     /**
-     * @return OK
+     * @return No Content
      */
     ownersDELETE(propertyId: string, ownerUserId: string): Observable<void> {
         let url_ = this.baseUrl + "/api/v1/properties/{propertyId}/owners/{ownerUserId}";
@@ -1090,9 +1333,21 @@ export class Client {
             (response as any).error instanceof Blob ? (response as any).error : undefined;
 
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
-        if (status === 200) {
+        if (status === 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
             return _observableOf(null as any);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -2260,6 +2515,17 @@ export interface AddressRequest {
     country?: string | undefined;
 }
 
+export interface AddressResponse {
+    zipCode?: string | undefined;
+    street?: string | undefined;
+    number?: string | undefined;
+    complement?: string | undefined;
+    neighborhood?: string | undefined;
+    city?: string | undefined;
+    state?: string | undefined;
+    country?: string | undefined;
+}
+
 export interface AssignRoleRequest {
     roleCode?: string | undefined;
 }
@@ -2275,6 +2541,21 @@ export interface AuthTokensResponse {
 export interface ChangePasswordRequest {
     currentPassword?: string | undefined;
     newPassword?: string | undefined;
+}
+
+export interface CondominiumDetailResponse {
+    id?: string;
+    name?: string | undefined;
+    address?: AddressResponse;
+    createdAt?: Date;
+    updatedAt?: Date;
+}
+
+export interface CondominiumSummaryResponse {
+    id?: string;
+    name?: string | undefined;
+    createdAt?: Date;
+    updatedAt?: Date;
 }
 
 export interface CreateCondominiumRequest {
@@ -2327,6 +2608,27 @@ export interface OwnProfileResponse {
     lastLoginAt?: Date | undefined;
 }
 
+export interface PagedCondominiumResponse {
+    page?: number;
+    pageSize?: number;
+    totalCount?: number;
+    items?: CondominiumSummaryResponse[] | undefined;
+}
+
+export interface PagedPropertyOwnerResponse {
+    page?: number;
+    pageSize?: number;
+    totalCount?: number;
+    items?: PropertyOwnerResponse[] | undefined;
+}
+
+export interface PagedPropertyResponse {
+    page?: number;
+    pageSize?: number;
+    totalCount?: number;
+    items?: PropertySummaryResponse[] | undefined;
+}
+
 export interface PagedUserResponse {
     page?: number;
     pageSize?: number;
@@ -2344,24 +2646,46 @@ export interface ProblemDetails {
     [key: string]: any;
 }
 
+export interface PropertyDetailResponse {
+    id?: string;
+    code?: string | undefined;
+    name?: string | undefined;
+    capacity?: number;
+    condominiumId?: string | undefined;
+    address?: AddressResponse;
+    effectiveAddress?: AddressResponse;
+    effectiveAddressSource?: string | undefined;
+    status?: string | undefined;
+    createdAt?: Date;
+    updatedAt?: Date;
+}
+
 export interface PropertyManagementAddressRequestOptional {
-    readonly isSet?: boolean;
-    value?: AddressRequest;
+    zipCode?: string | undefined;
+    street?: string | undefined;
+    number?: string | undefined;
+    complement?: string | undefined;
+    neighborhood?: string | undefined;
+    city?: string | undefined;
+    state?: string | undefined;
+    country?: string | undefined;
 }
 
-export interface PropertyManagementGuidNullableOptional {
-    readonly isSet?: boolean;
-    readonly value?: string | undefined;
+export interface PropertyOwnerResponse {
+    propertyId?: string;
+    ownerUserId?: string;
+    createdAt?: Date;
 }
 
-export interface PropertyManagementInt32Optional {
-    readonly isSet?: boolean;
-    readonly value?: number;
-}
-
-export interface PropertyManagementStringOptional {
-    readonly isSet?: boolean;
-    readonly value?: string | undefined;
+export interface PropertySummaryResponse {
+    id?: string;
+    code?: string | undefined;
+    name?: string | undefined;
+    capacity?: number;
+    condominiumId?: string | undefined;
+    status?: string | undefined;
+    createdAt?: Date;
+    updatedAt?: Date;
 }
 
 export interface RefreshRequest {
@@ -2404,10 +2728,10 @@ export interface UpdateCondominiumRequest {
 }
 
 export interface UpdatePropertyRequest {
-    code?: PropertyManagementStringOptional;
-    name?: PropertyManagementStringOptional;
-    capacity?: PropertyManagementInt32Optional;
-    condominiumId?: PropertyManagementGuidNullableOptional;
+    code?: string;
+    name?: string;
+    capacity?: number;
+    condominiumId?: string | undefined;
     address?: PropertyManagementAddressRequestOptional;
 }
 

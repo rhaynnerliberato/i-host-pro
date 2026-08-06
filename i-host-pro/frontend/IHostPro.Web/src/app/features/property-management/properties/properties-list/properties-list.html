@@ -1,0 +1,90 @@
+<div class="properties-list-page">
+  <div class="properties-list-header">
+    <h1>{{ 'propertyManagement.properties.list.title' | transloco }}</h1>
+    <button mat-flat-button color="primary" (click)="openCreateDialog()">
+      <mat-icon>add</mat-icon>
+      {{ 'propertyManagement.properties.list.create' | transloco }}
+    </button>
+  </div>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="properties-list-state">
+        <mat-progress-spinner diameter="32" mode="indeterminate" />
+      </div>
+    }
+    @case ('error') {
+      <div class="properties-list-state">
+        <p>{{ 'propertyManagement.properties.list.loadError' | transloco }}</p>
+        <button mat-button (click)="loadProperties()">{{ 'common.retry' | transloco }}</button>
+      </div>
+    }
+    @case ('empty') {
+      <div class="properties-list-state">
+        <p>{{ 'propertyManagement.properties.list.empty' | transloco }}</p>
+      </div>
+    }
+    @case ('loaded') {
+      <table mat-table [dataSource]="properties()" class="full-width">
+        <ng-container matColumnDef="code">
+          <th mat-header-cell *matHeaderCellDef>{{ 'propertyManagement.properties.list.columns.code' | transloco }}</th>
+          <td mat-cell *matCellDef="let property">{{ property.code }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>{{ 'propertyManagement.properties.list.columns.name' | transloco }}</th>
+          <td mat-cell *matCellDef="let property">{{ property.name }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="capacity">
+          <th mat-header-cell *matHeaderCellDef>{{ 'propertyManagement.properties.list.columns.capacity' | transloco }}</th>
+          <td mat-cell *matCellDef="let property">{{ property.capacity }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>{{ 'propertyManagement.properties.list.columns.status' | transloco }}</th>
+          <td mat-cell *matCellDef="let property">
+            <mat-chip-set>
+              <mat-chip>{{ statusLabelKey(property.status) | transloco }}</mat-chip>
+            </mat-chip-set>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>{{ 'propertyManagement.properties.list.columns.actions' | transloco }}</th>
+          <td mat-cell *matCellDef="let property">
+            <button mat-icon-button [matMenuTriggerFor]="menu" [attr.aria-label]="'propertyManagement.properties.list.actionsFor' | transloco: { name: property.name }">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              @if (canEdit(property.status)) {
+                <button mat-menu-item (click)="openEditDialog(property.id)">{{ 'propertyManagement.properties.list.edit' | transloco }}</button>
+              }
+              <button mat-menu-item (click)="openOwnersDialog(property)">{{ 'propertyManagement.properties.list.manageOwners' | transloco }}</button>
+              @if (canActivate(property.status)) {
+                <button mat-menu-item (click)="activate(property.id)">{{ 'propertyManagement.properties.list.activate' | transloco }}</button>
+              }
+              @if (canDeactivate(property.status)) {
+                <button mat-menu-item (click)="deactivate(property.id)">{{ 'propertyManagement.properties.list.deactivate' | transloco }}</button>
+              }
+              @if (canArchive(property.status)) {
+                <button mat-menu-item (click)="confirmArchive(property)">{{ 'propertyManagement.properties.list.archive' | transloco }}</button>
+              }
+            </mat-menu>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+
+      <mat-paginator
+        [length]="totalCount()"
+        [pageIndex]="pageIndex()"
+        [pageSize]="pageSize()"
+        [pageSizeOptions]="[10, 25, 50]"
+        (page)="onPageChange($event)"
+      />
+    }
+  }
+</div>

@@ -1,0 +1,24 @@
+.full-width {
+  width: 100%;
+}
+
+.address-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1rem;
+  margin-top: 0.5rem;
+
+  mat-form-field {
+    width: 100%;
+  }
+}
+
+.address-hint {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.form-error {
+  color: var(--mat-sys-error);
+}

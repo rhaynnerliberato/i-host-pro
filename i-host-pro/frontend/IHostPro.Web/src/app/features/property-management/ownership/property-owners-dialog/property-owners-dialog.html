@@ -1,0 +1,47 @@
+<h2 mat-dialog-title>{{ 'propertyManagement.ownership.title' | transloco: { name: data.propertyName } }}</h2>
+
+<mat-dialog-content>
+  @switch (state()) {
+    @case ('loading') {
+      <div class="owners-state">
+        <mat-progress-spinner diameter="32" mode="indeterminate" />
+      </div>
+    }
+    @case ('error') {
+      <div class="owners-state">
+        <p>{{ 'propertyManagement.ownership.loadError' | transloco }}</p>
+        <button mat-button (click)="loadOwners()">{{ 'common.retry' | transloco }}</button>
+      </div>
+    }
+    @case ('empty') {
+      <p>{{ 'propertyManagement.ownership.none' | transloco }}</p>
+    }
+    @case ('loaded') {
+      <mat-list>
+        @for (owner of owners(); track owner.ownerUserId) {
+          <mat-list-item>
+            <span matListItemTitle>{{ owner.ownerUserId }}</span>
+            <button mat-icon-button matListItemMeta [disabled]="busy()" (click)="confirmRemove(owner)" [attr.aria-label]="'common.remove' | transloco">
+              <mat-icon>close</mat-icon>
+            </button>
+          </mat-list-item>
+        }
+      </mat-list>
+    }
+  }
+
+  <form class="link-form" (ngSubmit)="linkOwner()" novalidate>
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'propertyManagement.ownership.ownerUserId' | transloco }}</mat-label>
+      <input matInput [formControl]="ownerUserIdControl" />
+      @if (ownerUserIdControl.invalid && ownerUserIdControl.touched) {
+        <mat-error>{{ 'propertyManagement.ownership.errors.ownerUserIdRequired' | transloco }}</mat-error>
+      }
+    </mat-form-field>
+    <button mat-button type="submit" [disabled]="busy()">{{ 'propertyManagement.ownership.link' | transloco }}</button>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-flat-button color="primary" (click)="close()">{{ 'common.close' | transloco }}</button>
+</mat-dialog-actions>

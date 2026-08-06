@@ -55,6 +55,24 @@ describe('AdminLayout nav item visibility', () => {
     const paths = component['navItems']().map((item) => item.path);
 
     expect(paths).toContain('/');
+    expect(paths).toContain('/reservations');
+  });
+
+  it('shows the "Condomínios" and "Imóveis" nav items to a user holding PROPERTIES:MANAGE', () => {
+    const component = configure(['PROPERTIES:MANAGE']);
+
+    const paths = component['navItems']().map((item) => item.path);
+
     expect(paths).toContain('/condominiums');
+    expect(paths).toContain('/properties');
+  });
+
+  it('hides the "Condomínios" and "Imóveis" nav items from a user who does not hold PROPERTIES:MANAGE', () => {
+    const component = configure(['SOME:OTHER']);
+
+    const paths = component['navItems']().map((item) => item.path);
+
+    expect(paths).not.toContain('/condominiums');
+    expect(paths).not.toContain('/properties');
   });
 });

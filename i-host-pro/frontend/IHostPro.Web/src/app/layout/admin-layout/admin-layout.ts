@@ -24,8 +24,8 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { labelKey: 'layout.nav.home', path: '/', icon: 'home' },
   { labelKey: 'layout.nav.users', path: '/users', icon: 'group', requiredPermission: 'USERS:MANAGE' },
-  { labelKey: 'layout.nav.condominiums', path: '/condominiums', icon: 'apartment' },
-  { labelKey: 'layout.nav.properties', path: '/properties', icon: 'villa' },
+  { labelKey: 'layout.nav.condominiums', path: '/condominiums', icon: 'apartment', requiredPermission: 'PROPERTIES:MANAGE' },
+  { labelKey: 'layout.nav.properties', path: '/properties', icon: 'villa', requiredPermission: 'PROPERTIES:MANAGE' },
   { labelKey: 'layout.nav.reservations', path: '/reservations', icon: 'event' },
 ];
 
