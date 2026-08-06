@@ -261,6 +261,25 @@ public class UsersEndpointsTests : IClassFixture<UsersEndpointsTests.Fixture>
         return (user.Id, email);
     }
 
+    /// <summary>Same as <see cref="SeedUserAsync"/>, plus real <c>UserRole</c> rows against the platform's real, seeded catalog (Fase 4, Incremento 2 — GET /users/me permissions tests).</summary>
+    private async Task<(Guid UserId, string Email)> SeedUserWithRolesAsync(Guid tenantId, params string[] roleCodes)
+    {
+        var (userId, email) = await SeedUserAsync(tenantId);
+
+        await using var dbContext = CreateMigratorDbContextWithTenant(tenantId);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetPostgresTenantAsync(dbContext, tenantId);
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var roleCode in roleCodes)
+            dbContext.UserRoles.Add(new UserRole(tenantId, userId, roleCode, now, assignedByUserId: null));
+
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return (userId, email);
+    }
+
     private async Task<string> GetTenantSlugAsync(Guid tenantId)
     {
         await using var dbContext = CreateMigratorDbContextWithTenant(tenantId);
@@ -392,6 +411,150 @@ public class UsersEndpointsTests : IClassFixture<UsersEndpointsTests.Fixture>
 
         var body = await response.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonWebDefaults);
         body!.Id.Should().Be(userId); // never the query-string-supplied id
+    }
+
+    // ---- Tests: profile permissions (Fase 4, Incremento 2 — minimal OwnProfileResponse fix) ----
+
+    [Fact]
+    public async Task GetOwnProfile_for_an_ADMIN_user_includes_USERS_MANAGE_among_their_permissions()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (_, email) = await SeedUserWithRolesAsync(tenantId, "ADMIN");
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var login = await LoginAsync(client, slug, email);
+
+        var response = await GetAsync(client, "/api/v1/users/me", login.AccessToken);
+
+        var body = await response.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonWebDefaults);
+        body!.Permissions.Should().Contain("USERS:MANAGE");
+    }
+
+    [Fact]
+    public async Task GetOwnProfile_for_a_user_with_multiple_roles_returns_the_union_of_both_roles_permissions()
+    {
+        var tenantId = await SeedTenantAsync();
+        // OPERATOR grants RESERVATIONS:MANAGE; HOUSEKEEPER grants CLEANINGS:MANAGE:OWN_CLEANING — disjoint sets (IdentityCatalogSeed).
+        var (_, email) = await SeedUserWithRolesAsync(tenantId, "OPERATOR", "HOUSEKEEPER");
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var login = await LoginAsync(client, slug, email);
+
+        var response = await GetAsync(client, "/api/v1/users/me", login.AccessToken);
+
+        var body = await response.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonWebDefaults);
+        body!.Permissions.Should().Contain("RESERVATIONS:MANAGE").And.Contain("CLEANINGS:MANAGE:OWN_CLEANING");
+    }
+
+    [Fact]
+    public async Task GetOwnProfile_permissions_shared_by_more_than_one_role_appear_only_once()
+    {
+        var tenantId = await SeedTenantAsync();
+        // ADMIN and OPERATOR both grant AUDIT:READ (IdentityCatalogSeed) — must not be duplicated in the union.
+        var (_, email) = await SeedUserWithRolesAsync(tenantId, "ADMIN", "OPERATOR");
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var login = await LoginAsync(client, slug, email);
+
+        var response = await GetAsync(client, "/api/v1/users/me", login.AccessToken);
+
+        var body = await response.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonWebDefaults);
+        body!.Permissions.Count(code => code == "AUDIT:READ").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetOwnProfile_permissions_are_returned_in_deterministic_ordinal_order()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (_, email) = await SeedUserWithRolesAsync(tenantId, "ADMIN");
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var login = await LoginAsync(client, slug, email);
+
+        var response = await GetAsync(client, "/api/v1/users/me", login.AccessToken);
+
+        var body = await response.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonWebDefaults);
+        var expectedOrder = body!.Permissions.OrderBy(code => code, StringComparer.Ordinal).ToArray();
+        body.Permissions.Should().Equal(expectedOrder);
+    }
+
+    [Fact]
+    public async Task GetOwnProfile_for_a_user_with_a_zero_permission_role_returns_an_empty_permissions_collection()
+    {
+        var tenantId = await SeedTenantAsync();
+        // SYSTEM is seeded with zero RolePermission rows (IdentityCatalogSeed).
+        var (_, email) = await SeedUserWithRolesAsync(tenantId, "SYSTEM");
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var login = await LoginAsync(client, slug, email);
+
+        var response = await GetAsync(client, "/api/v1/users/me", login.AccessToken);
+
+        var body = await response.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonWebDefaults);
+        body!.Permissions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetOwnProfile_never_includes_a_permission_from_a_role_the_user_was_not_assigned()
+    {
+        var tenantId = await SeedTenantAsync();
+        // HOUSEKEEPER never grants USERS:MANAGE/ROLES:READ/PERMISSIONS:READ (ADMIN-only in IdentityCatalogSeed).
+        var (_, email) = await SeedUserWithRolesAsync(tenantId, "HOUSEKEEPER");
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var login = await LoginAsync(client, slug, email);
+
+        var response = await GetAsync(client, "/api/v1/users/me", login.AccessToken);
+
+        var body = await response.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonWebDefaults);
+        body!.Permissions.Should().NotContain("USERS:MANAGE").And.NotContain("ROLES:READ").And.NotContain("PERMISSIONS:READ");
+    }
+
+    [Fact]
+    public async Task GetOwnProfile_permissions_reflect_only_the_callers_own_tenant_scoped_role_assignment()
+    {
+        // Two tenants; Tenant A's user is ADMIN, Tenant B's user has no role at all — the
+        // permission catalog itself is platform-fixed (shared), but role ASSIGNMENT is
+        // tenant-scoped data, so Tenant B's caller must never inherit Tenant A's grant.
+        var tenantAId = await SeedTenantAsync();
+        var tenantBId = await SeedTenantAsync();
+        await SeedUserWithRolesAsync(tenantAId, "ADMIN");
+        var (_, tenantBEmail) = await SeedUserWithRolesAsync(tenantBId); // no role assigned
+        var tenantBSlug = await GetTenantSlugAsync(tenantBId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var login = await LoginAsync(client, tenantBSlug, tenantBEmail);
+
+        var response = await GetAsync(client, "/api/v1/users/me", login.AccessToken);
+
+        var body = await response.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonWebDefaults);
+        body!.Permissions.Should().BeEmpty("Tenant B's caller holds no role of their own, regardless of Tenant A's ADMIN");
+    }
+
+    [Fact]
+    public async Task GetOwnProfile_response_exposes_only_plain_permission_code_strings_no_internal_claims_or_metadata()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (_, email) = await SeedUserWithRolesAsync(tenantId, "ADMIN");
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var login = await LoginAsync(client, slug, email);
+
+        var response = await GetAsync(client, "/api/v1/users/me", login.AccessToken);
+
+        var raw = await response.Content.ReadAsStringAsync();
+        raw.Should().NotContain("passwordHash", "sensitive internal fields must never reach the wire");
+        raw.Should().NotContain("claim", "the raw JWT/claims machinery must never leak into the profile response");
+
+        var body = await response.Content.ReadFromJsonAsync<OwnProfileResponse>(JsonWebDefaults);
+        body!.Permissions.Should().OnlyContain(code => System.Text.RegularExpressions.Regex.IsMatch(code, "^[A-Z_]+:[A-Z_]+(:[A-Z_]+)?$"));
     }
 
     // ---- Tests: sessions --------------------------------------------------

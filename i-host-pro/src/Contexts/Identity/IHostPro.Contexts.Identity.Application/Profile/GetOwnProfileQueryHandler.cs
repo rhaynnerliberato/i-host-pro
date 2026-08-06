@@ -1,5 +1,6 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
+using IHostPro.Contexts.Identity.Application.Authorization;
 using IHostPro.Contexts.Identity.Application.Errors;
 
 namespace IHostPro.Contexts.Identity.Application.Profile;
@@ -17,6 +18,16 @@ namespace IHostPro.Contexts.Identity.Application.Profile;
 /// the same reader Login/Refresh already use, sorted here with
 /// <see cref="StringComparer.Ordinal"/> — the reader itself returns them in
 /// whatever order the underlying query produces, never guaranteed sorted.
+///
+/// Permissions (Fase 4, Incremento 2 — minimal contract fix so the frontend
+/// never needs to decode a JWT or cross-reference roles against the role
+/// catalog to know its own authorization) are resolved from those same roles
+/// via <see cref="IPermissionReader"/> — the exact same reader
+/// <c>PermissionAuthorizationHandler</c> uses to enforce every
+/// <c>[Authorize(Policy = ...)]</c> in the API, so this endpoint can never
+/// drift from what the backend actually enforces. No new authorization logic
+/// is introduced here — only a read of the caller's own already-computed
+/// effective permissions.
 /// </summary>
 public sealed class GetOwnProfileQueryHandler : IQueryHandler<GetOwnProfileQuery, OwnProfileResult>
 {
@@ -25,11 +36,14 @@ public sealed class GetOwnProfileQueryHandler : IQueryHandler<GetOwnProfileQuery
 
     private readonly IUserAuthenticationService _userAuthenticationService;
     private readonly IUserRoleReader _roleReader;
+    private readonly IPermissionReader _permissionReader;
 
-    public GetOwnProfileQueryHandler(IUserAuthenticationService userAuthenticationService, IUserRoleReader roleReader)
+    public GetOwnProfileQueryHandler(
+        IUserAuthenticationService userAuthenticationService, IUserRoleReader roleReader, IPermissionReader permissionReader)
     {
         _userAuthenticationService = userAuthenticationService;
         _roleReader = roleReader;
+        _permissionReader = permissionReader;
     }
 
     public async ValueTask<Result<OwnProfileResult>> Handle(GetOwnProfileQuery query, CancellationToken cancellationToken)
@@ -41,8 +55,11 @@ public sealed class GetOwnProfileQueryHandler : IQueryHandler<GetOwnProfileQuery
         var roles = await _roleReader.GetRoleCodesAsync(user.Id, cancellationToken);
         var sortedRoles = roles.OrderBy(code => code, StringComparer.Ordinal).ToArray();
 
+        var permissions = await _permissionReader.GetPermissionCodesAsync(sortedRoles, cancellationToken);
+        var sortedPermissions = permissions.Distinct(StringComparer.Ordinal).OrderBy(code => code, StringComparer.Ordinal).ToArray();
+
         var result = new OwnProfileResult(
-            user.Id, user.FullName, user.Email.Value, user.Status.ToString(), sortedRoles, user.CreatedAt, user.LastLoginAt);
+            user.Id, user.FullName, user.Email.Value, user.Status.ToString(), sortedRoles, sortedPermissions, user.CreatedAt, user.LastLoginAt);
 
         return Result.Success(result);
     }

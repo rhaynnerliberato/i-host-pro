@@ -6,6 +6,7 @@ using IHostPro.Contexts.Identity.Application.Users;
 using IHostPro.Contexts.Identity.Contracts.Authorization;
 using IHostPro.Contexts.Identity.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IHostPro.Contexts.Identity.Api.Controllers;
@@ -33,6 +34,10 @@ public sealed class UserAdministrationController : ControllerBase
 
     [HttpPost]
     [Authorize(Policy = IdentityPermissionCodes.UsersManage)]
+    [ProducesResponseType(typeof(UserResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Create([FromBody] CreateUserRequest request, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -58,6 +63,7 @@ public sealed class UserAdministrationController : ControllerBase
 
     [HttpGet]
     [Authorize(Policy = IdentityPermissionCodes.UsersManage)]
+    [ProducesResponseType(typeof(PagedUserResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> List(
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
@@ -77,6 +83,8 @@ public sealed class UserAdministrationController : ControllerBase
 
     [HttpGet("{userId:guid}")]
     [Authorize(Policy = IdentityPermissionCodes.UsersManage)]
+    [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid userId, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -91,6 +99,10 @@ public sealed class UserAdministrationController : ControllerBase
 
     [HttpPatch("{userId:guid}")]
     [Authorize(Policy = IdentityPermissionCodes.UsersManage)]
+    [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Update(Guid userId, [FromBody] UpdateUserRequest request, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -106,6 +118,9 @@ public sealed class UserAdministrationController : ControllerBase
 
     [HttpPost("{userId:guid}/roles")]
     [Authorize(Policy = IdentityPermissionCodes.UsersManage)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> AssignRole(Guid userId, [FromBody] AssignRoleRequest request, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -121,6 +136,9 @@ public sealed class UserAdministrationController : ControllerBase
 
     [HttpDelete("{userId:guid}/roles/{roleCode}")]
     [Authorize(Policy = IdentityPermissionCodes.UsersManage)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> RemoveRole(Guid userId, string roleCode, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -136,6 +154,9 @@ public sealed class UserAdministrationController : ControllerBase
 
     [HttpPost("{userId:guid}/block")]
     [Authorize(Policy = IdentityPermissionCodes.UsersManage)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Block(Guid userId, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -151,6 +172,9 @@ public sealed class UserAdministrationController : ControllerBase
 
     [HttpPost("{userId:guid}/unblock")]
     [Authorize(Policy = IdentityPermissionCodes.UsersManage)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Unblock(Guid userId, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -166,6 +190,10 @@ public sealed class UserAdministrationController : ControllerBase
 
     [HttpPost("{userId:guid}/reset-password")]
     [Authorize(Policy = IdentityPermissionCodes.UsersManage)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> ResetPassword(Guid userId, [FromBody] ResetPasswordRequest request, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();

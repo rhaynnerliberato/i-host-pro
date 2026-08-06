@@ -96,7 +96,7 @@ public sealed class UsersController : ControllerBase
     private void SetNoStoreHeaders() => Response.Headers.CacheControl = "no-store";
 
     private static OwnProfileResponse ToResponse(OwnProfileResult result) => new(
-        result.Id, result.FullName, result.Email, result.Status, result.Roles, result.CreatedAt, result.LastLoginAt);
+        result.Id, result.FullName, result.Email, result.Status, result.Roles, result.Permissions, result.CreatedAt, result.LastLoginAt);
 
     private static OwnSessionResponse ToResponse(OwnSessionResult result) => new(
         result.SessionId, result.CreatedAt, result.LastActivityAt, result.IsCurrent, result.Browser);

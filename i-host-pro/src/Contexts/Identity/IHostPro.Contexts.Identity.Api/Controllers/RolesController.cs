@@ -4,6 +4,7 @@ using IHostPro.Contexts.Identity.Application;
 using IHostPro.Contexts.Identity.Application.Catalog;
 using IHostPro.Contexts.Identity.Contracts.Authorization;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IHostPro.Contexts.Identity.Api.Controllers;
@@ -28,6 +29,7 @@ public sealed class RolesController : ControllerBase
 
     [HttpGet]
     [Authorize(Policy = IdentityPermissionCodes.RolesRead)]
+    [ProducesResponseType(typeof(RoleResponse[]), StatusCodes.Status200OK)]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
         // Administrative catalog data — never cached by an intermediary
