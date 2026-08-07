@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
@@ -76,53 +77,136 @@ public sealed class WebE2EFixture : IAsyncLifetime
     public string ApiBaseUrl { get; } = $"http://localhost:{ApiPort}";
     public string WebBaseUrl { get; } = $"http://localhost:{WebPort}";
 
+    private static readonly TimeSpan ProcessStopTimeout = TimeSpan.FromSeconds(15);
+
     private PostgreSqlContainer _postgresContainer = null!;
     private RabbitMqContainer _rabbitMqContainer = null!;
     private RedisContainer _redisContainer = null!;
     private string _migratorConnectionString = null!;
     private string _appConnectionString = null!;
-    private Process? _apiProcess;
-    private Process? _webProcess;
-    private IPlaywright _playwright = null!;
+    private Guid _tenantId;
+    private ManagedProcess? _apiProcess;
+    private ManagedProcess? _webProcess;
+    private IPlaywright? _playwright;
+    private int _cleanedUp;
     public IBrowser Browser { get; private set; } = null!;
 
+    /// <summary>
+    /// If any step throws — a container failing to start, a migration
+    /// failing, the API/Angular process never becoming ready, the browser
+    /// failing to launch — <see cref="CleanupAsync"/> runs before the
+    /// exception propagates. This is required, not optional: xUnit does not
+    /// reliably call <see cref="DisposeAsync"/> when <see cref="IAsyncLifetime.InitializeAsync"/>
+    /// itself throws, so without this catch, whatever had already started
+    /// (containers, the API process, the Angular process) would leak for the
+    /// lifetime of the test host. The original exception is always what
+    /// propagates — cleanup failures are logged, never substituted in its
+    /// place.
+    /// </summary>
     public async Task InitializeAsync()
     {
-        await StartPostgresAsync();
-        await StartRabbitMqAsync();
-        await StartRedisAsync();
-        await MigrateSchemasAsync();
-        await ProvisionMessageStoresAsync();
-        await ProvisionRabbitMqTopologyAsync();
-        await SeedTenantAndAdminAsync();
+        try
+        {
+            await StartPostgresAsync();
+            await StartRabbitMqAsync();
+            await StartRedisAsync();
+            await MigrateSchemasAsync();
+            await ProvisionMessageStoresAsync();
+            await ProvisionRabbitMqTopologyAsync();
+            await SeedTenantAndAdminAsync();
 
-        _apiProcess = StartApiProcess();
-        await WaitForHttpReadyAsync(ApiBaseUrl + "/swagger/v1/swagger.json", TimeSpan.FromSeconds(60));
+            _apiProcess = StartApiProcess();
+            await WaitForHttpReadyAsync(ApiBaseUrl + "/swagger/v1/swagger.json", TimeSpan.FromSeconds(60));
 
-        _webProcess = StartWebProcess();
-        await WaitForHttpReadyAsync(WebBaseUrl, TimeSpan.FromSeconds(90));
+            _webProcess = StartWebProcess();
+            await WaitForHttpReadyAsync(WebBaseUrl, TimeSpan.FromSeconds(90));
 
-        Microsoft.Playwright.Program.Main(["install", "chromium"]);
-        _playwright = await Playwright.CreateAsync();
-        Browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+            Microsoft.Playwright.Program.Main(["install", "chromium"]);
+            _playwright = await Playwright.CreateAsync();
+            Browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+        }
+        catch
+        {
+            var diagnostics = await CleanupAsync();
+            if (diagnostics.Count > 0)
+                await Console.Error.WriteLineAsync("WebE2EFixture.InitializeAsync failed; cleanup ran and reported: " + string.Join(" | ", diagnostics));
+            throw;
+        }
     }
 
+    /// <summary>Delegates to the same idempotent <see cref="CleanupAsync"/> InitializeAsync's own failure path uses. A leaked resource here is never swallowed — it fails this call loudly (an orphaned process/container is exactly the defect class this hardening exists to catch), unlike InitializeAsync's path, which must let the original startup exception win instead.</summary>
     public async Task DisposeAsync()
     {
-        if (Browser is not null)
-            await Browser.CloseAsync();
-        _playwright?.Dispose();
+        var diagnostics = await CleanupAsync();
+        if (diagnostics.Count > 0)
+            throw new InvalidOperationException("WebE2EFixture cleanup left orphaned resources: " + string.Join(" | ", diagnostics));
+    }
 
-        await StopProcessAsync(_webProcess);
-        await StopProcessAsync(_apiProcess);
+    /// <summary>
+    /// The single teardown routine, safe to call more than once (a second
+    /// call is a no-op — guarded by <see cref="_cleanedUp"/>) and safe to
+    /// call when only part of the infrastructure was ever created (every
+    /// step is null-checked). Every step always runs, regardless of an
+    /// earlier step's outcome, so one broken container disposal can never
+    /// prevent the browser or a process from being torn down — each
+    /// failure is collected into the returned list instead of thrown
+    /// mid-sequence. Ordered shutdown: browser, then Playwright itself,
+    /// then Angular, then the API (reverse of startup order), then the
+    /// ephemeral containers.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> CleanupAsync()
+    {
+        if (Interlocked.Exchange(ref _cleanedUp, 1) != 0)
+            return [];
+
+        var diagnostics = new List<string>();
+
+        if (Browser is not null)
+        {
+            try { await Browser.CloseAsync(); }
+            catch (Exception ex) { diagnostics.Add($"Browser.CloseAsync: {ex.Message}"); }
+        }
+        try { _playwright?.Dispose(); }
+        catch (Exception ex) { diagnostics.Add($"Playwright.Dispose: {ex.Message}"); }
+
+        if (_webProcess is not null)
+        {
+            var diagnostic = await _webProcess.StopAsync(ProcessStopTimeout);
+            if (diagnostic is not null)
+                diagnostics.Add(diagnostic);
+            else if (IsPortInUse(WebPort))
+                diagnostics.Add($"Port {WebPort} is still in use after the Angular dev server process reported exited — a different, untracked process is now holding it.");
+        }
+        if (_apiProcess is not null)
+        {
+            var diagnostic = await _apiProcess.StopAsync(ProcessStopTimeout);
+            if (diagnostic is not null)
+                diagnostics.Add(diagnostic);
+            else if (IsPortInUse(ApiPort))
+                diagnostics.Add($"Port {ApiPort} is still in use after the API process reported exited — a different, untracked process is now holding it.");
+        }
 
         if (_rabbitMqContainer is not null)
-            await _rabbitMqContainer.DisposeAsync();
+        {
+            try { await _rabbitMqContainer.DisposeAsync(); }
+            catch (Exception ex) { diagnostics.Add($"RabbitMQ container disposal: {ex.Message}"); }
+        }
         if (_redisContainer is not null)
-            await _redisContainer.DisposeAsync();
+        {
+            try { await _redisContainer.DisposeAsync(); }
+            catch (Exception ex) { diagnostics.Add($"Redis container disposal: {ex.Message}"); }
+        }
         if (_postgresContainer is not null)
-            await _postgresContainer.DisposeAsync();
+        {
+            try { await _postgresContainer.DisposeAsync(); }
+            catch (Exception ex) { diagnostics.Add($"Postgres container disposal: {ex.Message}"); }
+        }
+
+        return diagnostics;
     }
+
+    private static bool IsPortInUse(int port) =>
+        IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(endpoint => endpoint.Port == port);
 
     private async Task StartPostgresAsync()
     {
@@ -267,6 +351,7 @@ public sealed class WebE2EFixture : IAsyncLifetime
     private async Task SeedTenantAndAdminAsync()
     {
         var tenantId = Guid.NewGuid();
+        _tenantId = tenantId;
         await using var dbContext = CreateIdentityDbContext(tenantId);
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('app.tenant_id', {tenantId.ToString()}, true)");
@@ -312,13 +397,48 @@ public sealed class WebE2EFixture : IAsyncLifetime
         return new IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence.PropertyManagementDbContext(options, new TenantContext());
     }
 
-    private IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext CreateReservationsDbContext()
+    /// <summary>Mirrors <see cref="CreateIdentityDbContext"/>'s exact pattern: with no tenantId, the migrator connection (schema DDL only, e.g. <see cref="MigrateSchemasAsync"/>); with one, the app connection and a tenant-scoped <see cref="TenantContext"/>.</summary>
+    private IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext CreateReservationsDbContext(Guid? tenantId = null)
     {
+        var tenantContext = new TenantContext();
+        if (tenantId is { } id)
+            tenantContext.SetTenant(id);
         var options = new DbContextOptionsBuilder<IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext>()
-            .UseNpgsql(_migratorConnectionString, npgsqlOptions =>
+            .UseNpgsql(tenantId is null ? _migratorConnectionString : _appConnectionString, npgsqlOptions =>
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "reservations"))
             .Options;
-        return new IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext(options, new TenantContext());
+        return new IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext(options, tenantContext);
+    }
+
+    /// <summary>
+    /// Counts <c>reservations.reservation_audit_log</c> rows for one reservation/action —
+    /// exposed for tests that must prove a rejected (losing) request produced no audit trail.
+    /// <c>ReservationAuditWriter.Record</c> and the domain event enqueue both happen in the same
+    /// application-layer code path, and both are persisted (or rolled back) atomically together by
+    /// <c>ReservationsOutboxTransactionExecutor</c> (event staged into the same
+    /// <c>SaveChangesAndFlushMessagesAsync</c> call as the audit row) — so an audit-row count of
+    /// exactly one for a two-request race is direct evidence the loser produced neither.
+    ///
+    /// Uses the app connection with an explicit <c>SELECT set_config('app.tenant_id', ..., true)</c>
+    /// inside its own transaction — mirrors <see cref="SeedTenantAndAdminAsync"/>'s own pattern
+    /// exactly. This table is RLS-protected (Fase 3, Incremento 1 plan, item 11); without both the
+    /// tenant-scoped <see cref="TenantContext"/> (satisfies the EF Core Global Query Filter) and the
+    /// session-level <c>app.tenant_id</c> (satisfies the database-level RLS policy, which the
+    /// migrator connection alone does not bypass), the query silently returns zero rows regardless
+    /// of what was actually persisted — confirmed the hard way earlier in this same investigation.
+    /// </summary>
+    public async Task<int> CountReservationAuditEntriesAsync(Guid reservationId, string actionCode)
+    {
+        await using var dbContext = CreateReservationsDbContext(_tenantId);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('app.tenant_id', {_tenantId.ToString()}, true)");
+
+        var count = await dbContext.ReservationAuditLog
+            .Where(e => e.AggregateId == reservationId && e.ActionCode == actionCode)
+            .CountAsync();
+
+        await transaction.CommitAsync();
+        return count;
     }
 
     private static string FindSolutionRoot()
@@ -336,7 +456,7 @@ public sealed class WebE2EFixture : IAsyncLifetime
     /// bound to the fixed port the committed frontend <c>config.json</c>
     /// already expects.
     /// </summary>
-    private Process StartApiProcess()
+    private ManagedProcess StartApiProcess()
     {
         var dllPath = Path.Combine(FindSolutionRoot(), "src", "Host", "IHostPro.Api", "bin", "Debug", "net10.0", "IHostPro.Api.dll");
         if (!File.Exists(dllPath))
@@ -345,12 +465,7 @@ public sealed class WebE2EFixture : IAsyncLifetime
         using var signingKey = RSA.Create(2048);
         var signingKeyPem = signingKey.ExportRSAPrivateKeyPem();
 
-        var psi = new ProcessStartInfo("dotnet", $"\"{dllPath}\" --urls {ApiBaseUrl}")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
+        var psi = new ProcessStartInfo("dotnet", $"\"{dllPath}\" --urls {ApiBaseUrl}");
         psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         psi.Environment["ConnectionStrings__Identity"] = _appConnectionString;
         psi.Environment["ConnectionStrings__PropertyManagement"] = _appConnectionString;
@@ -377,16 +492,11 @@ public sealed class WebE2EFixture : IAsyncLifetime
         // no override is needed here.
         psi.Environment["OpenTelemetry__OtlpEndpoint"] = "http://127.0.0.1:14317";
 
-        var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start IHostPro.Api process.");
-        process.OutputDataReceived += (_, _) => { };
-        process.ErrorDataReceived += (_, _) => { };
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-        return process;
+        return ManagedProcess.Start(psi, "IHostPro.Api");
     }
 
     /// <summary>Real <c>npm start</c> (Angular's own dev server, `ng serve`) as a subprocess — never a hand-built static host standing in for it.</summary>
-    private Process StartWebProcess()
+    private ManagedProcess StartWebProcess()
     {
         var webRoot = Path.Combine(FindSolutionRoot(), "frontend", "IHostPro.Web");
         if (!Directory.Exists(webRoot))
@@ -407,17 +517,9 @@ public sealed class WebE2EFixture : IAsyncLifetime
         var psi = new ProcessStartInfo("node", $"\"{ngScript}\" serve --port {WebPort}")
         {
             WorkingDirectory = webRoot,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
         };
 
-        var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start the Angular dev server process.");
-        process.OutputDataReceived += (_, _) => { };
-        process.ErrorDataReceived += (_, _) => { };
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-        return process;
+        return ManagedProcess.Start(psi, "ng serve");
     }
 
     /// <summary>
@@ -462,20 +564,5 @@ public sealed class WebE2EFixture : IAsyncLifetime
             }
         }
         throw new TimeoutException($"'{url}' did not become reachable within {timeout}.", lastError);
-    }
-
-    private static async Task StopProcessAsync(Process? process)
-    {
-        if (process is null || process.HasExited)
-            return;
-        try
-        {
-            process.Kill(entireProcessTree: true);
-            await process.WaitForExitAsync();
-        }
-        catch (InvalidOperationException)
-        {
-            // Already exited between the HasExited check and Kill().
-        }
     }
 }
