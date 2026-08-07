@@ -5,6 +5,7 @@ using IHostPro.Contexts.Reservations.Api.Http;
 using IHostPro.Contexts.Reservations.Application;
 using IHostPro.Contexts.Reservations.Application.Reservations;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IHostPro.Contexts.Reservations.Api.Controllers;
@@ -33,6 +34,11 @@ public sealed class ReservationsController : ControllerBase
 
     [HttpPost]
     [Authorize(Policy = IdentityPermissionCodes.ReservationsManage)]
+    [ProducesResponseType(typeof(ReservationDetailResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Create([FromBody] CreateReservationRequest request, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -61,6 +67,9 @@ public sealed class ReservationsController : ControllerBase
 
     [HttpGet]
     [Authorize(Policy = IdentityPermissionCodes.ReservationsManage)]
+    [ProducesResponseType(typeof(PagedReservationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> List(
         [FromQuery] Guid? propertyId, [FromQuery] string? status,
         [FromQuery] DateTimeOffset? from, [FromQuery] DateTimeOffset? to,
@@ -80,6 +89,9 @@ public sealed class ReservationsController : ControllerBase
 
     [HttpGet("{reservationId:guid}")]
     [Authorize(Policy = IdentityPermissionCodes.ReservationsManage)]
+    [ProducesResponseType(typeof(ReservationDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid reservationId, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
@@ -96,6 +108,11 @@ public sealed class ReservationsController : ControllerBase
 
     [HttpPatch("{reservationId:guid}")]
     [Authorize(Policy = IdentityPermissionCodes.ReservationsManage)]
+    [ProducesResponseType(typeof(ReservationDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Update(
         Guid reservationId, [FromBody] UpdateReservationRequest request, CancellationToken cancellationToken)
     {
@@ -124,6 +141,10 @@ public sealed class ReservationsController : ControllerBase
 
     [HttpPost("{reservationId:guid}/cancel")]
     [Authorize(Policy = IdentityPermissionCodes.ReservationsManage)]
+    [ProducesResponseType(typeof(ReservationDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Cancel(Guid reservationId, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();

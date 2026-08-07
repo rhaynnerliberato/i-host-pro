@@ -1,4 +1,3 @@
-using IHostPro.Contexts.PropertyManagement.Application;
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
@@ -6,25 +5,37 @@ namespace IHostPro.Api.Swagger;
 
 /// <summary>
 /// Without this filter, Swashbuckle's default reflection-based schema
-/// generation describes PropertyManagement's <c>Optional&lt;T&gt;</c> by its
-/// public CLR shape — <c>{ isSet: boolean, value: T }</c> — which does not
-/// match what <c>OptionalJsonConverter&lt;T&gt;</c> (PropertyManagement.Api)
-/// actually reads/writes on the wire: the bare <c>T</c> value, or JSON
-/// <c>null</c>; the JSON property being present at all is what "isSet" means,
-/// never a nested wrapper object. Left unfixed, NSwag generates a client that
-/// sends the wrong shape and every <c>PATCH</c> carrying an
-/// <c>Optional&lt;T&gt;</c> field fails deserialization. This filter replaces
-/// the generated schema for any such property with its inner <c>T</c>'s own
-/// schema, so the OpenAPI document — and everything generated from it —
-/// reflects the converter's real contract. Lives in the Host project (not
-/// PropertyManagement.Api) because Swashbuckle is only referenced at the
-/// composition root.
+/// generation describes an <c>Optional&lt;T&gt;</c> by its public CLR shape —
+/// <c>{ isSet: boolean, value: T }</c> — which does not match what each
+/// context's own <c>OptionalJsonConverter&lt;T&gt;</c> actually reads/writes
+/// on the wire: the bare <c>T</c> value, or JSON <c>null</c>; the JSON
+/// property being present at all is what "isSet" means, never a nested
+/// wrapper object. Left unfixed, NSwag generates a client that sends the
+/// wrong shape and every <c>PATCH</c> carrying an <c>Optional&lt;T&gt;</c>
+/// field fails deserialization. This filter replaces the generated schema
+/// for any such property with its inner <c>T</c>'s own schema, so the
+/// OpenAPI document — and everything generated from it — reflects the
+/// converter's real contract. Lives in the Host project (not a context's own
+/// Api project) because Swashbuckle is only referenced at the composition
+/// root.
+///
+/// Each Bounded Context declares its own independent <c>Optional&lt;T&gt;</c>
+/// (Architecture Principles §4: Application layers never reference each
+/// other) — Property Management's and Reservations' are two distinct closed
+/// generic type definitions, never the same type, so both are checked
+/// explicitly by their fully-qualified type rather than by name.
 /// </summary>
 public sealed class OptionalSchemaFilter : ISchemaFilter
 {
+    private static readonly Type[] OptionalTypeDefinitions =
+    [
+        typeof(IHostPro.Contexts.PropertyManagement.Application.Optional<>),
+        typeof(IHostPro.Contexts.Reservations.Application.Optional<>),
+    ];
+
     public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
     {
-        if (!context.Type.IsGenericType || context.Type.GetGenericTypeDefinition() != typeof(Optional<>))
+        if (!context.Type.IsGenericType || !OptionalTypeDefinitions.Contains(context.Type.GetGenericTypeDefinition()))
             return;
         if (schema is not OpenApiSchema mutableSchema)
             return;
