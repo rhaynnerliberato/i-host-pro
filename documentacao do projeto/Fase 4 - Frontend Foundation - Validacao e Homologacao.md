@@ -1,8 +1,8 @@
 # Fase 4 — Frontend Foundation — Validação e Homologação
 
-Versão: 1.3
+Versão: 1.4
 
-Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Incremento 2 (Administração de Usuários) **aprovado, versionado e publicado** na mesma branch (Seções 11.11–11.12). Incremento 3 (Gestão de Condomínios e Imóveis) **aprovado, versionado e publicado** na mesma branch (Seções 12.9–12.10). Incremento 4 (Gestão de Reservas) **aprovado, versionado e publicado** na mesma branch (Seções 13.13–13.14) — inclui a correção definitiva do lifecycle de `WebE2EFixture` e a reconstrução do teste de conflito de concorrência com chamadas HTTP diretas. **Fase 4 (Frontend Foundation) encerrada — 4 de 4 incrementos publicados** — ainda não integrada em `master`.
+Status: **Fase 4 (Frontend Foundation) encerrada e integrada em `master`** (Seção 14) — os 4 incrementos (Fundação/Autenticação — Seção 10; Administração de Usuários — Seções 11.11–11.12; Gestão de Condomínios e Imóveis — Seções 12.9–12.10; Gestão de Reservas — Seções 13.13–13.14) aprovados, versionados e publicados em `feature/frontend-foundation`, depois integrados em `master` por fast-forward. `origin/master` sincronizado.
 
 ---
 
@@ -630,4 +630,23 @@ O teste de cancelamento repetido cancela a reserva via API real com o menu de a�
 
 Push `git push origin feature/frontend-foundation` (`7b9e7fe..15b98df`, quatro commits: os três funcionais da Seção 13.13 + `docs(frontend): record increment 4 completion`, hash `15b98df`). Confirmado após o push: `git status -sb` reporta apenas o cabeçalho da branch (working tree limpa); `git rev-list --left-right --count origin/feature/frontend-foundation...feature/frontend-foundation` retorna `0 0`.
 
-**Incremento 4 encerrado. Fase 4 (Frontend Foundation) encerrada — todos os 4 incrementos aprovados, versionados e publicados em `feature/frontend-foundation`.** Ainda não integrada em `master` (nenhum merge realizado, nenhuma tag criada, nenhuma branch excluída, nenhum force push usado).
+**Incremento 4 encerrado. Fase 4 (Frontend Foundation) encerrada — todos os 4 incrementos aprovados, versionados e publicados em `feature/frontend-foundation`.** Integração em `master` registrada na Seção 14.
+
+## 14. Encerramento da Fase 4 — integração em `master`
+
+**Aprovação final**: Fase 4 (Frontend Foundation), com seus 4 incrementos (Fundação/Autenticação; Administração de Usuários; Gestão de Condomínios e Imóveis; Gestão de Reservas) aprovados e publicados individualmente (Seções 10, 11.11–11.12, 12.9–12.10, 13.13–13.14), aprovada para integração em `master`.
+
+**Integração fast-forward**: `git checkout master`; `git fetch origin`; `git pull --ff-only origin master` (`Already up to date`, sem divergência); `git merge --ff-only feature/frontend-foundation` (`Updating 116abbc..0cf8c5b`, `Fast-forward`, 194 arquivos alterados) — nenhum merge commit criado, nenhum rebase, nenhum force push, nenhuma tag.
+
+**Push de `master`**: `git push origin master` (`116abbc..0cf8c5b`). Confirmado: `git status -sb` reporta apenas o cabeçalho da branch (working tree limpa); `git rev-list --left-right --count origin/master...master` retorna `0 0`. `master` contém, em ordem, os commits dos 4 incrementos da Fase 4 (verificado via `git log --oneline master`), encadeados sobre a Fase 3 (Reservations backend) já publicada.
+
+**Fase 4 (Frontend Foundation) encerrada.**
+
+**Débitos remanescentes** (nenhum bloqueia o encerramento desta fase — registrados para avaliação futura, nenhum corrigido nesta etapa por estar fora do escopo homologado):
+
+1. **`jsonParseReviver` do `Client` gerado pelo NSwag não é configurado globalmente** (Seção 13.9) — todo campo de data de qualquer resposta da API é, em tempo de execução, uma string ISO, apesar da interface TypeScript gerada declarar `Date`. Contornado localmente onde já necessário (`reservation-form-dialog.ts`); nenhum outro ponto do código hoje depende de métodos de instância de `Date` sobre um valor vindo da API.
+2. **Controllers reais ainda sem metadata OpenAPI (`[ProducesResponseType]`)**: `PermissionsController` (1 ação) e `MyPropertiesController` (2 ações) — nenhum dos dois é consumido pelo frontend atual, por isso ficaram fora do gate de cada incremento (que corrigia apenas os endpoints realmente consumidos, nunca especulativamente). `UsersController` tem cobertura parcial (2 de 4 ações).
+3. **Vulnerabilidades `npm` já classificadas, não eliminadas** — Seção 10.3 (Incremento 1): classificação original registrada; reavaliar quando o Angular/dependências forem atualizados.
+4. **Débito de retry-safety herdado de Identity** (pré-existente à Fase 4, não introduzido por ela): `LogoutExecutor`/`RevokeOwnSessionExecutor` (`src/Contexts/Identity/IHostPro.Contexts.Identity.Infrastructure/Persistence/`) ainda têm a lacuna de limpeza em retry já conhecida antes do Checkpoint 6 da Fase 2 — deliberadamente adiada, não relacionada ao frontend.
+
+Fase 5 (Configuration & Policy) ainda não iniciada — a branch `feature/configuration-policy` e um plano de leitura (sem implementação, sem commit) são tratados fora deste documento, no relatório final desta etapa.
