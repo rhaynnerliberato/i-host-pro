@@ -1,8 +1,8 @@
 # Fase 4 — Frontend Foundation — Validação e Homologação
 
-Versão: 0.9
+Versão: 1.2
 
-Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Incremento 2 (Administração de Usuários) **aprovado, versionado e publicado** na mesma branch (Seções 11.11–11.12). Incremento 3 (Gestão de Condomínios e Imóveis) **aprovado, versionado e publicado** na mesma branch (Seções 12.9–12.10). Fase 4 continua em andamento — não integrada em `master`.
+Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Incremento 2 (Administração de Usuários) **aprovado, versionado e publicado** na mesma branch (Seções 11.11–11.12). Incremento 3 (Gestão de Condomínios e Imóveis) **aprovado, versionado e publicado** na mesma branch (Seções 12.9–12.10). Incremento 4 (Gestão de Reservas) **aprovado e commitado, push ainda pendente** (Seções 13.9–13.13) — inclui a correção definitiva do lifecycle de `WebE2EFixture` e a reconstrução do teste de conflito de concorrência com chamadas HTTP diretas. Fase 4 funcionalmente concluída (4 de 4 incrementos), ainda não integrada em `master`.
 
 ---
 
@@ -498,3 +498,130 @@ Fase 2 (Property Management) homologada, commitada e publicada (pré-condição 
 Push `git push origin feature/frontend-foundation` (`69b2c9a..fe6d5c9`, quatro commits: os três funcionais desta seção + `docs(frontend): record increment 3 completion`, hash `fe6d5c9`). Confirmado após o push: `git status -sb` reporta apenas o cabeçalho da branch (working tree limpa); `git rev-list --left-right --count origin/feature/frontend-foundation...feature/frontend-foundation` retorna `0 0`.
 
 **Incremento 3 encerrado.** Fase 4 continua não integrada em `master` (nenhum merge realizado, nenhuma tag criada, nenhuma branch excluída, nenhum force push usado).
+
+## 13. Incremento 4 — Gestão de Reservas
+
+### 13.1 Escopo
+
+Interface administrativa de reservas manuais (rota `/reservations`, hoje um placeholder — Checkpoint 4 do Incremento 1) consumindo exclusivamente os 5 endpoints reais já existentes em `ReservationsController` (Reservations, Fase 3, homologada e publicada em `master`): listagem paginada com os filtros reais que o backend oferece (`propertyId`, `status`, `from`/`to` por interseção de período — ordenação é fixa no backend, por `checkInAt` depois `id`, sem controle de ordenação no frontend), detalhe, criação, atualização (PATCH presence-aware — campo omitido nunca altera, `guestPhone` explicitamente `null` remove o telefone), cancelamento com confirmação. Protegida por `permissionGuard` + `RESERVATIONS:MANAGE` (única permissão real que este controller exige — Seção 13.3).
+
+**Decisão de UX registrada**: o campo `PropertyId` do formulário de criação/edição usa um campo de texto para o GUID do imóvel (mesmo padrão já usado para `ownerUserId` no diálogo de ownership do Incremento 3), em vez de um seletor dependente de `GET /api/v1/properties`. Motivo: `GET /api/v1/properties` exige `PROPERTIES:MANAGE`, permissão que o papel `OPERATOR` **não possui** (Seção 12.3) — mas o Documento 09 (§6) e o seed real confirmam que `OPERATOR` pode "Cadastrar reservas manuais" via `RESERVATIONS:MANAGE`, que ele possui. Um seletor dependente de `PROPERTIES:MANAGE` bloquearia essa capacidade real do papel `OPERATOR`. Decisão dentro da autoridade técnica do Incremento (Constituição de Engenharia §13 — detalhe de implementação interno, não altera contrato público nem regra de negócio), registrada aqui para transparência.
+
+### 13.2 Fora de escopo
+
+Agenda unificada/calendário (Documento 14 §11, explicitamente fora deste incremento); dashboard operacional; check-in/checkout operacional; Housekeeping; Portal da Faxineira; Comunicação/WhatsApp; workflows; IA; qualquer funcionalidade das Fases 5+ (Plano Executivo). `RESERVATIONS:READ` e `RESERVATIONS:READ:OWN_OWNER` existem no catálogo de permissões mas nenhum endpoint de `ReservationsController` os exige hoje — sem capacidade real de "somente leitura" separada neste contexto (mesmo padrão já registrado para `PROPERTIES:READ` na Seção 12.3). Retry automático em conflito de concorrência (`ReservationConcurrencyConflict`) — apenas feedback e nova tentativa manual do usuário.
+
+### 13.3 Permissão real
+
+Confirmada em `IdentityCatalogSeed.cs` e no `ReservationsController` real: **`RESERVATIONS:MANAGE`** é a única permissão que protege todas as 5 ações (`Create`, `List`, `GetById`, `Update`, `Cancel` — todas usam exatamente a mesma policy, não há policy separada por ação). Concedida a `ADMIN` e `OPERATOR`; nenhum outro papel a possui. Verificado contra Documento 09 (§15 Matriz Simplificada: Reservas — Admin=X, Operador=X; §6 Operador: "Cadastrar reservas manuais"; §7 Faxineira: explicitamente "Não poderá: Visualizar reservas"; §8 Proprietário: "Poderá consultar: Reservas" mas "Não poderá: Alterar reservas"). **Nenhuma divergência encontrada** entre documentação e seed real — Documento 09 não contém nenhum código literal de permissão (documento puramente conceitual), apenas a Fase 3 (homologação real) confirma o código `RESERVATIONS:MANAGE`.
+
+### 13.4 Endpoints consumidos (`ReservationsController`, confirmados no código-fonte)
+
+| Método | Rota | Permissão | Request | Response |
+|---|---|---|---|---|
+| POST | `/api/v1/reservations` | `RESERVATIONS:MANAGE` | `CreateReservationRequest(propertyId, guestName, guestPhone?, checkInAt, checkOutAt, guestCount)` | `ReservationDetailResponse` (201) |
+| GET | `/api/v1/reservations` | `RESERVATIONS:MANAGE` | query: `propertyId?, status?, from?, to?, page?, pageSize?` | `PagedReservationResponse` |
+| GET | `/api/v1/reservations/{reservationId}` | `RESERVATIONS:MANAGE` | — | `ReservationDetailResponse` |
+| PATCH | `/api/v1/reservations/{reservationId}` | `RESERVATIONS:MANAGE` | `UpdateReservationRequest` (campos `Optional<T>` — omitido = não alterar; `guestPhone` explícito `null` = remover) | `ReservationDetailResponse` |
+| POST | `/api/v1/reservations/{reservationId}/cancel` | `RESERVATIONS:MANAGE` | — (sem corpo) | `ReservationDetailResponse` (200) |
+
+`ReservationDetailResponse`: `id, propertyId, guestName, guestPhone?, checkInAt, checkOutAt, guestCount, status, createdAt, updatedAt`. `ReservationSummaryResponse` (usado na listagem): mesmos campos exceto `guestPhone` (nunca exposto na listagem). `status` é sempre o código estável em minúsculas: `"confirmed"` ou `"cancelled"` (nunca o nome do enum C#). `Cancelled` é terminal — não existe restauração.
+
+**Nenhum endpoint declarava `[ProducesResponseType]` antes deste incremento** — o cliente NSwag anterior tipava todos os 5 métodos como `Observable<void>` (o corpo da resposta era descartado; `ReservationDetailResponse`/`ReservationSummaryResponse`/`PagedReservationResponse` não existiam em `api-client.ts`). Corrigido no Gate do OpenAPI (Seção 13.5).
+
+**Contrato de data/timezone**: `checkInAt`/`checkOutAt` exigem offset explícito no JSON (rejeitado com 400 se ausente — `RequireExplicitOffsetDateTimeOffsetConverter`, aplicado tanto em `CreateReservationRequest` quanto dentro do `Optional<DateTimeOffset>` de `UpdateReservationRequest`); o backend normaliza para UTC antes de persistir e a resposta sempre retorna o valor já em UTC.
+
+**Concorrência**: dois mecanismos independentes — conflito de agenda (duas reservas sobrepostas para o mesmo imóvel, `pg_advisory_xact_lock`, retorna `ReservationDateConflict`/409) e concorrência otimista na edição (`xmin`, retorna `ReservationConcurrencyConflict`/409, **sem retry automático**).
+
+**Códigos de erro reais** (`ReservationsErrorCodes.cs` + dois códigos ad-hoc não catalogados, mapeamento via `ReservationsResultHttpMapper`, mapper próprio deste contexto): 404 (`ReservationNotFound`, `PropertyNotFound`); 409 (`ReservationDateConflict`, `ReservationAlreadyCancelled`, `CancelledReservationCannotBeModified`, `ReservationConcurrencyConflict`); 400 com `ProblemDetails.Extensions["codes"]` (validação FluentValidation + `PropertyNotActive` + `PropertyCapacityExceeded` + `NoChangesProvided` + os literais ad-hoc `guest_name_invalid`/`reservation_schedule_invalid`).
+
+**Defeito confirmado, já conhecido do Incremento 3**: Reservations possui sua própria cópia independente de `Optional<T>`/`OptionalJsonConverter`/`OptionalJsonConverterFactory` (`IHostPro.Contexts.Reservations.Application`/`.Api.Http` — deliberadamente não compartilhada com Property Management, por design arquitetural, Architecture Principles §4), com exatamente o mesmo defeito de schema OpenAPI já corrigido na Seção 12.8, item 3 (confirmado no cliente NSwag anterior: `ReservationsGuidOptional`/`ReservationsInt32Optional`/`ReservationsDateTimeOffsetOptional`/`ReservationsStringOptional` com a forma incorreta `{isSet, value}`). Corrigido no Gate do OpenAPI (Seção 13.5) estendendo o `OptionalSchemaFilter` já aprovado — nunca duplicando-o nem criando um contrato manual no frontend.
+
+### 13.5 Gate do OpenAPI — correções aplicadas
+
+`[ProducesResponseType]` adicionado às 5 ações de `ReservationsController` (nenhuma existia antes). `OptionalSchemaFilter` (`src/Host/IHostPro.Api/Swagger/`) estendido para reconhecer também `IHostPro.Contexts.Reservations.Application.Optional<T>` (tipo genérico independente do de Property Management, verificado explicitamente contra ambas as definições de tipo fechado — nunca por correspondência de nome). NSwag regenerado (determinismo confirmado, duas execuções idênticas byte-a-byte).
+
+### 13.6 Checkpoints
+
+1. Gate de permissões e Gate do OpenAPI: confirmação do código `RESERVATIONS:MANAGE` (Seção 13.3), correções da Seção 13.5.
+2. Checkpoint 1 — Listagem e detalhe: rota `/reservations`, listagem paginada com os filtros reais (`propertyId`, `status`, `from`/`to`), estados vazio/carregando/erro, detalhe.
+3. Checkpoint 2 — Criação: formulário com os campos reais, tratamento de `PropertyNotFound`/`PropertyNotActive`/`PropertyCapacityExceeded`/`ReservationDateConflict`/validação, prevenção de duplo-submit.
+4. Checkpoint 3 — Atualização: PATCH presence-aware real (nunca reenviar todos os campos como no Incremento 3 — aqui o backend distingue omitido de alterado), remoção explícita de `guestPhone` via `null`, tratamento de 404/409/400.
+5. Checkpoint 4 — Cancelamento: confirmação obrigatória, tratamento de cancelamento duplicado (409 `ReservationAlreadyCancelled`).
+6. Testes unitários frontend + Playwright (10 fluxos).
+
+### 13.7 Critérios de aceite
+
+Todas as ações usam exclusivamente o cliente NSwag regenerado (nenhum contrato manual); rota protegida por `permissionGuard`/`RESERVATIONS:MANAGE` (navegação oculta/rota bloqueada sem a permissão, nunca por nome de papel, nunca por JWT decodificado); toda ação sensível (cancelar) exige confirmação; toda ação produz feedback; datas sempre enviadas com offset explícito, nunca com parsing ambíguo do navegador; nenhuma funcionalidade inexistente no backend é inventada (agenda, calendário, check-in/checkout, retry automático de concorrência); nenhum trabalho de Agenda/dashboard/Housekeeping/Fases 5+; testes unitários e Playwright cobrindo os fluxos principais aprovados.
+
+### 13.8 Dependências
+
+Fase 3 (Reservations) homologada, commitada e publicada em `master` (pré-condição já satisfeita — `Fase 3 - Reservation Management - Validacao e Homologacao.md`). ADR-014 (exceção síncrona Reservations→Property Management para elegibilidade) já implementada no backend, sem alteração necessária no frontend além de tratar os erros reais que ela documenta (`PropertyNotFound`/`PropertyNotActive`/`PropertyCapacityExceeded`). Infraestrutura de autorização por permissão real (`OwnProfileResponse.permissions`, `permissionGuard`) e `OptionalSchemaFilter` (Incremento 3) já implementadas e reaproveitadas. Fixture E2E compartilhada (`WebE2EFixtureCollection`) e inicialização direta do Angular via `node ng.js` já estabilizadas e reaproveitadas.
+
+### 13.9 Defeitos reais encontrados durante a implementação
+
+**`MatChipsModule` importado mas não registrado no array `imports` do componente**: `reservations-list.ts` continha a instrução `import { MatChipsModule } from '@angular/material/chips'` mas não adicionava `MatChipsModule` ao array `imports: [...]` do `@Component`. Compilava sem erro no editor, mas `ng build`/`ng test` falhavam com `NG8001: 'mat-chip-set' is not a known element` — a chip de status na coluna `status` da listagem. Corrigido adicionando `MatChipsModule` ao array de imports do componente.
+
+**`toLocalInputValue()` (diálogo de edição) lançava `TypeError: date.getFullYear is not a function` ao abrir uma reserva para edição**: causa raiz — o `Client` gerado pelo NSwag (`api-client.ts`) deixa `jsonParseReviver` indefinido (`protected jsonParseReviver: ... = undefined`), então **todo** campo de data retornado por **qualquer** endpoint deste projeto é, em tempo de execução, uma string ISO simples, apesar da interface TypeScript gerada declarar `Date`. Esse defeito é pré-existente e abrange o projeto inteiro (não introduzido neste incremento) — nunca havia se manifestado porque todo uso anterior de datas passava direto pelo `DatePipe` do Angular, que aceita string transparentemente. `reservation-form-dialog.ts` foi o primeiro ponto do código a chamar um método próprio (`getFullYear()`, `getMonth()` etc.) diretamente sobre um valor de data vindo da API. Corrigido localmente ampliando a assinatura do parâmetro de `toLocalInputValue` para `Date | string` e normalizando com `value instanceof Date ? value : new Date(value)`, com comentário explicando a causa raiz para não ser re-diagnosticado incorretamente no futuro. **Não corrigido de forma global** (fora do escopo deste incremento — nenhum outro ponto do código hoje depende de métodos de instância de `Date`, apenas de `DatePipe`); registrado aqui como característica conhecida do projeto.
+
+**Defeito de schema OpenAPI `Optional<T>` também presente em Reservations**: já registrado e corrigido na Seção 13.4/13.5 (extensão do `OptionalSchemaFilter` já aprovado no Incremento 3) — apenas referenciado aqui para o índice de defeitos ficar completo.
+
+**Defeito real de infraestrutura de teste E2E — processos órfãos do `WebE2EFixture` (corrigido definitivamente, ver Seção 13.10)**: a suíte Playwright deste incremento falhou de forma não-determinística mais de uma vez porque um `dotnet.exe` (porta 5140) e/ou um `node.exe` (porta 4200) de uma execução anterior sobreviviam como processos órfãos, ocupando as portas fixas que `WebE2EFixture` precisa. Diferente do defeito já corrigido na Seção 11.8 (que tratava apenas da árvore de processos do `ng serve`), a causa raiz aqui era estrutural: `WebE2EFixture.InitializeAsync` não tinha `try/catch` — se qualquer etapa falhasse após containers/processos já terem sido iniciados, nada os limpava, e o xUnit não garante chamar `DisposeAsync` quando `InitializeAsync` lança uma exceção. Corrigido nesta mesma etapa (Seção 13.10), não apenas registrado como risco.
+
+### 13.10 Correção definitiva do lifecycle do `WebE2EFixture`
+
+**Causa raiz confirmada**: `InitializeAsync` executava toda a sequência de inicialização (containers, migrações, processo da API, processo do Angular, browser) sem nenhum `try/catch` — qualquer falha após uma etapa já ter iniciado um recurso real deixava esse recurso sem dono. Separadamente, mesmo quando `DisposeAsync` era de fato chamado, `StopProcessAsync` (antigo) não tinha timeout limitado nem verificava se a porta do sistema operacional realmente havia sido liberada após `Kill(entireProcessTree: true)` — um `taskkill` incompleto no Windows (um processo-neto que escapou da árvore rastreada) podia falhar silenciosamente.
+
+**Correção aplicada**: extraído `ManagedProcess` (`tests/Frontend/IHostPro.Web.Tests.E2E/ManagedProcess.cs`) — encapsula um processo filho com `StopAsync` idempotente, espera limitada (15s), e um fallback `taskkill /PID <pid> /T /F` escopado exatamente ao PID que esta instância iniciou (nunca por nome). `WebE2EFixture` passou a ter uma única rotina de limpeza idempotente (`CleanupAsync`, guardada por `Interlocked.Exchange`) chamada tanto pelo `catch` de `InitializeAsync` (a limpeza roda e a exceção original é relançada sem alteração) quanto por `DisposeAsync` (que agora falha ruidosamente se algo ficou para trás — inclusive uma porta ainda ocupada após o processo dono reportar-se encerrado, verificado via `IPGlobalProperties.GetActiveTcpListeners()`). Nenhum código de produção foi alterado — toda a correção está em `tests/Frontend/IHostPro.Web.Tests.E2E/`.
+
+**Teste preventivo**: `ManagedProcessTests.cs` (5 testes, contra processos reais leves — nunca mocados) prova: `StopAsync` mata o processo e libera a porta que ele mantinha; `StopAsync` é idempotente; `StopAsync` em um processo já encerrado é no-op; uma falha simulada após dois passos de inicialização limpa ambos preservando a exceção original; uma falha simulada após apenas o primeiro passo nunca inicia o segundo. `WebE2EFixtureCleanupTests.cs` (2 testes, contra o `WebE2EFixture` real, nunca inicializado) prova: `DisposeAsync` não falha quando nenhuma infraestrutura foi criada; `DisposeAsync` chamado duas vezes é seguro. **7/7 aprovados.**
+
+### 13.11 Reconstrução do teste de conflito de concorrência
+
+Durante a validação desta correção, o teste `A_concurrency_conflict_is_presented_without_automatic_retry` (versão original, que disparava as duas submissões PATCH através de dois cliques reais em duas abas do navegador) produziu, uma vez em nove execuções, `statusA=200 statusB=200` — as duas requisições concorrentes aceitas. Investigação da causa raiz (leitura de `UpdateReservationCommandHandler`, `ReservationsOutboxTransactionExecutor`, `ReservationRepository`, `ReservationReader`) não encontrou nenhum caminho no backend capaz de produzir esse resultado sob concorrência genuína — mas também não foi possível provar, a partir da versão em UI, que as duas requisições de fato se sobrepuseram no servidor: `Task.WhenAll` sobre dois `ClickAsync()` garante apenas que os cliques são disparados perto um do outro, nunca que o processamento HTTP resultante realmente se sobrepõe.
+
+Por instrução do usuário, o teste foi reconstruído para disparar as duas chamadas PATCH diretamente contra a API real (`page.Context.APIRequest.PatchAsync`, `Task.WhenAll`, duas sessões ADMIN independentes, cada uma com seu próprio token real), eliminando o navegador como fonte de incerteza. O teste agora repete o experimento 5 vezes por execução (reserva nova a cada iteração), verificando em cada uma: exatamente uma resposta 200 e uma 409; a alteração vencedora é a única persistida (`GET` final); exatamente um registro em `reservation_audit_log` para a ação `reservation_updated` (prova de que a requisição perdedora não gerou auditoria nem evento — ambos são gravados atomicamente com o `SaveChanges`/checagem de `xmin` que a rejeita). Como a API colapsa todo código de conflito 409 em um `ProblemDetails` genérico sem a extensão `codes` (só o ramo 400 do `ReservationsResultHttpMapper` a adiciona), o cenário exclui os outros três códigos de conflito por construção: o PATCH altera somente `guestName` (nunca as datas, então `ReservationDateConflict` não pode disparar — `HasConflictingReservationAsync` também exclui a própria reserva) e a reserva usada nunca é cancelada por nada neste teste.
+
+Dois defeitos reais foram encontrados e corrigidos durante essa reconstrução — ambos em código de teste, nunca em código de produção:
+1. **`CountReservationAuditEntriesAsync` (novo helper em `WebE2EFixture`) retornava 0 mesmo com o registro de auditoria realmente persistido** — causa raiz: a tabela `reservation_audit_log` é protegida por RLS, e a conexão do migrador não a contorna automaticamente; a consulta precisa, adicionalmente, definir `app.tenant_id` na sessão. Corrigido mirando exatamente o padrão já usado por `SeedTenantAndAdminAsync` (conexão da aplicação, `TenantContext` com o tenant real, `SELECT set_config('app.tenant_id', ..., true)` dentro de uma transação explícita antes da consulta).
+2. **Reutilização das mesmas datas em todas as 5 iterações do laço** causava `ReservationDateConflict` (409) já na criação da segunda reserva de teste, contra a reserva (com data inalterada) da iteração anterior. Corrigido usando uma janela de datas própria e não sobreposta por iteração.
+
+**Resultado final, após as duas correções — 3 execuções independentes do teste (15 corridas de concorrência no total): 3/3 aprovadas**, todas com exatamente um vencedor, o estado final correto e exatamente um registro de auditoria. Nenhum código de produção foi alterado; nenhuma flag de teste temporária permaneceu; a falha nunca foi classificada como flakiness conhecida — foi investigada até a causa raiz real (uma limitação da versão em UI do teste, não do backend).
+
+### 13.12 Testes unitários frontend e Playwright (Incremento 4)
+
+**Testes unitários** (`ng test --watch=false`): 4 novos arquivos de spec — `reservation-error.spec.ts`, `reservations.service.spec.ts`, `reservations-list/reservations-list.spec.ts`, `reservation-form-dialog/reservation-form-dialog.spec.ts` —, cobrindo autorização (delegada aos testes de `admin-layout.spec.ts`, que ganharam dois casos novos para o item de navegação "Reservas"), carregamento/vazio/erro, filtros, paginação, criação, edição, `guestPhone` omitido (POST) e explicitamente `null` (PATCH), capacidade excedida, conflito de período, cancelamento e cancelamento repetido (409), prevenção de submissão duplicada, e tratamento de datas. **Suíte completa do projeto: 239/239 aprovados** (192 pré-existentes + 47 novos).
+
+**Playwright (.NET) — assembly completa, duas execuções consecutivas**: `ReservationsAuthorizationE2ETests` (2 testes) e `ReservationsE2ETests` (9 testes, incluindo a reconstrução da Seção 13.11) somam-se às classes já existentes (`AuthenticationE2ETests`, `UsersAuthorizationE2ETests`, `UsersManagementE2ETests`, `PropertyManagementAuthorizationE2ETests`, `PropertyManagementE2ETests`, mais `ManagedProcessTests`/`WebE2EFixtureCleanupTests` da Seção 13.10) — **47 testes no total**. Executada a assembly completa duas vezes consecutivas, sem qualquer intervenção manual entre as rodadas (apenas inspeção): **47/47 aprovados em ambas**, mesma contagem total nas duas, **zero processos órfãos, zero portas presas, zero containers efêmeros remanescentes** confirmado após cada rodada (`Get-NetTCPConnection`, `docker ps -a`).
+
+Como o papel `OPERATOR` seedado em `WebE2EFixture` **possui** `RESERVATIONS:MANAGE` (diferente de `PROPERTIES:MANAGE`, Seção 12.3), o teste de "usuário sem a permissão" usa um usuário `PROPERTY_OWNER` descartável, criado via API real (mesmo padrão de `CreateEligibleOwnerUserViaApiAsync` do Incremento 3) — o único papel real seedado no catálogo que nunca recebe `RESERVATIONS:MANAGE` (Documento 09 §8, apenas `RESERVATIONS:READ:OWN_OWNER`).
+
+O teste de cancelamento repetido cancela a reserva via API real com o menu de ações da linha ainda aberto (e agora desatualizado) na UI, depois clica no item "Cancelar reserva" desatualizado — reproduzindo deterministicamente, sem depender de corrida, o cenário de 409 `ReservationAlreadyCancelled`.
+
+**Validação proporcional** (Seção 18 da instrução do usuário): nenhuma alteração de contrato OpenAPI desde o Gate da Seção 13.5 — NSwag não regenerado novamente. `ng build` (produção) limpo. `git diff --check` sem erros de espaço em branco. Nenhuma suíte completa de Identity/PropertyManagement/Wolverine/arquitetura re-executada (nenhuma regressão concreta identificada que a justificasse). Artefatos locais (`.claude/launch.json`, log manual da API) removidos; container `ihostpro-homolog-rabbitmq` restaurado ao estado anterior (mesmas portas, mesma restart policy, volumes preservados) após cada rodada que exigiu pará-lo.
+
+### 13.13 Encerramento do Incremento 4
+
+**Aprovação**: Incremento 4 aprovado tecnicamente pelo usuário e autorizado para versionamento e publicação na branch `feature/frontend-foundation`, condicionado à correção definitiva do lifecycle do `WebE2EFixture` (Seção 13.10) e à validação por duas execuções consecutivas e limpas da assembly E2E completa (Seção 13.12) — ambas condições satisfeitas antes de qualquer commit.
+
+**Commits** (três commits funcionais, cada um isolado ao seu próprio grupo de arquivos, revisado via `git diff --cached` antes de cada commit — nunca `git add .`):
+
+| # | Hash completo | Mensagem | Escopo |
+|---|---|---|---|
+| 1 | `14cde37d5411cd60af6d2e3ae24b276a566a536d` | `fix(openapi): describe reservations contracts` | `[ProducesResponseType]` nas 5 ações de `ReservationsController`; `OptionalSchemaFilter` estendido para `Reservations.Application.Optional<T>`. 2 arquivos. |
+| 2 | `b700602ae6c3dbc2271ea2e0dc63c8797d2f4331` | `feat(frontend): add reservation management` | Cliente NSwag regenerado; rota/navegação `/reservations` condicionadas a `RESERVATIONS:MANAGE`; feature `features/reservations/` completa; traduções; testes unitários frontend. 18 arquivos. |
+| 3 | `57e3bb249bd2ff1a61f95c275fa2dd7d6e6eb2ff` | `test(frontend): cover reservations and harden e2e cleanup` | `ReservationsAuthorizationE2ETests`, `ReservationsE2ETests`; `ManagedProcess`, `ManagedProcessTests`, `WebE2EFixtureCleanupTests`; correção definitiva de `WebE2EFixture`. 6 arquivos. |
+
+**Resumo do que cada commit registra, para referência rápida**:
+- Código `RESERVATIONS:MANAGE` — única permissão real usada para proteger `/reservations` e condicionar a navegação (Seção 13.3). Nenhuma autorização baseada em nome de papel ou JWT decodificado.
+- 5 endpoints reais consumidos (Seção 13.4), nenhum inventado.
+- `OptionalSchemaFilter` estendido — nunca duplicado, nunca contrato manual no frontend.
+- Funcionalidades concluídas: listagem/detalhe com filtros reais, criação, edição presence-aware (`guestPhone` `null` explícito), cancelamento com confirmação — todas com tratamento dos erros reais que o backend distingue (Seções 13.6–13.7).
+- Testes unitários frontend: **239/239**. Playwright — assembly completa, duas execuções consecutivas: **47/47 em ambas**, zero recursos órfãos.
+- Defeito de infraestrutura de teste (processos órfãos do `WebE2EFixture`) corrigido definitivamente, não apenas contornado (Seção 13.10).
+- Teste de conflito de concorrência reconstruído com chamadas HTTP diretas após identificar que a versão em UI não conseguia provar sobreposição real de requisições; resultado final inequívoco em 15 corridas (Seção 13.11).
+- `dotnet build IHostPro.sln`/projeto E2E: aprovado. `ng build`: aprovado.
+- `git diff --check`: sem erros reais (apenas avisos benignos de LF/CRLF).
+- Stack homolog restaurado ao estado anterior após cada execução que exigiu pará-lo.
+
+**Incremento 4 concluído.** No momento deste registro (antes da publicação): push ainda pendente. Fase 4 funcionalmente concluída (todos os 4 incrementos implementados e homologados) — ainda não integrada em `master`.
