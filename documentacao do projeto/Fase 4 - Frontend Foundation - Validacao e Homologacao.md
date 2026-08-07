@@ -1,8 +1,8 @@
 # Fase 4 — Frontend Foundation — Validação e Homologação
 
-Versão: 1.2
+Versão: 1.3
 
-Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Incremento 2 (Administração de Usuários) **aprovado, versionado e publicado** na mesma branch (Seções 11.11–11.12). Incremento 3 (Gestão de Condomínios e Imóveis) **aprovado, versionado e publicado** na mesma branch (Seções 12.9–12.10). Incremento 4 (Gestão de Reservas) **aprovado e commitado, push ainda pendente** (Seções 13.9–13.13) — inclui a correção definitiva do lifecycle de `WebE2EFixture` e a reconstrução do teste de conflito de concorrência com chamadas HTTP diretas. Fase 4 funcionalmente concluída (4 de 4 incrementos), ainda não integrada em `master`.
+Status: Incremento 1 **aprovado, versionado e publicado** na branch remota `origin/feature/frontend-foundation` (ver Seção 10). Incremento 2 (Administração de Usuários) **aprovado, versionado e publicado** na mesma branch (Seções 11.11–11.12). Incremento 3 (Gestão de Condomínios e Imóveis) **aprovado, versionado e publicado** na mesma branch (Seções 12.9–12.10). Incremento 4 (Gestão de Reservas) **aprovado, versionado e publicado** na mesma branch (Seções 13.13–13.14) — inclui a correção definitiva do lifecycle de `WebE2EFixture` e a reconstrução do teste de conflito de concorrência com chamadas HTTP diretas. **Fase 4 (Frontend Foundation) encerrada — 4 de 4 incrementos publicados** — ainda não integrada em `master`.
 
 ---
 
@@ -625,3 +625,9 @@ O teste de cancelamento repetido cancela a reserva via API real com o menu de a�
 - Stack homolog restaurado ao estado anterior após cada execução que exigiu pará-lo.
 
 **Incremento 4 concluído.** No momento deste registro (antes da publicação): push ainda pendente. Fase 4 funcionalmente concluída (todos os 4 incrementos implementados e homologados) — ainda não integrada em `master`.
+
+### 13.14 Publicação do Incremento 4
+
+Push `git push origin feature/frontend-foundation` (`7b9e7fe..15b98df`, quatro commits: os três funcionais da Seção 13.13 + `docs(frontend): record increment 4 completion`, hash `15b98df`). Confirmado após o push: `git status -sb` reporta apenas o cabeçalho da branch (working tree limpa); `git rev-list --left-right --count origin/feature/frontend-foundation...feature/frontend-foundation` retorna `0 0`.
+
+**Incremento 4 encerrado. Fase 4 (Frontend Foundation) encerrada — todos os 4 incrementos aprovados, versionados e publicados em `feature/frontend-foundation`.** Ainda não integrada em `master` (nenhum merge realizado, nenhuma tag criada, nenhuma branch excluída, nenhum force push usado).
