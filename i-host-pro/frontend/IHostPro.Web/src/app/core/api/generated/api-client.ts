@@ -1359,9 +1359,9 @@ export class Client {
 
     /**
      * @param body (optional) 
-     * @return OK
+     * @return Created
      */
-    reservationsPOST(body?: CreateReservationRequest | undefined): Observable<void> {
+    reservationsPOST(body?: CreateReservationRequest | undefined): Observable<ReservationDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/reservations";
         url_ = url_.replace(/[?&]$/, "");
 
@@ -1373,6 +1373,7 @@ export class Client {
             responseType: "blob",
             headers: new HttpHeaders({
                 "Content-Type": "application/json",
+                "Accept": "application/json"
             })
         };
 
@@ -1383,23 +1384,49 @@ export class Client {
                 try {
                     return this.processReservationsPOST(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<ReservationDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<ReservationDetailResponse>;
         }));
     }
 
-    protected processReservationsPOST(response: HttpResponseBase): Observable<void> {
+    protected processReservationsPOST(response: HttpResponseBase): Observable<ReservationDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
             (response as any).error instanceof Blob ? (response as any).error : undefined;
 
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
-        if (status === 200) {
+        if (status === 201) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ReservationDetailResponse;
+            return _observableOf(result201);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -1418,7 +1445,7 @@ export class Client {
      * @param pageSize (optional) 
      * @return OK
      */
-    reservationsGET(propertyId?: string | undefined, status?: string | undefined, from?: Date | undefined, to?: Date | undefined, page?: number | undefined, pageSize?: number | undefined): Observable<void> {
+    reservationsGET(propertyId?: string | undefined, status?: string | undefined, from?: Date | undefined, to?: Date | undefined, page?: number | undefined, pageSize?: number | undefined): Observable<PagedReservationResponse> {
         let url_ = this.baseUrl + "/api/v1/reservations?";
         if (propertyId === null)
             throw new globalThis.Error("The parameter 'propertyId' cannot be null.");
@@ -1450,6 +1477,7 @@ export class Client {
             observe: "response",
             responseType: "blob",
             headers: new HttpHeaders({
+                "Accept": "application/json"
             })
         };
 
@@ -1460,14 +1488,14 @@ export class Client {
                 try {
                     return this.processReservationsGET(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<PagedReservationResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<PagedReservationResponse>;
         }));
     }
 
-    protected processReservationsGET(response: HttpResponseBase): Observable<void> {
+    protected processReservationsGET(response: HttpResponseBase): Observable<PagedReservationResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -1476,7 +1504,21 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PagedReservationResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -1489,7 +1531,7 @@ export class Client {
     /**
      * @return OK
      */
-    reservationsGET2(reservationId: string): Observable<void> {
+    reservationsGET2(reservationId: string): Observable<ReservationDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/reservations/{reservationId}";
         if (reservationId === undefined || reservationId === null)
             throw new globalThis.Error("The parameter 'reservationId' must be defined.");
@@ -1500,6 +1542,7 @@ export class Client {
             observe: "response",
             responseType: "blob",
             headers: new HttpHeaders({
+                "Accept": "application/json"
             })
         };
 
@@ -1510,14 +1553,14 @@ export class Client {
                 try {
                     return this.processReservationsGET2(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<ReservationDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<ReservationDetailResponse>;
         }));
     }
 
-    protected processReservationsGET2(response: HttpResponseBase): Observable<void> {
+    protected processReservationsGET2(response: HttpResponseBase): Observable<ReservationDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -1526,7 +1569,21 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ReservationDetailResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -1540,7 +1597,7 @@ export class Client {
      * @param body (optional) 
      * @return OK
      */
-    reservationsPATCH(reservationId: string, body?: UpdateReservationRequest | undefined): Observable<void> {
+    reservationsPATCH(reservationId: string, body?: UpdateReservationRequest | undefined): Observable<ReservationDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/reservations/{reservationId}";
         if (reservationId === undefined || reservationId === null)
             throw new globalThis.Error("The parameter 'reservationId' must be defined.");
@@ -1555,6 +1612,7 @@ export class Client {
             responseType: "blob",
             headers: new HttpHeaders({
                 "Content-Type": "application/json",
+                "Accept": "application/json"
             })
         };
 
@@ -1565,14 +1623,14 @@ export class Client {
                 try {
                     return this.processReservationsPATCH(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<ReservationDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<ReservationDetailResponse>;
         }));
     }
 
-    protected processReservationsPATCH(response: HttpResponseBase): Observable<void> {
+    protected processReservationsPATCH(response: HttpResponseBase): Observable<ReservationDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -1581,7 +1639,33 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ReservationDetailResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -1594,7 +1678,7 @@ export class Client {
     /**
      * @return OK
      */
-    cancel(reservationId: string): Observable<void> {
+    cancel(reservationId: string): Observable<ReservationDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/reservations/{reservationId}/cancel";
         if (reservationId === undefined || reservationId === null)
             throw new globalThis.Error("The parameter 'reservationId' must be defined.");
@@ -1605,6 +1689,7 @@ export class Client {
             observe: "response",
             responseType: "blob",
             headers: new HttpHeaders({
+                "Accept": "application/json"
             })
         };
 
@@ -1615,14 +1700,14 @@ export class Client {
                 try {
                     return this.processCancel(response_ as any);
                 } catch (e) {
-                    return _observableThrow(e) as any as Observable<void>;
+                    return _observableThrow(e) as any as Observable<ReservationDetailResponse>;
                 }
             } else
-                return _observableThrow(response_) as any as Observable<void>;
+                return _observableThrow(response_) as any as Observable<ReservationDetailResponse>;
         }));
     }
 
-    protected processCancel(response: HttpResponseBase): Observable<void> {
+    protected processCancel(response: HttpResponseBase): Observable<ReservationDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -1631,7 +1716,27 @@ export class Client {
         let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
         if (status === 200) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
-            return _observableOf(null as any);
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ReservationDetailResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
             }));
         } else if (status !== 200 && status !== 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -2629,6 +2734,13 @@ export interface PagedPropertyResponse {
     items?: PropertySummaryResponse[] | undefined;
 }
 
+export interface PagedReservationResponse {
+    page?: number;
+    pageSize?: number;
+    totalCount?: number;
+    items?: ReservationSummaryResponse[] | undefined;
+}
+
 export interface PagedUserResponse {
     page?: number;
     pageSize?: number;
@@ -2692,24 +2804,29 @@ export interface RefreshRequest {
     refreshToken?: string | undefined;
 }
 
-export interface ReservationsDateTimeOffsetOptional {
-    readonly isSet?: boolean;
-    readonly value?: Date;
+export interface ReservationDetailResponse {
+    id?: string;
+    propertyId?: string;
+    guestName?: string | undefined;
+    guestPhone?: string | undefined;
+    checkInAt?: Date;
+    checkOutAt?: Date;
+    guestCount?: number;
+    status?: string | undefined;
+    createdAt?: Date;
+    updatedAt?: Date;
 }
 
-export interface ReservationsGuidOptional {
-    readonly isSet?: boolean;
-    readonly value?: string;
-}
-
-export interface ReservationsInt32Optional {
-    readonly isSet?: boolean;
-    readonly value?: number;
-}
-
-export interface ReservationsStringOptional {
-    readonly isSet?: boolean;
-    readonly value?: string | undefined;
+export interface ReservationSummaryResponse {
+    id?: string;
+    propertyId?: string;
+    guestName?: string | undefined;
+    checkInAt?: Date;
+    checkOutAt?: Date;
+    guestCount?: number;
+    status?: string | undefined;
+    createdAt?: Date;
+    updatedAt?: Date;
 }
 
 export interface ResetPasswordRequest {
@@ -2736,12 +2853,12 @@ export interface UpdatePropertyRequest {
 }
 
 export interface UpdateReservationRequest {
-    propertyId?: ReservationsGuidOptional;
-    guestName?: ReservationsStringOptional;
-    guestPhone?: ReservationsStringOptional;
-    checkInAt?: ReservationsDateTimeOffsetOptional;
-    checkOutAt?: ReservationsDateTimeOffsetOptional;
-    guestCount?: ReservationsInt32Optional;
+    propertyId?: string;
+    guestName?: string;
+    guestPhone?: string;
+    checkInAt?: Date;
+    checkOutAt?: Date;
+    guestCount?: number;
 }
 
 export interface UpdateUserRequest {

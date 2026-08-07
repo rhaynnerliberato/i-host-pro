@@ -243,5 +243,69 @@
         "generic": "The action could not be completed. Please try again."
       }
     }
+  },
+  "reservations": {
+    "list": {
+      "title": "Reservations",
+      "create": "New reservation",
+      "loadError": "Unable to load reservations.",
+      "empty": "No reservations found.",
+      "columns": {
+        "guestName": "Guest",
+        "propertyId": "Property",
+        "checkInAt": "Check-in",
+        "checkOutAt": "Check-out",
+        "guestCount": "Guests",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "actionsFor": "Actions for {{name}}",
+      "edit": "Edit",
+      "cancel": "Cancel reservation",
+      "cancelConfirmTitle": "Cancel reservation",
+      "cancelConfirmMessage": "Are you sure you want to cancel {{name}}'s reservation?",
+      "statusConfirmed": "Confirmed",
+      "statusCancelled": "Cancelled",
+      "createdSuccess": "Reservation created successfully.",
+      "updatedSuccess": "Reservation updated successfully.",
+      "cancelledSuccess": "Reservation cancelled successfully.",
+      "filters": {
+        "propertyId": "Property ID",
+        "status": "Status",
+        "statusAll": "All",
+        "from": "From",
+        "to": "To",
+        "apply": "Filter"
+      },
+      "errors": {
+        "conflict": "The action could not be completed due to a conflict (schedule, already cancelled, or a concurrent edit).",
+        "notFound": "Reservation not found.",
+        "generic": "The action could not be completed. Please try again."
+      }
+    },
+    "form": {
+      "createTitle": "New reservation",
+      "editTitle": "Edit reservation",
+      "propertyId": "Property ID",
+      "guestName": "Guest name",
+      "guestPhone": "Guest phone",
+      "checkInAt": "Check-in",
+      "checkOutAt": "Check-out",
+      "guestCount": "Guest count",
+      "errors": {
+        "propertyIdRequired": "Enter the property ID.",
+        "guestNameRequired": "Enter the guest name.",
+        "checkInRequired": "Enter the check-in date and time.",
+        "checkOutRequired": "Enter the check-out date and time.",
+        "checkOutBeforeCheckIn": "Check-out must be after check-in.",
+        "guestCountInvalid": "Enter a valid guest count (greater than zero).",
+        "notFound": "Property or reservation not found.",
+        "propertyNotActive": "The selected property is not active.",
+        "capacityExceeded": "The guest count exceeds the property's capacity.",
+        "conflict": "The action could not be completed due to a conflict (schedule, already cancelled, or a concurrent edit).",
+        "validation": "Please check the entered data.",
+        "generic": "Unable to save. Please try again."
+      }
+    }
   }
 }

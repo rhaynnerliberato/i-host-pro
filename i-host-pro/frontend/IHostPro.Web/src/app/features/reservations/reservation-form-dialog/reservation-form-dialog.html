@@ -1,0 +1,67 @@
+<h2 mat-dialog-title>{{ (isEditMode ? 'reservations.form.editTitle' : 'reservations.form.createTitle') | transloco }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  <mat-dialog-content>
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'reservations.form.propertyId' | transloco }}</mat-label>
+      <input matInput formControlName="propertyId" />
+      @if (form.controls.propertyId.invalid && form.controls.propertyId.touched) {
+        <mat-error>{{ 'reservations.form.errors.propertyIdRequired' | transloco }}</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'reservations.form.guestName' | transloco }}</mat-label>
+      <input matInput formControlName="guestName" />
+      @if (form.controls.guestName.invalid && form.controls.guestName.touched) {
+        <mat-error>{{ 'reservations.form.errors.guestNameRequired' | transloco }}</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'reservations.form.guestPhone' | transloco }}</mat-label>
+      <input matInput formControlName="guestPhone" />
+    </mat-form-field>
+
+    <div class="dates-grid">
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'reservations.form.checkInAt' | transloco }}</mat-label>
+        <input matInput type="datetime-local" formControlName="checkInAt" />
+        @if (form.controls.checkInAt.invalid && form.controls.checkInAt.touched) {
+          <mat-error>{{ 'reservations.form.errors.checkInRequired' | transloco }}</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'reservations.form.checkOutAt' | transloco }}</mat-label>
+        <input matInput type="datetime-local" formControlName="checkOutAt" />
+        @if (form.controls.checkOutAt.invalid && form.controls.checkOutAt.touched) {
+          <mat-error>{{ 'reservations.form.errors.checkOutRequired' | transloco }}</mat-error>
+        }
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'reservations.form.guestCount' | transloco }}</mat-label>
+      <input matInput type="number" min="1" formControlName="guestCount" />
+      @if (form.controls.guestCount.invalid && form.controls.guestCount.touched) {
+        <mat-error>{{ 'reservations.form.errors.guestCountInvalid' | transloco }}</mat-error>
+      }
+    </mat-form-field>
+
+    @if (errorKey(); as key) {
+      <p class="form-error" role="alert">{{ key | transloco }}</p>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" (click)="cancel()">{{ 'common.cancel' | transloco }}</button>
+    <button mat-flat-button color="primary" type="submit" [disabled]="submitting()">
+      @if (submitting()) {
+        <mat-progress-spinner diameter="20" mode="indeterminate" />
+      } @else {
+        {{ 'common.save' | transloco }}
+      }
+    </button>
+  </mat-dialog-actions>
+</form>

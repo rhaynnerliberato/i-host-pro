@@ -26,7 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'layout.nav.users', path: '/users', icon: 'group', requiredPermission: 'USERS:MANAGE' },
   { labelKey: 'layout.nav.condominiums', path: '/condominiums', icon: 'apartment', requiredPermission: 'PROPERTIES:MANAGE' },
   { labelKey: 'layout.nav.properties', path: '/properties', icon: 'villa', requiredPermission: 'PROPERTIES:MANAGE' },
-  { labelKey: 'layout.nav.reservations', path: '/reservations', icon: 'event' },
+  { labelKey: 'layout.nav.reservations', path: '/reservations', icon: 'event', requiredPermission: 'RESERVATIONS:MANAGE' },
 ];
 
 @Component({

@@ -1,0 +1,121 @@
+<div class="reservations-list-page">
+  <div class="reservations-list-header">
+    <h1>{{ 'reservations.list.title' | transloco }}</h1>
+    <button mat-flat-button color="primary" (click)="openCreateDialog()">
+      <mat-icon>add</mat-icon>
+      {{ 'reservations.list.create' | transloco }}
+    </button>
+  </div>
+
+  <form class="reservations-filters" [formGroup]="filterForm" (ngSubmit)="applyFilters()">
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'reservations.list.filters.propertyId' | transloco }}</mat-label>
+      <input matInput formControlName="propertyId" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'reservations.list.filters.status' | transloco }}</mat-label>
+      <mat-select formControlName="status">
+        <mat-option value="">{{ 'reservations.list.filters.statusAll' | transloco }}</mat-option>
+        <mat-option value="confirmed">{{ 'reservations.list.statusConfirmed' | transloco }}</mat-option>
+        <mat-option value="cancelled">{{ 'reservations.list.statusCancelled' | transloco }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'reservations.list.filters.from' | transloco }}</mat-label>
+      <input matInput type="date" formControlName="from" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'reservations.list.filters.to' | transloco }}</mat-label>
+      <input matInput type="date" formControlName="to" />
+    </mat-form-field>
+
+    <button mat-stroked-button type="submit">{{ 'reservations.list.filters.apply' | transloco }}</button>
+  </form>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="reservations-list-state">
+        <mat-progress-spinner diameter="32" mode="indeterminate" />
+      </div>
+    }
+    @case ('error') {
+      <div class="reservations-list-state">
+        <p>{{ 'reservations.list.loadError' | transloco }}</p>
+        <button mat-button (click)="loadReservations()">{{ 'common.retry' | transloco }}</button>
+      </div>
+    }
+    @case ('empty') {
+      <div class="reservations-list-state">
+        <p>{{ 'reservations.list.empty' | transloco }}</p>
+      </div>
+    }
+    @case ('loaded') {
+      <table mat-table [dataSource]="reservations()" class="full-width">
+        <ng-container matColumnDef="guestName">
+          <th mat-header-cell *matHeaderCellDef>{{ 'reservations.list.columns.guestName' | transloco }}</th>
+          <td mat-cell *matCellDef="let reservation">{{ reservation.guestName }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="propertyId">
+          <th mat-header-cell *matHeaderCellDef>{{ 'reservations.list.columns.propertyId' | transloco }}</th>
+          <td mat-cell *matCellDef="let reservation">{{ reservation.propertyId }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="checkInAt">
+          <th mat-header-cell *matHeaderCellDef>{{ 'reservations.list.columns.checkInAt' | transloco }}</th>
+          <td mat-cell *matCellDef="let reservation">{{ reservation.checkInAt | date: 'short' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="checkOutAt">
+          <th mat-header-cell *matHeaderCellDef>{{ 'reservations.list.columns.checkOutAt' | transloco }}</th>
+          <td mat-cell *matCellDef="let reservation">{{ reservation.checkOutAt | date: 'short' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="guestCount">
+          <th mat-header-cell *matHeaderCellDef>{{ 'reservations.list.columns.guestCount' | transloco }}</th>
+          <td mat-cell *matCellDef="let reservation">{{ reservation.guestCount }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>{{ 'reservations.list.columns.status' | transloco }}</th>
+          <td mat-cell *matCellDef="let reservation">
+            <mat-chip-set>
+              <mat-chip>{{ statusLabelKey(reservation.status) | transloco }}</mat-chip>
+            </mat-chip-set>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>{{ 'reservations.list.columns.actions' | transloco }}</th>
+          <td mat-cell *matCellDef="let reservation">
+            <button mat-icon-button [matMenuTriggerFor]="menu" [attr.aria-label]="'reservations.list.actionsFor' | transloco: { name: reservation.guestName }">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              @if (canEdit(reservation.status)) {
+                <button mat-menu-item (click)="openEditDialog(reservation.id)">{{ 'reservations.list.edit' | transloco }}</button>
+              }
+              @if (canCancel(reservation.status)) {
+                <button mat-menu-item (click)="confirmCancel(reservation)">{{ 'reservations.list.cancel' | transloco }}</button>
+              }
+            </mat-menu>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+
+      <mat-paginator
+        [length]="totalCount()"
+        [pageIndex]="pageIndex()"
+        [pageSize]="pageSize()"
+        [pageSizeOptions]="[10, 25, 50]"
+        (page)="onPageChange($event)"
+      />
+    }
+  }
+</div>

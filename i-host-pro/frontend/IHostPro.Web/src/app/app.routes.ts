@@ -42,8 +42,9 @@ export const routes: Routes = [
       },
       {
         path: 'reservations',
-        data: { titleKey: 'layout.nav.reservations' },
-        loadComponent: () => import('./features/placeholder/placeholder').then((m) => m.Placeholder),
+        canActivate: [permissionGuard],
+        data: { titleKey: 'layout.nav.reservations', permissions: ['RESERVATIONS:MANAGE'] },
+        loadComponent: () => import('./features/reservations/reservations-list/reservations-list').then((m) => m.ReservationsList),
       },
     ],
   },

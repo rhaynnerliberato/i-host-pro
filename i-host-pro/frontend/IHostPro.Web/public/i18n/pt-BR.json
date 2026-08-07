@@ -243,5 +243,69 @@
         "generic": "Não foi possível concluir a ação. Tente novamente."
       }
     }
+  },
+  "reservations": {
+    "list": {
+      "title": "Reservas",
+      "create": "Nova reserva",
+      "loadError": "Não foi possível carregar as reservas.",
+      "empty": "Nenhuma reserva encontrada.",
+      "columns": {
+        "guestName": "Hóspede",
+        "propertyId": "Imóvel",
+        "checkInAt": "Check-in",
+        "checkOutAt": "Check-out",
+        "guestCount": "Hóspedes",
+        "status": "Status",
+        "actions": "Ações"
+      },
+      "actionsFor": "Ações para {{name}}",
+      "edit": "Editar",
+      "cancel": "Cancelar reserva",
+      "cancelConfirmTitle": "Cancelar reserva",
+      "cancelConfirmMessage": "Tem certeza de que deseja cancelar a reserva de {{name}}?",
+      "statusConfirmed": "Confirmada",
+      "statusCancelled": "Cancelada",
+      "createdSuccess": "Reserva criada com sucesso.",
+      "updatedSuccess": "Reserva atualizada com sucesso.",
+      "cancelledSuccess": "Reserva cancelada com sucesso.",
+      "filters": {
+        "propertyId": "ID do imóvel",
+        "status": "Status",
+        "statusAll": "Todos",
+        "from": "De",
+        "to": "Até",
+        "apply": "Filtrar"
+      },
+      "errors": {
+        "conflict": "Não foi possível concluir a ação devido a um conflito (agenda, reserva já cancelada ou edição concorrente).",
+        "notFound": "Reserva não encontrada.",
+        "generic": "Não foi possível concluir a ação. Tente novamente."
+      }
+    },
+    "form": {
+      "createTitle": "Nova reserva",
+      "editTitle": "Editar reserva",
+      "propertyId": "ID do imóvel",
+      "guestName": "Nome do hóspede",
+      "guestPhone": "Telefone do hóspede",
+      "checkInAt": "Check-in",
+      "checkOutAt": "Check-out",
+      "guestCount": "Quantidade de hóspedes",
+      "errors": {
+        "propertyIdRequired": "Informe o ID do imóvel.",
+        "guestNameRequired": "Informe o nome do hóspede.",
+        "checkInRequired": "Informe a data e hora de check-in.",
+        "checkOutRequired": "Informe a data e hora de check-out.",
+        "checkOutBeforeCheckIn": "O check-out deve ser após o check-in.",
+        "guestCountInvalid": "Informe uma quantidade de hóspedes válida (maior que zero).",
+        "notFound": "Imóvel ou reserva não encontrado.",
+        "propertyNotActive": "O imóvel selecionado não está ativo.",
+        "capacityExceeded": "A quantidade de hóspedes excede a capacidade do imóvel.",
+        "conflict": "Não foi possível concluir a ação devido a um conflito (agenda, reserva já cancelada ou edição concorrente).",
+        "validation": "Verifique os dados informados.",
+        "generic": "Não foi possível salvar. Tente novamente."
+      }
+    }
   }
 }
