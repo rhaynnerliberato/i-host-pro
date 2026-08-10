@@ -1,8 +1,8 @@
 # Fase 5 — Configuration & Policy — Validação e Homologação
 
-Versão: 1.1 (Incremento 1 aprovado pelo usuário e em processo de versionamento — ver §18)
+Versão: 1.2 (Incremento 1 aprovado, versionado e publicado em `origin/feature/configuration-policy` — ver §18)
 
-Status: **Incremento 1 (Policy Engine Foundation) aprovado pelo usuário e sendo versionado** — todos os 7 checkpoints concluídos; suíte de backend completa (1.643 testes) e suíte E2E completa (54 testes, duas execuções consecutivas) 100% aprovadas; build Debug e Release ambas limpas; *benchmark* oficial da decisão 7 dentro da meta (p95 = 36,41 ms ≤ 50 ms); ambiente de homologação restaurado; débito preventivo de descoberta Wolverine fechado (§18.1). Três dos cinco commits aprovados já realizados nesta branch (`feature/configuration-policy`); nenhum push realizado ainda; nenhum merge/tag/rebase/force-push em nenhum momento — ver §18 para o estado detalhado e os hashes completos.
+Status: **Incremento 1 (Policy Engine Foundation) concluído, versionado e publicado** — todos os 7 checkpoints concluídos; suíte de backend completa (1.643 testes) e suíte E2E completa (54 testes, duas execuções consecutivas) 100% aprovadas; build Debug e Release ambas limpas; *benchmark* oficial da decisão 7 dentro da meta (p95 = 36,41 ms ≤ 50 ms); ambiente de homologação restaurado; débito preventivo de descoberta Wolverine fechado (§18.2). Quatro commits publicados em `origin/feature/configuration-policy` (§18.4/§18.5); o quinto (este) fecha a publicação. Nenhum merge para `master`, tag, exclusão de branch ou force-push em nenhum momento — ver §18 para o estado detalhado e os hashes completos. Fase 5 continua em andamento (§18.6) — Incremento 2 (Configuration/Settings) ainda não implementado.
 
 ---
 
@@ -618,8 +618,12 @@ Cada commit foi precedido de *staging* seletivo (nunca `git add .`) e revisão d
 
 Este documento (Commit 4 — `docs(configuration): record increment 1 completion`) e o commit de fechamento de publicação (Commit 5 — `docs(configuration): close increment 1 publication`, após o push) fecham a lista de cinco commits aprovados.
 
-### 18.5 Estado no momento deste registro
+### 18.5 Publicação
 
-- `git push` para `origin/feature/configuration-policy` **ainda não foi realizado** neste instante — será executado logo após este commit de documentação, conforme §5 da instrução de aprovação.
-- Nenhum merge para `master`, tag ou exclusão de branch foi realizado ou será realizado nesta etapa.
-- A Fase 5 **continua em andamento**: este documento registra o fechamento do Incremento 1 (Policy Engine Foundation); o Incremento 2 (Configuration/Settings) ainda não foi implementado — apenas a auditoria/planejamento somente leitura, sem código, começará após a publicação deste incremento (ver relatório de auditoria apresentado separadamente na conversa).
+`git push -u origin feature/configuration-policy` executado após o Commit 4 (este documento, no estado do §18.4). Confirmado: quatro commits publicados em `origin/feature/configuration-policy` (`54b454d`, `a003795`, `640aa9b`, `9a5220a`), `git status -sb` mostrando `feature/configuration-policy...origin/feature/configuration-policy` com ahead/behind = 0/0, working tree limpa. Nenhum merge para `master`, tag ou exclusão de branch foi realizado.
+
+Este parágrafo (§18.5) e o Commit 5 que o inclui (`docs(configuration): close increment 1 publication`) fecham a lista de cinco commits aprovados para este incremento — após este commit, um `git push origin feature/configuration-policy` final replica-o ao remoto, reconfirmando ahead/behind = 0/0.
+
+### 18.6 Estado da Fase 5 após a publicação
+
+A Fase 5 **continua em andamento**: este documento registra o fechamento e a publicação do Incremento 1 (Policy Engine Foundation). O Incremento 2 (Configuration/Settings) ainda não foi implementado — nenhum `ConfigurationDefinition`/`ConfigurationValue`/migração/API/frontend/teste foi criado. Apenas a auditoria e o planejamento somente leitura, sem código, começam após esta publicação (relatório de auditoria apresentado separadamente na conversa); a implementação do Incremento 2 aguarda aprovação explícita do usuário.
