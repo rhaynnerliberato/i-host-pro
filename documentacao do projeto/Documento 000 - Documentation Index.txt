@@ -403,7 +403,7 @@ Consult when:
 
 Authoritative documents:
 
-`Fase 1 - Identity and Access - Validacao e Homologacao.md`, `Fase 2 - Property Management - Validacao e Homologacao.md`, `Fase 3 - Reservation Management - Validacao e Homologacao.md`. Purely retrospective — never treat these as a forward-looking plan.
+`Fase 1 - Identity and Access - Validacao e Homologacao.md`, `Fase 2 - Property Management - Validacao e Homologacao.md`, `Fase 3 - Reservation Management - Validacao e Homologacao.md`, `Fase 4 - Frontend Foundation - Validacao e Homologacao.md`, `Fase 5 - Configuration and Policy - Validacao e Homologacao.md`. Purely retrospective — never treat these as a forward-looking plan.
 
 ---
 

@@ -719,6 +719,7 @@ Financeiro	PixPaymentConfirmed, RefundRequested
 Sistema	JobStarted, JobFinished, BackupCompleted
 Identity & Access	UserLoggedIn, LoginFailed, AccountLockedOut, UserLoggedOut, RefreshTokenReuseDetected, SessionRevoked, UserCreated, UserUpdated, UserBlocked, UserUnblocked, UserRoleAssigned, UserRoleRemoved, PasswordChanged
 Property Management	CondominiumCreated, CondominiumUpdated, PropertyCreated, PropertyUpdated, PropertyActivated, PropertyDeactivated, PropertyArchived, PropertyOwnerLinked, PropertyOwnerUnlinked
+Configuration & Policy	PolicyUpdated
 
 27. Eventos do Módulo Reservations — Payloads e Roteamento (Fase 3, Incremento 1)
 
@@ -765,3 +766,34 @@ Convenção já registrada em ADR-013 (exchange único por Bounded Context, tipo
 | ReservationCreated | reservation-events | reservation_created | Incremento 1 (Fase 3) |
 | ReservationUpdated | reservation-events | reservation_updated | Incremento 1 (Fase 3) |
 | ReservationCancelled | reservation-events | reservation_cancelled | Incremento 1 (Fase 3) |
+
+28. Evento do Módulo Configuration & Policy — Payload e Roteamento (Fase 5, Incremento 1, Checkpoint 6)
+
+Registrado neste documento antes da implementação, conforme Fase 5, Incremento 1, oficial decisão 5 e §10 da instrução de aprovação ("Registrar antes da implementação no Documento 07: PolicyUpdated"). Único evento deste incremento — não há um evento por nível de escopo (Global/Tenant/Property); o escopo pertence ao payload, nunca ao nome do evento. `ConfigurationUpdated` (para um incremento futuro de Configurações, ainda não implementado) foi aprovado na mesma decisão, mas não é registrado aqui por não ter payload/roteamento definidos até ser implementado — mesma convenção do §5/§27 para eventos prospectivos.
+
+Anexado como seção nova ao final do documento, sem renumerar nenhuma seção existente — mesmo critério já usado para o §27 (Reservations).
+
+28.1 Payload de PolicyUpdated
+
+Payload mínimo, deliberadamente sem valor anterior, valor novo, condições, ações, dados pessoais ou motivo da alteração (Fase 5, Incremento 1, oficial decisão 5) — um consumidor que precisar do valor efetivo deve consultar a API administrativa/os leitores tipados, nunca inferir do próprio evento.
+
+AggregateType = "PolicyValue"; AggregateId = id da linha `PolicyValue` recém-criada. ActorType é sempre "User" (toda escrita deste incremento é administrativa, via `POLICIES:MANAGE`); ActorId é o id do usuário administrador que criou a nova versão. TenantId (herdado de `IntegrationEvent`) é sempre preenchido neste incremento — GLOBAL nunca é editável por um tenant (decisão 2.2), então toda publicação de `PolicyUpdated` neste incremento se origina de uma escrita em escopo Tenant ou Property, ambos sempre tenant-scoped. `Timestamp` (herdado de `IntegrationEvent`) representa `occurredAtUtc`.
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| PolicyCode | string | Código estável da política alterada — "EARLY_CHECKIN" ou "LATE_CHECKOUT" neste incremento |
+| ScopeType | string | "Tenant" ou "Property" — nunca "Global" neste incremento |
+| ScopeReferenceId | Guid? | Id do Imóvel quando ScopeType = "Property"; null quando ScopeType = "Tenant" |
+| PolicyVersion | int | O número de versão da nova linha `PolicyValue` (nunca reaproveita `IntegrationEvent.Version`, que é a versão do envelope do evento, não do dado de negócio) |
+
+28.2 Roteamento RabbitMQ de PolicyUpdated
+
+Mesma convenção do ADR-013 — exchange próprio `configuration-events` (declarado desde o Checkpoint 1 deste incremento, nunca reaproveitando identity-events/property-management-events/reservation-events), tipo topic, routing key = nome do evento em snake_case.
+
+| Evento | Exchange | Routing Key | Registrado desde |
+|---|---|---|---|
+| PolicyUpdated | configuration-events | policy_updated | Checkpoint 6 (Fase 5, Incremento 1) |
+
+28.3 Consumidor
+
+Consumidor inicial e único neste incremento: invalidação de cache dentro do próprio contexto Configuration & Policy (processo `IHostPro.Worker`) — nunca um consumidor em Reservations ou qualquer outro Bounded Context (§10 da instrução de aprovação: "Não criar consumidor em Reservations neste incremento").
