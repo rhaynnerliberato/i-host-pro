@@ -74,6 +74,29 @@ public sealed class WebE2EFixture : IAsyncLifetime
     public const string OperatorPassword = "Correct-Horse-Battery-Staple-88!";
     public const string OperatorFullName = "E2E Playwright Operator";
 
+    /// <summary>
+    /// Checkpoint 7 homologação (Fase 5), real conflict found and resolved by
+    /// explicit user decision: <c>IdentityCatalogSeed</c> deliberately gives
+    /// no single role both <c>POLICIES:READ</c> and <c>POLICIES:MANAGE</c>
+    /// (only ADMIN has MANAGE, only AI_AGENT has READ) — confirmed by direct
+    /// HTTP observation against a real running API that an ADMIN-only token
+    /// gets <c>403</c> on every read endpoint <c>PoliciesController</c>
+    /// exposes (<c>List</c>/<c>GetValue</c>/<c>GetEffective</c>/<c>GetHistory</c>),
+    /// which breaks the natural single-screen admin workflow
+    /// <c>PoliciesE2ETests</c> exercises (open a dialog, see the current
+    /// value, write a new one, see it reflected). This persona holds BOTH
+    /// <c>ADMIN</c> and <c>AI_AGENT</c> (see <see cref="SeedTenantAndAdminAsync"/>)
+    /// — a test-fixture-only combination, never touching the approved
+    /// production permission catalog — used exclusively by
+    /// <c>PoliciesE2ETests</c>. <see cref="PoliciesAuthorizationE2ETests"/>
+    /// keeps using the standard <see cref="AdminEmail"/>/<see cref="OperatorEmail"/>,
+    /// since it only asserts route/nav access (OR semantics on either
+    /// permission), never a data read.
+    /// </summary>
+    public const string PolicyAdminEmail = "policy-admin@e2e-playwright.test";
+    public const string PolicyAdminPassword = "Correct-Horse-Battery-Staple-99!";
+    public const string PolicyAdminFullName = "E2E Playwright Policy Admin";
+
     public string ApiBaseUrl { get; } = $"http://localhost:{ApiPort}";
     public string WebBaseUrl { get; } = $"http://localhost:{WebPort}";
 
@@ -87,6 +110,7 @@ public sealed class WebE2EFixture : IAsyncLifetime
     private Guid _tenantId;
     private ManagedProcess? _apiProcess;
     private ManagedProcess? _webProcess;
+    private ManagedProcess? _workerProcess;
     private IPlaywright? _playwright;
     private int _cleanedUp;
     public IBrowser Browser { get; private set; } = null!;
@@ -117,6 +141,17 @@ public sealed class WebE2EFixture : IAsyncLifetime
 
             _apiProcess = StartApiProcess();
             await WaitForHttpReadyAsync(ApiBaseUrl + "/swagger/v1/swagger.json", TimeSpan.FromSeconds(60));
+
+            // Checkpoint 7 homologação (Fase 5), real gap found and fixed: without a
+            // real IHostPro.Worker running, nothing ever consumes PolicyUpdated, so
+            // the Redis-backed effective-policy cache (Checkpoint 6) is never
+            // invalidated after a write — confirmed by direct observation, a UI flow
+            // that writes a new policy version and then re-reads its effective
+            // resolution (exactly what PolicyDetailDialog.submitNewVersion does)
+            // sees a stale cached resolution. Mirrors StartApiProcess's own
+            // RabbitMq/Redis wiring so both processes share the same physical
+            // broker/cache the real deployment does.
+            _workerProcess = StartWorkerProcess();
 
             _webProcess = StartWebProcess();
             await WaitForHttpReadyAsync(WebBaseUrl, TimeSpan.FromSeconds(90));
@@ -184,6 +219,12 @@ public sealed class WebE2EFixture : IAsyncLifetime
                 diagnostics.Add(diagnostic);
             else if (IsPortInUse(ApiPort))
                 diagnostics.Add($"Port {ApiPort} is still in use after the API process reported exited — a different, untracked process is now holding it.");
+        }
+        if (_workerProcess is not null)
+        {
+            var diagnostic = await _workerProcess.StopAsync(ProcessStopTimeout);
+            if (diagnostic is not null)
+                diagnostics.Add(diagnostic);
         }
 
         if (_rabbitMqContainer is not null)
@@ -274,15 +315,18 @@ public sealed class WebE2EFixture : IAsyncLifetime
             await pmDbContext.Database.MigrateAsync();
         await using (var reservationsDbContext = CreateReservationsDbContext())
             await reservationsDbContext.Database.MigrateAsync();
+        await using (var configurationDbContext = CreateConfigurationDbContext())
+            await configurationDbContext.Database.MigrateAsync();
     }
 
-    /// <summary>Mirrors IHostPro.MigrationRunner exactly: platform_messaging (Main) first, then the three Ancillary outboxes.</summary>
+    /// <summary>Mirrors IHostPro.MigrationRunner exactly: platform_messaging (Main) first, then the four Ancillary outboxes.</summary>
     private async Task ProvisionMessageStoresAsync()
     {
         await ProvisionMessageStoreSchemaAsync("platform_messaging", dbContextType: null);
         await ProvisionMessageStoreSchemaAsync("identity_messaging", typeof(IdentityDbContext));
         await ProvisionMessageStoreSchemaAsync("property_management_messaging", typeof(IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence.PropertyManagementDbContext));
         await ProvisionMessageStoreSchemaAsync("reservations_messaging", typeof(IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext));
+        await ProvisionMessageStoreSchemaAsync("configuration_messaging", typeof(IHostPro.Contexts.Configuration.Infrastructure.Persistence.ConfigurationDbContext));
     }
 
     private async Task ProvisionMessageStoreSchemaAsync(string schema, Type? dbContextType)
@@ -333,7 +377,22 @@ public sealed class WebE2EFixture : IAsyncLifetime
             opts.UseIHostProRabbitMq(rabbitConfiguration, listen: false)
                 .DeclareExchange("identity-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
                 .DeclareExchange("property-management-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
-                .DeclareExchange("reservation-events", exchange => exchange.ExchangeType = ExchangeType.Topic);
+                .DeclareExchange("reservation-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
+                // Fase 5, Checkpoint 7 homologação: was missing entirely — the
+                // same "configuration-events" gap already found and fixed in
+                // IHostPro.MigrationRunner (see the Fase 5 homologation doc,
+                // §13.7). Also declares the "configuration.policy-updated" queue
+                // and its binding, mirroring MigrationRunner exactly, since this
+                // fixture now runs a real IHostPro.Worker (StartWorkerProcess)
+                // that calls opts.ListenToRabbitQueue("configuration.policy-updated")
+                // expecting it to already exist — never provisioned by a host at
+                // runtime, same single-provisioning-authority pattern as
+                // production.
+                .DeclareExchange("configuration-events", exchange =>
+                {
+                    exchange.ExchangeType = ExchangeType.Topic;
+                    exchange.BindQueue("configuration.policy-updated", "policy_updated");
+                });
         });
 
         using var topologyHost = topologyHostBuilder.Build();
@@ -372,6 +431,15 @@ public sealed class WebE2EFixture : IAsyncLifetime
         dbContext.Users.Add(operatorUser);
         dbContext.UserRoles.Add(new UserRole(tenantId, operatorUser.Id, "OPERATOR", now, assignedByUserId: null));
 
+        // See PolicyAdminEmail's own doc comment: both roles are needed only
+        // because no single role in the approved catalog holds both
+        // POLICIES:READ and POLICIES:MANAGE.
+        var policyAdminHash = PasswordHash.FromEncoded(hasher.HashPassword(null!, PolicyAdminPassword));
+        var policyAdmin = User.Register(Guid.NewGuid(), tenantId, Email.Create(PolicyAdminEmail), PolicyAdminFullName, policyAdminHash, now);
+        dbContext.Users.Add(policyAdmin);
+        dbContext.UserRoles.Add(new UserRole(tenantId, policyAdmin.Id, "ADMIN", now, assignedByUserId: null));
+        dbContext.UserRoles.Add(new UserRole(tenantId, policyAdmin.Id, "AI_AGENT", now, assignedByUserId: null));
+
         await dbContext.SaveChangesAsync();
         await transaction.CommitAsync();
     }
@@ -395,6 +463,15 @@ public sealed class WebE2EFixture : IAsyncLifetime
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "property_management"))
             .Options;
         return new IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence.PropertyManagementDbContext(options, new TenantContext());
+    }
+
+    private IHostPro.Contexts.Configuration.Infrastructure.Persistence.ConfigurationDbContext CreateConfigurationDbContext()
+    {
+        var options = new DbContextOptionsBuilder<IHostPro.Contexts.Configuration.Infrastructure.Persistence.ConfigurationDbContext>()
+            .UseNpgsql(_migratorConnectionString, npgsqlOptions =>
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "configuration"))
+            .Options;
+        return new IHostPro.Contexts.Configuration.Infrastructure.Persistence.ConfigurationDbContext(options, new TenantContext());
     }
 
     /// <summary>Mirrors <see cref="CreateIdentityDbContext"/>'s exact pattern: with no tenantId, the migrator connection (schema DDL only, e.g. <see cref="MigrateSchemasAsync"/>); with one, the app connection and a tenant-scoped <see cref="TenantContext"/>.</summary>
@@ -470,6 +547,7 @@ public sealed class WebE2EFixture : IAsyncLifetime
         psi.Environment["ConnectionStrings__Identity"] = _appConnectionString;
         psi.Environment["ConnectionStrings__PropertyManagement"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Reservations"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__Configuration"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _appConnectionString;
         psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";
         psi.Environment["Identity__Jwt__Audience"] = "ihostpro-api-test";
@@ -483,6 +561,7 @@ public sealed class WebE2EFixture : IAsyncLifetime
         psi.Environment["Identity__RefreshToken__SecretSizeBytes"] = "32";
         psi.Environment["Identity__RefreshToken__ConcurrentRotationGraceWindow"] = "00:00:10";
         psi.Environment["Identity__SessionRevocationCache__ConnectionString"] = _redisContainer.GetConnectionString();
+        psi.Environment["Configuration__PolicyCache__ConnectionString"] = _redisContainer.GetConnectionString();
         psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;
         psi.Environment["RabbitMq__VirtualHost"] = "/";
         psi.Environment["RabbitMq__Username"] = RabbitMqBuilder.DefaultUsername;
@@ -493,6 +572,49 @@ public sealed class WebE2EFixture : IAsyncLifetime
         psi.Environment["OpenTelemetry__OtlpEndpoint"] = "http://127.0.0.1:14317";
 
         return ManagedProcess.Start(psi, "IHostPro.Api");
+    }
+
+    /// <summary>
+    /// Runs the actual built <c>IHostPro.Worker</c> executable as a real
+    /// subprocess (same rationale as <see cref="StartApiProcess"/>) — the
+    /// real consumer of <c>PolicyUpdated</c>, sharing the exact same
+    /// RabbitMQ/Redis connection <see cref="StartApiProcess"/> hands to
+    /// <c>IHostPro.Api</c>, so a write through the real API is actually
+    /// reflected by a subsequent real-time cache invalidation, exactly like
+    /// production. Binds no HTTP port of its own.
+    /// </summary>
+    private ManagedProcess StartWorkerProcess()
+    {
+        var dllPath = Path.Combine(FindSolutionRoot(), "src", "Host", "IHostPro.Worker", "bin", "Debug", "net10.0", "IHostPro.Worker.dll");
+        if (!File.Exists(dllPath))
+            throw new InvalidOperationException($"IHostPro.Worker build output not found at {dllPath}. Build IHostPro.Worker in Debug configuration first.");
+
+        using var signingKey = RSA.Create(2048);
+        var signingKeyPem = signingKey.ExportRSAPrivateKeyPem();
+
+        var psi = new ProcessStartInfo("dotnet", $"\"{dllPath}\"");
+        psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        psi.Environment["ConnectionStrings__Identity"] = _appConnectionString;
+        psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";
+        psi.Environment["Identity__Jwt__Audience"] = "ihostpro-api-test";
+        psi.Environment["Identity__Jwt__AccessTokenLifetime"] = "00:15:00";
+        psi.Environment["Identity__Jwt__ClockSkew"] = "00:01:00";
+        psi.Environment["Identity__Jwt__SigningKey__PrivateKeyPem"] = signingKeyPem;
+        psi.Environment["Identity__AccountLockout__MaxFailedAccessAttempts"] = "5";
+        psi.Environment["Identity__AccountLockout__DefaultLockoutDuration"] = "00:05:00";
+        psi.Environment["Identity__AccountLockout__AllowedForNewUsers"] = "true";
+        psi.Environment["Identity__RefreshToken__Lifetime"] = "30.00:00:00";
+        psi.Environment["Identity__RefreshToken__SecretSizeBytes"] = "32";
+        psi.Environment["Identity__RefreshToken__ConcurrentRotationGraceWindow"] = "00:00:10";
+        psi.Environment["Identity__SessionRevocationCache__ConnectionString"] = _redisContainer.GetConnectionString();
+        psi.Environment["Configuration__PolicyCache__ConnectionString"] = _redisContainer.GetConnectionString();
+        psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;
+        psi.Environment["RabbitMq__VirtualHost"] = "/";
+        psi.Environment["RabbitMq__Username"] = RabbitMqBuilder.DefaultUsername;
+        psi.Environment["RabbitMq__Password"] = RabbitMqBuilder.DefaultPassword;
+        psi.Environment["OpenTelemetry__OtlpEndpoint"] = "http://127.0.0.1:14317";
+
+        return ManagedProcess.Start(psi, "IHostPro.Worker");
     }
 
     /// <summary>Real <c>npm start</c> (Angular's own dev server, `ng serve`) as a subprocess — never a hand-built static host standing in for it.</summary>

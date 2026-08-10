@@ -30,8 +30,15 @@ internal sealed class ManagedProcess
 
     public int Id => _process.Id;
 
-    /// <summary>Starts the process and immediately begins draining stdout/stderr asynchronously (event-based <see cref="Process.BeginOutputReadLine"/>/<see cref="Process.BeginErrorReadLine"/>) so a full output buffer can never deadlock the child — the same mechanism already relied on before this refactor, unchanged.</summary>
-    public static ManagedProcess Start(ProcessStartInfo startInfo, string name)
+    /// <summary>
+    /// Starts the process and immediately begins draining stdout/stderr asynchronously (event-based
+    /// <see cref="Process.BeginOutputReadLine"/>/<see cref="Process.BeginErrorReadLine"/>) so a full
+    /// output buffer can never deadlock the child — the same mechanism already relied on before this
+    /// refactor, unchanged. <paramref name="onOutputLine"/> is an optional diagnostic hook (defaults
+    /// to the same no-op every existing caller already gets) — never used to change process behavior,
+    /// only to let a caller observe it.
+    /// </summary>
+    public static ManagedProcess Start(ProcessStartInfo startInfo, string name, Action<string>? onOutputLine = null)
     {
         startInfo.RedirectStandardOutput = true;
         startInfo.RedirectStandardError = true;
@@ -39,8 +46,8 @@ internal sealed class ManagedProcess
 
         var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start '{name}'.");
         var managed = new ManagedProcess(process, name);
-        process.OutputDataReceived += (_, _) => { };
-        process.ErrorDataReceived += (_, _) => { };
+        process.OutputDataReceived += (_, e) => { if (e.Data is not null) onOutputLine?.Invoke(e.Data); };
+        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) onOutputLine?.Invoke(e.Data); };
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         return managed;

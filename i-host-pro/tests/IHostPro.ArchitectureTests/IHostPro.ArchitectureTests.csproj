@@ -58,6 +58,11 @@
     <ProjectReference Include="..\..\src\Contexts\Reservations\IHostPro.Contexts.Reservations.Application\IHostPro.Contexts.Reservations.Application.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Reservations\IHostPro.Contexts.Reservations.Infrastructure\IHostPro.Contexts.Reservations.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Reservations\IHostPro.Contexts.Reservations.Api\IHostPro.Contexts.Reservations.Api.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Configuration\IHostPro.Contexts.Configuration.Domain\IHostPro.Contexts.Configuration.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Configuration\IHostPro.Contexts.Configuration.Contracts\IHostPro.Contexts.Configuration.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Configuration\IHostPro.Contexts.Configuration.Application\IHostPro.Contexts.Configuration.Application.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Configuration\IHostPro.Contexts.Configuration.Infrastructure\IHostPro.Contexts.Configuration.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Configuration\IHostPro.Contexts.Configuration.Api\IHostPro.Contexts.Configuration.Api.csproj" />
   </ItemGroup>
 
 </Project>
