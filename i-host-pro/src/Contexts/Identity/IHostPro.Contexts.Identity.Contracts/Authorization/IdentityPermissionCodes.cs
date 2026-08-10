@@ -44,4 +44,17 @@ public static class IdentityPermissionCodes
     /// by value for the first time. No new migration required.
     /// </summary>
     public const string ReservationsManage = "RESERVATIONS:MANAGE";
+
+    /// <summary>
+    /// Fase 5, Incremento 1 (Policy Engine Foundation), official decisions §7.
+    /// Already seeded into the persisted catalog since
+    /// <c>IdentityCatalogSeed</c>'s original migration (ADMIN=manage,
+    /// AI_AGENT=read — Documento 09 §5/§9); promoted here only now because
+    /// Configuration &amp; Policy's controller needs to reference them by
+    /// value for the first time. No new migration required.
+    /// <c>SETTINGS:READ</c>/<c>SETTINGS:MANAGE</c> remain reserved for the
+    /// future Configurações increment and are deliberately not promoted yet.
+    /// </summary>
+    public const string PoliciesRead = "POLICIES:READ";
+    public const string PoliciesManage = "POLICIES:MANAGE";
 }

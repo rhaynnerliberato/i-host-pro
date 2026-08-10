@@ -25,5 +25,6 @@
     <ProjectReference Include="..\..\BuildingBlocks\IHostPro.BuildingBlocks.Messaging.Abstractions\IHostPro.BuildingBlocks.Messaging.Abstractions.csproj" />
     <!-- One line per module (Architecture Principles, Section 16). -->
     <ProjectReference Include="..\..\Contexts\Identity\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Contexts\Configuration\IHostPro.Contexts.Configuration.Infrastructure\IHostPro.Contexts.Configuration.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

@@ -7,6 +7,7 @@
     <ProjectReference Include="..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Infrastructure\IHostPro.Contexts.PropertyManagement.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Reservations\IHostPro.Contexts.Reservations.Infrastructure\IHostPro.Contexts.Reservations.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Configuration\IHostPro.Contexts.Configuration.Infrastructure\IHostPro.Contexts.Configuration.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

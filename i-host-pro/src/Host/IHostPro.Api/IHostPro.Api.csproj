@@ -39,6 +39,14 @@
     <ProjectReference Include="..\..\Contexts\Reservations\IHostPro.Contexts.Reservations.Api\IHostPro.Contexts.Reservations.Api.csproj" />
     <ProjectReference Include="..\..\Contexts\Reservations\IHostPro.Contexts.Reservations.Infrastructure\IHostPro.Contexts.Reservations.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Contexts\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
+    <!-- Configuration & Policy module (Fase 5, Incremento 1 — Policy Engine
+         Foundation, Checkpoint 1). No HTTP endpoint exists yet
+         (PoliciesController is Checkpoint 4) — Api is still referenced now,
+         matching every other context's own Program.cs reference shape, so
+         AddControllers() picks it up automatically the moment it exists. -->
+    <ProjectReference Include="..\..\Contexts\Configuration\IHostPro.Contexts.Configuration.Api\IHostPro.Contexts.Configuration.Api.csproj" />
+    <ProjectReference Include="..\..\Contexts\Configuration\IHostPro.Contexts.Configuration.Infrastructure\IHostPro.Contexts.Configuration.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Contexts\Configuration\IHostPro.Contexts.Configuration.Application\IHostPro.Contexts.Configuration.Application.csproj" />
   </ItemGroup>
 
 </Project>

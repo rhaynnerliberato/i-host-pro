@@ -10,6 +10,10 @@ using IHostPro.Contexts.Identity.Infrastructure.Authentication;
 using IHostPro.Contexts.Identity.Infrastructure.Caching;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using IHostPro.Api.Swagger;
+using IHostPro.Contexts.Configuration.Application;
+using IHostPro.Contexts.Configuration.Contracts;
+using IHostPro.Contexts.Configuration.Infrastructure;
+using IHostPro.Contexts.Configuration.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Contracts;
 using IHostPro.Contexts.PropertyManagement.Infrastructure;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
@@ -163,6 +167,17 @@ try
     // concern, never registered in IHostPro.Worker's Program.cs.
     builder.Services.AddReservationsCommandDispatch();
 
+    // Configuration & Policy module — DbContext, resolver and typed readers
+    // registration. Registered here (never IHostPro.Worker's Program.cs)
+    // mirroring every other context's own module registration placement.
+    builder.Services.AddConfigurationModule(builder.Configuration);
+
+    // Configuration & Policy's Commands/Queries/handlers/validators/pipeline
+    // behaviors (Checkpoint 4) — mirrors AddReservationsCommandDispatch's
+    // placement exactly; calls AddConfigurationApplicationMediator()
+    // internally.
+    builder.Services.AddConfigurationCommandDispatch();
+
     // Wolverine's own Main message store (Fase 2, Incremento 1, Checkpoint 6
     // homologação — found and fixed during real-host startup validation):
     // Identity's and Property Management's outboxes are both registered as
@@ -241,6 +256,19 @@ try
             builder.Configuration.GetConnectionString("Reservations")!,
             "reservations_messaging",
             typeof(ReservationsDbContext));
+
+        // Configuration & Policy's own durable outbox (Fase 5, Incremento 1
+        // — Policy Engine Foundation, Checkpoint 1) — a fourth "ancillary"
+        // store, in its own configuration_messaging schema, never shared
+        // with any other context's. No route is registered here yet —
+        // PolicyUpdated is the first event this context publishes, added
+        // only in Checkpoint 6 — mirrors Property Management's own
+        // Checkpoint 1 precedent (schema provisioned ahead of its first
+        // real event).
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("Configuration")!,
+            "configuration_messaging",
+            typeof(ConfigurationDbContext));
 
         // Identity & Access's first six Integration Events (Incremento 2 plan,
         // Etapa 15; Documento 07 §13.2; ADR-013): one topic exchange per
@@ -349,6 +377,20 @@ try
         RouteReservationEvent<ReservationCreated>("reservation_created");
         RouteReservationEvent<ReservationUpdated>("reservation_updated");
         RouteReservationEvent<ReservationCancelled>("reservation_cancelled");
+
+        // Configuration & Policy's first Integration Event (Fase 5, Incremento
+        // 1, Checkpoint 6) — its own topic exchange, declared since Checkpoint
+        // 1 (IHostPro.MigrationRunner), never identity-events/property-management-events/
+        // reservation-events. See Documento 07 §28.
+        const string configurationEventsExchange = "configuration-events";
+
+        void RouteConfigurationEvent<TEvent>(string routingKey) where TEvent : IntegrationEvent =>
+            opts.PublishMessage(typeof(TEvent))
+                .ToRabbitRoutingKey(configurationEventsExchange, routingKey, exchange => exchange.ExchangeType = ExchangeType.Topic)
+                .UseDurableOutbox()
+                .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        RouteConfigurationEvent<PolicyUpdated>("policy_updated");
     });
 
     builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();

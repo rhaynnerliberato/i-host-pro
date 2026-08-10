@@ -2,6 +2,7 @@ using System.Reflection;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
+using IHostPro.Contexts.Configuration.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
@@ -59,6 +60,7 @@ try
         typeof(IdentityDbContext).Assembly,
         typeof(PropertyManagementDbContext).Assembly,
         typeof(ReservationsDbContext).Assembly,
+        typeof(ConfigurationDbContext).Assembly,
     };
 
     var moduleDbContextTypes = moduleAssemblies
@@ -324,6 +326,51 @@ try
 
     log.LogInformation("Reservations' durable outbox provisioned");
 
+    // Configuration & Policy's own durable outbox (Fase 5, Incremento 1 —
+    // Policy Engine Foundation, Checkpoint 1) — mirrors Identity's/Property
+    // Management's/Reservations' provisioning above exactly, in its own
+    // schema (configuration_messaging), never sharing any of the other
+    // three. No Integration Event is routed/published yet (PolicyUpdated is
+    // Checkpoint 6) — this only provisions the schema/tables so that
+    // checkpoint's first real event has them ready, mirroring Property
+    // Management's own Checkpoint 1 precedent.
+    var configurationMigratorConnectionString = builder.Configuration.GetConnectionString("Configuration")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Configuration'.");
+
+    log.LogInformation("Provisioning Configuration & Policy's durable outbox (schema configuration_messaging)");
+
+    var configurationOutboxHostBuilder = Host.CreateApplicationBuilder();
+    configurationOutboxHostBuilder.UseWolverine(opts =>
+    {
+        opts.EnrollAncillaryPostgresqlOutbox(
+            configurationMigratorConnectionString, "configuration_messaging", typeof(ConfigurationDbContext));
+        opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+        opts.UseEntityFrameworkCoreTransactions();
+    });
+
+    using (var configurationOutboxHost = configurationOutboxHostBuilder.Build())
+    {
+        await configurationOutboxHost.SetupResources();
+    }
+
+    await using (var connection = new NpgsqlConnection(configurationMigratorConnectionString))
+    {
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            GRANT USAGE ON SCHEMA configuration_messaging TO ihostpro_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA configuration_messaging TO ihostpro_app;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA configuration_messaging TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA configuration_messaging
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA configuration_messaging
+              GRANT USAGE, SELECT ON SEQUENCES TO ihostpro_app;
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    log.LogInformation("Configuration & Policy's durable outbox provisioned");
+
     // RabbitMQ messaging topology (Checkpoint 6 homologação, third production
     // defect: neither IHostPro.Api nor IHostPro.Worker ever declared the
     // topic exchanges they publish/route to — AutoProvision defaults to
@@ -345,7 +392,7 @@ try
     // IHostPro.Api/IHostPro.Worker use — so host/vhost/user/password/
     // timeouts can never drift between this provisioning step and the real
     // runtime connection.
-    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events exchanges)");
+    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events, configuration-events exchanges)");
 
     var messagingTopologyHostBuilder = Host.CreateApplicationBuilder();
     messagingTopologyHostBuilder.UseWolverine(opts =>
@@ -353,7 +400,31 @@ try
         opts.UseIHostProRabbitMq(builder.Configuration, listen: false)
             .DeclareExchange("identity-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
             .DeclareExchange("property-management-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
-            .DeclareExchange("reservation-events", exchange => exchange.ExchangeType = ExchangeType.Topic);
+            .DeclareExchange("reservation-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            // Fase 5, Incremento 1 (Policy Engine Foundation), Checkpoint 1:
+            // declared ahead of PolicyUpdated (Checkpoint 6) — same
+            // "infrastructure ready, content added later" precedent as the
+            // configuration_messaging outbox schema above.
+            //
+            // Checkpoint 7 homologação, real defect found and fixed: the
+            // "configuration.policy-updated" queue itself was never
+            // declared/bound anywhere — IHostPro.Worker's Program.cs used
+            // opts.Publish(...).ToRabbitTopics(...).BindTopic(...).ToQueue(...),
+            // which is a SENDER-side routing rule and, confirmed against
+            // Wolverine's own RabbitMQ documentation and by direct
+            // observation against a real broker, never creates a queue or
+            // makes any process listen to it — publish and listen are
+            // separate concerns in Wolverine's RabbitMQ transport. The queue
+            // must be provisioned here, the same single authority every
+            // other messaging object in this platform already goes through
+            // (mirrors ex.BindQueue(...) from Wolverine's own
+            // object-management documentation); IHostPro.Worker now only
+            // calls opts.ListenToRabbitQueue("configuration.policy-updated").
+            .DeclareExchange("configuration-events", exchange =>
+            {
+                exchange.ExchangeType = ExchangeType.Topic;
+                exchange.BindQueue("configuration.policy-updated", "policy_updated");
+            });
     });
 
     using (var messagingTopologyHost = messagingTopologyHostBuilder.Build())

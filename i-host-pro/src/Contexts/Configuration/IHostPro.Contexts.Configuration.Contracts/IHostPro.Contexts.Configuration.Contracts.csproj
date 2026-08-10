@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fase 5, Incremento 1 (Policy Engine Foundation): this is the ONLY project
+    other Bounded Contexts may ever reference to consume Configuration &
+    Policy synchronously (Architecture Principles §14, Exceção 1 — already
+    pre-approved, no new ADR required). The typed policy readers
+    (IEarlyCheckInPolicyReader/ILateCheckoutPolicyReader) and their result
+    types belong to Checkpoint 3 (Resolução e contrato). PolicyUpdated
+    (Checkpoint 6 — Cache e eventos) is the first type here that needs
+    IntegrationEvent, mirroring every other context's own
+    "<Context>.Contracts -> BuildingBlocks.Messaging.Abstractions" reference
+    exactly (e.g. Reservations.Contracts).
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Messaging.Abstractions\IHostPro.BuildingBlocks.Messaging.Abstractions.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
