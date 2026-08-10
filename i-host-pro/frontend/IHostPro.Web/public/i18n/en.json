@@ -34,7 +34,8 @@
       "users": "Users",
       "properties": "Properties",
       "condominiums": "Condominiums",
-      "reservations": "Reservations"
+      "reservations": "Reservations",
+      "policies": "Policies"
     }
   },
   "home": {
@@ -305,6 +306,89 @@
         "conflict": "The action could not be completed due to a conflict (schedule, already cancelled, or a concurrent edit).",
         "validation": "Please check the entered data.",
         "generic": "Unable to save. Please try again."
+      }
+    }
+  },
+  "policies": {
+    "list": {
+      "title": "Policies",
+      "loadError": "Unable to load policies.",
+      "empty": "No policies found.",
+      "columns": {
+        "code": "Code",
+        "name": "Name",
+        "category": "Category",
+        "actions": "Actions"
+      },
+      "manage": "Manage"
+    },
+    "detail": {
+      "title": "{{name}}",
+      "scope": "Scope",
+      "scopeTenant": "Tenant (whole company)",
+      "scopeProperty": "Specific property",
+      "propertyId": "Property ID",
+      "propertyIdRequired": "Enter the property ID.",
+      "load": "Load",
+      "currentValue": {
+        "title": "Value at this scope"
+      },
+      "effective": {
+        "title": "Effective value",
+        "resolved": "Configured",
+        "notConfigured": "Not configured at any level.",
+        "definedHere": "Defined at this level.",
+        "inheritedFromTenant": "Inherited from the tenant-wide setting.",
+        "inheritedFromGlobal": "Inherited from the system default.",
+        "version": "Version {{version}}",
+        "loadError": "Unable to load the effective value."
+      },
+      "history": {
+        "title": "History at this scope",
+        "empty": "No versions recorded at this scope.",
+        "loadError": "Unable to load the history.",
+        "columns": {
+          "version": "Version",
+          "createdAt": "Date",
+          "createdBy": "Changed by",
+          "reason": "Reason",
+          "current": "Current"
+        }
+      },
+      "form": {
+        "title": "New version",
+        "reason": "Reason",
+        "reasonRequired": "Enter the reason for this change.",
+        "allowed": "Allowed",
+        "earliestTime": "Earliest time",
+        "latestTime": "Latest time",
+        "requiresCleaningCompleted": "Requires cleaning completed",
+        "requiresForm": "Requires signed form",
+        "notifyFrontDesk": "Notify front desk",
+        "chargeType": "Charge type",
+        "chargeTypeNone": "None",
+        "chargeTypeFixedAmount": "Fixed amount",
+        "chargeTypePercentage": "Percentage",
+        "chargeValue": "Charge value",
+        "requiresPix": "Requires Pix payment",
+        "blocksCalendar": "Blocks the calendar",
+        "updatesCleaning": "Updates the cleaning schedule",
+        "submit": "Save new version",
+        "createdSuccess": "New version created successfully.",
+        "errors": {
+          "policy_not_found": "Policy not found.",
+          "invalid_policy_value": "The submitted value is invalid for this policy.",
+          "scope_not_supported": "The selected scope is not supported.",
+          "policy_not_configured": "No value is currently configured at this scope.",
+          "version_conflict": "This policy was changed by someone else. Reload the current value and try again.",
+          "forbidden": "This scope cannot be edited.",
+          "validation_error": "Please check the entered data.",
+          "generic": "Unable to save. Please try again."
+        }
+      },
+      "errors": {
+        "policy_not_configured": "No value is currently configured at this scope.",
+        "generic": "Unable to load. Please try again."
       }
     }
   }

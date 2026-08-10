@@ -1,0 +1,52 @@
+<div class="policies-list-page">
+  <div class="policies-list-header">
+    <h1>{{ 'policies.list.title' | transloco }}</h1>
+  </div>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="policies-list-state">
+        <mat-progress-spinner diameter="32" mode="indeterminate" />
+      </div>
+    }
+    @case ('error') {
+      <div class="policies-list-state">
+        <p>{{ 'policies.list.loadError' | transloco }}</p>
+        <button mat-button (click)="loadPolicies()">{{ 'common.retry' | transloco }}</button>
+      </div>
+    }
+    @case ('empty') {
+      <div class="policies-list-state">
+        <p>{{ 'policies.list.empty' | transloco }}</p>
+      </div>
+    }
+    @case ('loaded') {
+      <table mat-table [dataSource]="policies()" class="full-width">
+        <ng-container matColumnDef="code">
+          <th mat-header-cell *matHeaderCellDef>{{ 'policies.list.columns.code' | transloco }}</th>
+          <td mat-cell *matCellDef="let policy">{{ policy.code }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>{{ 'policies.list.columns.name' | transloco }}</th>
+          <td mat-cell *matCellDef="let policy">{{ policy.name }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="category">
+          <th mat-header-cell *matHeaderCellDef>{{ 'policies.list.columns.category' | transloco }}</th>
+          <td mat-cell *matCellDef="let policy">{{ policy.category }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>{{ 'policies.list.columns.actions' | transloco }}</th>
+          <td mat-cell *matCellDef="let policy">
+            <button mat-button (click)="openDetailDialog(policy)">{{ 'policies.list.manage' | transloco }}</button>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+    }
+  }
+</div>

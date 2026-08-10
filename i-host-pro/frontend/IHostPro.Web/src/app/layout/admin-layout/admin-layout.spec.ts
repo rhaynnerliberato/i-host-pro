@@ -90,4 +90,28 @@ describe('AdminLayout nav item visibility', () => {
 
     expect(paths).not.toContain('/reservations');
   });
+
+  it('shows the "Políticas" nav item to a user holding only POLICIES:READ (OR semantics across an array)', () => {
+    const component = configure(['POLICIES:READ']);
+
+    const paths = component['navItems']().map((item) => item.path);
+
+    expect(paths).toContain('/policies');
+  });
+
+  it('shows the "Políticas" nav item to a user holding only POLICIES:MANAGE (OR semantics across an array)', () => {
+    const component = configure(['POLICIES:MANAGE']);
+
+    const paths = component['navItems']().map((item) => item.path);
+
+    expect(paths).toContain('/policies');
+  });
+
+  it('hides the "Políticas" nav item from a user who holds neither POLICIES:READ nor POLICIES:MANAGE', () => {
+    const component = configure(['SOME:OTHER']);
+
+    const paths = component['navItems']().map((item) => item.path);
+
+    expect(paths).not.toContain('/policies');
+  });
 });

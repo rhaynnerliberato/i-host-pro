@@ -17,8 +17,15 @@ interface NavItem {
   labelKey: string;
   path: string;
   icon: string;
-  /** Real permission code (never a role name) required to show this item — omitted means always visible to an authenticated user. */
-  requiredPermission?: string;
+  /**
+   * Real permission code(s) (never a role name) required to show this item —
+   * omitted means always visible to an authenticated user. An array is OR
+   * semantics (mirrors `permissionGuard`'s own `.some(...)`): needed for
+   * Policies, whose seeded catalog deliberately gives no single role both
+   * `POLICIES:READ` and `POLICIES:MANAGE` (only ADMIN has MANAGE, only
+   * AI_AGENT has READ) — either one must be able to reach the nav entry.
+   */
+  requiredPermission?: string | string[];
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -27,6 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'layout.nav.condominiums', path: '/condominiums', icon: 'apartment', requiredPermission: 'PROPERTIES:MANAGE' },
   { labelKey: 'layout.nav.properties', path: '/properties', icon: 'villa', requiredPermission: 'PROPERTIES:MANAGE' },
   { labelKey: 'layout.nav.reservations', path: '/reservations', icon: 'event', requiredPermission: 'RESERVATIONS:MANAGE' },
+  { labelKey: 'layout.nav.policies', path: '/policies', icon: 'rule', requiredPermission: ['POLICIES:READ', 'POLICIES:MANAGE'] },
 ];
 
 @Component({
@@ -52,7 +60,11 @@ export class AdminLayout {
 
   protected readonly userProfile = inject(UserProfileService);
   protected readonly navItems = computed(() =>
-    NAV_ITEMS.filter((item) => !item.requiredPermission || this.userProfile.hasPermission(item.requiredPermission)),
+    NAV_ITEMS.filter((item) => {
+      if (!item.requiredPermission) return true;
+      const codes = Array.isArray(item.requiredPermission) ? item.requiredPermission : [item.requiredPermission];
+      return codes.some((code) => this.userProfile.hasPermission(code));
+    }),
   );
 
   protected readonly isHandset = toSignal(

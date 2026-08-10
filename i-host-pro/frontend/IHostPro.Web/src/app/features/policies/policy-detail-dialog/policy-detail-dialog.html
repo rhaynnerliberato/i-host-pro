@@ -1,0 +1,170 @@
+<h2 mat-dialog-title>{{ 'policies.detail.title' | transloco: { name: data.policy.name } }}</h2>
+
+<mat-dialog-content class="policy-detail-content">
+  <p class="policy-description">{{ data.policy.description }}</p>
+
+  <div class="scope-row">
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'policies.detail.scope' | transloco }}</mat-label>
+      <mat-select [value]="scopeType()" (selectionChange)="scopeType.set($event.value)">
+        <mat-option value="Tenant">{{ 'policies.detail.scopeTenant' | transloco }}</mat-option>
+        <mat-option value="Property">{{ 'policies.detail.scopeProperty' | transloco }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    @if (scopeType() === 'Property') {
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'policies.detail.propertyId' | transloco }}</mat-label>
+        <input matInput [formControl]="propertyIdControl" />
+        @if (propertyIdControl.invalid || (propertyIdControl.touched && !propertyIdControl.value.trim())) {
+          <mat-error>{{ 'policies.detail.propertyIdRequired' | transloco }}</mat-error>
+        }
+      </mat-form-field>
+    }
+
+    <button mat-flat-button color="primary" type="button" [disabled]="loading()" (click)="load()">
+      {{ 'policies.detail.load' | transloco }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="policy-detail-state">
+      <mat-progress-spinner diameter="32" mode="indeterminate" />
+    </div>
+  }
+
+  @if (loadedScope() && !loading()) {
+    <section class="policy-detail-section">
+      <h3>{{ 'policies.detail.effective.title' | transloco }}</h3>
+      @if (effectiveError()) {
+        <p>{{ 'policies.detail.effective.loadError' | transloco }}</p>
+      } @else if (effective(); as effectiveValue) {
+        @if (inheritanceKey(); as key) {
+          <p>{{ key | transloco }}</p>
+        }
+        @if (effectiveValue.status === 'Resolved') {
+          <p>{{ 'policies.detail.effective.version' | transloco: { version: effectiveValue.version } }}</p>
+          <pre>{{ effectiveValue.value | json }}</pre>
+        }
+      }
+    </section>
+
+    <section class="policy-detail-section">
+      <h3>{{ 'policies.detail.currentValue.title' | transloco }}</h3>
+      @if (currentValueState() === 'error') {
+        <p>{{ 'policies.detail.errors.generic' | transloco }}</p>
+      } @else if (currentValueState() === 'notConfigured') {
+        <p>{{ 'policies.detail.errors.policy_not_configured' | transloco }}</p>
+      } @else if (currentValue(); as value) {
+        <p>{{ 'policies.detail.effective.version' | transloco: { version: value.version } }}</p>
+        <pre>{{ value.value | json }}</pre>
+      }
+    </section>
+
+    <section class="policy-detail-section">
+      <h3>{{ 'policies.detail.history.title' | transloco }}</h3>
+      @if (historyError()) {
+        <p>{{ 'policies.detail.history.loadError' | transloco }}</p>
+      } @else if (history().length === 0) {
+        <p>{{ 'policies.detail.history.empty' | transloco }}</p>
+      } @else {
+        <table mat-table [dataSource]="history()" class="full-width">
+          <ng-container matColumnDef="version">
+            <th mat-header-cell *matHeaderCellDef>{{ 'policies.detail.history.columns.version' | transloco }}</th>
+            <td mat-cell *matCellDef="let entry">{{ entry.version }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="createdAtUtc">
+            <th mat-header-cell *matHeaderCellDef>{{ 'policies.detail.history.columns.createdAt' | transloco }}</th>
+            <td mat-cell *matCellDef="let entry">{{ entry.createdAtUtc | date: 'short' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="reason">
+            <th mat-header-cell *matHeaderCellDef>{{ 'policies.detail.history.columns.reason' | transloco }}</th>
+            <td mat-cell *matCellDef="let entry">{{ entry.reason }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="isCurrent">
+            <th mat-header-cell *matHeaderCellDef>{{ 'policies.detail.history.columns.current' | transloco }}</th>
+            <td mat-cell *matCellDef="let entry">{{ entry.isCurrent ? '✓' : '' }}</td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="historyColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: historyColumns"></tr>
+        </table>
+      }
+    </section>
+
+    @if (canManage()) {
+      <section class="policy-detail-section">
+        <h3>{{ 'policies.detail.form.title' | transloco }}</h3>
+        <form [formGroup]="newVersionForm" (ngSubmit)="submitNewVersion()" novalidate>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>{{ 'policies.detail.form.reason' | transloco }}</mat-label>
+            <input matInput formControlName="reason" />
+            @if (newVersionForm.controls.reason.invalid && newVersionForm.controls.reason.touched) {
+              <mat-error>{{ 'policies.detail.form.reasonRequired' | transloco }}</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-checkbox formControlName="allowed">{{ 'policies.detail.form.allowed' | transloco }}</mat-checkbox>
+
+          @if (isEarlyCheckIn) {
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>{{ 'policies.detail.form.earliestTime' | transloco }}</mat-label>
+              <input matInput type="time" formControlName="earliestTime" />
+            </mat-form-field>
+            <mat-checkbox formControlName="requiresCleaningCompleted">{{ 'policies.detail.form.requiresCleaningCompleted' | transloco }}</mat-checkbox>
+            <mat-checkbox formControlName="requiresForm">{{ 'policies.detail.form.requiresForm' | transloco }}</mat-checkbox>
+            <mat-checkbox formControlName="notifyFrontDesk">{{ 'policies.detail.form.notifyFrontDesk' | transloco }}</mat-checkbox>
+          }
+
+          @if (isLateCheckout) {
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>{{ 'policies.detail.form.latestTime' | transloco }}</mat-label>
+              <input matInput type="time" formControlName="latestTime" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>{{ 'policies.detail.form.chargeType' | transloco }}</mat-label>
+              <mat-select formControlName="chargeType">
+                <mat-option value="none">{{ 'policies.detail.form.chargeTypeNone' | transloco }}</mat-option>
+                <mat-option value="fixedAmount">{{ 'policies.detail.form.chargeTypeFixedAmount' | transloco }}</mat-option>
+                <mat-option value="percentage">{{ 'policies.detail.form.chargeTypePercentage' | transloco }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            @if (newVersionForm.controls.chargeType.value !== 'none') {
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>{{ 'policies.detail.form.chargeValue' | transloco }}</mat-label>
+                <input matInput type="number" formControlName="chargeValue" />
+              </mat-form-field>
+            }
+
+            <mat-checkbox formControlName="requiresPix">{{ 'policies.detail.form.requiresPix' | transloco }}</mat-checkbox>
+            <mat-checkbox formControlName="blocksCalendar">{{ 'policies.detail.form.blocksCalendar' | transloco }}</mat-checkbox>
+            <mat-checkbox formControlName="updatesCleaning">{{ 'policies.detail.form.updatesCleaning' | transloco }}</mat-checkbox>
+          }
+
+          @if (formErrorKey(); as key) {
+            <p class="form-error" role="alert">{{ key | transloco }}</p>
+          }
+
+          <div class="form-actions">
+            <button mat-flat-button color="primary" type="submit" [disabled]="submitting()">
+              @if (submitting()) {
+                <mat-progress-spinner diameter="20" mode="indeterminate" />
+              } @else {
+                {{ 'policies.detail.form.submit' | transloco }}
+              }
+            </button>
+          </div>
+        </form>
+      </section>
+    }
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-flat-button color="primary" (click)="close()">{{ 'common.close' | transloco }}</button>
+</mat-dialog-actions>

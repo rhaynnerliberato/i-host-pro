@@ -637,6 +637,406 @@ export class Client {
     }
 
     /**
+     * @return OK
+     */
+    policies(): Observable<PolicyDefinitionResponse[]> {
+        let url_ = this.baseUrl + "/api/v1/policies";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processPolicies(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processPolicies(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<PolicyDefinitionResponse[]>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<PolicyDefinitionResponse[]>;
+        }));
+    }
+
+    protected processPolicies(response: HttpResponseBase): Observable<PolicyDefinitionResponse[]> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PolicyDefinitionResponse[];
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @param scopeType (optional) 
+     * @param propertyId (optional) 
+     * @return OK
+     */
+    valuesGET(policyCode: string, scopeType?: string | undefined, propertyId?: string | undefined): Observable<PolicyValueDetailResponse> {
+        let url_ = this.baseUrl + "/api/v1/policies/{policyCode}/values?";
+        if (policyCode === undefined || policyCode === null)
+            throw new globalThis.Error("The parameter 'policyCode' must be defined.");
+        url_ = url_.replace("{policyCode}", encodeURIComponent("" + policyCode));
+        if (scopeType === null)
+            throw new globalThis.Error("The parameter 'scopeType' cannot be null.");
+        else if (scopeType !== undefined)
+            url_ += "scopeType=" + encodeURIComponent("" + scopeType) + "&";
+        if (propertyId === null)
+            throw new globalThis.Error("The parameter 'propertyId' cannot be null.");
+        else if (propertyId !== undefined)
+            url_ += "propertyId=" + encodeURIComponent("" + propertyId) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processValuesGET(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processValuesGET(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<PolicyValueDetailResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<PolicyValueDetailResponse>;
+        }));
+    }
+
+    protected processValuesGET(response: HttpResponseBase): Observable<PolicyValueDetailResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PolicyValueDetailResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @param body (optional) 
+     * @return Created
+     */
+    valuesPOST(policyCode: string, body?: CreatePolicyValueVersionRequest | undefined): Observable<PolicyValueDetailResponse> {
+        let url_ = this.baseUrl + "/api/v1/policies/{policyCode}/values";
+        if (policyCode === undefined || policyCode === null)
+            throw new globalThis.Error("The parameter 'policyCode' must be defined.");
+        url_ = url_.replace("{policyCode}", encodeURIComponent("" + policyCode));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(body);
+
+        let options_ : any = {
+            body: content_,
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processValuesPOST(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processValuesPOST(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<PolicyValueDetailResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<PolicyValueDetailResponse>;
+        }));
+    }
+
+    protected processValuesPOST(response: HttpResponseBase): Observable<PolicyValueDetailResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 201) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result201: any = null;
+            result201 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PolicyValueDetailResponse;
+            return _observableOf(result201);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @param propertyId (optional) 
+     * @return OK
+     */
+    effective(policyCode: string, propertyId?: string | undefined): Observable<EffectivePolicyResponse> {
+        let url_ = this.baseUrl + "/api/v1/policies/{policyCode}/effective?";
+        if (policyCode === undefined || policyCode === null)
+            throw new globalThis.Error("The parameter 'policyCode' must be defined.");
+        url_ = url_.replace("{policyCode}", encodeURIComponent("" + policyCode));
+        if (propertyId === null)
+            throw new globalThis.Error("The parameter 'propertyId' cannot be null.");
+        else if (propertyId !== undefined)
+            url_ += "propertyId=" + encodeURIComponent("" + propertyId) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processEffective(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processEffective(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<EffectivePolicyResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<EffectivePolicyResponse>;
+        }));
+    }
+
+    protected processEffective(response: HttpResponseBase): Observable<EffectivePolicyResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as EffectivePolicyResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @param scopeType (optional) 
+     * @param propertyId (optional) 
+     * @return OK
+     */
+    history(policyCode: string, scopeType?: string | undefined, propertyId?: string | undefined): Observable<PolicyValueDetailResponse[]> {
+        let url_ = this.baseUrl + "/api/v1/policies/{policyCode}/history?";
+        if (policyCode === undefined || policyCode === null)
+            throw new globalThis.Error("The parameter 'policyCode' must be defined.");
+        url_ = url_.replace("{policyCode}", encodeURIComponent("" + policyCode));
+        if (scopeType === null)
+            throw new globalThis.Error("The parameter 'scopeType' cannot be null.");
+        else if (scopeType !== undefined)
+            url_ += "scopeType=" + encodeURIComponent("" + scopeType) + "&";
+        if (propertyId === null)
+            throw new globalThis.Error("The parameter 'propertyId' cannot be null.");
+        else if (propertyId !== undefined)
+            url_ += "propertyId=" + encodeURIComponent("" + propertyId) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processHistory(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processHistory(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<PolicyValueDetailResponse[]>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<PolicyValueDetailResponse[]>;
+        }));
+    }
+
+    protected processHistory(response: HttpResponseBase): Observable<PolicyValueDetailResponse[]> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PolicyValueDetailResponse[];
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
      * @param body (optional) 
      * @return Created
      */
@@ -2668,6 +3068,14 @@ export interface CreateCondominiumRequest {
     address?: AddressRequest;
 }
 
+export interface CreatePolicyValueVersionRequest {
+    scopeType?: string | undefined;
+    propertyId?: string | undefined;
+    value?: any;
+    reason?: string | undefined;
+    expectedVersion?: number | undefined;
+}
+
 export interface CreatePropertyRequest {
     code?: string | undefined;
     name?: string | undefined;
@@ -2690,6 +3098,14 @@ export interface CreateUserRequest {
     email?: string | undefined;
     initialPassword?: string | undefined;
     roleCode?: string | undefined;
+}
+
+export interface EffectivePolicyResponse {
+    policyCode?: string | undefined;
+    status?: string | undefined;
+    value?: any | undefined;
+    resolvedScope?: string | undefined;
+    version?: number | undefined;
 }
 
 export interface LinkPropertyOwnerRequest {
@@ -2746,6 +3162,29 @@ export interface PagedUserResponse {
     pageSize?: number;
     totalCount?: number;
     items?: UserResponse[] | undefined;
+}
+
+export interface PolicyDefinitionResponse {
+    code?: string | undefined;
+    name?: string | undefined;
+    description?: string | undefined;
+    category?: string | undefined;
+    valueType?: string | undefined;
+    schemaVersion?: number;
+    isActive?: boolean;
+}
+
+export interface PolicyValueDetailResponse {
+    id?: string;
+    policyCode?: string | undefined;
+    scopeType?: string | undefined;
+    propertyId?: string | undefined;
+    version?: number;
+    value?: any;
+    createdAtUtc?: Date;
+    createdByUserId?: string;
+    reason?: string | undefined;
+    isCurrent?: boolean;
 }
 
 export interface ProblemDetails {

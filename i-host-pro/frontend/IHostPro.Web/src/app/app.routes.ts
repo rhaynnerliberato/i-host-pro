@@ -46,6 +46,12 @@ export const routes: Routes = [
         data: { titleKey: 'layout.nav.reservations', permissions: ['RESERVATIONS:MANAGE'] },
         loadComponent: () => import('./features/reservations/reservations-list/reservations-list').then((m) => m.ReservationsList),
       },
+      {
+        path: 'policies',
+        canActivate: [permissionGuard],
+        data: { titleKey: 'layout.nav.policies', permissions: ['POLICIES:READ', 'POLICIES:MANAGE'] },
+        loadComponent: () => import('./features/policies/policies-list/policies-list').then((m) => m.PoliciesList),
+      },
     ],
   },
 ];

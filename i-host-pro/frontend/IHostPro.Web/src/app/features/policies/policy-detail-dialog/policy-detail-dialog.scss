@@ -1,0 +1,61 @@
+.policy-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 480px;
+}
+
+.policy-description {
+  color: rgba(0, 0, 0, 0.6);
+  margin: 0;
+}
+
+.scope-row {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.policy-detail-state {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0;
+}
+
+.policy-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  h3 {
+    margin: 0;
+  }
+
+  pre {
+    background: rgba(0, 0, 0, 0.04);
+    padding: 0.75rem;
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+.form-error {
+  color: var(--mat-sys-error, #b3261e);
+}
+
+.full-width {
+  width: 100%;
+}

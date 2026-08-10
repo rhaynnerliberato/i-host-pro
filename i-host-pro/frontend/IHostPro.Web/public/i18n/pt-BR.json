@@ -34,7 +34,8 @@
       "users": "Usuários",
       "properties": "Imóveis",
       "condominiums": "Condomínios",
-      "reservations": "Reservas"
+      "reservations": "Reservas",
+      "policies": "Políticas"
     }
   },
   "home": {
@@ -305,6 +306,89 @@
         "conflict": "Não foi possível concluir a ação devido a um conflito (agenda, reserva já cancelada ou edição concorrente).",
         "validation": "Verifique os dados informados.",
         "generic": "Não foi possível salvar. Tente novamente."
+      }
+    }
+  },
+  "policies": {
+    "list": {
+      "title": "Políticas",
+      "loadError": "Não foi possível carregar as políticas.",
+      "empty": "Nenhuma política encontrada.",
+      "columns": {
+        "code": "Código",
+        "name": "Nome",
+        "category": "Categoria",
+        "actions": "Ações"
+      },
+      "manage": "Gerenciar"
+    },
+    "detail": {
+      "title": "{{name}}",
+      "scope": "Escopo",
+      "scopeTenant": "Empresa (toda a conta)",
+      "scopeProperty": "Imóvel específico",
+      "propertyId": "ID do imóvel",
+      "propertyIdRequired": "Informe o ID do imóvel.",
+      "load": "Carregar",
+      "currentValue": {
+        "title": "Valor neste escopo"
+      },
+      "effective": {
+        "title": "Valor efetivo",
+        "resolved": "Configurado",
+        "notConfigured": "Não configurado em nenhum nível.",
+        "definedHere": "Definido neste nível.",
+        "inheritedFromTenant": "Herdado da configuração da empresa.",
+        "inheritedFromGlobal": "Herdado do padrão do sistema.",
+        "version": "Versão {{version}}",
+        "loadError": "Não foi possível carregar o valor efetivo."
+      },
+      "history": {
+        "title": "Histórico neste escopo",
+        "empty": "Nenhuma versão registrada neste escopo.",
+        "loadError": "Não foi possível carregar o histórico.",
+        "columns": {
+          "version": "Versão",
+          "createdAt": "Data",
+          "createdBy": "Alterado por",
+          "reason": "Motivo",
+          "current": "Atual"
+        }
+      },
+      "form": {
+        "title": "Nova versão",
+        "reason": "Motivo",
+        "reasonRequired": "Informe o motivo da alteração.",
+        "allowed": "Permitido",
+        "earliestTime": "Horário mais cedo",
+        "latestTime": "Horário mais tarde",
+        "requiresCleaningCompleted": "Exige limpeza concluída",
+        "requiresForm": "Exige formulário assinado",
+        "notifyFrontDesk": "Notificar recepção",
+        "chargeType": "Tipo de cobrança",
+        "chargeTypeNone": "Nenhuma",
+        "chargeTypeFixedAmount": "Valor fixo",
+        "chargeTypePercentage": "Percentual",
+        "chargeValue": "Valor da cobrança",
+        "requiresPix": "Exige pagamento via Pix",
+        "blocksCalendar": "Bloqueia a agenda",
+        "updatesCleaning": "Atualiza a agenda de limpeza",
+        "submit": "Salvar nova versão",
+        "createdSuccess": "Nova versão criada com sucesso.",
+        "errors": {
+          "policy_not_found": "Política não encontrada.",
+          "invalid_policy_value": "O valor informado é inválido para esta política.",
+          "scope_not_supported": "O escopo selecionado não é suportado.",
+          "policy_not_configured": "Não há valor configurado atualmente neste escopo.",
+          "version_conflict": "Esta política foi alterada por outra pessoa. Recarregue o valor atual e tente novamente.",
+          "forbidden": "Este escopo não pode ser editado.",
+          "validation_error": "Verifique os dados informados.",
+          "generic": "Não foi possível salvar. Tente novamente."
+        }
+      },
+      "errors": {
+        "policy_not_configured": "Não há valor configurado atualmente neste escopo.",
+        "generic": "Não foi possível carregar. Tente novamente."
       }
     }
   }
