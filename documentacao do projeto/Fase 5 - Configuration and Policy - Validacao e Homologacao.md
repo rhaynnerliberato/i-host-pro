@@ -1,8 +1,8 @@
 # Fase 5 — Configuration & Policy — Validação e Homologação
 
-Versão: 1.2 (Incremento 1 aprovado, versionado e publicado em `origin/feature/configuration-policy` — ver §18)
+Versão: 1.3 (Fase 5 funcionalmente concluída para o escopo atualmente justificável — ver §18 e §19)
 
-Status: **Incremento 1 (Policy Engine Foundation) concluído, versionado e publicado** — todos os 7 checkpoints concluídos; suíte de backend completa (1.643 testes) e suíte E2E completa (54 testes, duas execuções consecutivas) 100% aprovadas; build Debug e Release ambas limpas; *benchmark* oficial da decisão 7 dentro da meta (p95 = 36,41 ms ≤ 50 ms); ambiente de homologação restaurado; débito preventivo de descoberta Wolverine fechado (§18.2). Quatro commits publicados em `origin/feature/configuration-policy` (§18.4/§18.5); o quinto (este) fecha a publicação. Nenhum merge para `master`, tag, exclusão de branch ou force-push em nenhum momento — ver §18 para o estado detalhado e os hashes completos. Fase 5 continua em andamento (§18.6) — Incremento 2 (Configuration/Settings) ainda não implementado.
+Status: **Fase 5 (Configuration & Policy) concluída para o escopo atualmente justificável.** Incremento 1 (Policy Engine Foundation) — concluído e publicado: todos os 7 checkpoints aprovados, suíte de backend completa (1.643 testes) e suíte E2E completa (54 testes, duas execuções consecutivas) 100% aprovadas, build Debug e Release ambas limpas, *benchmark* oficial da decisão 7 dentro da meta (p95 = 36,41 ms ≤ 50 ms), débito preventivo de descoberta Wolverine fechado (§18.2), cinco commits publicados (§18.4/§18.5). Incremento 2 (Configuration/Settings) — **auditoria concluída, nenhuma implementação justificada no MVP atual** (§19): nenhum candidato encontrado satisfez simultaneamente consumidor real, variabilidade por tenant documentada, natureza de configuração (não Política/segurança/infraestrutura) e valor de negócio suficiente. Esta é uma decisão explícita de escopo baseada em auditoria real do código e da documentação — não uma implementação incompleta ou pendente. Administração de Políticas (`/policies`) entregue e homologada; Configurações (Settings) conscientemente adiadas até surgir um consumidor real; Feature Flags, Templates, vigência temporal e escopo por Grupo/Condomínio/Usuário permanecem fora do MVP, conforme decisões oficiais já registradas em §3/§4. Nenhum merge para `master`, tag, exclusão de branch ou force-push em nenhum momento até este ponto — ver §18/§19/§20 para o estado detalhado.
 
 ---
 
@@ -627,3 +627,35 @@ Este parágrafo (§18.5) e o Commit 5 que o inclui (`docs(configuration): close 
 ### 18.6 Estado da Fase 5 após a publicação
 
 A Fase 5 **continua em andamento**: este documento registra o fechamento e a publicação do Incremento 1 (Policy Engine Foundation). O Incremento 2 (Configuration/Settings) ainda não foi implementado — nenhum `ConfigurationDefinition`/`ConfigurationValue`/migração/API/frontend/teste foi criado. Apenas a auditoria e o planejamento somente leitura, sem código, começam após esta publicação (relatório de auditoria apresentado separadamente na conversa); a implementação do Incremento 2 aguarda aprovação explícita do usuário.
+
+## 19. Incremento 2 — Configuration/Settings — Auditoria de Elegibilidade
+
+Auditoria somente leitura executada e apresentada separadamente na conversa (inventário completo de valores hardcoded/duplicados no código real, leitura integral do Documento 08, do Documento 12 §11, do Documento 14 §28/§33, de `Architecture Principles.md` e do `Plano Executivo de Desenvolvimento por Fases.md`, e uma matriz de candidatos com doze critérios cada). O usuário aprovou formalmente a conclusão da auditoria: **nenhum candidato aprovado para implementação**. Nenhum código foi criado nesta auditoria — nenhum `ConfigurationDefinition`, nenhum `ConfigurationValue`, nenhuma migração, nenhuma API, nenhum frontend, nenhum evento `ConfigurationUpdated`, nenhum cache novo.
+
+Critério de elegibilidade aplicado a cada candidato encontrado: só entraria no Incremento 2 um valor que tivesse simultaneamente (1) consumidor real no código; (2) variabilidade por tenant documentada; (3) natureza de configuração de comportamento, não de política de negócio nem de segurança/infraestrutura; (4) valor de negócio suficiente para justificar o motor. Nenhum candidato encontrado satisfez os quatro critérios ao mesmo tempo — motivo pelo qual o Incremento 2 se encerra como auditoria, sem catálogo implementado.
+
+### 19.1 `DefaultPageSize` / `MaxPageSize`
+
+Encontrados duplicados como literais (`20`/`100`) em `UserListingOptions` (Identity, já `IOptions`), e como `const int` repetido em `ListCondominiumsQueryHandler`/`ListCondominiumsQueryValidator`/`CondominiumReader`, `ListPropertiesQueryHandler`/`ListPropertiesQueryValidator`/`PropertyReader`, `ListPropertyOwnersQueryHandler`/`ListPropertyOwnersQueryValidator`/`PropertyOwnerReader` (Property Management) e `ListReservationsQueryHandler`/`ListReservationsQueryValidator`/`ReservationReader` (Reservations).
+
+**Classificação oficial**: débito técnico de duplicação de código — não pertence ao Configuration & Policy. Nenhuma variabilidade por tenant foi documentada em nenhum dos documentos consultados (Documento 08, 12, 14). Não implementar agora. Registrado como débito técnico futuro: uma eventual correção deve unificar o valor em uma opção/constante técnica compartilhada (por exemplo, um `IOptions` em `BuildingBlocks`), nunca como `ConfigurationDefinition`. Nenhuma refatoração foi executada nesta fase.
+
+### 19.2 Idioma padrão
+
+Encontrado hardcoded (`defaultLang: 'pt-BR'`) em `app.config.ts` (Transloco), único idioma padrão para toda a plataforma, sem leitura de nenhuma fonte externa.
+
+**Classificação oficial**: requisito válido e documentado para personalização por tenant (Documento 14 §33: "cada tenant poderá personalizar... idioma padrão"). Não implementar agora — depende de uma decisão futura ainda não tomada sobre como identificar o tenant antes da autenticação (a tela de login não tem nenhum tenant resolvido no momento em que o idioma da própria tela de login precisaria ser decidido). `pt-BR` permanece como comportamento atual, inalterado. Nenhuma configuração parcial que só funcionasse depois do login foi criada.
+
+### 19.3 Fuso horário
+
+Nenhum fuso horário hardcoded foi encontrado no código — todo tratamento de data já usa `DateTimeOffset`/UTC normalizado, sem nenhum valor fixo a substituir.
+
+**Classificação oficial**: requisito futuro válido (Documento 14 §33: "fuso horário" entre os itens personalizáveis por tenant), mas sem consumidor funcional atual que necessite do motor de Configuration — nenhuma tela hoje formata ou exibe horários com um fuso presumido. Não implementar agora.
+
+### 19.4 Segurança — confirmação de que permanecem configuração técnica de plataforma
+
+Confirmado: `AccountLockoutOptions`, `Argon2Options`, `JwtOptions`, `JwtSigningKeyOptions`, `PasswordPolicyOptions` e `RefreshTokenOptions` continuam sendo configuração técnica/de segurança da plataforma (já implementadas como `IOptions` validadas com `ValidateOnStart`, section-bound em `appsettings.json`/variáveis de ambiente) e **nunca** configuração administrável por tenant. Fundamento: Documento 08 §27 exclui explicitamente "as garantias de segurança" da configurabilidade pelo administrador; `JwtSigningKeyOptions` armazena material de segredo, nunca elegível ao motor por instrução direta do usuário. Nenhuma dessas seis classes foi alterada nesta auditoria.
+
+### 19.5 Infraestrutura — confirmação de que permanecem em deployment/appsettings/IOptions
+
+Confirmado: Redis, RabbitMQ, connection strings, cache TTL técnico (`PolicyCacheOptions.TimeToLive`, `PermissionCacheOptions.Lifetime`, `SessionRevocationCacheOptions`), timeouts (`RabbitMqClientTimeoutOptions`), CORS, logging, observabilidade (OpenTelemetry/OTLP) e URLs internas permanecem exclusivamente em `appsettings.json`/variáveis de ambiente/`IOptions`, e não entram no motor de Configuration em nenhum momento desta fase. Nenhum desses itens foi alterado nesta auditoria.
