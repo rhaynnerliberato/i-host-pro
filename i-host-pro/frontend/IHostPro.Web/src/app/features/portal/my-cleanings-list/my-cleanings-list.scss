@@ -1,0 +1,40 @@
+.my-cleanings-list__title {
+  font-size: 20px;
+  margin: 4px 0 16px;
+}
+
+.my-cleanings-list__centered {
+  display: flex;
+  justify-content: center;
+  padding: 32px 0;
+}
+
+.my-cleanings-list__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.my-cleanings-list__card {
+  cursor: pointer;
+}
+
+.my-cleanings-list__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.my-cleanings-list__property {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-cleanings-list__schedule {
+  margin-top: 4px;
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 14px;
+}

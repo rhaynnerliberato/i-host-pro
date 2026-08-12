@@ -1,0 +1,112 @@
+<button mat-button class="my-cleaning-detail__back" (click)="goBack()">← {{ 'portal.detail.back' | transloco }}</button>
+
+@switch (state()) {
+  @case ('loading') {
+    <div class="my-cleaning-detail__centered">
+      <mat-spinner diameter="40" />
+    </div>
+  }
+  @case ('error') {
+    <p class="my-cleaning-detail__centered">{{ 'portal.detail.loadError' | transloco }}</p>
+  }
+  @case ('loaded') {
+    @if (cleaning(); as c) {
+      <mat-card class="my-cleaning-detail__summary">
+        <mat-card-content>
+          <div class="my-cleaning-detail__row">
+            <span class="my-cleaning-detail__property">{{ c.propertyId }}</span>
+            <mat-chip>{{ statusLabelKey(c.status) | transloco }}</mat-chip>
+          </div>
+          @if (c.scheduledAtUtc) {
+            <div class="my-cleaning-detail__schedule">{{ c.scheduledAtUtc | date: 'medium' }}</div>
+          }
+        </mat-card-content>
+      </mat-card>
+
+      <section class="my-cleaning-detail__actions">
+        @if (canMarkInTransit()) {
+          <button mat-flat-button color="primary" (click)="markInTransit()">{{ 'portal.detail.markInTransit' | transloco }}</button>
+        }
+        @if (canStart()) {
+          <button mat-flat-button color="primary" (click)="start()">{{ 'portal.detail.start' | transloco }}</button>
+        }
+        @if (canStartInspection()) {
+          <button mat-flat-button color="primary" (click)="startInspection()">{{ 'portal.detail.startInspection' | transloco }}</button>
+        }
+        @if (canComplete()) {
+          <button mat-flat-button color="primary" (click)="complete()">{{ 'portal.detail.complete' | transloco }}</button>
+        }
+        @if (!isTerminal()) {
+          <button mat-stroked-button (click)="reportDelay()">{{ 'portal.detail.reportDelay' | transloco }}</button>
+        }
+        @if (canMarkWaitingMaterials()) {
+          <button mat-stroked-button (click)="markWaitingMaterials()">{{ 'portal.detail.markWaitingMaterials' | transloco }}</button>
+        }
+        @if (canMarkWaitingHelp()) {
+          <button mat-stroked-button (click)="markWaitingHelp()">{{ 'portal.detail.markWaitingHelp' | transloco }}</button>
+        }
+      </section>
+
+      <section class="my-cleaning-detail__section">
+        <div class="my-cleaning-detail__section-header">
+          <h2>{{ 'portal.detail.occurrences.title' | transloco }}</h2>
+          @if (!isTerminal()) {
+            <button mat-button (click)="toggleOccurrenceForm()">{{ 'portal.detail.occurrences.register' | transloco }}</button>
+          }
+        </div>
+
+        @if (occurrenceFormOpen()) {
+          <form [formGroup]="occurrenceForm" class="my-cleaning-detail__occurrence-form" (ngSubmit)="submitOccurrence()">
+            <mat-form-field appearance="outline">
+              <mat-label>{{ 'portal.detail.occurrences.type' | transloco }}</mat-label>
+              <mat-select formControlName="type">
+                @for (code of occurrenceTypeCodes; track code) {
+                  <mat-option [value]="code">{{ 'portal.detail.occurrences.types.' + code | transloco }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>{{ 'portal.detail.occurrences.description' | transloco }}</mat-label>
+              <textarea matInput formControlName="description" rows="2"></textarea>
+            </mat-form-field>
+            <button mat-flat-button color="primary" type="submit" [disabled]="occurrenceForm.invalid">
+              {{ 'portal.detail.occurrences.submit' | transloco }}
+            </button>
+          </form>
+        }
+
+        @if (occurrences().length === 0) {
+          <p class="my-cleaning-detail__empty">{{ 'portal.detail.occurrences.empty' | transloco }}</p>
+        } @else {
+          <ul class="my-cleaning-detail__occurrence-list">
+            @for (occurrence of occurrences(); track occurrence.id) {
+              <li>
+                <strong>{{ 'portal.detail.occurrences.types.' + occurrence.type | transloco }}</strong>
+                @if (occurrence.description) {
+                  <span> — {{ occurrence.description }}</span>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
+      <section class="my-cleaning-detail__section">
+        <h2>{{ 'portal.detail.checklist.title' | transloco }}</h2>
+        <ul class="my-cleaning-detail__checklist">
+          @for (code of checklistItemCodes; track code) {
+            <li>
+              <mat-checkbox
+                [checked]="isChecked(code)"
+                [disabled]="isTerminal()"
+                (change)="toggleChecklistItem(code, $event.checked)"
+              >
+                {{ 'portal.detail.checklist.items.' + code | transloco }}
+              </mat-checkbox>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  }
+}

@@ -1,0 +1,25 @@
+<div class="portal-shell">
+  <mat-toolbar class="portal-shell__toolbar" color="primary">
+    <span>{{ 'portal.shell.title' | transloco }}</span>
+  </mat-toolbar>
+
+  <main class="portal-shell__content">
+    <router-outlet />
+  </main>
+
+  <nav class="portal-shell__bottom-nav">
+    <a
+      class="portal-shell__nav-item"
+      routerLink="/my-cleanings"
+      routerLinkActive="portal-shell__nav-item--active"
+      [routerLinkActiveOptions]="{ exact: true }"
+    >
+      <mat-icon>cleaning_services</mat-icon>
+      <span>{{ 'portal.shell.myCleanings' | transloco }}</span>
+    </a>
+    <button type="button" class="portal-shell__nav-item" (click)="logout()">
+      <mat-icon>logout</mat-icon>
+      <span>{{ 'portal.shell.logout' | transloco }}</span>
+    </button>
+  </nav>
+</div>

@@ -496,5 +496,96 @@
       "completedAtUtc": "Completed at",
       "cancelledAtUtc": "Cancelled at"
     }
+  },
+  "portal": {
+    "shell": {
+      "title": "iHostPro",
+      "myCleanings": "My Cleanings",
+      "logout": "Log out"
+    },
+    "list": {
+      "title": "My Cleanings",
+      "loadError": "Unable to load your cleanings.",
+      "empty": "No cleanings assigned to you right now.",
+      "start": "Start",
+      "startInspection": "Start inspection",
+      "complete": "Complete",
+      "startedSuccess": "Cleaning started.",
+      "inspectionStartedSuccess": "Inspection started.",
+      "completedSuccess": "Cleaning completed.",
+      "status": {
+        "Pending": "Pending",
+        "Assigned": "Assigned",
+        "InTransit": "On the way",
+        "Started": "In progress",
+        "InInspection": "In inspection",
+        "Completed": "Completed",
+        "Cancelled": "Cancelled",
+        "Interrupted": "Interrupted",
+        "WaitingMaterials": "Waiting for materials",
+        "WaitingHelp": "Waiting for help"
+      },
+      "errors": {
+        "conflict": "The action could not be completed due to a conflict with the cleaning's current state.",
+        "notFound": "Cleaning not found.",
+        "generic": "The action could not be completed. Please try again."
+      }
+    },
+    "detail": {
+      "back": "Back",
+      "loadError": "Unable to load this cleaning.",
+      "markInTransit": "I'm on my way",
+      "start": "Start",
+      "startInspection": "Start inspection",
+      "complete": "Complete",
+      "reportDelay": "Report delay",
+      "markWaitingMaterials": "Need materials",
+      "markWaitingHelp": "Need help",
+      "inTransitSuccess": "Marked as on the way.",
+      "startedSuccess": "Cleaning started.",
+      "inspectionStartedSuccess": "Inspection started.",
+      "completedSuccess": "Cleaning completed.",
+      "waitingMaterialsSuccess": "Marked as waiting for materials.",
+      "waitingHelpSuccess": "Marked as waiting for help.",
+      "delaySuccess": "Delay reported.",
+      "occurrences": {
+        "title": "Occurrences",
+        "register": "Register occurrence",
+        "type": "Type",
+        "description": "Description (optional)",
+        "submit": "Register",
+        "empty": "No occurrences registered.",
+        "occurrenceRegistered": "Occurrence registered.",
+        "types": {
+          "Theft": "Theft",
+          "Breakage": "Breakage",
+          "ForgottenObject": "Forgotten object",
+          "Damage": "Damage",
+          "Animal": "Animal",
+          "Smoking": "Smoking",
+          "Noise": "Noise",
+          "MaterialShortage": "Material shortage"
+        }
+      },
+      "checklist": {
+        "title": "Checklist",
+        "items": {
+          "Stove": "Stove",
+          "Refrigerator": "Refrigerator",
+          "Tv": "TV",
+          "AirConditioning": "Air conditioning",
+          "Bathroom": "Bathroom",
+          "Linens": "Linens",
+          "Trash": "Trash",
+          "Window": "Window"
+        }
+      },
+      "errors": {
+        "conflict": "The action could not be completed due to a conflict with the cleaning's current state.",
+        "validation": "Check the entered information and try again.",
+        "notFound": "Cleaning not found.",
+        "generic": "The action could not be completed. Please try again."
+      }
+    }
   }
 }

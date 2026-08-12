@@ -496,5 +496,96 @@
       "completedAtUtc": "Concluída em",
       "cancelledAtUtc": "Cancelada em"
     }
+  },
+  "portal": {
+    "shell": {
+      "title": "iHostPro",
+      "myCleanings": "Minhas Faxinas",
+      "logout": "Sair"
+    },
+    "list": {
+      "title": "Minhas Faxinas",
+      "loadError": "Não foi possível carregar suas faxinas.",
+      "empty": "Nenhuma faxina atribuída a você no momento.",
+      "start": "Iniciar",
+      "startInspection": "Iniciar inspeção",
+      "complete": "Concluir",
+      "startedSuccess": "Faxina iniciada.",
+      "inspectionStartedSuccess": "Inspeção iniciada.",
+      "completedSuccess": "Faxina concluída.",
+      "status": {
+        "Pending": "Pendente",
+        "Assigned": "Designada",
+        "InTransit": "A caminho",
+        "Started": "Em andamento",
+        "InInspection": "Em inspeção",
+        "Completed": "Concluída",
+        "Cancelled": "Cancelada",
+        "Interrupted": "Interrompida",
+        "WaitingMaterials": "Aguardando materiais",
+        "WaitingHelp": "Aguardando ajuda"
+      },
+      "errors": {
+        "conflict": "A ação não pôde ser concluída devido a um conflito com o estado atual da faxina.",
+        "notFound": "Faxina não encontrada.",
+        "generic": "Não foi possível concluir a ação. Tente novamente."
+      }
+    },
+    "detail": {
+      "back": "Voltar",
+      "loadError": "Não foi possível carregar esta faxina.",
+      "markInTransit": "Estou a caminho",
+      "start": "Iniciar",
+      "startInspection": "Iniciar inspeção",
+      "complete": "Concluir",
+      "reportDelay": "Informar atraso",
+      "markWaitingMaterials": "Preciso de materiais",
+      "markWaitingHelp": "Preciso de ajuda",
+      "inTransitSuccess": "Marcado como a caminho.",
+      "startedSuccess": "Faxina iniciada.",
+      "inspectionStartedSuccess": "Inspeção iniciada.",
+      "completedSuccess": "Faxina concluída.",
+      "waitingMaterialsSuccess": "Marcada como aguardando materiais.",
+      "waitingHelpSuccess": "Marcada como aguardando ajuda.",
+      "delaySuccess": "Atraso informado.",
+      "occurrences": {
+        "title": "Ocorrências",
+        "register": "Registrar ocorrência",
+        "type": "Tipo",
+        "description": "Descrição (opcional)",
+        "submit": "Registrar",
+        "empty": "Nenhuma ocorrência registrada.",
+        "occurrenceRegistered": "Ocorrência registrada.",
+        "types": {
+          "Theft": "Furto",
+          "Breakage": "Quebra",
+          "ForgottenObject": "Objeto esquecido",
+          "Damage": "Dano",
+          "Animal": "Animal",
+          "Smoking": "Fumo",
+          "Noise": "Ruído",
+          "MaterialShortage": "Falta de material"
+        }
+      },
+      "checklist": {
+        "title": "Checklist",
+        "items": {
+          "Stove": "Fogão",
+          "Refrigerator": "Geladeira",
+          "Tv": "TV",
+          "AirConditioning": "Ar-condicionado",
+          "Bathroom": "Banheiro",
+          "Linens": "Enxoval",
+          "Trash": "Lixo",
+          "Window": "Janela"
+        }
+      },
+      "errors": {
+        "conflict": "A ação não pôde ser concluída devido a um conflito com o estado atual da faxina.",
+        "validation": "Verifique as informações preenchidas e tente novamente.",
+        "notFound": "Faxina não encontrada.",
+        "generic": "Não foi possível concluir a ação. Tente novamente."
+      }
+    }
   }
 }

@@ -1,0 +1,39 @@
+<h1 class="my-cleanings-list__title">{{ 'portal.list.title' | transloco }}</h1>
+
+@switch (state()) {
+  @case ('loading') {
+    <div class="my-cleanings-list__centered">
+      <mat-spinner diameter="40" />
+    </div>
+  }
+  @case ('error') {
+    <p class="my-cleanings-list__centered">{{ 'portal.list.loadError' | transloco }}</p>
+  }
+  @case ('empty') {
+    <p class="my-cleanings-list__centered">{{ 'portal.list.empty' | transloco }}</p>
+  }
+  @case ('loaded') {
+    <div class="my-cleanings-list__cards">
+      @for (cleaning of cleanings(); track cleaning.id) {
+        <mat-card class="my-cleanings-list__card" (click)="openDetail(cleaning)">
+          <mat-card-content>
+            <div class="my-cleanings-list__row">
+              <span class="my-cleanings-list__property">{{ cleaning.propertyId }}</span>
+              <mat-chip>{{ statusLabelKey(cleaning.status) | transloco }}</mat-chip>
+            </div>
+            @if (cleaning.scheduledAtUtc) {
+              <div class="my-cleanings-list__schedule">{{ cleaning.scheduledAtUtc | date: 'short' }}</div>
+            }
+          </mat-card-content>
+          @if (primaryActionKey(cleaning.status); as actionKey) {
+            <mat-card-actions>
+              <button mat-flat-button color="primary" (click)="runPrimaryAction(cleaning, $event)">
+                {{ actionKey | transloco }}
+              </button>
+            </mat-card-actions>
+          }
+        </mat-card>
+      }
+    </div>
+  }
+}

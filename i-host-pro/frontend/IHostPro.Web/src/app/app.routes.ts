@@ -60,4 +60,26 @@ export const routes: Routes = [
       },
     ],
   },
+  {
+    // Portal da Faxineira (Fase 6, Incremento 2A) — deliberately a SEPARATE
+    // route tree from the admin layout above, its own dedicated mobile-first
+    // shell, never nested under AdminLayout (approval §5-6).
+    path: 'my-cleanings',
+    canActivate: [authGuard],
+    loadComponent: () => import('./layout/portal-shell/portal-shell').then((m) => m.PortalShell),
+    children: [
+      {
+        path: '',
+        canActivate: [permissionGuard],
+        data: { permissions: ['CLEANINGS:MANAGE:OWN_CLEANING'] },
+        loadComponent: () => import('./features/portal/my-cleanings-list/my-cleanings-list').then((m) => m.MyCleaningsList),
+      },
+      {
+        path: ':cleaningId',
+        canActivate: [permissionGuard],
+        data: { permissions: ['CLEANINGS:MANAGE:OWN_CLEANING'] },
+        loadComponent: () => import('./features/portal/my-cleaning-detail/my-cleaning-detail').then((m) => m.MyCleaningDetail),
+      },
+    ],
+  },
 ];
