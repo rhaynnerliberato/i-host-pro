@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fase 6, Incremento 1: first Integration Events, exactly the subset
+    already catalogued in Documento 07 §6 that this increment's
+    administrative lifecycle actually reaches (CleaningCreated,
+    CleaningAssigned, CleaningStarted, CleaningInspectionStarted,
+    CleaningCompleted, CleaningCancelled) — see ADR-013 (RabbitMQ routing
+    convention). CleaningDelayed/CleaningNeedsHelp/CleaningNeedsMaterial stay
+    uncreated this increment: all three correspond to Faxineira-initiated
+    self-service actions (Documento 09 §7), deferred to the Portal da
+    Faxineira (Incremento 2).
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Messaging.Abstractions\IHostPro.BuildingBlocks.Messaging.Abstractions.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

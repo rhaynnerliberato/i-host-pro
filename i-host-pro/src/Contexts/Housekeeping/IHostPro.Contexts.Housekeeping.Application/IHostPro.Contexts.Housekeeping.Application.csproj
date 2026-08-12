@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fase 6, Incremento 1. Identity.Contracts referenced solely for
+    IIdentityUserEligibilityReader (Checkpoint 0 gate — reused as-is,
+    already generic over requiredRoleCode, no new contract needed) and
+    IdentityPermissionCodes. Reservations.Contracts/PropertyManagement.Contracts
+    referenced solely for the Integration Event types consumed to build this
+    context's local read projections (Checkpoint 3) — never their
+    Application/Infrastructure/Api layers.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\IHostPro.Contexts.Housekeeping.Domain\IHostPro.Contexts.Housekeeping.Domain.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.Housekeeping.Contracts\IHostPro.Contexts.Housekeeping.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="..\..\Identity\IHostPro.Contexts.Identity.Contracts\IHostPro.Contexts.Identity.Contracts.csproj" />
+    <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
+    <ProjectReference Include="..\..\PropertyManagement\IHostPro.Contexts.PropertyManagement.Contracts\IHostPro.Contexts.PropertyManagement.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mediator.SourceGenerator" Version="3.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

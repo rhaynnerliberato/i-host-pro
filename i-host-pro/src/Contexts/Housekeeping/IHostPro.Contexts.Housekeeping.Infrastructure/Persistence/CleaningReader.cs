@@ -1,0 +1,86 @@
+using IHostPro.BuildingBlocks.Application;
+using IHostPro.Contexts.Housekeeping.Application.Cleanings;
+using Microsoft.EntityFrameworkCore;
+
+namespace IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
+
+/// <inheritdoc cref="ICleaningReader"/>
+/// <remarks>
+/// Reads exclusively from <see cref="HousekeepingDbContext"/> —
+/// <c>Cleaning</c> is <c>ITenantOwned</c>, so the Global Query Filter
+/// already scopes every query here to the current tenant (mirrors
+/// <c>ReservationReader</c>). Relies on the ambient tenant-aware transaction
+/// <c>TenantTransactionBehavior&lt;,&gt;</c> already opens around the whole
+/// query-handler call (RLS's <c>app.tenant_id</c> included) — no
+/// scope-opening needed here.
+/// </remarks>
+public sealed class CleaningReader : ICleaningReader
+{
+    public const int MaxPageSize = 100;
+
+    private readonly HousekeepingDbContext _dbContext;
+
+    public CleaningReader(HousekeepingDbContext dbContext) => _dbContext = dbContext;
+
+    public async Task<PagedResult<CleaningSummaryResult>> ListAsync(
+        string? status, Guid? propertyId, Guid? assignedHousekeeperUserId,
+        int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var effectivePage = Math.Max(page, 1);
+        var effectivePageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+
+        var query = _dbContext.Cleanings.AsNoTracking();
+
+        if (status is not null)
+        {
+            var statusEnum = CleaningStatusCodeMapper.FromCode(status);
+            query = query.Where(c => c.Status == statusEnum);
+        }
+
+        if (propertyId is Guid effectivePropertyId)
+            query = query.Where(c => c.PropertyId == effectivePropertyId);
+
+        if (assignedHousekeeperUserId is Guid effectiveHousekeeperId)
+            query = query.Where(c => c.AssignedHousekeeperUserId == effectiveHousekeeperId);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var cleanings = await query
+            .OrderBy(c => c.CreatedAtUtc)
+            .ThenBy(c => c.Id)
+            .Skip((effectivePage - 1) * effectivePageSize)
+            .Take(effectivePageSize)
+            .ToListAsync(cancellationToken);
+
+        var items = cleanings
+            .Select(c => new CleaningSummaryResult(
+                c.Id, c.PropertyId, c.ReservationId, c.AssignedHousekeeperUserId,
+                CleaningStatusCodeMapper.ToCode(c.Status), c.CreatedAtUtc))
+            .ToArray();
+
+        return new PagedResult<CleaningSummaryResult>(effectivePage, effectivePageSize, totalCount, items);
+    }
+
+    public async Task<CleaningResult?> GetByIdAsync(Guid cleaningId, CancellationToken cancellationToken)
+    {
+        var cleaning = await _dbContext.Cleanings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == cleaningId, cancellationToken);
+
+        if (cleaning is null)
+            return null;
+
+        return new CleaningResult(
+            cleaning.Id,
+            cleaning.PropertyId,
+            cleaning.ReservationId,
+            cleaning.AssignedHousekeeperUserId,
+            CleaningStatusCodeMapper.ToCode(cleaning.Status),
+            cleaning.CreatedByUserId,
+            cleaning.CreatedAtUtc,
+            cleaning.StartedAtUtc,
+            cleaning.InspectionStartedAtUtc,
+            cleaning.CompletedAtUtc,
+            cleaning.CancelledAtUtc);
+    }
+}

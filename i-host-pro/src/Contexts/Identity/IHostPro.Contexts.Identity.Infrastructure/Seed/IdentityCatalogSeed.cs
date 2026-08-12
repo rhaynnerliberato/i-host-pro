@@ -35,7 +35,7 @@ public static class IdentityCatalogSeed
     [
         new Role("ADMIN", "Administrador"),
         new Role("OPERATOR", "Operador"),
-        new Role("HOUSEKEEPER", "Faxineira"),
+        new Role(IdentityRoleCodes.Housekeeper, "Faxineira"),
         new Role(IdentityRoleCodes.PropertyOwner, "Proprietário"),
         new Role("SYSTEM", "Sistema"),
         new Role("AI_AGENT", "Agente IA"),
@@ -115,9 +115,9 @@ public static class IdentityCatalogSeed
         new RolePermission("OPERATOR", "REPORTS:READ"),
 
         // HOUSEKEEPER — Documento 09 §7.
-        new RolePermission("HOUSEKEEPER", "PROPERTIES:READ"),
-        new RolePermission("HOUSEKEEPER", "SCHEDULE:READ"), // override — §7 "Não poderá: Editar agenda"
-        new RolePermission("HOUSEKEEPER", "CLEANINGS:MANAGE:OWN_CLEANING"),
+        new RolePermission(IdentityRoleCodes.Housekeeper,"PROPERTIES:READ"),
+        new RolePermission(IdentityRoleCodes.Housekeeper,"SCHEDULE:READ"), // override — §7 "Não poderá: Editar agenda"
+        new RolePermission(IdentityRoleCodes.Housekeeper,"CLEANINGS:MANAGE:OWN_CLEANING"),
 
         // PROPERTY_OWNER — Documento 09 §8.
         new RolePermission(IdentityRoleCodes.PropertyOwner, "PROPERTIES:READ:OWN_OWNER"),

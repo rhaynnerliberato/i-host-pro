@@ -13,9 +13,13 @@ namespace IHostPro.Contexts.Identity.Contracts.Authorization;
 /// case: Property Management's Ownership eligibility check
 /// (<c>IIdentityUserEligibilityReader</c>) needs to pass the exact role code
 /// it requires, and <c>IdentityCatalogSeed</c> needs the same constant
-/// rather than a second, independently-typed literal.
+/// rather than a second, independently-typed literal. <see cref="Housekeeper"/>
+/// is the second such case (Fase 6, Incremento 1): Housekeeping's cleaning
+/// assignment flow needs the same role code
+/// <c>IIdentityUserEligibilityReader</c> requires.
 /// </summary>
 public static class IdentityRoleCodes
 {
     public const string PropertyOwner = "PROPERTY_OWNER";
+    public const string Housekeeper = "HOUSEKEEPER";
 }

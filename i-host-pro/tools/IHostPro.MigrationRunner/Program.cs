@@ -3,6 +3,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Configuration.Infrastructure.Persistence;
+using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
@@ -61,6 +62,7 @@ try
         typeof(PropertyManagementDbContext).Assembly,
         typeof(ReservationsDbContext).Assembly,
         typeof(ConfigurationDbContext).Assembly,
+        typeof(HousekeepingDbContext).Assembly,
     };
 
     var moduleDbContextTypes = moduleAssemblies
@@ -371,6 +373,47 @@ try
 
     log.LogInformation("Configuration & Policy's durable outbox provisioned");
 
+    // Housekeeping's own durable outbox (Fase 6, Incremento 1, Checkpoint 1) —
+    // mirrors Identity's/Property Management's/Reservations'/Configuration &
+    // Policy's provisioning above exactly, in its own schema
+    // (housekeeping_messaging), never sharing any of the other four.
+    var housekeepingMigratorConnectionString = builder.Configuration.GetConnectionString("Housekeeping")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Housekeeping'.");
+
+    log.LogInformation("Provisioning Housekeeping's durable outbox (schema housekeeping_messaging)");
+
+    var housekeepingOutboxHostBuilder = Host.CreateApplicationBuilder();
+    housekeepingOutboxHostBuilder.UseWolverine(opts =>
+    {
+        opts.EnrollAncillaryPostgresqlOutbox(
+            housekeepingMigratorConnectionString, "housekeeping_messaging", typeof(HousekeepingDbContext));
+        opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+        opts.UseEntityFrameworkCoreTransactions();
+    });
+
+    using (var housekeepingOutboxHost = housekeepingOutboxHostBuilder.Build())
+    {
+        await housekeepingOutboxHost.SetupResources();
+    }
+
+    await using (var connection = new NpgsqlConnection(housekeepingMigratorConnectionString))
+    {
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            GRANT USAGE ON SCHEMA housekeeping_messaging TO ihostpro_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA housekeeping_messaging TO ihostpro_app;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA housekeeping_messaging TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA housekeeping_messaging
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA housekeeping_messaging
+              GRANT USAGE, SELECT ON SEQUENCES TO ihostpro_app;
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    log.LogInformation("Housekeeping's durable outbox provisioned");
+
     // RabbitMQ messaging topology (Checkpoint 6 homologação, third production
     // defect: neither IHostPro.Api nor IHostPro.Worker ever declared the
     // topic exchanges they publish/route to — AutoProvision defaults to
@@ -392,15 +435,36 @@ try
     // IHostPro.Api/IHostPro.Worker use — so host/vhost/user/password/
     // timeouts can never drift between this provisioning step and the real
     // runtime connection.
-    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events, configuration-events exchanges)");
+    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events, configuration-events, housekeeping-events exchanges)");
 
     var messagingTopologyHostBuilder = Host.CreateApplicationBuilder();
     messagingTopologyHostBuilder.UseWolverine(opts =>
     {
         opts.UseIHostProRabbitMq(builder.Configuration, listen: false)
             .DeclareExchange("identity-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
-            .DeclareExchange("property-management-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
-            .DeclareExchange("reservation-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            // Fase 6, Incremento 1, Checkpoint 1: bound to Housekeeping's own
+            // "housekeeping.property-projection" queue — a NEW subscriber
+            // queue on an exchange OWNED BY ANOTHER Bounded Context (Property
+            // Management never needs to know Housekeeping is listening; same
+            // single-provisioning-authority pattern as every other queue in
+            // this platform).
+            .DeclareExchange("property-management-events", exchange =>
+            {
+                exchange.ExchangeType = ExchangeType.Topic;
+                exchange.BindQueue("housekeeping.property-projection", "property_created");
+                exchange.BindQueue("housekeeping.property-projection", "property_activated");
+                exchange.BindQueue("housekeeping.property-projection", "property_deactivated");
+                exchange.BindQueue("housekeeping.property-projection", "property_archived");
+            })
+            // Fase 6, Incremento 1, Checkpoint 1: bound to Housekeeping's own
+            // "housekeeping.reservation-projection" queue — same decoupled
+            // pub/sub pattern as property-management-events above.
+            .DeclareExchange("reservation-events", exchange =>
+            {
+                exchange.ExchangeType = ExchangeType.Topic;
+                exchange.BindQueue("housekeeping.reservation-projection", "reservation_created");
+                exchange.BindQueue("housekeeping.reservation-projection", "reservation_cancelled");
+            })
             // Fase 5, Incremento 1 (Policy Engine Foundation), Checkpoint 1:
             // declared ahead of PolicyUpdated (Checkpoint 6) — same
             // "infrastructure ready, content added later" precedent as the
@@ -424,7 +488,14 @@ try
             {
                 exchange.ExchangeType = ExchangeType.Topic;
                 exchange.BindQueue("configuration.policy-updated", "policy_updated");
-            });
+            })
+            // Fase 6, Incremento 1, Checkpoint 1: Housekeeping's OWN published
+            // events (CleaningCreated/Assigned/Started/InspectionStarted/
+            // Completed/Cancelled) — no queue bound here yet, since no other
+            // Bounded Context consumes them this increment; the exchange only
+            // needs to exist so IHostPro.Api's publish-side routing has a
+            // real destination.
+            .DeclareExchange("housekeeping-events", exchange => exchange.ExchangeType = ExchangeType.Topic);
     });
 
     using (var messagingTopologyHost = messagingTopologyHostBuilder.Build())

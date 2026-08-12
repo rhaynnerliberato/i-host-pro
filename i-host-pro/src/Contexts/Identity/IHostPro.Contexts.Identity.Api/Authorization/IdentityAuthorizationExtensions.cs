@@ -72,7 +72,9 @@ public static class IdentityAuthorizationExtensions
             .AddPolicy(IdentityPermissionCodes.PoliciesRead, policy =>
                 policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.PoliciesRead)))
             .AddPolicy(IdentityPermissionCodes.PoliciesManage, policy =>
-                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.PoliciesManage)));
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.PoliciesManage)))
+            .AddPolicy(IdentityPermissionCodes.CleaningsManage, policy =>
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.CleaningsManage)));
 
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

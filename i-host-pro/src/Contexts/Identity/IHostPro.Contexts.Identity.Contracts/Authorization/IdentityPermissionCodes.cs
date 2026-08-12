@@ -57,4 +57,16 @@ public static class IdentityPermissionCodes
     /// </summary>
     public const string PoliciesRead = "POLICIES:READ";
     public const string PoliciesManage = "POLICIES:MANAGE";
+
+    /// <summary>
+    /// Fase 6, Incremento 1 (Housekeeping Foundation). Already seeded into
+    /// the persisted catalog since <c>IdentityCatalogSeed</c>'s original
+    /// migration (ADMIN=manage, OPERATOR=manage, HOUSEKEEPER=manage:own —
+    /// Documento 09 §5-§7); promoted here only now because Housekeeping's
+    /// controller/tests need to reference them by value for the first time.
+    /// No new migration required. <c>CLEANINGS:READ</c>/<c>CLEANINGS:READ:OWN_OWNER</c>
+    /// remain unpromoted — nothing outside the seed needs them by value yet.
+    /// </summary>
+    public const string CleaningsManage = "CLEANINGS:MANAGE";
+    public const string CleaningsManageOwnCleaning = "CLEANINGS:MANAGE:OWN_CLEANING";
 }
