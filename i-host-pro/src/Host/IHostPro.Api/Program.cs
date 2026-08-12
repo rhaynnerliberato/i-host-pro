@@ -20,6 +20,9 @@ using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 using IHostPro.Contexts.Reservations.Contracts;
 using IHostPro.Contexts.Reservations.Infrastructure;
 using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
+using IHostPro.Contexts.Housekeeping.Contracts;
+using IHostPro.Contexts.Housekeeping.Infrastructure;
+using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using JasperFx;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -62,6 +65,11 @@ try
         // schema instead of the bare, nullable T that OptionalJsonConverter<T> actually
         // reads/writes on the wire — see OptionalSchemaFilter for the full rationale.
         options.SchemaFilter<OptionalSchemaFilter>();
+        // OpenAPI operationId stability gate (Fase 6, Checkpoint 6) — see
+        // SwaggerOperationIdSelector's own doc comment for the full defect
+        // history and why this is scoped to only the two actions that need
+        // it, rather than a global {Controller}_{Action} convention.
+        options.CustomOperationIds(SwaggerOperationIdSelector);
     });
 
     // CORS for the Angular frontend (Fase 4, Incremento 1) — explicit origin
@@ -178,6 +186,20 @@ try
     // internally.
     builder.Services.AddConfigurationCommandDispatch();
 
+    // Housekeeping module (Fase 6, Incremento 1) — DbContext + the parts
+    // IHostPro.Worker also needs (audit writer, event collector, executor,
+    // local Property/Reservation projections and their Wolverine consumers)
+    // — see HousekeepingModuleExtensions' own doc comment for why this
+    // differs from Configuration & Policy's Worker-only-needs-the-cache
+    // shape.
+    builder.Services.AddHousekeepingModule(builder.Configuration);
+
+    // Housekeeping's Commands/Queries/handlers/validators/pipeline behaviors
+    // — mirrors AddReservationsCommandDispatch's placement exactly:
+    // dispatching a Command/Query is an HTTP-request concern, never
+    // registered in IHostPro.Worker's Program.cs.
+    builder.Services.AddHousekeepingCommandDispatch();
+
     // Wolverine's own Main message store (Fase 2, Incremento 1, Checkpoint 6
     // homologação — found and fixed during real-host startup validation):
     // Identity's and Property Management's outboxes are both registered as
@@ -269,6 +291,14 @@ try
             builder.Configuration.GetConnectionString("Configuration")!,
             "configuration_messaging",
             typeof(ConfigurationDbContext));
+
+        // Housekeeping's own durable outbox (Fase 6, Incremento 1) — a
+        // fifth "ancillary" store, in its own housekeeping_messaging schema,
+        // never shared with any other context's.
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("Housekeeping")!,
+            "housekeeping_messaging",
+            typeof(HousekeepingDbContext));
 
         // Identity & Access's first six Integration Events (Incremento 2 plan,
         // Etapa 15; Documento 07 §13.2; ADR-013): one topic exchange per
@@ -391,6 +421,28 @@ try
                 .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
 
         RouteConfigurationEvent<PolicyUpdated>("policy_updated");
+
+        // Housekeeping's first Integration Events (Fase 6, Incremento 1) —
+        // its own topic exchange, never any other context's.
+        // CleaningDelayed/CleaningNeedsHelp/CleaningNeedsMaterial (Documento
+        // 07 §6) are deliberately NOT routed here — all three are
+        // Faxineira-initiated self-service actions (Portal da Faxineira,
+        // Incremento 2), never published by this increment's administrative
+        // lifecycle.
+        const string housekeepingEventsExchange = "housekeeping-events";
+
+        void RouteHousekeepingEvent<TEvent>(string routingKey) where TEvent : IntegrationEvent =>
+            opts.PublishMessage(typeof(TEvent))
+                .ToRabbitRoutingKey(housekeepingEventsExchange, routingKey, exchange => exchange.ExchangeType = ExchangeType.Topic)
+                .UseDurableOutbox()
+                .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        RouteHousekeepingEvent<CleaningCreated>("cleaning_created");
+        RouteHousekeepingEvent<CleaningAssigned>("cleaning_assigned");
+        RouteHousekeepingEvent<CleaningStarted>("cleaning_started");
+        RouteHousekeepingEvent<CleaningInspectionStarted>("cleaning_inspection_started");
+        RouteHousekeepingEvent<CleaningCompleted>("cleaning_completed");
+        RouteHousekeepingEvent<CleaningCancelled>("cleaning_cancelled");
     });
 
     builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();
@@ -469,5 +521,57 @@ public partial class Program
             : null;
 
         return contextName is null ? baseName : contextName + baseName;
+    }
+
+    /// <summary>
+    /// Swashbuckle leaves <c>Operation.OperationId</c> unset by default in
+    /// this project (no <see cref="Microsoft.AspNetCore.Mvc.SwaggerGenOptions.CustomOperationIds"/>
+    /// configured until this gate) — the generated <c>swagger.json</c> never
+    /// contained an <c>operationId</c> field at all. NSwag's TypeScript
+    /// generator then synthesizes its own operation name from the LAST route
+    /// segment when generating the client, entirely independent of the C#
+    /// action method name: both <c>ReservationsController.CancelReservation</c>
+    /// and <c>CleaningsController.CancelCleaning</c> end in
+    /// <c>".../cancel"</c>, so NSwag produced two identical synthetic names
+    /// ("cancel"/"cancel2") — a genuine regression that silently pointed
+    /// Reservations' already-shipped "cancel" client method at the Cleanings
+    /// route instead (Fase 6 homologation document, Checkpoint 5).
+    ///
+    /// This resolver assigns an explicit, unique, semantic OperationId to
+    /// exactly the two actions known to collide under NSwag's path-based
+    /// fallback naming — every other action returns <see langword="null"/>,
+    /// preserving today's behavior unchanged (Swashbuckle omits OperationId
+    /// entirely when the selector returns null, exactly as it does today for
+    /// every action). A global <c>{Controller}_{Action}</c> convention was
+    /// deliberately rejected: <c>nswag.json</c> already sets
+    /// <c>"className": "{controller}Client"</c> with
+    /// <c>"operationGenerationMode": "MultipleClientsFromOperationId"</c>,
+    /// which only takes effect when OperationId contains an underscore —
+    /// assigning that format to every action would retroactively split the
+    /// single shared generated <c>Client</c> class into one class per
+    /// controller, breaking every existing frontend service's
+    /// <c>inject(Client)</c> call. This targeted resolver avoids that
+    /// entirely: neither "CancelReservation" nor "CancelCleaning" contains an
+    /// underscore, so both land on the same shared <c>Client</c> class as
+    /// every other operation, just with collision-proof, human-readable
+    /// method names (<c>cancelReservation()</c>/<c>cancelCleaning()</c>).
+    /// Any future reintroduction of this class of collision (two actions in
+    /// different controllers ending in the same route segment) is caught by
+    /// <c>OpenApiOperationIdTests</c> (<c>IHostPro.Api.Tests.Integration</c>),
+    /// which asserts against the real, fully-composed OpenAPI document that
+    /// no two operations ever share an OperationId — not by this resolver
+    /// growing new special cases proactively.
+    /// </summary>
+    internal static string? SwaggerOperationIdSelector(Microsoft.AspNetCore.Mvc.ApiExplorer.ApiDescription apiDescription)
+    {
+        if (apiDescription.ActionDescriptor is Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor descriptor)
+        {
+            if (descriptor is { ControllerName: "Reservations", ActionName: "CancelReservation" })
+                return "CancelReservation";
+            if (descriptor is { ControllerName: "Cleanings", ActionName: "CancelCleaning" })
+                return "CancelCleaning";
+        }
+
+        return null;
     }
 }

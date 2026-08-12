@@ -47,6 +47,10 @@
     <ProjectReference Include="..\..\Contexts\Configuration\IHostPro.Contexts.Configuration.Api\IHostPro.Contexts.Configuration.Api.csproj" />
     <ProjectReference Include="..\..\Contexts\Configuration\IHostPro.Contexts.Configuration.Infrastructure\IHostPro.Contexts.Configuration.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Contexts\Configuration\IHostPro.Contexts.Configuration.Application\IHostPro.Contexts.Configuration.Application.csproj" />
+    <!-- Housekeeping module (Fase 6, Incremento 1 — Housekeeping Foundation). -->
+    <ProjectReference Include="..\..\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Api\IHostPro.Contexts.Housekeeping.Api.csproj" />
+    <ProjectReference Include="..\..\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Infrastructure\IHostPro.Contexts.Housekeeping.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Contracts\IHostPro.Contexts.Housekeeping.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

@@ -145,7 +145,13 @@ public sealed class ReservationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Cancel(Guid reservationId, CancellationToken cancellationToken)
+    // Named CancelReservation (not Cancel) as part of the OpenAPI operationId
+    // stability gate (Fase 6, Checkpoint 6) — paired with an explicit
+    // Program.cs CustomOperationIds assignment (see AddSwaggerGen) that gives
+    // this action and CleaningsController.CancelCleaning deterministic,
+    // collision-proof operationIds. The route itself
+    // (POST /api/v1/reservations/{reservationId}/cancel) is unaffected.
+    public async Task<IActionResult> CancelReservation(Guid reservationId, CancellationToken cancellationToken)
     {
         SetNoStoreHeaders();
 
