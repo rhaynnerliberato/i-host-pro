@@ -52,6 +52,12 @@ export const routes: Routes = [
         data: { titleKey: 'layout.nav.policies', permissions: ['POLICIES:READ', 'POLICIES:MANAGE'] },
         loadComponent: () => import('./features/policies/policies-list/policies-list').then((m) => m.PoliciesList),
       },
+      {
+        path: 'housekeeping',
+        canActivate: [permissionGuard],
+        data: { titleKey: 'layout.nav.housekeeping', permissions: ['CLEANINGS:MANAGE'] },
+        loadComponent: () => import('./features/housekeeping/cleanings-list/cleanings-list').then((m) => m.CleaningsList),
+      },
     ],
   },
 ];

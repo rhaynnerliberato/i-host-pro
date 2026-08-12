@@ -15,7 +15,7 @@ describe('ReservationsService', () => {
       reservationsGET2: vi.fn().mockReturnValue(of({})),
       reservationsPOST: vi.fn().mockReturnValue(of({})),
       reservationsPATCH: vi.fn().mockReturnValue(of({})),
-      cancel: vi.fn().mockReturnValue(of({})),
+      cancelReservation: vi.fn().mockReturnValue(of({})),
     };
     TestBed.configureTestingModule({ providers: [{ provide: Client, useValue: client }] });
     service = TestBed.inject(ReservationsService);
@@ -91,8 +91,8 @@ describe('ReservationsService', () => {
     });
   });
 
-  it('cancel delegates to Client.cancel with the reservation id', () => {
+  it('cancel delegates to Client.cancelReservation with the reservation id', () => {
     service.cancel('res-1').subscribe();
-    expect(client['cancel']).toHaveBeenCalledWith('res-1');
+    expect(client['cancelReservation']).toHaveBeenCalledWith('res-1');
   });
 });

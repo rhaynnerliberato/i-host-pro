@@ -1,0 +1,134 @@
+<div class="cleanings-list-page">
+  <div class="cleanings-list-header">
+    <h1>{{ 'housekeeping.list.title' | transloco }}</h1>
+    <button mat-flat-button color="primary" (click)="openCreateDialog()">
+      <mat-icon>add</mat-icon>
+      {{ 'housekeeping.list.create' | transloco }}
+    </button>
+  </div>
+
+  <form class="cleanings-filters" [formGroup]="filterForm" (ngSubmit)="applyFilters()">
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'housekeeping.list.filters.status' | transloco }}</mat-label>
+      <mat-select formControlName="status">
+        <mat-option value="">{{ 'housekeeping.list.filters.statusAll' | transloco }}</mat-option>
+        @for (code of statusCodes; track code) {
+          <mat-option [value]="code">{{ statusLabelKey(code) | transloco }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'housekeeping.list.filters.propertyId' | transloco }}</mat-label>
+      <input matInput formControlName="propertyId" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'housekeeping.list.filters.assignedHousekeeperUserId' | transloco }}</mat-label>
+      <input matInput formControlName="assignedHousekeeperUserId" />
+    </mat-form-field>
+
+    <button mat-stroked-button type="submit">{{ 'housekeeping.list.filters.apply' | transloco }}</button>
+  </form>
+
+  @switch (state()) {
+    @case ('loading') {
+      <div class="cleanings-list-state">
+        <mat-progress-spinner diameter="32" mode="indeterminate" />
+      </div>
+    }
+    @case ('error') {
+      <div class="cleanings-list-state">
+        <p>{{ 'housekeeping.list.loadError' | transloco }}</p>
+        <button mat-button (click)="loadCleanings()">{{ 'common.retry' | transloco }}</button>
+      </div>
+    }
+    @case ('empty') {
+      <div class="cleanings-list-state">
+        <p>{{ 'housekeeping.list.empty' | transloco }}</p>
+      </div>
+    }
+    @case ('loaded') {
+      <table mat-table [dataSource]="cleanings()" class="full-width">
+        <ng-container matColumnDef="propertyId">
+          <th mat-header-cell *matHeaderCellDef>{{ 'housekeeping.list.columns.propertyId' | transloco }}</th>
+          <td mat-cell *matCellDef="let cleaning">
+            <button mat-button class="cell-link" (click)="openDetailDialog(cleaning.id)">{{ cleaning.propertyId }}</button>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="reservationId">
+          <th mat-header-cell *matHeaderCellDef>{{ 'housekeeping.list.columns.reservationId' | transloco }}</th>
+          <td mat-cell *matCellDef="let cleaning">{{ cleaning.reservationId ?? '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="assignedHousekeeperUserId">
+          <th mat-header-cell *matHeaderCellDef>{{ 'housekeeping.list.columns.assignedHousekeeperUserId' | transloco }}</th>
+          <td mat-cell *matCellDef="let cleaning">{{ cleaning.assignedHousekeeperUserId ?? '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>{{ 'housekeeping.list.columns.status' | transloco }}</th>
+          <td mat-cell *matCellDef="let cleaning">
+            <mat-chip-set>
+              <mat-chip>{{ statusLabelKey(cleaning.status) | transloco }}</mat-chip>
+            </mat-chip-set>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="createdAtUtc">
+          <th mat-header-cell *matHeaderCellDef>{{ 'housekeeping.list.columns.createdAtUtc' | transloco }}</th>
+          <td mat-cell *matCellDef="let cleaning">{{ cleaning.createdAtUtc | date: 'short' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>{{ 'housekeeping.list.columns.actions' | transloco }}</th>
+          <td mat-cell *matCellDef="let cleaning">
+            @if (hasAnyAction(cleaning.status)) {
+              <button mat-icon-button [matMenuTriggerFor]="menu" [attr.aria-label]="'housekeeping.list.actionsFor' | transloco: { propertyId: cleaning.propertyId }">
+                <mat-icon>more_vert</mat-icon>
+              </button>
+              <mat-menu #menu="matMenu">
+                @if (canAssign(cleaning.status)) {
+                  <button mat-menu-item (click)="openAssignDialog(cleaning)">{{ 'housekeeping.list.assign' | transloco }}</button>
+                }
+                @if (canStart(cleaning.status)) {
+                  <button mat-menu-item (click)="start(cleaning)">{{ 'housekeeping.list.start' | transloco }}</button>
+                }
+                @if (canStartInspection(cleaning.status)) {
+                  <button mat-menu-item (click)="startInspection(cleaning)">{{ 'housekeeping.list.startInspection' | transloco }}</button>
+                }
+                @if (canComplete(cleaning.status)) {
+                  <button mat-menu-item (click)="complete(cleaning)">{{ 'housekeeping.list.complete' | transloco }}</button>
+                }
+                @if (canMarkInterrupted(cleaning.status)) {
+                  <button mat-menu-item (click)="markInterrupted(cleaning)">{{ 'housekeeping.list.markInterrupted' | transloco }}</button>
+                }
+                @if (canMarkWaitingMaterials(cleaning.status)) {
+                  <button mat-menu-item (click)="markWaitingMaterials(cleaning)">{{ 'housekeeping.list.markWaitingMaterials' | transloco }}</button>
+                }
+                @if (canMarkWaitingHelp(cleaning.status)) {
+                  <button mat-menu-item (click)="markWaitingHelp(cleaning)">{{ 'housekeeping.list.markWaitingHelp' | transloco }}</button>
+                }
+                @if (canCancel(cleaning.status)) {
+                  <button mat-menu-item (click)="confirmCancel(cleaning)">{{ 'housekeeping.list.cancel' | transloco }}</button>
+                }
+              </mat-menu>
+            }
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+
+      <mat-paginator
+        [length]="totalCount()"
+        [pageIndex]="pageIndex()"
+        [pageSize]="pageSize()"
+        [pageSizeOptions]="[10, 25, 50]"
+        (page)="onPageChange($event)"
+      />
+    }
+  }
+</div>

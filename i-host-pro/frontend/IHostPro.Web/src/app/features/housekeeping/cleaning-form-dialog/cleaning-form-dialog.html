@@ -1,0 +1,34 @@
+<h2 mat-dialog-title>{{ 'housekeeping.form.createTitle' | transloco }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  <mat-dialog-content>
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'housekeeping.form.propertyId' | transloco }}</mat-label>
+      <input matInput formControlName="propertyId" />
+      @if (form.controls.propertyId.invalid && form.controls.propertyId.touched) {
+        <mat-error>{{ 'housekeeping.form.errors.propertyIdRequired' | transloco }}</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'housekeeping.form.reservationId' | transloco }}</mat-label>
+      <input matInput formControlName="reservationId" />
+      <mat-hint>{{ 'housekeeping.form.reservationIdHint' | transloco }}</mat-hint>
+    </mat-form-field>
+
+    @if (errorKey(); as key) {
+      <p class="form-error" role="alert">{{ key | transloco }}</p>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" (click)="cancel()">{{ 'common.cancel' | transloco }}</button>
+    <button mat-flat-button color="primary" type="submit" [disabled]="submitting()">
+      @if (submitting()) {
+        <mat-progress-spinner diameter="20" mode="indeterminate" />
+      } @else {
+        {{ 'common.save' | transloco }}
+      }
+    </button>
+  </mat-dialog-actions>
+</form>

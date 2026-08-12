@@ -114,4 +114,20 @@ describe('AdminLayout nav item visibility', () => {
 
     expect(paths).not.toContain('/policies');
   });
+
+  it('shows the "Limpezas" nav item to a user holding CLEANINGS:MANAGE', () => {
+    const component = configure(['CLEANINGS:MANAGE']);
+
+    const paths = component['navItems']().map((item) => item.path);
+
+    expect(paths).toContain('/housekeeping');
+  });
+
+  it('hides the "Limpezas" nav item from a user who does not hold CLEANINGS:MANAGE', () => {
+    const component = configure(['SOME:OTHER']);
+
+    const paths = component['navItems']().map((item) => item.path);
+
+    expect(paths).not.toContain('/housekeeping');
+  });
 });

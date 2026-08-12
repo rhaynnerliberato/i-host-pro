@@ -35,7 +35,8 @@
       "properties": "Properties",
       "condominiums": "Condominiums",
       "reservations": "Reservations",
-      "policies": "Policies"
+      "policies": "Policies",
+      "housekeeping": "Housekeeping"
     }
   },
   "home": {
@@ -390,6 +391,110 @@
         "policy_not_configured": "No value is currently configured at this scope.",
         "generic": "Unable to load. Please try again."
       }
+    }
+  },
+  "housekeeping": {
+    "list": {
+      "title": "Housekeeping",
+      "create": "New cleaning",
+      "loadError": "Unable to load cleanings.",
+      "empty": "No cleanings found.",
+      "columns": {
+        "propertyId": "Property",
+        "reservationId": "Reservation",
+        "assignedHousekeeperUserId": "Housekeeper",
+        "status": "Status",
+        "createdAtUtc": "Created at",
+        "actions": "Actions"
+      },
+      "actionsFor": "Actions for the cleaning of {{propertyId}}",
+      "assign": "Assign housekeeper",
+      "start": "Start",
+      "startInspection": "Start inspection",
+      "complete": "Complete",
+      "markInterrupted": "Mark as interrupted",
+      "markWaitingMaterials": "Mark as waiting for materials",
+      "markWaitingHelp": "Mark as waiting for help",
+      "cancel": "Cancel cleaning",
+      "cancelConfirmTitle": "Cancel cleaning",
+      "cancelConfirmMessage": "Are you sure you want to cancel the cleaning for property {{propertyId}}?",
+      "createdSuccess": "Cleaning created successfully.",
+      "assignedSuccess": "Housekeeper assigned successfully.",
+      "startedSuccess": "Cleaning started successfully.",
+      "inspectionStartedSuccess": "Inspection started successfully.",
+      "completedSuccess": "Cleaning completed successfully.",
+      "cancelledSuccess": "Cleaning cancelled successfully.",
+      "interruptedSuccess": "Cleaning marked as interrupted.",
+      "waitingMaterialsSuccess": "Cleaning marked as waiting for materials.",
+      "waitingHelpSuccess": "Cleaning marked as waiting for help.",
+      "filters": {
+        "status": "Status",
+        "statusAll": "All",
+        "propertyId": "Property ID",
+        "assignedHousekeeperUserId": "Housekeeper ID",
+        "apply": "Filter"
+      },
+      "status": {
+        "Pending": "Pending",
+        "Assigned": "Assigned",
+        "InTransit": "In transit",
+        "Started": "In progress",
+        "InInspection": "In inspection",
+        "Completed": "Completed",
+        "Cancelled": "Cancelled",
+        "Interrupted": "Interrupted",
+        "WaitingMaterials": "Waiting for materials",
+        "WaitingHelp": "Waiting for help"
+      },
+      "errors": {
+        "forbidden": "The given housekeeper is not eligible (inactive, from another tenant, or missing the HOUSEKEEPER role).",
+        "conflict": "The action could not be completed due to a conflict with the cleaning's current state.",
+        "concurrency": "The cleaning was changed by someone else. Please reload and try again.",
+        "notFound": "Cleaning not found.",
+        "generic": "The action could not be completed. Please try again."
+      }
+    },
+    "form": {
+      "createTitle": "New cleaning",
+      "propertyId": "Property ID",
+      "reservationId": "Reservation ID",
+      "reservationIdHint": "Optional — links the cleaning to an existing reservation.",
+      "errors": {
+        "propertyIdRequired": "Enter the property ID.",
+        "propertyNotFound": "The given property is not known or is not active.",
+        "reservationNotFound": "The given reservation was not found.",
+        "notFound": "Property or reservation not found.",
+        "validation": "Please check the entered data.",
+        "generic": "Unable to save. Please try again."
+      }
+    },
+    "assign": {
+      "title": "Assign housekeeper",
+      "housekeeperUserId": "Housekeeper ID",
+      "confirm": "Assign",
+      "errors": {
+        "housekeeperUserIdRequired": "Enter the housekeeper ID.",
+        "notEligible": "The given housekeeper is not eligible (inactive, from another tenant, or missing the HOUSEKEEPER role).",
+        "notFound": "Cleaning not found.",
+        "concurrency": "The cleaning was changed by someone else. Please reload and try again.",
+        "conflict": "The action could not be completed due to a conflict with the cleaning's current state.",
+        "validation": "Please check the entered data.",
+        "generic": "The action could not be completed. Please try again."
+      }
+    },
+    "detail": {
+      "title": "Cleaning details",
+      "id": "ID",
+      "propertyId": "Property",
+      "reservationId": "Reservation",
+      "assignedHousekeeperUserId": "Housekeeper",
+      "status": "Status",
+      "createdByUserId": "Created by",
+      "createdAtUtc": "Created at",
+      "startedAtUtc": "Started at",
+      "inspectionStartedAtUtc": "Inspection started at",
+      "completedAtUtc": "Completed at",
+      "cancelledAtUtc": "Cancelled at"
     }
   }
 }

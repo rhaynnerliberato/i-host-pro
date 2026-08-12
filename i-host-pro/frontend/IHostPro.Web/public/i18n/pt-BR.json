@@ -35,7 +35,8 @@
       "properties": "Imóveis",
       "condominiums": "Condomínios",
       "reservations": "Reservas",
-      "policies": "Políticas"
+      "policies": "Políticas",
+      "housekeeping": "Limpezas"
     }
   },
   "home": {
@@ -390,6 +391,110 @@
         "policy_not_configured": "Não há valor configurado atualmente neste escopo.",
         "generic": "Não foi possível carregar. Tente novamente."
       }
+    }
+  },
+  "housekeeping": {
+    "list": {
+      "title": "Limpezas",
+      "create": "Nova limpeza",
+      "loadError": "Não foi possível carregar as limpezas.",
+      "empty": "Nenhuma limpeza encontrada.",
+      "columns": {
+        "propertyId": "Imóvel",
+        "reservationId": "Reserva",
+        "assignedHousekeeperUserId": "Camareira",
+        "status": "Status",
+        "createdAtUtc": "Criada em",
+        "actions": "Ações"
+      },
+      "actionsFor": "Ações para a limpeza de {{propertyId}}",
+      "assign": "Atribuir camareira",
+      "start": "Iniciar",
+      "startInspection": "Iniciar inspeção",
+      "complete": "Concluir",
+      "markInterrupted": "Marcar como interrompida",
+      "markWaitingMaterials": "Marcar aguardando materiais",
+      "markWaitingHelp": "Marcar aguardando ajuda",
+      "cancel": "Cancelar limpeza",
+      "cancelConfirmTitle": "Cancelar limpeza",
+      "cancelConfirmMessage": "Tem certeza de que deseja cancelar a limpeza do imóvel {{propertyId}}?",
+      "createdSuccess": "Limpeza criada com sucesso.",
+      "assignedSuccess": "Camareira atribuída com sucesso.",
+      "startedSuccess": "Limpeza iniciada com sucesso.",
+      "inspectionStartedSuccess": "Inspeção iniciada com sucesso.",
+      "completedSuccess": "Limpeza concluída com sucesso.",
+      "cancelledSuccess": "Limpeza cancelada com sucesso.",
+      "interruptedSuccess": "Limpeza marcada como interrompida.",
+      "waitingMaterialsSuccess": "Limpeza marcada como aguardando materiais.",
+      "waitingHelpSuccess": "Limpeza marcada como aguardando ajuda.",
+      "filters": {
+        "status": "Status",
+        "statusAll": "Todos",
+        "propertyId": "ID do imóvel",
+        "assignedHousekeeperUserId": "ID da camareira",
+        "apply": "Filtrar"
+      },
+      "status": {
+        "Pending": "Pendente",
+        "Assigned": "Atribuída",
+        "InTransit": "Em deslocamento",
+        "Started": "Em andamento",
+        "InInspection": "Em inspeção",
+        "Completed": "Concluída",
+        "Cancelled": "Cancelada",
+        "Interrupted": "Interrompida",
+        "WaitingMaterials": "Aguardando materiais",
+        "WaitingHelp": "Aguardando ajuda"
+      },
+      "errors": {
+        "forbidden": "A camareira informada não é elegível (inativa, de outro tenant ou sem o papel HOUSEKEEPER).",
+        "conflict": "Não foi possível concluir a ação devido a um conflito com o estado atual da limpeza.",
+        "concurrency": "A limpeza foi alterada por outra pessoa. Recarregue e tente novamente.",
+        "notFound": "Limpeza não encontrada.",
+        "generic": "Não foi possível concluir a ação. Tente novamente."
+      }
+    },
+    "form": {
+      "createTitle": "Nova limpeza",
+      "propertyId": "ID do imóvel",
+      "reservationId": "ID da reserva",
+      "reservationIdHint": "Opcional — vincula a limpeza a uma reserva existente.",
+      "errors": {
+        "propertyIdRequired": "Informe o ID do imóvel.",
+        "propertyNotFound": "O imóvel informado não é conhecido ou não está ativo.",
+        "reservationNotFound": "A reserva informada não foi encontrada.",
+        "notFound": "Imóvel ou reserva não encontrado.",
+        "validation": "Verifique os dados informados.",
+        "generic": "Não foi possível salvar. Tente novamente."
+      }
+    },
+    "assign": {
+      "title": "Atribuir camareira",
+      "housekeeperUserId": "ID da camareira",
+      "confirm": "Atribuir",
+      "errors": {
+        "housekeeperUserIdRequired": "Informe o ID da camareira.",
+        "notEligible": "A camareira informada não é elegível (inativa, de outro tenant ou sem o papel HOUSEKEEPER).",
+        "notFound": "Limpeza não encontrada.",
+        "concurrency": "A limpeza foi alterada por outra pessoa. Recarregue e tente novamente.",
+        "conflict": "Não foi possível concluir a ação devido a um conflito com o estado atual da limpeza.",
+        "validation": "Verifique os dados informados.",
+        "generic": "Não foi possível concluir a ação. Tente novamente."
+      }
+    },
+    "detail": {
+      "title": "Detalhes da limpeza",
+      "id": "ID",
+      "propertyId": "Imóvel",
+      "reservationId": "Reserva",
+      "assignedHousekeeperUserId": "Camareira",
+      "status": "Status",
+      "createdByUserId": "Criada por",
+      "createdAtUtc": "Criada em",
+      "startedAtUtc": "Iniciada em",
+      "inspectionStartedAtUtc": "Inspeção iniciada em",
+      "completedAtUtc": "Concluída em",
+      "cancelledAtUtc": "Cancelada em"
     }
   }
 }

@@ -1,0 +1,28 @@
+<h2 mat-dialog-title>{{ 'housekeeping.assign.title' | transloco }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  <mat-dialog-content>
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'housekeeping.assign.housekeeperUserId' | transloco }}</mat-label>
+      <input matInput formControlName="housekeeperUserId" />
+      @if (form.controls.housekeeperUserId.invalid && form.controls.housekeeperUserId.touched) {
+        <mat-error>{{ 'housekeeping.assign.errors.housekeeperUserIdRequired' | transloco }}</mat-error>
+      }
+    </mat-form-field>
+
+    @if (errorKey(); as key) {
+      <p class="form-error" role="alert">{{ key | transloco }}</p>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" (click)="cancel()">{{ 'common.cancel' | transloco }}</button>
+    <button mat-flat-button color="primary" type="submit" [disabled]="submitting()">
+      @if (submitting()) {
+        <mat-progress-spinner diameter="20" mode="indeterminate" />
+      } @else {
+        {{ 'housekeeping.assign.confirm' | transloco }}
+      }
+    </button>
+  </mat-dialog-actions>
+</form>

@@ -56,6 +56,11 @@ export class ReservationsService {
   }
 
   cancel(reservationId: string): Observable<ReservationDetailResponse> {
-    return this.client.cancel(reservationId);
+    // Explicit, stable OperationId ("CancelReservation") assigned server-side
+    // (Program.cs's AddSwaggerGen CustomOperationIds) — see the Fase 6
+    // homologation document (OpenAPI operationId stability gate) for why a
+    // numeric-suffix name (cancel2) is no longer produced here. The actual
+    // HTTP route (/api/v1/reservations/{reservationId}/cancel) is unchanged.
+    return this.client.cancelReservation(reservationId);
   }
 }

@@ -1,0 +1,42 @@
+<h2 mat-dialog-title>{{ 'housekeeping.detail.title' | transloco }}</h2>
+
+<mat-dialog-content>
+  <dl class="detail-grid">
+    <dt>{{ 'housekeeping.detail.id' | transloco }}</dt>
+    <dd>{{ data.cleaning.id }}</dd>
+
+    <dt>{{ 'housekeeping.detail.propertyId' | transloco }}</dt>
+    <dd>{{ data.cleaning.propertyId }}</dd>
+
+    <dt>{{ 'housekeeping.detail.reservationId' | transloco }}</dt>
+    <dd>{{ data.cleaning.reservationId ?? '—' }}</dd>
+
+    <dt>{{ 'housekeeping.detail.assignedHousekeeperUserId' | transloco }}</dt>
+    <dd>{{ data.cleaning.assignedHousekeeperUserId ?? '—' }}</dd>
+
+    <dt>{{ 'housekeeping.detail.status' | transloco }}</dt>
+    <dd>{{ 'housekeeping.list.status.' + data.cleaning.status | transloco }}</dd>
+
+    <dt>{{ 'housekeeping.detail.createdByUserId' | transloco }}</dt>
+    <dd>{{ data.cleaning.createdByUserId }}</dd>
+
+    <dt>{{ 'housekeeping.detail.createdAtUtc' | transloco }}</dt>
+    <dd>{{ data.cleaning.createdAtUtc | date: 'short' }}</dd>
+
+    <dt>{{ 'housekeeping.detail.startedAtUtc' | transloco }}</dt>
+    <dd>{{ data.cleaning.startedAtUtc ? (data.cleaning.startedAtUtc | date: 'short') : '—' }}</dd>
+
+    <dt>{{ 'housekeeping.detail.inspectionStartedAtUtc' | transloco }}</dt>
+    <dd>{{ data.cleaning.inspectionStartedAtUtc ? (data.cleaning.inspectionStartedAtUtc | date: 'short') : '—' }}</dd>
+
+    <dt>{{ 'housekeeping.detail.completedAtUtc' | transloco }}</dt>
+    <dd>{{ data.cleaning.completedAtUtc ? (data.cleaning.completedAtUtc | date: 'short') : '—' }}</dd>
+
+    <dt>{{ 'housekeeping.detail.cancelledAtUtc' | transloco }}</dt>
+    <dd>{{ data.cleaning.cancelledAtUtc ? (data.cleaning.cancelledAtUtc | date: 'short') : '—' }}</dd>
+  </dl>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-flat-button color="primary" (click)="close()">{{ 'common.close' | transloco }}</button>
+</mat-dialog-actions>
