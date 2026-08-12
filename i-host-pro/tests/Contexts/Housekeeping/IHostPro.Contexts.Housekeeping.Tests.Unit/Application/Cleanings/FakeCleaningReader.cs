@@ -23,6 +23,8 @@ internal sealed class FakeCleaningReader : ICleaningReader
     public Guid? LastAssignedHousekeeperUserId { get; private set; }
     public int? LastPage { get; private set; }
     public int? LastPageSize { get; private set; }
+    public Guid? LastHousekeeperUserId { get; private set; }
+    public Guid? LastCleaningId { get; private set; }
 
     public Task<PagedResult<CleaningSummaryResult>> ListAsync(
         string? status, Guid? propertyId, Guid? assignedHousekeeperUserId,
@@ -39,4 +41,24 @@ internal sealed class FakeCleaningReader : ICleaningReader
 
     public Task<CleaningResult?> GetByIdAsync(Guid cleaningId, CancellationToken cancellationToken) =>
         Task.FromResult(_detail);
+
+    public Task<PagedResult<CleaningSummaryResult>> ListForHousekeeperAsync(
+        Guid housekeeperUserId, string? status, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        LastHousekeeperUserId = housekeeperUserId;
+        LastStatus = status;
+        LastPage = page;
+        LastPageSize = pageSize;
+
+        return Task.FromResult(new PagedResult<CleaningSummaryResult>(page, pageSize, _summaries.Count, _summaries));
+    }
+
+    public Task<CleaningResult?> GetByIdForHousekeeperAsync(
+        Guid cleaningId, Guid housekeeperUserId, CancellationToken cancellationToken)
+    {
+        LastCleaningId = cleaningId;
+        LastHousekeeperUserId = housekeeperUserId;
+
+        return Task.FromResult(_detail is not null && _detail.AssignedHousekeeperUserId == housekeeperUserId ? _detail : null);
+    }
 }

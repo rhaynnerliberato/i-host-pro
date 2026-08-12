@@ -9,7 +9,7 @@ public class ListCleaningsQueryHandlerTests
     public async Task Returns_the_page_the_reader_produces()
     {
         var summary = new CleaningSummaryResult(
-            Guid.NewGuid(), Guid.NewGuid(), null, null, "Pending", DateTimeOffset.UtcNow);
+            Guid.NewGuid(), Guid.NewGuid(), null, null, "Pending", DateTimeOffset.UtcNow, null);
         var handler = new ListCleaningsQueryHandler(FakeCleaningReader.WithSummaries([summary]));
 
         var result = await handler.Handle(new(null, null, null, null, null), CancellationToken.None);

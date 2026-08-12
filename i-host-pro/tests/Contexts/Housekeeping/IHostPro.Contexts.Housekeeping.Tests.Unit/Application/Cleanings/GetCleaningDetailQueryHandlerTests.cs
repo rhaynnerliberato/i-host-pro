@@ -12,7 +12,7 @@ public class GetCleaningDetailQueryHandlerTests
         var cleaningId = Guid.NewGuid();
         var detail = new CleaningResult(
             cleaningId, Guid.NewGuid(), null, null, "Pending", Guid.NewGuid(),
-            DateTimeOffset.UtcNow, null, null, null, null);
+            DateTimeOffset.UtcNow, null, null, null, null, null);
         var handler = new GetCleaningDetailQueryHandler(FakeCleaningReader.WithDetail(detail));
 
         var result = await handler.Handle(new(cleaningId), CancellationToken.None);

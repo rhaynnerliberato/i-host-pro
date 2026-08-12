@@ -85,6 +85,24 @@ describe('UserProfileService', () => {
     expect(service.hasPermission('USERS:MANAGE')).toBe(false);
   });
 
+  it(
+    'hasPermission never prefix-matches — CLEANINGS:MANAGE does not grant CLEANINGS:MANAGE:OWN_CLEANING and vice versa ' +
+      '(Fase 6, Incremento 2A approval §22 — the admin and self-service Housekeeping permissions must stay exact-match distinct)',
+    () => {
+      client.me.mockReturnValue(of(profile({ roles: ['ADMIN'], permissions: ['CLEANINGS:MANAGE'] })));
+      service.load().subscribe();
+
+      expect(service.hasPermission('CLEANINGS:MANAGE')).toBe(true);
+      expect(service.hasPermission('CLEANINGS:MANAGE:OWN_CLEANING')).toBe(false);
+
+      client.me.mockReturnValue(of(profile({ roles: ['HOUSEKEEPER'], permissions: ['CLEANINGS:MANAGE:OWN_CLEANING'] })));
+      service.load().subscribe();
+
+      expect(service.hasPermission('CLEANINGS:MANAGE:OWN_CLEANING')).toBe(true);
+      expect(service.hasPermission('CLEANINGS:MANAGE')).toBe(false);
+    },
+  );
+
   it('leaves the profile and permissions untouched when load() fails, so callers must explicitly clear() on a refresh failure', () => {
     client.me.mockReturnValue(of(profile()));
     service.load().subscribe();

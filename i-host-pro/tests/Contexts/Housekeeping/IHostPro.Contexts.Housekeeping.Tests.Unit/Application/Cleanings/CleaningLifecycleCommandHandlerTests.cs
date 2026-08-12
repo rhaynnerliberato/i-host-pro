@@ -266,22 +266,24 @@ public class CleaningLifecycleCommandHandlerTests
         result.Error.Code.Should().Be(HousekeepingErrorCodes.InvalidCleaningTransition);
     }
 
-    // --- MarkCleaningWaitingMaterialsCommandHandler: Started -> WaitingMaterials (no event) ---
+    // --- MarkCleaningWaitingMaterialsCommandHandler: Started -> WaitingMaterials (publishes CleaningNeedsMaterial, Fase 6 Incremento 2A) ---
 
     [Fact]
-    public async Task MarkWaitingMaterials_from_Started_succeeds_and_audits_but_enqueues_no_event()
+    public async Task MarkWaitingMaterials_from_Started_succeeds_audits_and_enqueues_CleaningNeedsMaterial()
     {
         var cleaning = StartedCleaning();
         var repository = FakeCleaningRepository.WithCleaning(cleaning);
         var auditWriter = new FakeHousekeepingAuditWriter();
+        var eventCollector = new FakeIntegrationEventCollector();
         var handler = new MarkCleaningWaitingMaterialsCommandHandler(
-            new PassThroughCleaningTransitionExecutor(), repository, auditWriter, new FixedTimeProvider(Now));
+            new PassThroughCleaningTransitionExecutor(), repository, auditWriter, eventCollector, new FixedTimeProvider(Now));
 
         var result = await handler.Handle(new MarkCleaningWaitingMaterialsCommand(TenantId, ActorId, cleaning.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be("WaitingMaterials");
         auditWriter.RecordedEntries.Should().ContainSingle(e => e.ActionCode == "cleaning_waiting_materials");
+        eventCollector.EnqueuedEvents.Should().ContainSingle(e => e is CleaningNeedsMaterial);
     }
 
     [Fact]
@@ -290,7 +292,8 @@ public class CleaningLifecycleCommandHandlerTests
         var cleaning = PendingCleaning();
         var repository = FakeCleaningRepository.WithCleaning(cleaning);
         var handler = new MarkCleaningWaitingMaterialsCommandHandler(
-            new PassThroughCleaningTransitionExecutor(), repository, new FakeHousekeepingAuditWriter(), new FixedTimeProvider(Now));
+            new PassThroughCleaningTransitionExecutor(), repository, new FakeHousekeepingAuditWriter(),
+            new FakeIntegrationEventCollector(), new FixedTimeProvider(Now));
 
         var result = await handler.Handle(new MarkCleaningWaitingMaterialsCommand(TenantId, ActorId, cleaning.Id), CancellationToken.None);
 
@@ -298,22 +301,24 @@ public class CleaningLifecycleCommandHandlerTests
         result.Error.Code.Should().Be(HousekeepingErrorCodes.InvalidCleaningTransition);
     }
 
-    // --- MarkCleaningWaitingHelpCommandHandler: Started -> WaitingHelp (no event) ---
+    // --- MarkCleaningWaitingHelpCommandHandler: Started -> WaitingHelp (publishes CleaningNeedsHelp, Fase 6 Incremento 2A) ---
 
     [Fact]
-    public async Task MarkWaitingHelp_from_Started_succeeds_and_audits_but_enqueues_no_event()
+    public async Task MarkWaitingHelp_from_Started_succeeds_audits_and_enqueues_CleaningNeedsHelp()
     {
         var cleaning = StartedCleaning();
         var repository = FakeCleaningRepository.WithCleaning(cleaning);
         var auditWriter = new FakeHousekeepingAuditWriter();
+        var eventCollector = new FakeIntegrationEventCollector();
         var handler = new MarkCleaningWaitingHelpCommandHandler(
-            new PassThroughCleaningTransitionExecutor(), repository, auditWriter, new FixedTimeProvider(Now));
+            new PassThroughCleaningTransitionExecutor(), repository, auditWriter, eventCollector, new FixedTimeProvider(Now));
 
         var result = await handler.Handle(new MarkCleaningWaitingHelpCommand(TenantId, ActorId, cleaning.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be("WaitingHelp");
         auditWriter.RecordedEntries.Should().ContainSingle(e => e.ActionCode == "cleaning_waiting_help");
+        eventCollector.EnqueuedEvents.Should().ContainSingle(e => e is CleaningNeedsHelp);
     }
 
     [Fact]
@@ -322,7 +327,8 @@ public class CleaningLifecycleCommandHandlerTests
         var cleaning = InInspectionCleaning();
         var repository = FakeCleaningRepository.WithCleaning(cleaning);
         var handler = new MarkCleaningWaitingHelpCommandHandler(
-            new PassThroughCleaningTransitionExecutor(), repository, new FakeHousekeepingAuditWriter(), new FixedTimeProvider(Now));
+            new PassThroughCleaningTransitionExecutor(), repository, new FakeHousekeepingAuditWriter(),
+            new FakeIntegrationEventCollector(), new FixedTimeProvider(Now));
 
         var result = await handler.Handle(new MarkCleaningWaitingHelpCommand(TenantId, ActorId, cleaning.Id), CancellationToken.None);
 

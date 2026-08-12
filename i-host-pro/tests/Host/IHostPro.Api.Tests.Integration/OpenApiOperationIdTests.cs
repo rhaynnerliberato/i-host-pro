@@ -106,6 +106,26 @@ public sealed class OpenApiOperationIdTests : IAsyncLifetime
         await _postgresContainer.DisposeAsync();
     }
 
+    /// <summary>
+    /// Fase 6, Incremento 2A: <c>MyCleaningsController</c>'s self-service
+    /// lifecycle actions (Start/StartInspection/Complete/WaitingMaterials/
+    /// WaitingHelp) share the exact same last route segment as
+    /// <c>CleaningsController</c>'s administrative actions — the identical
+    /// collision class this file's own generic duplicate-operationId check
+    /// already covers by construction. This constant + the loop in the test
+    /// below is the same style of targeted, real-document verification
+    /// already used for CancelReservation/CancelCleaning, extended rather
+    /// than duplicated.
+    /// </summary>
+    private static readonly (string OperationId, string Path)[] SelfServiceCollisionPairs =
+    [
+        ("StartOwnCleaning", "/api/v1/my-cleanings/{cleaningId}/start"),
+        ("StartOwnCleaningInspection", "/api/v1/my-cleanings/{cleaningId}/start-inspection"),
+        ("CompleteOwnCleaning", "/api/v1/my-cleanings/{cleaningId}/complete"),
+        ("MarkOwnCleaningWaitingMaterials", "/api/v1/my-cleanings/{cleaningId}/waiting-materials"),
+        ("MarkOwnCleaningWaitingHelp", "/api/v1/my-cleanings/{cleaningId}/waiting-help"),
+    ];
+
     [Fact]
     public async Task The_real_composed_OpenAPI_document_has_no_duplicate_operationId_and_CancelReservation_CancelCleaning_map_to_the_correct_routes()
     {
@@ -187,6 +207,15 @@ public sealed class OpenApiOperationIdTests : IAsyncLifetime
                 "CancelReservation must be assigned and map to the real Reservations cancel route");
             cancelCleaning.Should().Be(("/api/v1/cleanings/{cleaningId}/cancel", "post"),
                 "CancelCleaning must be assigned and map to the real Cleanings cancel route");
+
+            foreach (var (expectedOperationId, expectedPath) in SelfServiceCollisionPairs)
+            {
+                var match = operationIds.SingleOrDefault(o => o.OperationId == expectedOperationId);
+                match.Should().NotBe(default,
+                    $"{expectedOperationId} must be assigned to exactly one operation in the real OpenAPI document");
+                match.Path.Should().Be(expectedPath, $"{expectedOperationId} must map to the real self-service route, not the administrative one");
+                match.Verb.Should().Be("post");
+            }
         }
         finally
         {

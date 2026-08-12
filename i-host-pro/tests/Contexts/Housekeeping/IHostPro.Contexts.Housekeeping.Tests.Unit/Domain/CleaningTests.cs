@@ -18,6 +18,13 @@ public class CleaningTests
         return cleaning;
     }
 
+    private static Cleaning CreateInTransit()
+    {
+        var cleaning = CreateAssigned();
+        cleaning.MarkInTransit(Now.AddMinutes(2));
+        return cleaning;
+    }
+
     private static Cleaning CreateStarted()
     {
         var cleaning = CreateAssigned();
@@ -123,6 +130,48 @@ public class CleaningTests
         var cleaning = CreatePending();
 
         var act = () => cleaning.Start(Now.AddMinutes(1));
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Start_from_InTransit_transitions_to_Started()
+    {
+        var cleaning = CreateInTransit();
+
+        cleaning.Start(Now.AddMinutes(3));
+
+        cleaning.Status.Should().Be(CleaningStatus.Started);
+    }
+
+    // --- MarkInTransit (Fase 6, Incremento 2A) ---
+
+    [Fact]
+    public void MarkInTransit_from_Assigned_transitions_to_InTransit()
+    {
+        var cleaning = CreateAssigned();
+
+        cleaning.MarkInTransit(Now.AddMinutes(2));
+
+        cleaning.Status.Should().Be(CleaningStatus.InTransit);
+    }
+
+    [Fact]
+    public void MarkInTransit_from_Pending_throws()
+    {
+        var cleaning = CreatePending();
+
+        var act = () => cleaning.MarkInTransit(Now.AddMinutes(1));
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void MarkInTransit_from_Started_throws()
+    {
+        var cleaning = CreateStarted();
+
+        var act = () => cleaning.MarkInTransit(Now.AddMinutes(3));
 
         act.Should().Throw<InvalidOperationException>();
     }

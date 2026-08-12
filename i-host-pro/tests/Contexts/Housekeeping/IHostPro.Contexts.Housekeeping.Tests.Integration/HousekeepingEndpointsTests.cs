@@ -278,10 +278,16 @@ public class HousekeepingEndpointsTests : IClassFixture<HousekeepingEndpointsTes
     /// — Incremento 1 plan, "Tenant e RLS") but <c>users.tenant_id</c> carries a
     /// real foreign key to it, so a row must exist here before any
     /// tenant-owned Identity entity can be inserted for the same id.
+    /// Idempotent (Fase 6, Incremento 2A) — <see cref="SeedHousekeeperUserAsync"/>
+    /// is now called more than once for the SAME tenant in tests that seed
+    /// two housekeepers sharing a tenant.
     /// </summary>
     private async Task EnsureTenantExistsAsync(Guid tenantId)
     {
         await using var dbContext = CreateIdentityDbContext(_migratorConnectionString, new TenantContext());
+
+        if (await dbContext.Tenants.AnyAsync(t => t.Id == tenantId))
+            return;
 
         var tenant = Tenant.Provision(tenantId, TenantSlug.Create($"test-{tenantId:N}"), "Test Tenant", DateTimeOffset.UtcNow);
         dbContext.Tenants.Add(tenant);
@@ -319,6 +325,9 @@ public class HousekeepingEndpointsTests : IClassFixture<HousekeepingEndpointsTes
 
     private static Task<HttpResponseMessage> PostAsync(HttpClient client, string route, object? body, string? token) =>
         SendAsync(client, HttpMethod.Post, route, body, token);
+
+    private static Task<HttpResponseMessage> PutAsync(HttpClient client, string route, object? body, string? token) =>
+        SendAsync(client, HttpMethod.Put, route, body, token);
 
     private static async Task<HttpResponseMessage> SendAsync(HttpClient client, HttpMethod method, string route, object? body, string? token)
     {
@@ -635,6 +644,454 @@ public class HousekeepingEndpointsTests : IClassFixture<HousekeepingEndpointsTes
         var response = await GetAsync(client, "/api/v1/cleanings", token: null);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    // ---- Self-service (Portal da Faxineira, Fase 6 Incremento 2A) ----
+
+    [Fact]
+    public async Task MyCleanings_list_returns_only_cleanings_assigned_to_the_caller()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperA = await SeedHousekeeperUserAsync(tenantId);
+        var housekeeperB = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+
+        var createdForA = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperA, adminToken);
+        await CreateAndAssignCleaningAsync(client, propertyId, housekeeperB, adminToken);
+
+        var housekeeperAToken = await GenerateTokenAsync(host, housekeeperA, tenantId, ["HOUSEKEEPER"]);
+        var listResponse = await GetAsync(client, "/api/v1/my-cleanings", housekeeperAToken);
+
+        listResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var page = await listResponse.Content.ReadFromJsonAsync<PagedCleaningResponse>(JsonWebDefaults);
+        page!.TotalCount.Should().Be(1);
+        page.Items.Single().Id.Should().Be(createdForA.Id);
+        page.Items.Single().AssignedHousekeeperUserId.Should().Be(housekeeperA);
+    }
+
+    [Fact]
+    public async Task MyCleanings_getById_for_own_cleaning_returns_200()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperUserId = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+
+        var housekeeperToken = await GenerateTokenAsync(host, housekeeperUserId, tenantId, ["HOUSEKEEPER"]);
+        var getResponse = await GetAsync(client, $"/api/v1/my-cleanings/{created.Id}", housekeeperToken);
+
+        getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var detail = await getResponse.Content.ReadFromJsonAsync<CleaningDetailResponse>(JsonWebDefaults);
+        detail!.Id.Should().Be(created.Id);
+        detail.AssignedHousekeeperUserId.Should().Be(housekeeperUserId);
+    }
+
+    [Fact]
+    public async Task MyCleanings_getById_for_a_cleaning_assigned_to_someone_else_returns_404_never_403()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperA = await SeedHousekeeperUserAsync(tenantId);
+        var housekeeperB = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+
+        var createdForA = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperA, adminToken);
+
+        var housekeeperBToken = await GenerateTokenAsync(host, housekeeperB, tenantId, ["HOUSEKEEPER"]);
+        var getResponse = await GetAsync(client, $"/api/v1/my-cleanings/{createdForA.Id}", housekeeperBToken);
+
+        getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task MyCleanings_getById_across_tenants_returns_404_never_403()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperUserId = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+
+        var otherTenantId = Guid.NewGuid();
+        var otherHousekeeperUserId = await SeedHousekeeperUserAsync(otherTenantId);
+        var otherTenantToken = await GenerateTokenAsync(host, otherHousekeeperUserId, otherTenantId, ["HOUSEKEEPER"]);
+
+        var getResponse = await GetAsync(client, $"/api/v1/my-cleanings/{created.Id}", otherTenantToken);
+
+        getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task MyCleanings_list_without_a_token_returns_401()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+
+        var response = await GetAsync(client, "/api/v1/my-cleanings", token: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task MyCleanings_list_with_ADMIN_role_lacking_CLEANINGS_MANAGE_OWN_CLEANING_returns_403()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+
+        var response = await GetAsync(client, "/api/v1/my-cleanings", adminToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // ---- Self-service lifecycle (Portal da Faxineira, Fase 6 Incremento 2A) ----
+
+    [Fact]
+    public async Task Full_self_service_lifecycle_via_InTransit_start_start_inspection_complete_succeeds()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperUserId = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+        var housekeeperToken = await GenerateTokenAsync(host, housekeeperUserId, tenantId, ["HOUSEKEEPER"]);
+
+        var inTransitResponse = await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/in-transit", null, housekeeperToken);
+        inTransitResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await inTransitResponse.Content.ReadFromJsonAsync<CleaningDetailResponse>(JsonWebDefaults))!.Status.Should().Be("InTransit");
+
+        var startResponse = await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/start", null, housekeeperToken);
+        startResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await startResponse.Content.ReadFromJsonAsync<CleaningDetailResponse>(JsonWebDefaults))!.Status.Should().Be("Started");
+
+        var startInspectionResponse = await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/start-inspection", null, housekeeperToken);
+        startInspectionResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await startInspectionResponse.Content.ReadFromJsonAsync<CleaningDetailResponse>(JsonWebDefaults))!.Status.Should().Be("InInspection");
+
+        var completeResponse = await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/complete", null, housekeeperToken);
+        completeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await completeResponse.Content.ReadFromJsonAsync<CleaningDetailResponse>(JsonWebDefaults))!.Status.Should().Be("Completed");
+    }
+
+    [Fact]
+    public async Task Self_service_waiting_materials_waiting_help_and_delay_all_succeed_for_the_owning_housekeeper()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperUserId = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var housekeeperToken = await GenerateTokenAsync(host, housekeeperUserId, tenantId, ["HOUSEKEEPER"]);
+
+        var delayCleaning = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+        var delayResponse = await PostAsync(client, $"/api/v1/my-cleanings/{delayCleaning.Id}/delay", null, housekeeperToken);
+        delayResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await delayResponse.Content.ReadFromJsonAsync<CleaningDetailResponse>(JsonWebDefaults))!.Status.Should().Be("Assigned");
+
+        var materialsCleaning = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+        await PostAsync(client, $"/api/v1/my-cleanings/{materialsCleaning.Id}/start", null, housekeeperToken);
+        var materialsResponse = await PostAsync(client, $"/api/v1/my-cleanings/{materialsCleaning.Id}/waiting-materials", null, housekeeperToken);
+        materialsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await materialsResponse.Content.ReadFromJsonAsync<CleaningDetailResponse>(JsonWebDefaults))!.Status.Should().Be("WaitingMaterials");
+
+        var helpCleaning = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+        await PostAsync(client, $"/api/v1/my-cleanings/{helpCleaning.Id}/start", null, housekeeperToken);
+        var helpResponse = await PostAsync(client, $"/api/v1/my-cleanings/{helpCleaning.Id}/waiting-help", null, housekeeperToken);
+        helpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await helpResponse.Content.ReadFromJsonAsync<CleaningDetailResponse>(JsonWebDefaults))!.Status.Should().Be("WaitingHelp");
+    }
+
+    [Fact]
+    public async Task Self_service_start_by_a_housekeeper_not_assigned_to_the_cleaning_returns_404_never_403()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperA = await SeedHousekeeperUserAsync(tenantId);
+        var housekeeperB = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperA, adminToken);
+
+        var housekeeperBToken = await GenerateTokenAsync(host, housekeeperB, tenantId, ["HOUSEKEEPER"]);
+        var startResponse = await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/start", null, housekeeperBToken);
+
+        startResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    /// <summary>
+    /// The same fail-closed guarantee as
+    /// <see cref="MyCleanings_getById_across_tenants_returns_404_never_403"/>,
+    /// but for a mutating self-service endpoint rather than a read — proves
+    /// RLS/OwnCleaningLoader reject a cross-tenant write attempt identically
+    /// to a cross-tenant read, never merely relying on the read path having
+    /// been checked once.
+    /// </summary>
+    [Fact]
+    public async Task Self_service_start_across_tenants_returns_404_never_403()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperUserId = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+
+        var otherTenantId = Guid.NewGuid();
+        var otherHousekeeperUserId = await SeedHousekeeperUserAsync(otherTenantId);
+        var otherTenantToken = await GenerateTokenAsync(host, otherHousekeeperUserId, otherTenantId, ["HOUSEKEEPER"]);
+
+        var startResponse = await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/start", null, otherTenantToken);
+
+        startResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Self_service_delay_on_a_Completed_cleaning_returns_409()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperUserId = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var housekeeperToken = await GenerateTokenAsync(host, housekeeperUserId, tenantId, ["HOUSEKEEPER"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+
+        await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/start", null, housekeeperToken);
+        await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/start-inspection", null, housekeeperToken);
+        await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/complete", null, housekeeperToken);
+
+        var delayResponse = await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/delay", null, housekeeperToken);
+
+        delayResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // ---- Occurrences (Fase 6, Incremento 2A) ----
+
+    [Fact]
+    public async Task Register_and_list_occurrence_for_own_cleaning_succeeds()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperUserId = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var housekeeperToken = await GenerateTokenAsync(host, housekeeperUserId, tenantId, ["HOUSEKEEPER"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+        await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/start", null, housekeeperToken);
+
+        var registerResponse = await PostAsync(
+            client, $"/api/v1/my-cleanings/{created.Id}/occurrences",
+            new RegisterCleaningOccurrenceRequest("Damage", "Broken lamp in the living room"), housekeeperToken);
+
+        registerResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var registered = await registerResponse.Content.ReadFromJsonAsync<CleaningOccurrenceResponse>(JsonWebDefaults);
+        registered!.Type.Should().Be("Damage");
+        registered.Description.Should().Be("Broken lamp in the living room");
+        registered.RegisteredByUserId.Should().Be(housekeeperUserId);
+
+        var listResponse = await GetAsync(client, $"/api/v1/my-cleanings/{created.Id}/occurrences", housekeeperToken);
+        listResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var occurrences = await listResponse.Content.ReadFromJsonAsync<CleaningOccurrenceResponse[]>(JsonWebDefaults);
+        occurrences.Should().ContainSingle(o => o.Id == registered.Id);
+    }
+
+    [Fact]
+    public async Task Register_occurrence_by_a_housekeeper_not_assigned_to_the_cleaning_returns_404()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperA = await SeedHousekeeperUserAsync(tenantId);
+        var housekeeperB = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperA, adminToken);
+
+        var housekeeperBToken = await GenerateTokenAsync(host, housekeeperB, tenantId, ["HOUSEKEEPER"]);
+        var registerResponse = await PostAsync(
+            client, $"/api/v1/my-cleanings/{created.Id}/occurrences",
+            new RegisterCleaningOccurrenceRequest("Noise", null), housekeeperBToken);
+
+        registerResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Register_occurrence_with_an_invalid_type_returns_400()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperUserId = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var housekeeperToken = await GenerateTokenAsync(host, housekeeperUserId, tenantId, ["HOUSEKEEPER"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+
+        var registerResponse = await PostAsync(
+            client, $"/api/v1/my-cleanings/{created.Id}/occurrences",
+            new RegisterCleaningOccurrenceRequest("NotARealType", null), housekeeperToken);
+
+        registerResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Register_occurrence_on_a_Completed_cleaning_returns_409()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperUserId = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var housekeeperToken = await GenerateTokenAsync(host, housekeeperUserId, tenantId, ["HOUSEKEEPER"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+        await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/start", null, housekeeperToken);
+        await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/start-inspection", null, housekeeperToken);
+        await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/complete", null, housekeeperToken);
+
+        var registerResponse = await PostAsync(
+            client, $"/api/v1/my-cleanings/{created.Id}/occurrences",
+            new RegisterCleaningOccurrenceRequest("Theft", null), housekeeperToken);
+
+        registerResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // ---- Checklist (Fase 6, Incremento 2A) ----
+
+    [Fact]
+    public async Task Checklist_starts_with_all_8_items_unchecked_and_toggling_one_persists_it()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperUserId = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var housekeeperToken = await GenerateTokenAsync(host, housekeeperUserId, tenantId, ["HOUSEKEEPER"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+        await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/start", null, housekeeperToken);
+
+        var initialResponse = await GetAsync(client, $"/api/v1/my-cleanings/{created.Id}/checklist", housekeeperToken);
+        initialResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var initialItems = await initialResponse.Content.ReadFromJsonAsync<CleaningChecklistItemResponse[]>(JsonWebDefaults);
+        initialItems.Should().HaveCount(8);
+        initialItems.Should().OnlyContain(i => !i.IsChecked && i.UpdatedByUserId == null);
+
+        var setResponse = await PutAsync(
+            client, $"/api/v1/my-cleanings/{created.Id}/checklist/Stove", new SetChecklistItemRequest(true), housekeeperToken);
+        setResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var setItem = await setResponse.Content.ReadFromJsonAsync<CleaningChecklistItemResponse>(JsonWebDefaults);
+        setItem!.IsChecked.Should().BeTrue();
+        setItem.UpdatedByUserId.Should().Be(housekeeperUserId);
+
+        var afterResponse = await GetAsync(client, $"/api/v1/my-cleanings/{created.Id}/checklist", housekeeperToken);
+        var afterItems = await afterResponse.Content.ReadFromJsonAsync<CleaningChecklistItemResponse[]>(JsonWebDefaults);
+        afterItems.Should().ContainSingle(i => i.ItemType == "Stove" && i.IsChecked);
+        afterItems.Should().Contain(i => i.ItemType != "Stove" && !i.IsChecked);
+    }
+
+    [Fact]
+    public async Task Checklist_does_not_block_Complete_when_no_item_is_checked()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperUserId = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var housekeeperToken = await GenerateTokenAsync(host, housekeeperUserId, tenantId, ["HOUSEKEEPER"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+        await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/start", null, housekeeperToken);
+        await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/start-inspection", null, housekeeperToken);
+
+        var completeResponse = await PostAsync(client, $"/api/v1/my-cleanings/{created.Id}/complete", null, housekeeperToken);
+
+        completeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await completeResponse.Content.ReadFromJsonAsync<CleaningDetailResponse>(JsonWebDefaults))!.Status.Should().Be("Completed");
+    }
+
+    [Fact]
+    public async Task Set_checklist_item_by_a_housekeeper_not_assigned_to_the_cleaning_returns_404()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperA = await SeedHousekeeperUserAsync(tenantId);
+        var housekeeperB = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperA, adminToken);
+
+        var housekeeperBToken = await GenerateTokenAsync(host, housekeeperB, tenantId, ["HOUSEKEEPER"]);
+        var setResponse = await PutAsync(
+            client, $"/api/v1/my-cleanings/{created.Id}/checklist/Window", new SetChecklistItemRequest(true), housekeeperBToken);
+
+        setResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Set_checklist_item_with_an_invalid_item_type_returns_400()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedActivePropertyProjectionAsync(tenantId, propertyId);
+        var housekeeperUserId = await SeedHousekeeperUserAsync(tenantId);
+        var adminToken = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var housekeeperToken = await GenerateTokenAsync(host, housekeeperUserId, tenantId, ["HOUSEKEEPER"]);
+        var created = await CreateAndAssignCleaningAsync(client, propertyId, housekeeperUserId, adminToken);
+
+        var setResponse = await PutAsync(
+            client, $"/api/v1/my-cleanings/{created.Id}/checklist/NotARealItem", new SetChecklistItemRequest(true), housekeeperToken);
+
+        setResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    private async Task<CleaningDetailResponse> CreateAndAssignCleaningAsync(
+        HttpClient client, Guid propertyId, Guid housekeeperUserId, string adminToken)
+    {
+        var createResponse = await PostAsync(client, "/api/v1/cleanings", new CreateCleaningRequest(propertyId, null), adminToken);
+        var created = await createResponse.Content.ReadFromJsonAsync<CleaningDetailResponse>(JsonWebDefaults);
+
+        var assignResponse = await PostAsync(
+            client, $"/api/v1/cleanings/{created!.Id}/assign", new AssignCleaningRequest(housekeeperUserId), adminToken);
+        return (await assignResponse.Content.ReadFromJsonAsync<CleaningDetailResponse>(JsonWebDefaults))!;
     }
 
     // ---- Helpers ----
