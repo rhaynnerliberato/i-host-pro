@@ -1,8 +1,8 @@
 # Fase 6 — Housekeeping — Validação e Homologação
 
-Versão: 0.9 (Incremento 2A — Portal da Faxineira Core — tecnicamente concluído, versionado; publicação em `origin/feature/housekeeping` em andamento — documento vivo, atualizado progressivamente a cada checkpoint)
+Versão: 1.0 (Incremento 2A — Portal da Faxineira Core — tecnicamente concluído, versionado e **publicado** em `origin/feature/housekeeping` — documento vivo, atualizado progressivamente a cada checkpoint)
 
-Status: **Incremento 1 (Housekeeping Foundation) e Incremento 2A (Portal da Faxineira Core) tecnicamente aprovados e versionados em `feature/housekeeping` local.** Auditoria da Fase 6 aprovada com correções; Checkpoints 0-6 do Incremento 1 concluídos; Checkpoints 0-6 do Incremento 2A concluídos (§21-§27). **A Fase 6 continua EM ANDAMENTO** — o Incremento 2B (Files/Evidências — fotos/vídeos de ocorrências) permanece não implementado, dependendo de auditoria e decisão explícita (§28.4). Nenhum merge para `master` foi realizado; `feature/housekeeping` permanece a branch ativa.
+Status: **Incremento 1 (Housekeeping Foundation) e Incremento 2A (Portal da Faxineira Core) tecnicamente aprovados, versionados e publicados em `origin/feature/housekeeping`.** Auditoria da Fase 6 aprovada com correções; Checkpoints 0-6 do Incremento 1 concluídos; Checkpoints 0-6 do Incremento 2A concluídos (§21-§29). **A Fase 6 continua EM ANDAMENTO** — o Incremento 2B (Files/Evidências — fotos/vídeos de ocorrências) permanece não implementado, dependendo de auditoria e decisão explícita (§28.4/§30). `master` **não contém** ainda nenhuma alteração da Fase 6; nenhum merge foi realizado; `feature/housekeeping` permanece a branch ativa.
 
 ---
 
@@ -899,3 +899,15 @@ O Incremento 2A (Portal da Faxineira Core) está **tecnicamente concluído e ver
 ### 28.4 Incremento 2B (Files/Evidências) — ainda não iniciado
 
 Fotos e vídeos de ocorrências/checklist permanecem inteiramente fora de escopo desta sessão, conforme a exclusão explícita já registrada em §21. Nenhuma Fase 7 ou posterior foi iniciada. A auditoria técnica/documental do Incremento 2B, sem qualquer implementação, é apresentada em §30, junto com a decisão pendente sobre se o Incremento 2B é ou não indispensável para o encerramento funcional da Fase 6.
+
+## 29. Publicação do Incremento 2A
+
+O push de `feature/housekeeping` para `origin/feature/housekeeping` foi realizado com sucesso (`56433f0..73492f1`). Confirmado via `git fetch` + `git status -sb`: `feature/housekeeping...origin/feature/housekeeping`, sem anotação de `ahead`/`behind` — **branch remota totalmente sincronizada**. `master` **não contém** nenhuma alteração da Fase 6 (nenhum merge foi realizado). A Fase 6 permanece **EM ANDAMENTO**: o Incremento 2B (Files/Evidências) ainda não foi iniciado e depende de decisão explícita após a auditoria técnica/documental apresentada em §30.
+
+**Status oficial após a publicação**:
+
+- **Fase 6** — EM ANDAMENTO.
+- **Incremento 1** (Housekeeping Foundation) — concluído e publicado em `origin/feature/housekeeping`.
+- **Incremento 2A** (Portal da Faxineira Core) — concluído e publicado em `origin/feature/housekeeping`.
+- **Incremento 2B** (Files/Evidências) — não implementado; depende de decisão/aprovação após auditoria (§30).
+- **`master`** — sem integração da Fase 6.
