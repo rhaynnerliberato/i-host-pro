@@ -113,6 +113,25 @@ public sealed class PolicyUpdatedWolverineDiscoveryTests : IAsyncLifetime
     /// call. IHostPro.Worker only ever attaches a consumer to an
     /// already-existing queue (§13.7); it never declares topology itself, so
     /// without this the subprocess below would have nothing to listen to.
+    ///
+    /// Fase 6, Checkpoint 6 homologação, real defect found and fixed in this
+    /// TEST's own fixture (not production code): this method predates
+    /// Housekeeping and originally declared only the Configuration &amp;
+    /// Policy topology. Since ADR-015's generalization, IHostPro.Worker's
+    /// Program.cs unconditionally calls ListenToRabbitQueue for
+    /// housekeeping.property-projection/housekeeping.reservation-projection
+    /// too (Worker hosts every Bounded Context's consumers in one process),
+    /// so the real Worker subprocess this test boots now fails outright at
+    /// startup with a real AMQP 404 ("no queue 'housekeeping.property-projection'
+    /// in vhost '/'") the instant it tries to listen to a queue this
+    /// fixture never provisioned — confirmed by a real failing run of this
+    /// exact test before this fix. Extended below to also declare the two
+    /// Housekeeping-owned queues (bound to Property Management's/
+    /// Reservations' own exchanges, exactly mirroring
+    /// IHostPro.MigrationRunner's own declarations) so this test keeps
+    /// exercising a real, fully-bootable Worker process rather than one that
+    /// crashes before ever reaching the PolicyUpdated listener this test
+    /// actually cares about.
     /// </summary>
     private async Task DeclareConfigurationRabbitMqTopologyAsync()
     {
@@ -134,6 +153,20 @@ public sealed class PolicyUpdatedWolverineDiscoveryTests : IAsyncLifetime
                 {
                     exchange.ExchangeType = ExchangeType.Topic;
                     exchange.BindQueue("configuration.policy-updated", "policy_updated");
+                })
+                .DeclareExchange("property-management-events", exchange =>
+                {
+                    exchange.ExchangeType = ExchangeType.Topic;
+                    exchange.BindQueue("housekeeping.property-projection", "property_created");
+                    exchange.BindQueue("housekeeping.property-projection", "property_activated");
+                    exchange.BindQueue("housekeeping.property-projection", "property_deactivated");
+                    exchange.BindQueue("housekeeping.property-projection", "property_archived");
+                })
+                .DeclareExchange("reservation-events", exchange =>
+                {
+                    exchange.ExchangeType = ExchangeType.Topic;
+                    exchange.BindQueue("housekeeping.reservation-projection", "reservation_created");
+                    exchange.BindQueue("housekeeping.reservation-projection", "reservation_cancelled");
                 });
         });
 

@@ -317,9 +317,14 @@ public sealed class WebE2EFixture : IAsyncLifetime
             await reservationsDbContext.Database.MigrateAsync();
         await using (var configurationDbContext = CreateConfigurationDbContext())
             await configurationDbContext.Database.MigrateAsync();
+        // Fase 6, Checkpoint 6 homologação: was missing entirely — see this
+        // file's own StartWorkerProcess/ProvisionRabbitMqTopologyAsync doc
+        // comments for the full real-failure narrative this gap caused.
+        await using (var housekeepingDbContext = CreateHousekeepingDbContext())
+            await housekeepingDbContext.Database.MigrateAsync();
     }
 
-    /// <summary>Mirrors IHostPro.MigrationRunner exactly: platform_messaging (Main) first, then the four Ancillary outboxes.</summary>
+    /// <summary>Mirrors IHostPro.MigrationRunner exactly: platform_messaging (Main) first, then the five Ancillary outboxes.</summary>
     private async Task ProvisionMessageStoresAsync()
     {
         await ProvisionMessageStoreSchemaAsync("platform_messaging", dbContextType: null);
@@ -327,6 +332,7 @@ public sealed class WebE2EFixture : IAsyncLifetime
         await ProvisionMessageStoreSchemaAsync("property_management_messaging", typeof(IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence.PropertyManagementDbContext));
         await ProvisionMessageStoreSchemaAsync("reservations_messaging", typeof(IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext));
         await ProvisionMessageStoreSchemaAsync("configuration_messaging", typeof(IHostPro.Contexts.Configuration.Infrastructure.Persistence.ConfigurationDbContext));
+        await ProvisionMessageStoreSchemaAsync("housekeeping_messaging", typeof(IHostPro.Contexts.Housekeeping.Infrastructure.Persistence.HousekeepingDbContext));
     }
 
     private async Task ProvisionMessageStoreSchemaAsync(string schema, Type? dbContextType)
@@ -376,8 +382,40 @@ public sealed class WebE2EFixture : IAsyncLifetime
         {
             opts.UseIHostProRabbitMq(rabbitConfiguration, listen: false)
                 .DeclareExchange("identity-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
-                .DeclareExchange("property-management-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
-                .DeclareExchange("reservation-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
+                // Fase 6, Checkpoint 6 homologação: this fixture's own topology
+                // provisioning predates Housekeeping and never learned about its
+                // two consumer queues — the identical class of gap already found
+                // and fixed once in this same checkpoint for
+                // PolicyUpdatedWolverineDiscoveryTests.cs's own hand-rolled
+                // topology (see the Fase 6 homologation doc, §10.9). Confirmed by
+                // a real failing run: the real Worker subprocess this fixture
+                // starts (StartWorkerProcess) now unconditionally calls
+                // ListenToRabbitQueue for housekeeping.property-projection/
+                // housekeeping.reservation-projection too (Worker hosts every
+                // Bounded Context's consumers in one process since ADR-015), so
+                // it crashed at startup with a real AMQP 404
+                // ("no queue 'housekeeping.property-projection' in vhost '/'")
+                // before ever reaching readiness — which in turn left the real
+                // IHostPro.Api process never started at all (this fixture only
+                // proceeds to start Api after the Worker signals it is
+                // listening), surfacing here as every single E2E test timing out
+                // waiting for a completely unreachable Api. Mirrors
+                // IHostPro.MigrationRunner's own declarations exactly.
+                .DeclareExchange("property-management-events", exchange =>
+                {
+                    exchange.ExchangeType = ExchangeType.Topic;
+                    exchange.BindQueue("housekeeping.property-projection", "property_created");
+                    exchange.BindQueue("housekeeping.property-projection", "property_activated");
+                    exchange.BindQueue("housekeeping.property-projection", "property_deactivated");
+                    exchange.BindQueue("housekeeping.property-projection", "property_archived");
+                })
+                .DeclareExchange("reservation-events", exchange =>
+                {
+                    exchange.ExchangeType = ExchangeType.Topic;
+                    exchange.BindQueue("housekeeping.reservation-projection", "reservation_created");
+                    exchange.BindQueue("housekeeping.reservation-projection", "reservation_cancelled");
+                })
+                .DeclareExchange("housekeeping-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
                 // Fase 5, Checkpoint 7 homologação: was missing entirely — the
                 // same "configuration-events" gap already found and fixed in
                 // IHostPro.MigrationRunner (see the Fase 5 homologation doc,
@@ -474,6 +512,15 @@ public sealed class WebE2EFixture : IAsyncLifetime
         return new IHostPro.Contexts.Configuration.Infrastructure.Persistence.ConfigurationDbContext(options, new TenantContext());
     }
 
+    private IHostPro.Contexts.Housekeeping.Infrastructure.Persistence.HousekeepingDbContext CreateHousekeepingDbContext()
+    {
+        var options = new DbContextOptionsBuilder<IHostPro.Contexts.Housekeeping.Infrastructure.Persistence.HousekeepingDbContext>()
+            .UseNpgsql(_migratorConnectionString, npgsqlOptions =>
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "housekeeping"))
+            .Options;
+        return new IHostPro.Contexts.Housekeeping.Infrastructure.Persistence.HousekeepingDbContext(options, new TenantContext());
+    }
+
     /// <summary>Mirrors <see cref="CreateIdentityDbContext"/>'s exact pattern: with no tenantId, the migrator connection (schema DDL only, e.g. <see cref="MigrateSchemasAsync"/>); with one, the app connection and a tenant-scoped <see cref="TenantContext"/>.</summary>
     private IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext CreateReservationsDbContext(Guid? tenantId = null)
     {
@@ -548,6 +595,7 @@ public sealed class WebE2EFixture : IAsyncLifetime
         psi.Environment["ConnectionStrings__PropertyManagement"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Reservations"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Configuration"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__Housekeeping"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _appConnectionString;
         psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";
         psi.Environment["Identity__Jwt__Audience"] = "ihostpro-api-test";
@@ -595,6 +643,26 @@ public sealed class WebE2EFixture : IAsyncLifetime
         var psi = new ProcessStartInfo("dotnet", $"\"{dllPath}\"");
         psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         psi.Environment["ConnectionStrings__Identity"] = _appConnectionString;
+        // Fase 6, Checkpoint 6 homologação: was missing entirely — the real
+        // Worker subprocess this fixture starts calls AddHousekeepingModule,
+        // which needs ConnectionStrings:Housekeeping to point at THIS
+        // fixture's own ephemeral Postgres container (never the
+        // appsettings.json dev-default), same as every other context below.
+        psi.Environment["ConnectionStrings__Housekeeping"] = _appConnectionString;
+        // Fase 6, Checkpoint 6 homologação, real defect found and fixed:
+        // ConnectionStrings:Platform was missing entirely from this specific
+        // process launch (StartApiProcess already sets it) — Program.cs's
+        // own Main Wolverine store setup throws
+        // InvalidOperationException("Missing connection string
+        // 'ConnectionStrings:Platform'.") immediately at startup without it,
+        // confirmed by a real crash log captured from this exact subprocess
+        // (temporary Debug-level diagnostic capture, since reverted) —
+        // meaning the real Worker this fixture starts has never actually
+        // been running successfully; every E2E test that depends on ANY
+        // Worker-consumed event (PolicyUpdated included, not just
+        // Housekeeping) was silently exercising a Worker that immediately
+        // crashed at boot.
+        psi.Environment["ConnectionStrings__Platform"] = _appConnectionString;
         psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";
         psi.Environment["Identity__Jwt__Audience"] = "ihostpro-api-test";
         psi.Environment["Identity__Jwt__AccessTokenLifetime"] = "00:15:00";

@@ -331,7 +331,8 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
     /// </summary>
     private static readonly string[] EnvironmentKeys =
     [
-        "ConnectionStrings__Identity", "ConnectionStrings__PropertyManagement", "ConnectionStrings__Reservations", "ConnectionStrings__Platform",
+        "ConnectionStrings__Identity", "ConnectionStrings__PropertyManagement", "ConnectionStrings__Reservations",
+        "ConnectionStrings__Configuration", "ConnectionStrings__Housekeeping", "ConnectionStrings__Platform",
         "Identity__Jwt__Issuer", "Identity__Jwt__Audience", "Identity__Jwt__AccessTokenLifetime", "Identity__Jwt__ClockSkew",
         "Identity__Jwt__SigningKey__PrivateKeyPem",
         "Identity__AccountLockout__MaxFailedAccessAttempts", "Identity__AccountLockout__DefaultLockoutDuration", "Identity__AccountLockout__AllowedForNewUsers",
@@ -351,6 +352,8 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
             ["ConnectionStrings__Identity"] = _fixture.AppConnectionString,
             ["ConnectionStrings__PropertyManagement"] = _fixture.AppConnectionString,
             ["ConnectionStrings__Reservations"] = _fixture.AppConnectionString,
+            ["ConnectionStrings__Configuration"] = _fixture.AppConnectionString,
+            ["ConnectionStrings__Housekeeping"] = _fixture.AppConnectionString,
             ["ConnectionStrings__Platform"] = _fixture.AppConnectionString,
             ["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test",
             ["Identity__Jwt__Audience"] = "ihostpro-api-test",
@@ -1307,6 +1310,8 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         psi.Environment["ConnectionStrings__Identity"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__PropertyManagement"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__Reservations"] = _fixture.MigratorConnectionString;
+        psi.Environment["ConnectionStrings__Configuration"] = _fixture.MigratorConnectionString;
+        psi.Environment["ConnectionStrings__Housekeeping"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _fixture.MigratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _fixture.RabbitMq.Hostname;
         psi.Environment["RabbitMq__VirtualHost"] = "/";

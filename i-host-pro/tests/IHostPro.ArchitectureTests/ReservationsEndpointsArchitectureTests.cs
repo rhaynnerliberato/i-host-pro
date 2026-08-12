@@ -30,7 +30,7 @@ public class ReservationsEndpointsArchitectureTests
             nameof(ReservationsController.List),
             nameof(ReservationsController.GetById),
             nameof(ReservationsController.Update),
-            nameof(ReservationsController.Cancel),
+            nameof(ReservationsController.CancelReservation),
         ], "no physical/logical exclusion action may exist this increment");
     }
 
@@ -50,13 +50,13 @@ public class ReservationsEndpointsArchitectureTests
     }
 
     [Fact]
-    public void Cancel_accepts_no_body()
+    public void CancelReservation_accepts_no_body()
     {
-        var cancel = typeof(ReservationsController).GetMethod(nameof(ReservationsController.Cancel))!;
+        var cancel = typeof(ReservationsController).GetMethod(nameof(ReservationsController.CancelReservation))!;
 
         cancel.GetParameters().Should().NotContain(
             p => p.GetCustomAttribute<FromBodyAttribute>() != null,
-            "Cancel is a pure state transition with no client-supplied body");
+            "CancelReservation is a pure state transition with no client-supplied body");
     }
 
     [Fact]
