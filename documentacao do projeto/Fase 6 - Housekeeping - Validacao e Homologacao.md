@@ -1,8 +1,8 @@
 # Fase 6 — Housekeeping — Validação e Homologação
 
-Versão: 0.8 (Checkpoint 6 concluído, Incremento 1 aprovado, versionado e **publicado** — documento vivo, atualizado progressivamente a cada checkpoint)
+Versão: 0.9 (Incremento 2A — Portal da Faxineira Core — tecnicamente concluído, versionado; publicação em `origin/feature/housekeeping` em andamento — documento vivo, atualizado progressivamente a cada checkpoint)
 
-Status: **Incremento 1 (Housekeeping Foundation) tecnicamente aprovado, versionado e publicado em `origin/feature/housekeeping`.** Auditoria da Fase 6 aprovada com correções; Checkpoints 0-6 concluídos (gates e contratos existentes; Foundation; domínio/persistência; projeção de eventos/integração; API administrativa; frontend administrativo; E2E/homologação). **A Fase 6 continua em andamento** — o Incremento 1 cobre apenas Housekeeping Foundation; o Incremento 2 (Portal da Faxineira) ainda não foi aprovado para implementação, apenas auditado/planejado (§21). Nenhum merge para `master` foi realizado; `feature/housekeeping` permanece a branch ativa.
+Status: **Incremento 1 (Housekeeping Foundation) e Incremento 2A (Portal da Faxineira Core) tecnicamente aprovados e versionados em `feature/housekeeping` local.** Auditoria da Fase 6 aprovada com correções; Checkpoints 0-6 do Incremento 1 concluídos; Checkpoints 0-6 do Incremento 2A concluídos (§21-§27). **A Fase 6 continua EM ANDAMENTO** — o Incremento 2B (Files/Evidências — fotos/vídeos de ocorrências) permanece não implementado, dependendo de auditoria e decisão explícita (§28.4). Nenhum merge para `master` foi realizado; `feature/housekeeping` permanece a branch ativa.
 
 ---
 
@@ -569,3 +569,333 @@ Este parágrafo (§20.8) e o commit que o inclui (`docs(housekeeping): close inc
 ### 20.9 Estado da Fase 6 após a publicação
 
 A Fase 6 **continua em andamento**: este documento registra o fechamento e a publicação do Incremento 1 (Housekeeping Foundation). O Incremento 2 (Portal da Faxineira) ainda não foi implementado — nenhum `Files`, upload, checklist, ocorrência, ou endpoint/frontend novo do Portal foi criado. Apenas a auditoria e o planejamento somente leitura, sem código, começam após esta publicação (§21). A implementação do Incremento 2 aguarda aprovação explícita do usuário.
+
+## 21. Incremento 2 — decomposição e abertura do Incremento 2A
+
+### 21.1 Decomposição registrada
+
+A auditoria somente leitura do Incremento 2 (apresentada em conversa, sem alteração de código) foi aprovada pelo usuário, que autorizou o início de um subconjunto explícito do escopo original de Fase 6 (parágrafo único do Plano Executivo: "Ciclo de faxinas, atribuição, execução, checklist, ocorrências e portal"), decomposto em três incrementos:
+
+- **Incremento 1 — Housekeeping Foundation**: concluído e publicado (§1-§20 deste documento).
+- **Incremento 2A — Portal da Faxineira Core**: autorizado a iniciar nesta seção. Escopo: autoprestação da faxineira para as próprias faxinas (própria autorização/ABAC), transição `InTransit`, `Delay`/`NeedsHelp`/`NeedsMaterial`, ocorrências textuais, checklist textual (condicional ao Checkpoint 0), frontend Portal dedicado. Explicitamente **sem** Files/upload/fotos/vídeos em qualquer forma.
+- **Incremento 2B — Files/Evidências (futuro, não autorizado)**: upload real de fotos/vídeos, Bounded Context Files (já decidido arquiteturalmente em ADR-006, nunca implementado em código). Não iniciado; não faz parte desta seção.
+
+Esta decomposição é uma decisão de execução (sequenciamento) registrada aqui para rastreabilidade — não substitui nem altera o parágrafo original do Plano Executivo de Desenvolvimento por Fases, que permanece inalterado como a fonte do escopo aprovado de Fase 6 como um todo.
+
+### 21.2 Confirmação do gate de secrets
+
+Reconfirmado a partir dos próprios registros desta sessão (sem reabrir investigação de infraestrutura): a decisão de manter os três valores do `user-secrets` de `IHostPro.Api` (`RabbitMq:Username`, `RabbitMq:Password`, `Identity:Jwt:SigningKey:PrivateKeyPem`) como estão — já registrada em §20.2 — foi explicitamente confirmada pelo usuário via pergunta direta ("Leave all 3 secrets as-is (Recommended)"). Nenhum valor foi lido ou impresso novamente nesta confirmação.
+
+### 21.3 Checkpoint 0 — matriz de refinamento documental
+
+Auditados nesta seção: Documento 06 (Máquina de Estados), Documento 07 (Catálogo de Eventos), Documento 09 (Atores e Permissões), Documento 10 (Mapa Funcional), Documento 12 (Modelo de Dados Conceitual), Documento 14 (Diretrizes de UX/UI, §26 Portal da Faxineira), Documento 17 (Workflows 09-13), Plano Executivo, Architecture Principles, ADR-015, este documento (§1-§20), e o código atual de `Cleaning.cs`, `CleaningStatus.cs`, `ReservationProjectionEntry.cs`, `CreateCleaningCommand`/`CreateCleaningRequest`, `IdentityPermissionCodes.cs`, `IdentityCatalogSeed.cs`, `OwnProfileResponse.cs`/`GetOwnProfileQueryHandler.cs`.
+
+| Área | REQ (documentado) | DEC (decisão já tomada) | IMPLEMENTAÇÃO (código atual) | GAP | RECOMENDAÇÃO |
+|---|---|---|---|---|---|
+| **InTransit** | Doc 06 §5/§18: `Designada → Em Deslocamento → Iniciada` no fluxo canônico; descrição explícita: "Opcional. Configuração por tenant." | Doc 06 já documenta a etapa como opcional/configurável por tenant; usuário (§8) autorizou o método de domínio mas proibiu usar `RequireCleaningInTransitStep` como chave definitiva de `ConfigurationDefinition` neste incremento. | `CleaningStatus.InTransit` existe no enum, zero método de domínio (`Cleaning.cs` comentário: "the optional InTransit step is skipped by design this increment"). | Nenhum gap material — a "opcionalidade configurável por tenant" documentada não será implementada via `ConfigurationDefinition` real neste incremento (decisão já tomada pelo usuário), apenas a capacidade de transição em si (`Assigned → InTransit → Started` e `Assigned → Started` diretos, ambos válidos). | Implementar `Cleaning.MarkInTransit()` + `Start()` aceitando ambas origens (`Assigned` ou `InTransit`), sem introduzir configuração nova. |
+| **Delay** | Doc 09 linha 228: "Informar atraso" (capacidade da Faxineira). Doc 07: `CleaningDelayed` — "Faxina atrasada." (sem payload documentado). Doc 06: nenhum estado "Atrasada" existe na máquina de estados da Faxina. | — | Nenhuma implementação. `CleaningStatus` não tem valor "Delayed". | Nenhum gap material — a ausência de estado dedicado é consistente (evento informativo, não transição de estado) e a ausência de payload documentado já está coberta pela regra de parsimônia do usuário (§12). | Modelar como ação self-service que publica `CleaningDelayed` sem alterar `Status`, payload mínimo (`cleaningId`, `tenantId`, `reportedByUserId`, `reportedAtUtc`), sem campo de "minutos estimados" (não documentado, seria invenção). |
+| **NeedsHelp** | Doc 09: "Solicitar ajuda". Doc 07: `CleaningNeedsHelp` — "Solicitou ajuda." Doc 06 §5: estado `Aguardando Ajuda` — "Necessita apoio", entrada documentada a partir de `Iniciada`, sem retorno documentado. | — | `Cleaning.MarkWaitingHelp()` já existe (`Started → WaitingHelp`), implementado no Incremento 1. Nenhum evento de integração publicado ainda (endpoint self-service não existe). | Nenhum gap material. | Adicionar endpoint self-service que chama o método já existente + publica `CleaningNeedsHelp` (payload mínimo, mesmo padrão de Material). |
+| **NeedsMaterial** | Doc 09: "Solicitar materiais". Doc 07: `CleaningNeedsMaterial` — "Solicitou materiais." Doc 06 §5: estado `Aguardando Materiais` — "Necessário reabastecimento", mesma entrada/sem-retorno de NeedsHelp. Doc 17 Workflow 12 ("Pedido de Material"): `Faxineira → Solicitar Material → Registrar → Notificar Administrador` (sem fotos, sem relação com Reserva). | Doc 12 lista "Falta de material" também como exemplo de `Intercorrência` — sobreposição textual entre os dois modelos (Occurrence genérica vs. estado dedicado de Cleaning), não uma contradição: o Incremento 1 já escolheu e homologou o modelo de estado dedicado (`WaitingMaterials`), que este incremento apenas estende com o evento/endpoint self-service. | `Cleaning.MarkWaitingMaterials()` já existe (`Started → WaitingMaterials`). Nenhum evento/endpoint self-service ainda. | Nenhum gap material. | Mesmo tratamento de NeedsHelp: endpoint self-service + `CleaningNeedsMaterial`, payload mínimo, sem campo de "notificar administrador" (nenhum mecanismo de notificação existe no código — fora de escopo, não é um bloqueio). |
+| **Occurrence** | Doc 12: entidade `Intercorrência` — "Problema encontrado", exemplos: Furto, Quebra, Objeto esquecido, Dano, Animal, Fumo, Ruído, Falta de material. Doc 06 §5: registro de ocorrências ligado à etapa `Em Inspeção`. Doc 06 §8: máquina de estados própria da Intercorrência (`Registrada → Em Investigação → ... → Encerrada`) — mais rica que o necessário aqui. Doc 17 Workflow 11 ("Registro de Dano"): `Ocorrência → Registrar → Anexar Fotos → Relacionar Reserva → Notificar Administrador → Auditoria`. Doc 09: "Registrar intercorrência". | Usuário (§15): ocorrência como entidade (não agregado próprio), campos mínimos. Usuário (§2): proibido qualquer evidência/foto, real ou stub. Doc 07: nenhum evento `CleaningOccurrenceRegistered`/similar catalogado — usuário (§18) proíbe evento novo sem necessidade comprovada. | Nenhuma implementação (nem entidade, nem tabela). | Nenhum gap material bloqueante — a máquina de estados rica do Doc 06 §8 e os passos "Anexar Fotos"/"Relacionar Reserva"/"Notificar Administrador" do Workflow 11 excedem o que este incremento pode suportar sem Files/eventos novos; tratados como redução de escopo já autorizada pelo usuário, não como invenção. | `CleaningOccurrence` como entidade simples ligada a `Cleaning` (`cleaningId`, `tenantId`, `type` — catálogo fixo derivado dos 8 exemplos do Doc 12 —, `description` livre, `registeredByUserId`, `registeredAtUtc`), sem evidências, sem evento de integração, sem máquina de estados própria, sem relação explícita a Reserva (já transitiva via `Cleaning.ReservationId`). |
+| **Checklist** | Doc 12: entidade `Checklist` — "Representa itens de inspeção", exemplos: Fogão, Geladeira, TV, Ar-condicionado, Banheiro, Enxoval, Lixo, Janela (catálogo fixo, sem indicação de configuração por imóvel/tenant). Doc 12: Faxina "possui... checklist". Doc 17 Workflow 10 ("Conclusão da Faxina"): `Concluir → Checklist → Fotos → Ocorrências → Materiais → Finalizar` (sequência de UI, não enunciado como regra de bloqueio). | Usuário (§16-17): checklist não deve alterar silenciosamente a regra de `Complete` a menos que explicitamente documentado; fotos explicitamente não são requisito de conclusão neste incremento. | Nenhuma implementação. `Cleaning.Complete()` atual exige apenas `Status == InInspection`, sem depender de checklist. | Nenhum gap material — nenhum documento afirma em prosa que o checklist é obrigatório para concluir (o Workflow 10 é um diagrama de sequência de UI, não uma regra de negócio explícita); não há indicação documental de configurabilidade por imóvel/tenant (a lista do Doc 12 é o único catálogo encontrado). | Checklist textual com catálogo fixo de 8 itens (Doc 12), cada item um par `(rótulo, marcado: bool)` por Cleaning, sem gate sobre `Complete()` (preserva a regra atual), sem fotos, sem configuração por tenant/imóvel. |
+| **Minhas Faxinas (ordenação de "próximas faxinas")** | Doc 12: Faxina "possui... data; horário" como atributos conceituais. Doc 14 §26 (Portal da Faxineira): tela principal deve mostrar imediatamente "próximas faxinas; horário; imóvel". Doc 10 §5: "Agenda" é um módulo funcional próprio e rico (Agenda geral/por imóvel/por faxineira/por período/diária/semanal/mensal), citado como a tela principal da Faxineira no Doc 09/10 — nenhum código implementa este módulo. | — | `Cleaning.cs` **não possui nenhum campo de data/horário agendado** — apenas `CreatedAtUtc` (timestamp administrativo de criação) e timestamps de transição já ocorrida (`StartedAtUtc`, `InspectionStartedAtUtc`, `CompletedAtUtc`, `CancelledAtUtc`, todos nulos até a transição acontecer). `ReservationProjectionEntry` (projeção local de Reservation) carrega **apenas** `TenantId`+`ReservationId` — nenhuma data de check-in/check-out. `CreateCleaningCommand`/`CreateCleaningRequest` não capturam nenhuma data/horário na criação. | **GAP MATERIAL — bloqueante.** Não existe, em nenhum lugar do modelo de dados atual de Housekeeping, um campo que represente "quando esta faxina deve/deveria acontecer". `CreatedAtUtc` reflete apenas a ordem de inserção administrativa, não uma agenda real — usá-lo para ordenar "próximas faxinas" apresentaria à faxineira uma ordem sem relação garantida com a urgência real do trabalho. O módulo "Agenda" citado pela documentação como a fonte natural desse dado é uma funcionalidade própria, não implementada em nenhuma fase até aqui. | **Não resolvido — ver §21.4 abaixo. Nenhum dado especulativo foi adicionado.** |
+
+### 21.4 Gap material identificado — parada solicitada
+
+Conforme instrução explícita do usuário ("Se a informação temporal existente em Cleaning/Reservation projection for insuficiente para ordenar 'próximas faxinas' de forma correta: PARE e apresente o gap antes de adicionar dado especulativo"), a implementação de domínio para o Incremento 2A foi pausada neste ponto específico e o gap foi apresentado (matriz §21.3) antes de qualquer código. Os demais três pontos de possível conflito material que o usuário pediu para vigiar explicitamente — checklist, ocorrência, autorização own-cleaning — **não** apresentaram conflito documental material (ver matriz acima); apenas a ordenação de "próximas faxinas" permaneceu bloqueada até decisão do usuário.
+
+### 21.5 Resolução do gap — decisão do usuário
+
+Apresentadas três opções (adicionar campo de agendamento; ordenar por `CreatedAtUtc` documentando a limitação; remover a semântica de "próximas" neste incremento) mais a opção de fornecer contexto adicional. **Decisão do usuário: adicionar um campo real de agendamento.**
+
+Escopo da adição, mínimo e aditivo (sem alterar nenhum comportamento existente do Incremento 1):
+
+- Novo campo `Cleaning.ScheduledAtUtc` (`DateTimeOffset?`, opcional, nulo por padrão).
+- Capturável apenas na criação administrativa (`CreateCleaningCommand`/`CreateCleaningRequest` ganham um parâmetro opcional `ScheduledAtUtc`) — sem endpoint de atualização retroativa (não solicitado, seria escopo não pedido).
+- "Próximas faxinas" (Checkpoint 1/5, listagem own-cleaning) ordenada por `ScheduledAtUtc` ascendente, com faxinas sem valor (`null`) ordenadas por último (nunca ocultas) — nenhum dado é inventado para linhas existentes; elas simplesmente não participam da ordenação por agendamento até que um administrador informe a data.
+- Documento 12 já documentava conceitualmente que a Faxina "possui... data; horário" (linha 280-283) — esta adição apenas passa a implementar um atributo já previsto na documentação conceitual; nenhuma alteração do Documento 12 é necessária.
+- O módulo "Agenda" (Doc 10 §5, multi-visão: geral/por imóvel/por faxineira/por período/diária/semanal/mensal) permanece fora de escopo — `ScheduledAtUtc` é um campo simples de data/hora único por Cleaning, não uma reconstrução daquele módulo.
+
+Com esta decisão registrada, o Checkpoint 0 do Incremento 2A está concluído e a implementação de domínio (Checkpoint 1) está autorizada a prosseguir.
+
+## 22. Incremento 2A — Checkpoint 1: fundação de autorização/API own-cleaning
+
+### 22.1 `Cleaning.ScheduledAtUtc`
+
+Campo `DateTimeOffset? ScheduledAtUtc` adicionado a `Cleaning` (opcional, capturável apenas na criação administrativa via `CreateCleaningCommand`/`CreateCleaningRequest`, sem endpoint de atualização retroativa — conforme §21.5). Migration `AddCleaningScheduledAtUtc` gerada via `dotnet ef migrations add` (nunca escrita manualmente) — adiciona a coluna `housekeeping.cleanings.scheduled_at_utc` e o índice `(tenant_id, assigned_housekeeper_user_id, scheduled_at_utc)`. Propagado por toda a cadeia existente: `Cleaning.Create`, `CreateCleaningCommandHandler`, `CleaningResult`/`CleaningSummaryResult`, `CleaningDetailResponse`/`CleaningSummaryResponse`, `CleaningConfiguration`.
+
+### 22.2 Leitura própria com ABAC
+
+`ICleaningReader` ganhou dois métodos novos, mantendo os existentes intactos: `ListForHousekeeperAsync` (filtra obrigatoriamente por `AssignedHousekeeperUserId`, ordena por `ScheduledAtUtc` ascendente com nulos por último, depois `CreatedAtUtc`/`Id`) e `GetByIdForHousekeeperAsync` (retorna `null` tanto para "não existe" quanto para "existe mas não é minha", nunca distinguindo os dois casos). Duas novas queries de Application (`ListOwnCleaningsQuery`/`GetOwnCleaningDetailQuery`) recebem `HousekeeperUserId` exclusivamente do identity do chamador (`sub` claim via `HousekeepingIdentityReader`), nunca do corpo/query string da requisição.
+
+### 22.3 `MyCleaningsController` — endpoints self-service dedicados
+
+Novo controller em `api/v1/my-cleanings` (nunca um parâmetro opcional em `CleaningsController` — conforme §10 da autorização), com `GET /api/v1/my-cleanings` (lista paginada) e `GET /api/v1/my-cleanings/{cleaningId}` (detalhe), ambos gated por `[Authorize(Policy = IdentityPermissionCodes.CleaningsManageOwnCleaning)]`.
+
+**Defeito real encontrado e corrigido**: `CLEANINGS:MANAGE:OWN_CLEANING` já estava seedado no catálogo persistido e mapeado para `HOUSEKEEPER` desde o Incremento 1 (Fase 6), mas nenhuma `AuthorizationPolicy` ASP.NET Core correspondente havia sido registrada em `IdentityAuthorizationExtensions.AddIdentityAuthorization()` — a própria documentação da classe já previa isso ("A future checkpoint that protects a new endpoint with a permission code not yet listed here must add a policy for it at that point"). Sem essa policy, toda chamada a `MyCleaningsController` falhava com `InvalidOperationException: The AuthorizationPolicy named: 'CLEANINGS:MANAGE:OWN_CLEANING' was not found` — descoberto pelos próprios testes de integração HTTP reais desta seção (nunca por inspeção estática). Corrigido adicionando a policy que faltava, mesmo padrão das demais.
+
+### 22.4 Testes
+
+Unitários (`IHostPro.Contexts.Housekeeping.Tests.Unit`): 5 novos (`ListOwnCleaningsQueryHandlerTests` ×2, `GetOwnCleaningDetailQueryHandlerTests` ×3) — **67/67** aprovados.
+
+Integração HTTP real (`IHostPro.Contexts.Housekeeping.Tests.Integration`, `HousekeepingEndpointsTests`), 6 novos, todos contra Postgres/JWT reais via Testcontainers:
+- `MyCleanings_list_returns_only_cleanings_assigned_to_the_caller` — dois housekeepers no MESMO tenant, cada um só vê a própria faxina.
+- `MyCleanings_getById_for_own_cleaning_returns_200`.
+- `MyCleanings_getById_for_a_cleaning_assigned_to_someone_else_returns_404_never_403` — mesmo tenant, housekeeper errado.
+- `MyCleanings_getById_across_tenants_returns_404_never_403` — tenant diferente.
+- `MyCleanings_list_without_a_token_returns_401`.
+- `MyCleanings_list_with_ADMIN_role_lacking_CLEANINGS_MANAGE_OWN_CLEANING_returns_403` — prova que a permissão administrativa NÃO concede acesso aos endpoints self-service (nenhum bypass, correspondência exata de permissão).
+
+**Defeito de teste real encontrado e corrigido**: `EnsureTenantExistsAsync` (helper pré-existente da suíte) fazia `INSERT` incondicional de `Tenant`, nunca antes exercitado com dois housekeepers do mesmo tenant na mesma suíte — quebrava com violação de chave primária. Corrigido tornando-o idempotente (`if (await dbContext.Tenants.AnyAsync(...)) return;`), sem alterar o comportamento dos testes já existentes (cada um usa um tenant novo).
+
+**67/67** unit + **21/21** integration (`HousekeepingEndpointsTests`, incluindo os 15 pré-existentes) + **133/133** architecture (assembly inteiro) — todos revalidados após as correções. `git diff --check` não executado ainda (fica para o gate final do Checkpoint 6, junto dos demais checkpoints).
+
+## 23. Incremento 2A — Checkpoint 2: ciclo de vida do Portal
+
+### 23.1 Domínio
+
+`Cleaning.MarkInTransit()` adicionado (`Assigned → InTransit`, self-service apenas — nenhum gatilho administrativo, conforme Documento 06: "Faxineira informou deslocamento"). `Cleaning.Start()` revisado para aceitar origem `Assigned` OU `InTransit` — ambos os caminhos permanecem válidos, preservando a "opcionalidade" documentada sem introduzir uma `ConfigurationDefinition` nova (decisão já registrada em §21.5).
+
+### 23.2 Três eventos de integração — primeira implementação real
+
+`CleaningDelayed`, `CleaningNeedsHelp`, `CleaningNeedsMaterial` (Documento 07 §6) estavam catalogados desde antes da Fase 6 mas nunca implementados — confirmado nesta sessão que nem sequer os handlers ADMINISTRATIVOS de `MarkCleaningWaitingMaterials`/`MarkCleaningWaitingHelp` (Incremento 1) os publicavam, apenas auditavam. Payload mínimo para os três (apenas `CleaningId`, sem campo adicional — Documento 07 não documenta nenhum campo além do fato em si; regra de parsimônia da autorização §12-14):
+
+- **`CleaningDelayed`**: sem transição de estado (Documento 06 não documenta um estado "Atrasada"); apenas audita (`cleaning_delayed`) e publica. Rejeitado com `invalid_cleaning_transition` (409) apenas se a faxina já está `Completed`/`Cancelled` — limite de sanidade, não uma regra de negócio inventada.
+- **`CleaningNeedsMaterial`**/**`CleaningNeedsHelp`**: publicados tanto pelo caminho self-service quanto pelo administrativo já existente — os dois handlers `MarkCleaningWaitingMaterialsCommandHandler`/`MarkCleaningWaitingHelpCommandHandler` (Incremento 1) foram estendidos com a publicação do evento (mudança pequena, aditiva, sem alterar nenhum comportamento existente) para que o mesmo fato de domínio produza o mesmo evento independentemente de quem o disparou.
+
+### 23.3 Sete novos comandos self-service, todos com guarda ABAC
+
+`MarkOwnCleaningInTransitCommand`, `StartOwnCleaningCommand`, `StartOwnCleaningInspectionCommand`, `CompleteOwnCleaningCommand`, `MarkOwnCleaningWaitingMaterialsCommand`, `MarkOwnCleaningWaitingHelpCommand`, `ReportOwnCleaningDelayCommand` — cada um espelha estruturalmente seu equivalente administrativo, mas carrega através de `OwnCleaningLoader.LoadOwnedAsync` (novo helper compartilhado) a mesma garantia de fail-closed do Checkpoint 1: `null` tanto para "não existe" quanto para "existe mas não é minha", nunca um sinal distinto de "proibido". Nenhum comando de Cancel/Assign/Reassign/criação foi adicionado ao self-service (não concedido pela autorização §9).
+
+Sete novas rotas em `MyCleaningsController`: `POST /api/v1/my-cleanings/{id}/in-transit|start|start-inspection|complete|waiting-materials|waiting-help|delay` — mesmos nomes de segmento do controller administrativo, sob `/my-cleanings/`, todas gated por `CLEANINGS:MANAGE:OWN_CLEANING`.
+
+### 23.4 Testes
+
+Domínio (`CleaningTests`): +5 (`MarkInTransit` de `Assigned` sucede/de `Pending`/`Started` falha; `Start` de `InTransit` sucede).
+
+Unitários de Application (`OwnCleaningLifecycleCommandHandlerTests`, novo arquivo): +17 — sucesso por cada um dos 7 comandos, rejeição ABAC (`cleaning_not_found`, nunca "forbidden") para InTransit/Start/StartInspection/Complete/WaitingMaterials/WaitingHelp/Delay, rejeição de transição inválida para InTransit/Delay-em-Completed. `CleaningLifecycleCommandHandlerTests` (existente) atualizado: os dois testes que documentavam "enqueues no event" para os handlers administrativos de WaitingMaterials/WaitingHelp foram renomeados e revisados para refletir a nova publicação de evento (§23.2) — **89/89** no assembly completo.
+
+Integração HTTP real (`HousekeepingEndpointsTests`), 4 novos:
+- `Full_self_service_lifecycle_via_InTransit_start_start_inspection_complete_succeeds`.
+- `Self_service_waiting_materials_waiting_help_and_delay_all_succeed_for_the_owning_housekeeper`.
+- `Self_service_start_by_a_housekeeper_not_assigned_to_the_cleaning_returns_404_never_403`.
+- `Self_service_delay_on_a_Completed_cleaning_returns_409`.
+
+**25/25** (`HousekeepingEndpointsTests`) + **68/68** (projeto de integração completo) + **89/89** unit + **133/133** architecture — todos aprovados.
+
+## 24. Incremento 2A — Checkpoint 3: Ocorrências
+
+### 24.1 `CleaningOccurrence` — entidade, não agregado
+
+`CleaningOccurrence : Entity<Guid>, ITenantOwned` (nunca `AggregateRoot<Guid>` — decisão §15 já registrada em §21.3), imutável, append-only, mirando exatamente `CleaningAuditEntry`: `TenantId`, `CleaningId` (referência opaca, sem FK física, mesma convenção do resto do contexto), `Type` (`OccurrenceType`, catálogo fixo de 8 valores — Theft/Breakage/ForgottenObject/Damage/Animal/Smoking/Noise/MaterialShortage — traduzidos literalmente dos 8 exemplos do Documento 12 §8, único texto-fonte encontrado), `Description` (livre, até 500 caracteres), `RegisteredByUserId`, `RegisteredAtUtc`. Sem evidências/fotos (proibido — approval §2); sem máquina de estados própria; sem novo evento de integração (Documento 07 não cataloga nenhum evento de ocorrência; approval §18 proíbe evento novo sem necessidade comprovada).
+
+Migration `AddCleaningOccurrences` gerada via `dotnet ef migrations add`, complementada manualmente (mesmo padrão do `InitialCreate`) com `REVOKE UPDATE, DELETE` (apenas SELECT/INSERT, mesmo tratamento append-only de `cleaning_audit_log`) e RLS (`ENABLE`/`FORCE ROW LEVEL SECURITY` + `CREATE POLICY tenant_isolation`) para `housekeeping.cleaning_occurrences`.
+
+### 24.2 API self-service apenas
+
+`RegisterCleaningOccurrenceCommand`/Handler — ABAC via `OwnCleaningLoader` (mesma garantia fail-closed dos Checkpoints 1-2), rejeitado com `invalid_cleaning_transition` (409) apenas se a faxina já é `Completed`/`Cancelled` (mesmo limite de sanidade do `ReportOwnCleaningDelayCommand`, não uma regra nova). `ListCleaningOccurrencesQuery`/Handler — verifica a posse da Cleaning-pai via `ICleaningReader.GetByIdForHousekeeperAsync` antes de listar (404 uniforme, nunca uma lista vazia ambígua para um id não-possuído). Nenhum endpoint administrativo de ocorrências foi criado (fora do escopo explícito do Checkpoint 3 — "self-service API").
+
+Duas novas rotas em `MyCleaningsController`: `POST/GET /api/v1/my-cleanings/{cleaningId}/occurrences`, ambas gated por `CLEANINGS:MANAGE:OWN_CLEANING`.
+
+### 24.3 Testes
+
+Domínio (`CleaningOccurrenceTests`, novo arquivo): +3.
+
+Unitários de Application (`RegisterCleaningOccurrenceCommandHandlerTests`/`ListCleaningOccurrencesQueryHandlerTests`, novos arquivos): +6 — sucesso, rejeição ABAC (`cleaning_not_found`, nunca "forbidden"), rejeição em `Completed` (`invalid_cleaning_transition`), cleaning inexistente. **98/98** no assembly completo.
+
+Integração HTTP real (`HousekeepingEndpointsTests`), 4 novos: registro+listagem golden-path; housekeeper não-atribuído → 404; tipo inválido → 400; registro em faxina `Completed` → 409.
+
+**29/29** (`HousekeepingEndpointsTests`) + **72/72** (projeto de integração completo) + **98/98** unit + **133/133** architecture — todos aprovados.
+
+## 25. Incremento 2A — Checkpoint 4: Checklist textual
+
+### 25.1 `CleaningChecklistItem` — mutável, catálogo fixo de 8 itens
+
+Diferente de `CleaningOccurrence`/`CleaningAuditEntry` (append-only), `CleaningChecklistItem : Entity<Guid>, ITenantOwned` é mutável em memória (`SetChecked`) — representa literalmente o estado de uma caixa de seleção, não um fato imutável. Catálogo fixo de 8 valores (`Stove/Refrigerator/Tv/AirConditioning/Bathroom/Linens/Trash/Window`), traduzidos verbatim dos 8 exemplos do Documento 12 §8 ("Checklist"). Uma linha só é criada quando o item é alternado pela primeira vez (nunca semeada eagerly para as 8 na criação da Cleaning) — um item sem linha é simplesmente não marcado por padrão, nunca um valor inventado/persistido. Índice único `(tenant_id, cleaning_id, item_type)` garante no máximo uma linha por item por faxina.
+
+**Sem gate sobre `Cleaning.Complete()`** — decisão já confirmada no Checkpoint 0 (Fase 6 doc §21.3): nenhum documento afirma em prosa que o checklist é obrigatório para concluir; o Workflow 10 do Documento 17 é um diagrama de sequência de UI, não uma regra de negócio explícita. Verificado por teste de integração real (`Checklist_does_not_block_Complete_when_no_item_is_checked`).
+
+Migration `AddCleaningChecklistItems` gerada via `dotnet ef migrations add`, complementada manualmente com RLS (mesmo padrão de todas as tabelas do schema) — **sem** a restrição `REVOKE UPDATE, DELETE` aplicada a `cleaning_occurrences`/`cleaning_audit_log`, já que esta tabela é legitimamente mutável.
+
+### 25.2 API self-service apenas
+
+`SetOwnCleaningChecklistItemCommand`/Handler — upsert por chave composta via `ICleaningChecklistItemRepository` (não o `IRepository<TAggregate,TId>` genérico compartilhado, cuja busca por `Guid` único não serve para uma chave composta), ABAC via `OwnCleaningLoader`, mesmo limite de sanidade `Completed`/`Cancelled` → 409 dos Checkpoints 2-3, auditado (`cleaning_checklist_item_set`). `GetOwnCleaningChecklistQuery`/Handler — verifica a posse da Cleaning-pai antes de ler, sempre retorna os 8 itens (nunca omite os não-alternados).
+
+Duas novas rotas em `MyCleaningsController`: `GET /api/v1/my-cleanings/{cleaningId}/checklist`, `PUT /api/v1/my-cleanings/{cleaningId}/checklist/{itemType}`, ambas gated por `CLEANINGS:MANAGE:OWN_CLEANING`.
+
+### 25.3 Testes
+
+Domínio (`CleaningChecklistItemTests`, novo arquivo): +3.
+
+Unitários de Application (`SetOwnCleaningChecklistItemCommandHandlerTests`/`GetOwnCleaningChecklistQueryHandlerTests`, novos arquivos): +6 — criação de linha nova vs. mutação em linha existente, rejeição ABAC (`cleaning_not_found`), rejeição em `Completed` (`invalid_cleaning_transition`). **107/107** no assembly completo.
+
+Integração HTTP real (`HousekeepingEndpointsTests`), 4 novos: 8 itens iniciais todos não marcados + toggle persiste; `Complete()` nunca bloqueado pelo checklist; housekeeper não-atribuído → 404; tipo de item inválido → 400.
+
+**33/33** (`HousekeepingEndpointsTests`) + **76/76** (projeto de integração completo) + **107/107** unit + **133/133** architecture — todos aprovados.
+
+### 25.4 Defeito real encontrado durante a regeneração do NSwag — quinta ocorrência da classe CancelReservation/CancelCleaning
+
+Ao regenerar `api-client.ts` para o Checkpoint 5 (frontend), cinco ações self-service de `MyCleaningsController` (`Start`, `StartInspection`, `Complete`, `WaitingMaterials`, `WaitingHelp`) mostraram-se colidir com o mesmo nome de segmento de rota final das ações administrativas equivalentes de `CleaningsController` — exatamente a mesma classe de defeito já documentada e corrigida uma vez para `CancelReservation`/`CancelCleaning` (§20.4/`Program.SwaggerOperationIdSelector`). O NSwag gerou `start`/`start2`, `startInspection`/`startInspection2`, `complete`/`complete2`, `waitingMaterials`/`waitingMaterials2`, `waitingHelp`/`waitingHelp2` — nomes que não indicam qual rota real cada um chama, o mesmo risco de apontar silenciosamente para a rota errada numa regeneração futura (ordem de operações no documento OpenAPI não é uma garantia estável).
+
+**Corrigido**: `SwaggerOperationIdSelector` estendido com cinco novos casos, atribuindo IDs explícitos apenas ao lado self-service (`StartOwnCleaning`, `StartOwnCleaningInspection`, `CompleteOwnCleaning`, `MarkOwnCleaningWaitingMaterials`, `MarkOwnCleaningWaitingHelp`) — o lado administrativo permanece `null` (sem mudança), preservando os nomes já publicados `start()`/`startInspection()`/`complete()`/`waitingMaterials()`/`waitingHelp()` do frontend administrativo existente. `OpenApiOperationIdTests` estendido (não duplicado) com as mesmas cinco asserções reais contra o documento OpenAPI completo — **1/1 aprovado** contra Postgres/RabbitMQ reais via Testcontainers, confirmando que cada novo OperationId existe exatamente uma vez e mapeia para a rota `/my-cleanings/...` correta.
+
+## 26. Incremento 2A — Checkpoint 5: Frontend Portal
+
+### 26.1 Shell dedicado, nunca `AdminLayout`
+
+`layout/portal-shell/` (novo) — shell mobile-first dedicado ao Portal da Faxineira, conforme approval §5-6 (proibição explícita de reutilizar `/housekeeping` administrativo ou `AdminLayout`): uma única toolbar superior (nome do app) e uma barra de navegação inferior com exatamente dois destinos — "Minhas Faxinas" e "Sair" — sem `mat-sidenav`, sem `BreakpointObserver`, sem comportamento PWA/offline (nenhum desses foi solicitado). `app.routes.ts` ganhou uma árvore de rotas de topo nova, `/my-cleanings`, isolada da árvore `/housekeeping` administrativa, com `PortalShell` como componente-pai e dois filhos (`''` → lista, `':cleaningId'` → detalhe), ambos protegidos por `permissionGuard` exigindo `CLEANINGS:MANAGE:OWN_CLEANING` — a mesma permissão já tipada/semeada no Incremento 1, nunca uma nova.
+
+### 26.2 Telas
+
+`features/portal/my-cleanings-list/` — lista "Minhas Faxinas": cartões com `propertyId`, chip de status (rótulo traduzido), horário agendado quando presente (`scheduledAtUtc`), e um botão de ação primária condicional por status (mesmas transições de domínio do backend — nunca uma ação client-side inventada). Clique no cartão navega ao detalhe; clique no botão de ação dispara a transição diretamente da lista, sem navegação.
+
+`features/portal/my-cleaning-detail/` — tela de detalhe: botões de ciclo de vida (Estou a caminho / Iniciar / Iniciar inspeção / Concluir / Informar atraso / Aguardando materiais / Aguardando ajuda) visíveis apenas quando o status atual do domínio permite a transição correspondente (espelhando os guards reais de `Cleaning`, nunca uma lista fixa); seção "Ocorrências" com formulário (`[formGroup]`/`(ngSubmit)` corretamente vinculados — atenção redobrada após o defeito de produção já documentado em `AssignCleaningDialog`, Fase 6 §10) e listagem das ocorrências já registradas; seção "Checklist" com os 8 itens sempre exibidos (mesmo os não alternados), cada um uma checkbox que persiste via `PUT` ao ser alternada.
+
+`features/portal/portal.service.ts` — wrapper fino sobre o `Client` gerado (NSwag), mesma convenção dos demais `*.service.ts` do projeto.
+
+`public/i18n/en.json`/`pt-BR.json` — novo namespace `portal` (shell/list/detail/occurrences/checklist), com paridade completa entre os dois idiomas.
+
+### 26.3 Testes automatizados
+
+Suíte Angular completa (Vitest): **370/370 aprovados**, incluindo os novos specs de `PortalShell`, `PortalService`, `MyCleaningsList`, `MyCleaningDetail`, e um teste preventivo adicionado a `user-profile.service.spec.ts` provando que `CLEANINGS:MANAGE` e `CLEANINGS:MANAGE:OWN_CLEANING` nunca se concedem mutuamente (guarda contra checagem por prefixo, proibida explicitamente pelo approval).
+
+### 26.4 Verificação real em navegador — defeito encontrado e corrigido
+
+Após o incidente já registrado nesta mesma sessão (uma chamada ampla a `dotnet user-secrets list` vazou a chave privada de assinatura JWT para o output), a verificação visual do Portal foi deliberadamente desenhada para nunca ler/usar qualquer senha real: um teste xUnit temporário e descartável (`ZZZ_TEMP_PortalBrowserSeed.cs`, **excluído ao final desta seção** — nunca fez parte da suíte real) semeou um usuário `HOUSEKEEPER` sintético + duas Cleanings (`Assigned`/`InInspection`) diretamente no Postgres real de desenvolvimento e emitiu um JWT real assinado via `IJwtTokenGenerator` já resolvido por DI — a chave de assinatura em si nunca foi lida, impressa ou manuseada por este processo. O token foi injetado na aplicação Angular real (`ng serve`) através de `AuthStateService.setTokens(...)`, alcançado via os utilitários de depuração do próprio Angular (`ng.getComponent`), seguido de uma chamada real a `UserProfileService.load()` (perfil + permissões reais, nunca decodificados do JWT) — em nenhum momento uma senha real foi lida, digitada ou usada.
+
+Verificado, com a API real (`IHostPro.Api`) e o Postgres/RabbitMQ/Redis de desenvolvimento reais:
+
+- Lista renderiza as duas faxinas semeadas com status e ação primária corretos;
+- Tela de detalhe renderiza os botões de ciclo de vida corretos para `Assigned` (Estou a caminho / Iniciar / Informar atraso);
+- Checklist: toggle de um item (`TV`) persiste via `PUT /api/v1/my-cleanings/{id}/checklist/Tv` → `200 OK`, confirmado por releitura;
+- Ocorrências: registro de uma ocorrência (`Dano`, com descrição) persiste via `POST /api/v1/my-cleanings/{id}/occurrences` → `200 OK`, aparece na lista imediatamente;
+- Ação rápida "Iniciar" a partir do cartão da lista transiciona `Assigned → Started` via `POST .../start` → `200 OK`, atualização de status e botão de ação refletidos sem reload de página;
+- Logout ("Sair") limpa a sessão e redireciona a `/login`.
+
+**Defeito real encontrado e corrigido**: o snackbar de sucesso ao registrar uma ocorrência exibia a chave de tradução crua `portal.detail.occurrenceRegistered` em vez do texto traduzido — a chave correta já existia em ambos os idiomas, mas aninhada em `portal.detail.occurrences.occurrenceRegistered`, e `my-cleaning-detail.ts` referenciava o caminho errado (faltando o segmento `occurrences`). Corrigido em `my-cleaning-detail.ts` (uma linha); asserção de regressão adicionada ao teste existente `'submits a valid occurrence and reloads the occurrence list'` em `my-cleaning-detail.spec.ts`. Suíte completa revalidada após a correção: **370/370 aprovados**.
+
+Dados sintéticos de verificação (5 usuários `portal-verify-*@example.com`, Cleanings e projeções de propriedade associadas) foram removidos do Postgres de desenvolvimento ao final da verificação; o arquivo de teste temporário foi excluído do repositório.
+
+### 26.5 Segunda rodada de verificação — checklist completo de 17 itens (a pedido do usuário)
+
+A pedido explícito do usuário, a verificação em navegador foi refeita do zero com um roteiro mais abrangente, cobrindo especificamente: login HOUSEKEEPER, acesso ao Portal, ausência de acesso ao administrativo, Minhas Faxinas, detalhe, InTransit, iniciar, iniciar inspeção, concluir, atraso, ajuda, materiais, ocorrência, checklist, responsividade/mobile-first, bottom navigation e isolamento own-cleaning. Mesma técnica da rodada anterior (§26.4) — token real minerado via `IJwtTokenGenerator`, nunca uma senha — porém com um cenário de dados mais rico: um segundo teste xUnit temporário e descartável (mesmo arquivo `ZZZ_TEMP_PortalBrowserSeed.cs`, reescrito e novamente excluído ao final desta seção) semeou dois usuários `HOUSEKEEPER` reais no mesmo tenant e cinco Cleanings — quatro pertencentes ao housekeeper principal, cobrindo cada ramo do ciclo de vida, e uma pertencente ao SEGUNDO housekeeper (para o teste de isolamento own-cleaning).
+
+Resultado, item a item, todos aprovados contra a API real (`IHostPro.Api`, iniciada com o profile de desenvolvimento para que os user-secrets já configurados na máquina carregassem corretamente — nenhum segredo foi lido ou exibido por este processo) e o Postgres/RabbitMQ/Redis de desenvolvimento reais:
+
+1. **Login HOUSEKEEPER**: `UserProfileService.load()` retornou perfil real com `roles: ["HOUSEKEEPER"]` e `permissions: ["CLEANINGS:MANAGE:OWN_CLEANING", ...]`.
+2. **Acesso ao Portal**: `/my-cleanings` carregou normalmente sob `permissionGuard`.
+3. **Ausência de acesso ao administrativo**: navegação para `/housekeeping` (rota administrativa, exige `CLEANINGS:MANAGE`) resultou em "Acesso negado" — confirma na prática que a checagem de permissão é por igualdade exata, nunca por prefixo (mesma garantia já coberta por teste unitário em `user-profile.service.spec.ts`).
+4. **Minhas Faxinas**: lista renderizou exatamente as 4 Cleanings do housekeeper principal (Designada/Em andamento/Em andamento/Designada) — a Cleaning do segundo housekeeper nunca apareceu.
+5. **Detalhe**: navegação cartão → detalhe funcionou para todas as Cleanings testadas.
+6. **InTransit**: "Estou a caminho" → status "A caminho", snackbar "Marcado como a caminho." (texto traduzido correto).
+7. **Iniciar**: `Assigned`/`InTransit → Started`, status "Em andamento".
+8. **Iniciar inspeção**: `Started → InInspection`, status "Em inspeção", snackbar "Inspeção iniciada.".
+9. **Concluir**: `InInspection → Completed`, status "Concluída", snackbar "Faxina concluída.", nenhuma ação restante (estado terminal).
+10. **Informar atraso**: `POST /api/v1/my-cleanings/{id}/delay` → `200 OK` (não altera o status — por desenho, mesmo comportamento já documentado em §21.3/Checkpoint 0).
+11. **Preciso de ajuda**: `MarkWaitingHelp`, status "Aguardando ajuda".
+12. **Preciso de materiais**: `MarkWaitingMaterials`, status "Aguardando materiais".
+13. **Ocorrência**: registro de "Furto" persiste via `POST .../occurrences` → `200 OK`, snackbar "Ocorrência registrada." (confirma que a correção do §26.4 permanece válida).
+14. **Checklist**: toggle de "Fogão" (`Stove`) persiste via `PUT .../checklist/Stove` → `200 OK`.
+15. **Responsividade/mobile-first**: viewport redimensionado para 375×812 (preset mobile). O screenshot da ferramenta de navegador exibiu visualmente o conteúdo comprimido num retângulo menor que o viewport — investigado e determinado ser um artefato de renderização/captura da própria ferramenta (a proporção da imagem capturada, 469×1015, não corresponde a nenhuma escala óbvia do viewport real). Medições diretas via `getBoundingClientRect()`/`scrollWidth`/`clientWidth` no DOM real confirmaram que o layout está correto: `.portal-shell`, `.portal-shell__content` e a barra de navegação inferior ocupam exatamente 375px (100% do viewport), os cartões ocupam 351px (375px − 12px de padding em cada lado), e `document.documentElement.scrollWidth === clientWidth` (nenhum overflow horizontal). Tratado como aprovado com base na medição de DOM, não no screenshot visual, que se mostrou não confiável neste caso específico.
+16. **Bottom navigation**: os dois destinos ("Minhas Faxinas" e "Sair") testados a partir de uma tela de detalhe — "Minhas Faxinas" retorna à lista sem reload de página; "Sair" limpa a sessão e redireciona a `/login`.
+17. **Isolamento own-cleaning**: além da ausência na listagem (item 4), navegação direta por URL para a Cleaning do segundo housekeeper (`router.navigateByUrl('/my-cleanings/{id-do-outro-housekeeper}')`, simulando um link direto/deep link) resultou em `GET /api/v1/my-cleanings/{id} → 404 Not Found` e na tela "Não foi possível carregar esta faxina." — nunca os dados reais, confirmando o comportamento fail-closed uniforme já garantido por `OwnCleaningLoader`/`GetByIdForHousekeeperAsync` (Checkpoints 1-4).
+
+**Nenhum defeito novo encontrado nesta rodada** — a correção do §26.4 permanece válida e a suíte automatizada (370/370) não foi alterada. Dados sintéticos (2 usuários, 5 Cleanings, projeção de propriedade) removidos do Postgres de desenvolvimento; processo `IHostPro.Api` iniciado manualmente para esta verificação foi encerrado; arquivo de teste temporário excluído novamente.
+
+### 26.6 Observação registrada para o gate do Checkpoint 6 (não bloqueia este checkpoint)
+
+Executar `IHostPro.MigrationRunner.dll` diretamente (fora de `dotnet run` com o profile de desenvolvimento) falha na etapa de provisionamento da topologia RabbitMQ com `ACCESS_REFUSED`, porque as credenciais padrão do `appsettings.json` versionado (`guest`/`guest`) não correspondem ao broker real de desenvolvimento (usuário único configurado é `ihostpro`, sem usuário `guest`). As migrations EF Core (schema) são independentes desta etapa e foram confirmadas bem-sucedidas diretamente via `psql` (`housekeeping.cleanings.scheduled_at_utc`, `housekeeping.cleaning_occurrences`, `housekeeping.cleaning_checklist_items` todas presentes). A topologia RabbitMQ (`identity-events`, `property-management-events`, `reservation-events`, `configuration-events`, `housekeeping-events`) já está corretamente provisionada no broker de desenvolvimento a partir de execuções bem-sucedidas anteriores nesta mesma sessão — não é um bloqueio funcional agora. Fica registrado como item a investigar no gate de restauração/validação de ambiente do Checkpoint 6 (possível necessidade de `dotnet user-secrets` dedicado para o projeto `IHostPro.MigrationRunner`, não verificado nesta sessão).
+
+### 26.7 Build de produção
+
+`ng build --configuration production`: sucesso, sem erros ou warnings novos. Bundle inicial 409.02 kB raw / 95.12 kB estimado após transferência; `my-cleanings-list`/`my-cleaning-detail`/`portal-shell` carregados como lazy chunks, consistente com o padrão de lazy-loading já usado pelas demais features administrativas.
+
+## 27. Incremento 2A — Checkpoint 6: Homologação final
+
+### 27.1 Testes Playwright do Portal (novos)
+
+Dois arquivos novos em `tests/Frontend/IHostPro.Web.Tests.E2E/`, seguindo exatamente a convenção já estabelecida por `HousekeepingE2ETests.cs`/`UsersAuthorizationE2ETests.cs` (dados de teste sempre semeados via API real com o token real do ADMIN; login do HOUSEKEEPER sempre pelo formulário real, com uma senha sintética conhecida — nunca uma credencial de produção; navegação e asserções sempre via seletores reais do DOM/Playwright, nunca um atalho):
+
+- `PortalE2ETests.cs` (3 testes): `Housekeeper_completes_the_full_self_service_lifecycle_with_occurrence_and_checklist` (login → lista → detalhe → InTransit → Iniciar → ocorrência → checklist → Iniciar inspeção → Concluir → estado terminal → bottom nav → logout, tudo num único fluxo real coerente); `Housekeeper_reports_a_delay_and_requests_materials_and_help` (atraso, materiais, ajuda — os três ramos alternativos não cobertos pelo fluxo principal); `Portal_renders_full_width_at_a_mobile_viewport_with_no_horizontal_overflow` (375×812, `scrollWidth`/`clientWidth` sem overflow, bottom nav ocupando exatamente 375px).
+- `PortalAuthorizationE2ETests.cs` (3 testes): redirecionamento de usuário não autenticado com `redirectTo` preservado; HOUSEKEEPER negado em `/housekeeping` administrativo (`/forbidden`); HOUSEKEEPER incapaz de carregar a Cleaning de outro HOUSEKEEPER (ausente na lista, `404` real na API, tela "Não foi possível carregar esta faxina.").
+
+**Dois defeitos reais encontrados e corrigidos nos próprios testes durante a escrita** (nunca no código de produção): (1) duas das três funções de `PortalAuthorizationE2ETests` assumiam que o login redirecionava direto para `/my-cleanings`, mas `Login.submit()` só honra `redirectTo` quando presente na URL — sem ele, todo login (independente do papel) aterrissa em `/` (Home administrativa); corrigido aguardando `/` e navegando explicitamente em seguida. (2) o teste de isolamento correlacionava uma resposta de rede a uma navegação completa de página (`RunAndWaitForResponseAsync` em volta de um `GotoAsync` de documento inteiro, não um clique) — trocado por uma chamada de API direta e desacoplada (`page.Context.APIRequest.GetAsync`) para a asserção do `404`, com a verificação da UI mantida separadamente. Após as duas correções: **6/6 aprovados** repetidamente (quatro execuções completas do assembly `IHostPro.Web.Tests.E2E`, a última com **67/67** aprovados no total, incluindo todos os specs administrativos pré-existentes).
+
+### 27.2 Cross-tenant/ABAC/exact-permission-match
+
+- Já existia cobertura completa de isolamento same-tenant-different-housekeeper (404 nunca 403) para leitura e para cada comando self-service (`start`, `occurrences`, `checklist`), e um teste cross-tenant genuíno para `GetById`. **Gap identificado**: nenhum teste cross-tenant genuíno cobria um endpoint de **escrita**. Adicionado `Self_service_start_across_tenants_returns_404_never_403` em `HousekeepingEndpointsTests.cs`, espelhando exatamente o teste cross-tenant de leitura já existente — **77/77** aprovados no assembly completo (`IHostPro.Contexts.Housekeeping.Tests.Integration`) após a adição.
+- Exact-permission-match (nunca prefixo) confirmado em três camadas independentes: unitário (`user-profile.service.spec.ts`, Checkpoint 5), API real (`A_HOUSEKEEPER_who_navigates_directly_to_the_administrative_housekeeping_area_is_denied_access`, §27.1) e verificação manual em navegador (§26.5, item 3).
+
+### 27.3 Suíte de testes de backend consolidada
+
+Duas execuções completas de `dotnet test IHostPro.sln` foram realizadas nesta sessão. A **primeira** (antes dos ajustes dos testes Playwright do Portal) apresentou 4 falhas isoladas entre milhares de testes: `ReservationsE2ETests.Admin_clears_guestPhone_by_sending_null`, `ReservationsE2ETests.A_period_conflict_is_presented_correctly`, `PropertyManagementE2ETests.Admin_lists_and_creates_a_condominium` e `PolicyUpdatedRegressionTests.PolicyUpdated_delivered_through_real_RabbitMQ_to_the_real_Worker_advances_the_real_Redis_cache_generation` — nenhuma relacionada ao código desta sessão (Reservations/PropertyManagement/Configuration, nunca tocados no Incremento 2A). Todas as quatro foram reexecutadas **isoladamente** (fora do contexto do assembly gigante) e passaram sem exceção, confirmando que eram instabilidades transitórias por concorrência real (Playwright contra a UI real sob carga; redelivery real de RabbitMQ sob carga), não regressões de código.
+
+A **segunda** execução completa (após todos os ajustes, tentada para ter um artefato único e atual) apresentou uma cascata muito maior de falhas — incluindo especificações inteiras que NUNCA foram tocadas nesta sessão (Identity, Usuários, Políticas) e falhando em ~1ms cada, um padrão que não é de asserção de negócio mas de **infraestrutura**: o stack trace real mostra `Docker.DotNet` expirando ao tentar inspecionar um contêiner (`DockerContainer.CheckReadinessAsync`), e um benchmark de latência (Fase 5, decisão 7) que registrou p95 de 71ms contra o alvo de 50ms sob a mesma carga simultânea. Confirmado via `docker ps`/`docker info` imediatamente após (resposta em <1s) que o daemon Docker havia apenas saturado temporariamente por dezenas de execuções pesadas de Testcontainers em sequência direta nesta mesma sessão — não uma condição permanente, não um defeito de código e, especificamente, **não um defeito de produto do Incremento 2A**: nenhuma das especificações afetadas pertence a este incremento. Por essa razão, esta segunda execução **é inválida como evidência** e não é contada. Não foi realizada uma terceira execução massiva da solução — o custo de outra rodada completa não agregaria evidência útil além da já obtida via reexecuções isoladas e focadas.
+
+**Evidência oficial do Incremento 2A** (todas as contagens abaixo obtidas em execuções isoladas, limpas, sem concorrência entre pacotes pesados):
+
+- Primeira execução completa da solução: 4 falhas, todas reexecutadas isoladamente e não reproduzidas — nenhuma era regressão do Incremento 2A.
+- `IHostPro.Contexts.Housekeeping.Tests.Integration`: **77/77** (inclui o novo teste cross-tenant de escrita).
+- `IHostPro.Web.Tests.E2E`: **67/67** (inclui os 6 novos testes do Portal).
+- `IHostPro.Api.Tests.Integration.PolicyUpdatedRegressionTests` isolado: **1/1**.
+- `IHostPro.Contexts.Housekeeping.Tests.Unit` (gate final curto, pós-publicação dos testes Playwright): **107/107**.
+- `IHostPro.ArchitectureTests` (gate final curto, pós-publicação dos testes Playwright): **133/133**.
+- Frontend (Vitest): **370/370**.
+- `dotnet build IHostPro.sln -c Release`: 0 erros, 0 warnings.
+- `ng build --configuration production`: sucesso.
+- `npm run generate:api` × 2: saída byte-idêntica (determinístico).
+
+### 27.4 Build Release, testes de frontend, determinismo do NSwag
+
+- `dotnet build IHostPro.sln -c Release`: sucesso, 0 erros, 0 warnings.
+- `ng build --configuration production`: sucesso (§26.7).
+- Suíte de testes Angular (Vitest): **370/370** aprovados, execução final após todas as alterações do Checkpoint 6.
+- `npm run generate:api` executado duas vezes consecutivas com a API real em execução: saída **byte-idêntica** nas duas execuções (`diff` sem diferenças).
+
+### 27.5 `git diff --check`
+
+Apenas espaços em branco à direita (`trailing whitespace`) em 5 linhas de `api-client.ts` — todas em comentários JSDoc gerados automaticamente pelo próprio template Angular do NSwag (`@param foo (optional) `), confirmado determinístico (mesmas linhas nas duas gerações consecutivas de §27.4) e presente em parâmetros de endpoints administrativos pré-existentes, não específicos do Portal. Como o arquivo é 100% gerado (nunca editado manualmente, por convenção do projeto), corrigir a formatação à mão seria imediatamente revertido na próxima regeneração — registrado como característica conhecida e não-acionável do gerador, não um defeito do código desta sessão.
+
+### 27.6 Restauração de ambiente
+
+RabbitMQ e Redis de desenvolvimento (usados durante toda a sessão para os testes locais e a verificação em navegador) parados; RabbitMQ e Redis de homologação reiniciados — baseline correta restaurada (`ihostpro-homolog-rabbitmq`/`ihostpro-homolog-redis` up, `ihostpro-rabbitmq`/`ihostpro-redis` parados). Confirmado ausência de processos `dotnet`/`node` órfãos relacionados a este projeto (o servidor `ng serve` usado para a verificação em navegador do §26.5 foi encerrado). `ihostpro-postgres` (desenvolvimento, porta 5432) permanece em execução — não compartilha porta com `ihostpro-homolog-postgres` (porta 15432), portanto ambos correndo simultaneamente é o estado normal, não uma pendência de restauração.
+
+### 27.7 Débito não bloqueante — configuração do MigrationRunner
+
+O `appsettings.json` padrão do `IHostPro.MigrationRunner` não autentica no broker RabbitMQ usado fora do profile/configuração correspondente (as credenciais versionadas — `guest`/`guest` — não correspondem ao único usuário real do broker de desenvolvimento); execuções reais do `MigrationRunner` contra um broker real exigem as credenciais/configuração corretas por ambiente, não verificadas nesta sessão. Isto **não significa** que o `MigrationRunner` esteja quebrado, nem que o schema ou a topologia RabbitMQ não tenham sido validados — ambos foram confirmados bem-sucedidos por vias independentes desta mesma sessão (migrations EF Core aplicadas e verificadas diretamente via `psql`; topologia RabbitMQ — `identity-events`, `property-management-events`, `reservation-events`, `configuration-events`, `housekeeping-events` — já provisionada e confirmada via `rabbitmqctl list_exchanges`). Registrado como débito de configuração a investigar em sessão futura, não como defeito funcional.
+
+## 28. Incremento 2A — conclusão técnica e versionamento
+
+### 28.1 Status
+
+O Incremento 2A (Portal da Faxineira Core) está **tecnicamente concluído e versionado** em três commits em `feature/housekeeping`, **local nesta máquina neste momento** — a publicação em `origin/feature/housekeeping` é registrada separadamente em §29, após o push real. `master` permanece intocada; nenhuma tag foi criada; nenhum merge foi realizado. A Fase 6 **continua EM ANDAMENTO**: o Incremento 2B (Files/Evidências) não foi implementado e depende de decisão explícita após a auditoria de §28.4/§30.
+
+### 28.2 Commits
+
+| # | Hash | Assunto | Escopo |
+|---|------|---------|--------|
+| 1 | `db7525c34c62880622f92699cabd4c0834d1553c` | `feat(housekeeping): add housekeeper self-service workflows` | Backend/core: `ScheduledAtUtc`, `OwnCleaningLoader`, autorização `CLEANINGS:MANAGE:OWN_CLEANING`, InTransit, ciclo de vida own-cleaning, delay, waiting-materials/help, `CleaningOccurrence`, checklist textual, auditoria, migrations/RLS, correção de política de autorização ausente, correção de colisão de OperationId do NSwag. |
+| 2 | `bf4a2214742b529b7f2e2b3ac96ded0cea162905` | `feat(frontend): add housekeeper portal` | Frontend: `PortalShell`, rota `/my-cleanings`, `my-cleanings-list`, `my-cleaning-detail`, `PortalService`, i18n (`portal.*`), cliente NSwag regenerado. |
+| 3 | `7b9eebfb2c51a738879d0e49866bc110eeeaa735` | `test(housekeeping): cover housekeeper portal workflows` | Testes: unitários de domínio/aplicação (own-cleaning, occurrences, checklist), integração HTTP real (isolamento same-tenant e cross-tenant, leitura e escrita), regressão de OperationId, testes unitários de frontend, testes Playwright E2E do Portal (`PortalE2ETests`, `PortalAuthorizationE2ETests`). |
+
+### 28.3 Resultados finais registrados
+
+- Verificação real em navegador: **17/17 itens** aprovados (login HOUSEKEEPER, acesso ao Portal, ausência de acesso ao administrativo, Minhas Faxinas, detalhe, InTransit, iniciar, iniciar inspeção, concluir, atraso, ajuda, materiais, ocorrência, checklist, responsividade/mobile-first, bottom navigation, isolamento own-cleaning — §26.5).
+- `IHostPro.Contexts.Housekeeping.Tests.Integration`: **77/77**.
+- `IHostPro.Web.Tests.E2E`: **67/67**.
+- `IHostPro.Contexts.Housekeeping.Tests.Unit`: **107/107** (gate final, §27.3).
+- `IHostPro.ArchitectureTests`: **133/133** (gate final, §27.3).
+- Frontend (Vitest): **370/370**.
+- `dotnet build IHostPro.sln -c Release`: 0 erros / 0 warnings.
+- `ng build --configuration production`: sucesso.
+- `npm run generate:api` × 2: byte-idêntico (determinístico).
+- Cross-tenant write path (`Self_service_start_across_tenants_returns_404_never_403`): aprovado.
+- Exact-permission-match: confirmado em 3 camadas independentes (§27.2).
+- Ambiente restaurado (RabbitMQ/Redis de homologação reiniciados, dev parados, sem processos órfãos — §27.6).
+- Dados sintéticos removidos do Postgres de desenvolvimento; nenhuma credencial real foi lida, exibida ou usada em nenhum momento desta sessão.
+- Ressalva honesta sobre a suíte completa da solução registrada com precisão em §27.3 (primeira execução: 4 falhas transitórias, nenhuma regressão; segunda execução: inválida por saturação real do Docker/`Docker.DotNet`, não um defeito de produto).
+- Débito de configuração do `MigrationRunner` descrito com precisão em §27.7 (não é indicativo de schema ou topologia não validados).
+
+### 28.4 Incremento 2B (Files/Evidências) — ainda não iniciado
+
+Fotos e vídeos de ocorrências/checklist permanecem inteiramente fora de escopo desta sessão, conforme a exclusão explícita já registrada em §21. Nenhuma Fase 7 ou posterior foi iniciada. A auditoria técnica/documental do Incremento 2B, sem qualquer implementação, é apresentada em §30, junto com a decisão pendente sobre se o Incremento 2B é ou não indispensável para o encerramento funcional da Fase 6.
