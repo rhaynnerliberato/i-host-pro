@@ -1,8 +1,8 @@
 # Fase 6 — Housekeeping — Validação e Homologação
 
-Versão: 0.7 (Checkpoint 6 concluído, Incremento 1 aprovado e versionado — documento vivo, atualizado progressivamente a cada checkpoint)
+Versão: 0.8 (Checkpoint 6 concluído, Incremento 1 aprovado, versionado e **publicado** — documento vivo, atualizado progressivamente a cada checkpoint)
 
-Status: **Incremento 1 (Housekeeping Foundation) tecnicamente aprovado e versionado em `feature/housekeeping`.** Auditoria da Fase 6 aprovada com correções; Checkpoints 0-6 concluídos (gates e contratos existentes; Foundation; domínio/persistência; projeção de eventos/integração; API administrativa; frontend administrativo; E2E/homologação). **A Fase 6 continua em andamento** — o Incremento 1 cobre apenas Housekeeping Foundation; o Incremento 2 (Portal da Faxineira) ainda não foi aprovado para implementação, apenas auditado/planejado (§20.4).
+Status: **Incremento 1 (Housekeeping Foundation) tecnicamente aprovado, versionado e publicado em `origin/feature/housekeeping`.** Auditoria da Fase 6 aprovada com correções; Checkpoints 0-6 concluídos (gates e contratos existentes; Foundation; domínio/persistência; projeção de eventos/integração; API administrativa; frontend administrativo; E2E/homologação). **A Fase 6 continua em andamento** — o Incremento 1 cobre apenas Housekeeping Foundation; o Incremento 2 (Portal da Faxineira) ainda não foi aprovado para implementação, apenas auditado/planejado (§21). Nenhum merge para `master` foi realizado; `feature/housekeeping` permanece a branch ativa.
 
 ---
 
@@ -559,3 +559,13 @@ Este documento (Commit 6 — `docs(housekeeping): record increment 1 completion`
 - Nenhuma funcionalidade do Portal da Faxineira (Incremento 2) implementada.
 - Nenhuma criação automática de Cleaning a partir de eventos de Reservation fora do escopo já aprovado (reação de cancelamento automático, único caso aprovado desde o Checkpoint 3).
 - Nenhuma funcionalidade de Fase 7 ou posterior implementada ou referenciada.
+
+### 20.8 Publicação
+
+`git push -u origin feature/housekeeping` executado após o Commit 6 (este documento, no estado do §20.6). Confirmado: os seis commits publicados em `origin/feature/housekeeping` (`2d09585`, `f08e8d7`, `6253b09`, `d250748`, `9034247`, `6461e47`), `git status -sb` mostrando `feature/housekeeping...origin/feature/housekeeping` com ahead/behind = 0/0, working tree limpa (exceto `.claude/`, artefato local nunca versionado). Nenhum merge para `master`, tag ou exclusão de branch foi realizado.
+
+Este parágrafo (§20.8) e o commit que o inclui (`docs(housekeeping): close increment 1 publication`) fecham a lista de commits deste incremento — após este commit, um `git push origin feature/housekeeping` final replica-o ao remoto, reconfirmando ahead/behind = 0/0.
+
+### 20.9 Estado da Fase 6 após a publicação
+
+A Fase 6 **continua em andamento**: este documento registra o fechamento e a publicação do Incremento 1 (Housekeeping Foundation). O Incremento 2 (Portal da Faxineira) ainda não foi implementado — nenhum `Files`, upload, checklist, ocorrência, ou endpoint/frontend novo do Portal foi criado. Apenas a auditoria e o planejamento somente leitura, sem código, começam após esta publicação (§21). A implementação do Incremento 2 aguarda aprovação explícita do usuário.
