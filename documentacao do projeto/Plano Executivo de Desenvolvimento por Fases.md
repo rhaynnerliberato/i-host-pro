@@ -73,6 +73,9 @@ Configurações hierárquicas, políticas operacionais e regras variáveis. Esco
 
 Ciclo de faxinas, atribuição, execução, checklist, ocorrências e portal. Escopo detalhado a refinar e aprovar antes da implementação.
 
+**Status:** Concluída funcionalmente (Incremento 1 — Housekeeping Foundation + Incremento 2A — Portal da Faxineira Core). Files/Evidências (fotos/vídeos de ocorrências/checklist) permanece como escopo futuro deferido, não implementado, sem fase de implementação atribuída.
+**Homologação:** `Fase 6 - Housekeeping - Validacao e Homologacao.md`.
+
 ### Fase 7 — Agenda e Dashboard Operacional
 
 Agenda unificada, visualizações diária/semanal/mensal e indicadores operacionais. Escopo detalhado a refinar e aprovar antes da implementação.

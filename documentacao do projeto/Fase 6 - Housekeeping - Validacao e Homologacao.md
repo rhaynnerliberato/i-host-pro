@@ -1,8 +1,8 @@
 # Fase 6 — Housekeeping — Validação e Homologação
 
-Versão: 1.0 (Incremento 2A — Portal da Faxineira Core — tecnicamente concluído, versionado e **publicado** em `origin/feature/housekeeping` — documento vivo, atualizado progressivamente a cada checkpoint)
+Versão: 1.1 (Fase 6 encerrada funcionalmente — Incremento 1 + Incremento 2A publicados em `origin/feature/housekeeping`; Files/Evidências auditado e deliberadamente deferido — §30 — documento vivo, atualizado progressivamente a cada checkpoint)
 
-Status: **Incremento 1 (Housekeeping Foundation) e Incremento 2A (Portal da Faxineira Core) tecnicamente aprovados, versionados e publicados em `origin/feature/housekeeping`.** Auditoria da Fase 6 aprovada com correções; Checkpoints 0-6 do Incremento 1 concluídos; Checkpoints 0-6 do Incremento 2A concluídos (§21-§29). **A Fase 6 continua EM ANDAMENTO** — o Incremento 2B (Files/Evidências — fotos/vídeos de ocorrências) permanece não implementado, dependendo de auditoria e decisão explícita (§28.4/§30). `master` **não contém** ainda nenhuma alteração da Fase 6; nenhum merge foi realizado; `feature/housekeeping` permanece a branch ativa.
+Status: **Fase 6 (Housekeeping e Portal da Faxineira) CONCLUÍDA FUNCIONALMENTE**, composta por Incremento 1 (Housekeeping Foundation) e Incremento 2A (Portal da Faxineira Core) — ambos concluídos, homologados e publicados em `origin/feature/housekeeping`. Checkpoints 0-6 de ambos os incrementos concluídos (§4-§29). **Files/Evidências** (anteriormente denominado "Incremento 2B" durante o planejamento) foi auditado e deliberadamente **deferido** por decisão explícita do usuário — é requisito real e documentado do produto, não descartado, porém não bloqueia o encerramento funcional desta fase; permanece como escopo futuro sem fase de implementação atribuída (§30). Status da integração de `feature/housekeeping` em `master`: ver §30.6.
 
 ---
 
@@ -911,3 +911,50 @@ O push de `feature/housekeeping` para `origin/feature/housekeeping` foi realizad
 - **Incremento 2A** (Portal da Faxineira Core) — concluído e publicado em `origin/feature/housekeeping`.
 - **Incremento 2B** (Files/Evidências) — não implementado; depende de decisão/aprovação após auditoria (§30).
 - **`master`** — sem integração da Fase 6.
+
+## 30. Auditoria Files/Evidências e decisão de encerramento da Fase 6
+
+### 30.1 Auditoria executada
+
+Auditoria estritamente documental e de código (read-only — nenhuma implementação, migração, pacote, alteração de `docker-compose`, bucket, frontend ou API), consultando: `CLAUDE.md`; `ai-rules/00 - Engineering Constitution.md`, `01 - Decision Making Policy.md`, `05 - Testing and Validation Policy.md`; `Documento 000 - Documentation Index.txt`; `Plano Executivo de Desenvolvimento por Fases.md`; `Architecture Principles.md`; `ADR-006 - Cache e Armazenamento de Arquivos.md`; `ADR-015`; `Documento 05, 07, 09, 10, 12, 14, 17`; este próprio documento (§3, §21.1, §21.3, §28.4, §29); código real de `src/Contexts/Housekeeping/` (Domain/Application/Infrastructure/Api) e do frontend Portal; `docker-compose.yml`; `appsettings*.json`; `observability/`.
+
+### 30.2 Principais requisitos documentados (Files/Evidências)
+
+- `Documento 10 §7` — "Upload de fotos" / "Upload de vídeos" são funcionalidades explícitas listadas para o Portal da Faxineira.
+- `Documento 09 §7` — a Faxineira possui permissão narrativa de "Enviar fotos" / "Enviar vídeos".
+- `Documento 12 §8/§15/§16` — entidade conceitual "Evidência" (tipos: Foto/Vídeo/Áudio/Documento), relacionamento filho direto de Faxina, com "Miniaturas" citada como campo conceitual esperado.
+- `Documento 17, Workflow 11 — Registro de Dano` — `Ocorrência → Registrar → Anexar Fotos → Relacionar Reserva → Notificar Administrador → Auditoria`.
+- `Documento 14 §25` — requisitos de UX de upload (arrastar-e-largar, câmera, galeria, múltiplos arquivos, indicador de progresso, pré-visualização).
+- `ADR-006` (decisão já aprovada e vigente) — Files como Bounded Context Generic centralizado; **AWS S3 em produção**; **MinIO em desenvolvimento/homologação**; acesso somente via contrato público do contexto Files; binários nunca armazenados na base transacional.
+- `Architecture Principles.md §3` — Files listado como Bounded Context (`Generic | Armazenamento de evidências/documentos`).
+
+### 30.3 Principais gaps identificados
+
+- `Documento 07` (Catálogo de Eventos de Domínio) não possui nenhum evento relacionado a evidências/anexos — nenhum outro Bounded Context depende hoje de Files.
+- `Documento 09 §15` (matriz simplificada de permissões) não possui linha para o recurso "Arquivos", apesar de citado em §12.
+- Sem definição documentada de: tipos/MIME/tamanho/quantidade permitidos por upload; metadados (legenda, ordem, retenção, soft vs. hard delete); URLs públicas vs. privadas/assinadas; autorização de download; criptografia; scan de antivírus; particionamento de storage key por tenant; ciclo de vida do upload (direto vs. proxy pela API, multipart, retry, limpeza de órfãos, consistência transacional entre metadado Postgres e binário no storage).
+- Nenhuma implementação existe em código: zero Bounded Context Files em `src/Contexts/`; zero pacote SDK de storage (`AWSSDK.S3`/`Minio`/`Azure.Storage.Blobs`) em qualquer `.csproj` da solução; zero configuração relacionada em `appsettings*.json` ou `observability/`. O serviço MinIO já está provisionado em `docker-compose.yml` (conforme ADR-006), mas nenhum código o referencia.
+
+### 30.4 Conflitos documentais encontrados (não resolvidos silenciosamente)
+
+- `Documento 05 §10` lista Fotos/Vídeos como funcionalidade do módulo Faxinas, enquanto `§23` do mesmo documento determina que arquivos nunca devem ser armazenados diretamente em outros módulos — leitura possível (capacidade percebida pelo ator vs. implementação técnica centralizada em Files), porém não confirmada explicitamente por nenhum documento.
+- `Documento 14 §25` define requisitos de upload, mas `§26` (elementos mínimos da tela inicial do Portal da Faxineira) não inclui botão de upload/câmera.
+- `Documento 12 §8` cita "Áudio" como tipo de evidência — não mencionado em nenhum outro documento do conjunto auditado.
+
+### 30.5 Decisão (aprovada explicitamente pelo usuário)
+
+- **Files/Evidências é requisito real e documentado do produto** — não foi cancelado nem descartado, e nenhum documento histórico foi alterado para remover referências a fotos/vídeos.
+- **Files/Evidências NÃO é condição para o encerramento da Fase 6** nesta versão do Plano Executivo.
+- A Fase 6 é considerada **concluída funcionalmente** com Incremento 1 (Housekeeping Foundation) + Incremento 2A (Portal da Faxineira Core).
+- O que era tratado como "Incremento 2B — Files/Evidências" durante o planejamento passa a ser **escopo futuro deferido, não implementado, não descartado, sem fase de implementação atribuída neste momento**.
+- A proposta de arquitetura apresentada na auditoria (`FileAttachment`, `OwnerType`, presigned URL, `ConfirmFileUploadCommand`, `IObjectStorage`, estrutura de storage key, attachment de `ChecklistItem`/`CleaningOccurrence`, tipos finais Photo/Video/Audio/Document, thumbnail assíncrona, novos eventos, antivírus, limites, MIME allowlist, retenção, estratégia de exclusão) **permanece como RECOMENDAÇÃO/GAP, não aprovada** — não deve ser tratada como Architecture Principles, ADR ou requisito aprovado sem refinamento e aprovação futura explícita.
+- `ADR-006` permanece vigente, sem alteração, quanto à existência conceitual do Files BC, centralização, S3, MinIO e contrato público.
+- `Plano Executivo de Desenvolvimento por Fases.md` permanece com sua sequência atual — nenhuma Fase 6B foi criada; nenhuma Fase 7-12 foi renumerada ou alterada em escopo.
+
+### 30.6 Status oficial
+
+- **Fase 6 — Housekeeping e Portal da Faxineira** — STATUS: **CONCLUÍDA FUNCIONALMENTE**.
+- **Incremento 1** (Housekeeping Foundation) — concluído; homologado; publicado em `origin/feature/housekeeping`.
+- **Incremento 2A** (Portal da Faxineira Core) — concluído; homologado; publicado em `origin/feature/housekeeping`.
+- **Files/Evidências** — deferido; não implementado; não bloqueia o encerramento funcional da Fase 6; exige planejamento/aprovação futura. (Anteriormente denominado "Incremento 2B" durante o planejamento.)
+- **Integração em `master`**: autorizada pelo usuário (fast-forward puro); execução registrada nesta mesma sessão — ver atualização de status ao final deste documento assim que concluída.
