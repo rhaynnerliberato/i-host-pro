@@ -27,6 +27,8 @@ public sealed class HousekeepingDbContext : BaseDbContext
 
     public DbSet<Cleaning> Cleanings => Set<Cleaning>();
     public DbSet<CleaningAuditEntry> CleaningAuditLog => Set<CleaningAuditEntry>();
+    public DbSet<CleaningOccurrence> CleaningOccurrences => Set<CleaningOccurrence>();
+    public DbSet<CleaningChecklistItem> CleaningChecklistItems => Set<CleaningChecklistItem>();
     public DbSet<PropertyProjectionEntry> PropertyProjection => Set<PropertyProjectionEntry>();
     public DbSet<ReservationProjectionEntry> ReservationProjection => Set<ReservationProjectionEntry>();
 

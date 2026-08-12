@@ -3,7 +3,9 @@ using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Application;
+using IHostPro.Contexts.Housekeeping.Application.Checklist;
 using IHostPro.Contexts.Housekeeping.Application.Cleanings;
+using IHostPro.Contexts.Housekeeping.Application.Occurrences;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using Mediator;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,6 +43,9 @@ public static class HousekeepingCommandDispatchExtensions
 
         services.AddScoped<IValidator<CreateCleaningCommand>, CreateCleaningCommandValidator>();
         services.AddScoped<IValidator<ListCleaningsQuery>, ListCleaningsQueryValidator>();
+        services.AddScoped<IValidator<ListOwnCleaningsQuery>, ListOwnCleaningsQueryValidator>();
+        services.AddScoped<IValidator<RegisterCleaningOccurrenceCommand>, RegisterCleaningOccurrenceCommandValidator>();
+        services.AddScoped<IValidator<SetOwnCleaningChecklistItemCommand>, SetOwnCleaningChecklistItemCommandValidator>();
 
         // Validation runs first for every command — safe as a single open
         // generic. Assign/Start/StartInspection/Complete/Cancel/MarkInterrupted/
@@ -62,6 +67,23 @@ public static class HousekeepingCommandDispatchExtensions
         services.AddScoped<
             IPipelineBehavior<GetCleaningDetailQuery, Result<CleaningResult>>,
             TenantTransactionBehavior<GetCleaningDetailQuery, Result<CleaningResult>, HousekeepingDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<ListOwnCleaningsQuery, Result<PagedResult<CleaningSummaryResult>>>,
+            TenantTransactionBehavior<ListOwnCleaningsQuery, Result<PagedResult<CleaningSummaryResult>>, HousekeepingDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<GetOwnCleaningDetailQuery, Result<CleaningResult>>,
+            TenantTransactionBehavior<GetOwnCleaningDetailQuery, Result<CleaningResult>, HousekeepingDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<ListCleaningOccurrencesQuery, Result<IReadOnlyList<CleaningOccurrenceResult>>>,
+            TenantTransactionBehavior<ListCleaningOccurrencesQuery, Result<IReadOnlyList<CleaningOccurrenceResult>>, HousekeepingDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<GetOwnCleaningChecklistQuery, Result<IReadOnlyList<CleaningChecklistItemResult>>>,
+            TenantTransactionBehavior<GetOwnCleaningChecklistQuery, Result<IReadOnlyList<CleaningChecklistItemResult>>, HousekeepingDbContext>>();
+
+        // RegisterCleaningOccurrenceCommand/SetOwnCleaningChecklistItemCommand:
+        // deliberately no pipeline behavior, same reasoning as this class's
+        // own doc comment — the handler injects IHousekeepingTransactionExecutor
+        // directly.
 
         return services;
     }

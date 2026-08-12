@@ -1,6 +1,7 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
 using IHostPro.Contexts.Housekeeping.Application.Errors;
+using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Domain;
 
 namespace IHostPro.Contexts.Housekeeping.Application.Cleanings;
@@ -16,17 +17,20 @@ public sealed class MarkCleaningWaitingHelpCommandHandler : ICommandHandler<Mark
     private readonly ICleaningTransitionExecutor _executor;
     private readonly IRepository<Cleaning, Guid> _repository;
     private readonly IHousekeepingAuditWriter _auditWriter;
+    private readonly IIntegrationEventCollector _eventCollector;
     private readonly TimeProvider _timeProvider;
 
     public MarkCleaningWaitingHelpCommandHandler(
         ICleaningTransitionExecutor executor,
         IRepository<Cleaning, Guid> repository,
         IHousekeepingAuditWriter auditWriter,
+        IIntegrationEventCollector eventCollector,
         TimeProvider timeProvider)
     {
         _executor = executor;
         _repository = repository;
         _auditWriter = auditWriter;
+        _eventCollector = eventCollector;
         _timeProvider = timeProvider;
     }
 
@@ -51,6 +55,17 @@ public sealed class MarkCleaningWaitingHelpCommandHandler : ICommandHandler<Mark
             _auditWriter.Record(CleaningAuditEntry.Create(
                 Guid.NewGuid(), command.TenantId, command.ActorId, "Cleaning", command.CleaningId,
                 "cleaning_waiting_help", ["status"], now));
+
+            _eventCollector.Enqueue(new CleaningNeedsHelp
+            {
+                TenantId = command.TenantId,
+                AggregateId = command.CleaningId,
+                AggregateType = "Cleaning",
+                CorrelationId = Guid.NewGuid(),
+                ActorType = "User",
+                ActorId = command.ActorId.ToString(),
+                CleaningId = command.CleaningId,
+            });
 
             return Result.Success(CreateCleaningCommandHandler.ToResult(cleaning));
         }, cancellationToken);

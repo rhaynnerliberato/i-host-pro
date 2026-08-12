@@ -68,7 +68,8 @@ public sealed class CreateCleaningCommandHandler : ICommandHandler<CreateCleanin
             var cleaningId = Guid.NewGuid();
 
             var cleaning = Cleaning.Create(
-                cleaningId, command.TenantId, command.PropertyId, command.ReservationId, command.ActorId, now);
+                cleaningId, command.TenantId, command.PropertyId, command.ReservationId, command.ActorId, now,
+                command.ScheduledAtUtc);
 
             _repository.Add(cleaning);
 
@@ -104,6 +105,7 @@ public sealed class CreateCleaningCommandHandler : ICommandHandler<CreateCleanin
         CleaningStatusCodeMapper.ToCode(cleaning.Status),
         cleaning.CreatedByUserId,
         cleaning.CreatedAtUtc,
+        cleaning.ScheduledAtUtc,
         cleaning.StartedAtUtc,
         cleaning.InspectionStartedAtUtc,
         cleaning.CompletedAtUtc,

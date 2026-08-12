@@ -26,4 +26,28 @@ public interface ICleaningReader
         int page, int pageSize, CancellationToken cancellationToken);
 
     Task<CleaningResult?> GetByIdAsync(Guid cleaningId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Self-service "Minhas Faxinas" listing (Fase 6, Incremento 2A) —
+    /// <paramref name="housekeeperUserId"/> is a mandatory filter, always
+    /// taken from the caller's own authenticated identity, never
+    /// client-supplied (ABAC: <c>Cleaning.AssignedHousekeeperUserId ==</c>
+    /// caller, in addition to the tenant scoping the Global Query Filter
+    /// already applies). Ordered by <see cref="CleaningSummaryResult.ScheduledAtUtc"/>
+    /// ascending with nulls last, then <c>createdAtUtc</c>/<c>id</c> as a
+    /// deterministic tie-breaker — cleanings with no schedule set are never
+    /// hidden, only sorted after every scheduled one.
+    /// </summary>
+    Task<PagedResult<CleaningSummaryResult>> ListForHousekeeperAsync(
+        Guid housekeeperUserId, string? status, int page, int pageSize, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Self-service detail read (Fase 6, Incremento 2A) — returns <c>null</c>
+    /// both when the cleaning does not exist AND when it exists but is not
+    /// assigned to <paramref name="housekeeperUserId"/>, so the controller
+    /// can fail closed with a uniform 404 without revealing whether a
+    /// cleaning belonging to someone else exists (§4 ABAC rule).
+    /// </summary>
+    Task<CleaningResult?> GetByIdForHousekeeperAsync(
+        Guid cleaningId, Guid housekeeperUserId, CancellationToken cancellationToken);
 }

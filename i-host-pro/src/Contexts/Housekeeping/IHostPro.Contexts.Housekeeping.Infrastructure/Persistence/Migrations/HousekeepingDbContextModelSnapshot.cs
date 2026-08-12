@@ -62,6 +62,10 @@ namespace IHostPro.Contexts.Housekeeping.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("reservation_id");
 
+                    b.Property<DateTimeOffset?>("ScheduledAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scheduled_at_utc");
+
                     b.Property<DateTimeOffset?>("StartedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("started_at_utc");
@@ -89,6 +93,8 @@ namespace IHostPro.Contexts.Housekeeping.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "AssignedHousekeeperUserId");
 
                     b.HasIndex("TenantId", "ReservationId");
+
+                    b.HasIndex("TenantId", "AssignedHousekeeperUserId", "ScheduledAtUtc");
 
                     b.HasIndex("TenantId", "PropertyId", "CreatedAtUtc");
 
@@ -143,6 +149,86 @@ namespace IHostPro.Contexts.Housekeeping.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "AggregateId", "OccurredAt");
 
                     b.ToTable("cleaning_audit_log", "housekeeping");
+                });
+
+            modelBuilder.Entity("IHostPro.Contexts.Housekeeping.Domain.CleaningChecklistItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CleaningId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cleaning_id");
+
+                    b.Property<bool>("IsChecked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_checked");
+
+                    b.Property<string>("ItemType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("item_type");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "CleaningId", "ItemType")
+                        .IsUnique();
+
+                    b.ToTable("cleaning_checklist_items", "housekeeping");
+                });
+
+            modelBuilder.Entity("IHostPro.Contexts.Housekeeping.Domain.CleaningOccurrence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CleaningId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cleaning_id");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<DateTimeOffset>("RegisteredAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("registered_at_utc");
+
+                    b.Property<Guid>("RegisteredByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("registered_by_user_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "CleaningId", "RegisteredAtUtc");
+
+                    b.ToTable("cleaning_occurrences", "housekeeping");
                 });
 
             modelBuilder.Entity("IHostPro.Contexts.Housekeeping.Infrastructure.Projections.PropertyProjectionEntry", b =>

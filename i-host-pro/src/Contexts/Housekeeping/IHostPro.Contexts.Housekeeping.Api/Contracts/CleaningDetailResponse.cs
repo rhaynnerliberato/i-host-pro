@@ -13,6 +13,7 @@ public sealed record CleaningDetailResponse(
     string Status,
     Guid CreatedByUserId,
     DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? ScheduledAtUtc,
     DateTimeOffset? StartedAtUtc,
     DateTimeOffset? InspectionStartedAtUtc,
     DateTimeOffset? CompletedAtUtc,

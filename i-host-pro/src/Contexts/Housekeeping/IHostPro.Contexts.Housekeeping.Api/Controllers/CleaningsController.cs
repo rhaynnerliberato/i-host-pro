@@ -44,7 +44,8 @@ public sealed class CleaningsController : ControllerBase
             return Unauthorized();
 
         var command = new CreateCleaningCommand(
-            identity.TenantId, identity.UserId, request.PropertyId ?? Guid.Empty, request.ReservationId);
+            identity.TenantId, identity.UserId, request.PropertyId ?? Guid.Empty, request.ReservationId,
+            request.ScheduledAtUtc);
 
         var result = await _sender.Send(command, cancellationToken);
 
@@ -288,16 +289,17 @@ public sealed class CleaningsController : ControllerBase
             : HousekeepingResultHttpMapper.ToActionResult(result.Error);
     }
 
-    private static CleaningDetailResponse ToDetailResponse(CleaningResult result) => new(
+    internal static CleaningDetailResponse ToDetailResponse(CleaningResult result) => new(
         result.Id, result.PropertyId, result.ReservationId, result.AssignedHousekeeperUserId, result.Status,
-        result.CreatedByUserId, result.CreatedAtUtc, result.StartedAtUtc, result.InspectionStartedAtUtc,
-        result.CompletedAtUtc, result.CancelledAtUtc);
+        result.CreatedByUserId, result.CreatedAtUtc, result.ScheduledAtUtc, result.StartedAtUtc,
+        result.InspectionStartedAtUtc, result.CompletedAtUtc, result.CancelledAtUtc);
 
     private static PagedCleaningResponse ToResponse(PagedResult<CleaningSummaryResult> result) => new(
         result.Page, result.PageSize, result.TotalCount, result.Items.Select(ToResponse).ToArray());
 
-    private static CleaningSummaryResponse ToResponse(CleaningSummaryResult result) => new(
-        result.Id, result.PropertyId, result.ReservationId, result.AssignedHousekeeperUserId, result.Status, result.CreatedAtUtc);
+    internal static CleaningSummaryResponse ToResponse(CleaningSummaryResult result) => new(
+        result.Id, result.PropertyId, result.ReservationId, result.AssignedHousekeeperUserId, result.Status,
+        result.CreatedAtUtc, result.ScheduledAtUtc);
 
     private void SetNoStoreHeaders() => Response.Headers.CacheControl = "no-store";
 }

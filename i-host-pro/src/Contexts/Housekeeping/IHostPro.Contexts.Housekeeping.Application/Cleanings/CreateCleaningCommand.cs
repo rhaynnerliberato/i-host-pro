@@ -19,4 +19,5 @@ public sealed record CreateCleaningCommand(
     Guid TenantId,
     Guid ActorId,
     Guid PropertyId,
-    Guid? ReservationId) : ICommand<CleaningResult>;
+    Guid? ReservationId,
+    DateTimeOffset? ScheduledAtUtc = null) : ICommand<CleaningResult>;

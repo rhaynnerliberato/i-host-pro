@@ -31,6 +31,7 @@ public sealed class CleaningConfiguration : IEntityTypeConfiguration<Cleaning>
 
         builder.Property(c => c.CreatedByUserId).HasColumnName("created_by_user_id").IsRequired();
         builder.Property(c => c.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        builder.Property(c => c.ScheduledAtUtc).HasColumnName("scheduled_at_utc");
         builder.Property(c => c.StartedAtUtc).HasColumnName("started_at_utc");
         builder.Property(c => c.InspectionStartedAtUtc).HasColumnName("inspection_started_at_utc");
         builder.Property(c => c.CompletedAtUtc).HasColumnName("completed_at_utc");
@@ -43,6 +44,11 @@ public sealed class CleaningConfiguration : IEntityTypeConfiguration<Cleaning>
         builder.HasIndex(c => new { c.TenantId, c.Status, c.CreatedAtUtc });
         builder.HasIndex(c => new { c.TenantId, c.PropertyId, c.CreatedAtUtc });
         builder.HasIndex(c => new { c.TenantId, c.AssignedHousekeeperUserId });
+
+        // Backs ListForHousekeeperAsync's "Minhas Faxinas" ordering
+        // (Fase 6, Incremento 2A) — ScheduledAtUtc ascending within a given
+        // housekeeper/tenant.
+        builder.HasIndex(c => new { c.TenantId, c.AssignedHousekeeperUserId, c.ScheduledAtUtc });
 
         // Non-unique — a Reservation may, in principle, be linked to more
         // than one Cleaning across its lifetime; the lookup used to react to

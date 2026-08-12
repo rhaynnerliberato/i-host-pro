@@ -51,6 +51,11 @@ namespace IHostPro.Contexts.Identity.Api.Authorization;
 /// <see cref="IdentityPermissionCodes.ReservationsManage"/> follows the
 /// exact same pattern (Fase 3, Incremento 1 plan, item 5) — Reservations'
 /// controller references it as a policy name string only.
+///
+/// <see cref="IdentityPermissionCodes.CleaningsManageOwnCleaning"/> was
+/// already seeded into the persisted catalog (mapped to <c>HOUSEKEEPER</c>)
+/// since Fase 6, Incremento 1, but had no policy registered here until Fase
+/// 6, Incremento 2A — <c>MyCleaningsController</c> is its first consumer.
 /// </summary>
 public static class IdentityAuthorizationExtensions
 {
@@ -74,7 +79,9 @@ public static class IdentityAuthorizationExtensions
             .AddPolicy(IdentityPermissionCodes.PoliciesManage, policy =>
                 policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.PoliciesManage)))
             .AddPolicy(IdentityPermissionCodes.CleaningsManage, policy =>
-                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.CleaningsManage)));
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.CleaningsManage)))
+            .AddPolicy(IdentityPermissionCodes.CleaningsManageOwnCleaning, policy =>
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.CleaningsManageOwnCleaning)));
 
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

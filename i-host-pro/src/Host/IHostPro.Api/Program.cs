@@ -570,6 +570,30 @@ public partial class Program
                 return "CancelReservation";
             if (descriptor is { ControllerName: "Cleanings", ActionName: "CancelCleaning" })
                 return "CancelCleaning";
+
+            // Fase 6, Incremento 2A — MyCleaningsController's self-service
+            // lifecycle actions share the exact same LAST route segment
+            // (".../start", ".../start-inspection", ".../complete",
+            // ".../waiting-materials", ".../waiting-help") as their
+            // administrative CleaningsController counterparts, the same
+            // class of collision as CancelReservation/CancelCleaning above.
+            // Only the self-service side needs an explicit id — leaving
+            // CleaningsController's own actions untouched (still null here)
+            // preserves the already-shipped admin frontend's
+            // start()/startInspection()/complete()/waitingMaterials()/waitingHelp()
+            // method names exactly as they are today.
+            if (descriptor.ControllerName == "MyCleanings")
+            {
+                return descriptor.ActionName switch
+                {
+                    "Start" => "StartOwnCleaning",
+                    "StartInspection" => "StartOwnCleaningInspection",
+                    "Complete" => "CompleteOwnCleaning",
+                    "WaitingMaterials" => "MarkOwnCleaningWaitingMaterials",
+                    "WaitingHelp" => "MarkOwnCleaningWaitingHelp",
+                    _ => null,
+                };
+            }
         }
 
         return null;

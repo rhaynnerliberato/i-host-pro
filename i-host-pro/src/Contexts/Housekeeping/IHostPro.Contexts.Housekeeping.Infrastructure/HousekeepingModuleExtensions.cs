@@ -1,7 +1,9 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
 using IHostPro.Contexts.Housekeeping.Application;
+using IHostPro.Contexts.Housekeeping.Application.Checklist;
 using IHostPro.Contexts.Housekeeping.Application.Cleanings;
+using IHostPro.Contexts.Housekeeping.Application.Occurrences;
 using IHostPro.Contexts.Housekeeping.Domain;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Messaging;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
@@ -45,6 +47,10 @@ public static class HousekeepingModuleExtensions
         services.AddScoped<IRepository<Cleaning, Guid>, CleaningRepository>();
         services.AddScoped<ICleaningReader, CleaningReader>();
         services.AddScoped<IHousekeepingAuditWriter, HousekeepingAuditWriter>();
+        services.AddScoped<ICleaningOccurrenceWriter, CleaningOccurrenceWriter>();
+        services.AddScoped<ICleaningOccurrenceReader, CleaningOccurrenceReader>();
+        services.AddScoped<ICleaningChecklistItemRepository, CleaningChecklistItemRepository>();
+        services.AddScoped<ICleaningChecklistReader, CleaningChecklistReader>();
         services.AddScoped<IPropertyReferenceProjection, PropertyReferenceProjectionReader>();
         services.AddScoped<IReservationReferenceProjection, ReservationReferenceProjectionReader>();
 

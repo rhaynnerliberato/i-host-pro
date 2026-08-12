@@ -27,6 +27,17 @@ public sealed class Cleaning : AggregateRoot<Guid>, ITenantOwned
     public CleaningStatus Status { get; private set; }
     public Guid CreatedByUserId { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
+
+    /// <summary>
+    /// When this cleaning is expected to happen — always caller-supplied at
+    /// creation, optional, never derived/inferred (Fase 6, Incremento 2A,
+    /// Checkpoint 0 gap resolution: <c>CreatedAtUtc</c> alone cannot answer
+    /// "when should this cleaning happen", the Portal's "próximas faxinas"
+    /// requirement). A cleaning with no value here simply does not
+    /// participate in schedule-based ordering; it is never hidden or
+    /// defaulted to a guessed date.
+    /// </summary>
+    public DateTimeOffset? ScheduledAtUtc { get; private set; }
     public DateTimeOffset? StartedAtUtc { get; private set; }
     public DateTimeOffset? InspectionStartedAtUtc { get; private set; }
     public DateTimeOffset? CompletedAtUtc { get; private set; }
@@ -38,7 +49,8 @@ public sealed class Cleaning : AggregateRoot<Guid>, ITenantOwned
     }
 
     private Cleaning(
-        Guid id, Guid tenantId, Guid propertyId, Guid? reservationId, Guid createdByUserId, DateTimeOffset now)
+        Guid id, Guid tenantId, Guid propertyId, Guid? reservationId, Guid createdByUserId, DateTimeOffset now,
+        DateTimeOffset? scheduledAtUtc)
         : base(id)
     {
         TenantId = tenantId;
@@ -47,11 +59,13 @@ public sealed class Cleaning : AggregateRoot<Guid>, ITenantOwned
         CreatedByUserId = createdByUserId;
         Status = CleaningStatus.Pending;
         CreatedAtUtc = now;
+        ScheduledAtUtc = scheduledAtUtc?.ToUniversalTime();
     }
 
     public static Cleaning Create(
-        Guid id, Guid tenantId, Guid propertyId, Guid? reservationId, Guid createdByUserId, DateTimeOffset now) =>
-        new(id, tenantId, propertyId, reservationId, createdByUserId, now.ToUniversalTime());
+        Guid id, Guid tenantId, Guid propertyId, Guid? reservationId, Guid createdByUserId, DateTimeOffset now,
+        DateTimeOffset? scheduledAtUtc = null) =>
+        new(id, tenantId, propertyId, reservationId, createdByUserId, now.ToUniversalTime(), scheduledAtUtc);
 
     /// <summary>
     /// <see cref="CleaningStatus.Pending"/> → <see cref="CleaningStatus.Assigned"/>.
@@ -71,14 +85,35 @@ public sealed class Cleaning : AggregateRoot<Guid>, ITenantOwned
     }
 
     /// <summary>
-    /// <see cref="CleaningStatus.Assigned"/> → <see cref="CleaningStatus.Started"/>
-    /// — the optional <see cref="CleaningStatus.InTransit"/> step is skipped
-    /// by design this increment (Checkpoint 0/§6 approval decision: not
-    /// required, no admin-triggered entry point exists).
+    /// <see cref="CleaningStatus.Assigned"/> → <see cref="CleaningStatus.InTransit"/>
+    /// — self-service only (Fase 6, Incremento 2A): Documento 06 describes
+    /// this step as the housekeeper informing their own displacement
+    /// ("Faxineira informou deslocamento"), never an administrative action.
+    /// Documento 06 also marks it "Opcional. Configuração por tenant." — no
+    /// per-tenant configuration mechanism backs that optionality yet
+    /// (Checkpoint 0 gap resolution), so this step simply remains optional
+    /// in the literal sense that <see cref="Start"/> accepts either
+    /// <see cref="CleaningStatus.Assigned"/> or <see cref="CleaningStatus.InTransit"/>
+    /// as its origin.
+    /// </summary>
+    public void MarkInTransit(DateTimeOffset now)
+    {
+        if (Status != CleaningStatus.Assigned)
+            throw new InvalidOperationException($"Cannot mark a cleaning in status '{Status}' as in transit.");
+
+        Status = CleaningStatus.InTransit;
+    }
+
+    /// <summary>
+    /// <see cref="CleaningStatus.Assigned"/> OR <see cref="CleaningStatus.InTransit"/>
+    /// → <see cref="CleaningStatus.Started"/> — <see cref="CleaningStatus.InTransit"/>
+    /// accepted as a valid origin since Fase 6, Incremento 2A (see
+    /// <see cref="MarkInTransit"/>); both direct and via-InTransit paths
+    /// remain valid, matching Documento 06's own "opcional" framing.
     /// </summary>
     public void Start(DateTimeOffset now)
     {
-        if (Status != CleaningStatus.Assigned)
+        if (Status is not (CleaningStatus.Assigned or CleaningStatus.InTransit))
             throw new InvalidOperationException($"Cannot start a cleaning in status '{Status}'.");
 
         Status = CleaningStatus.Started;
