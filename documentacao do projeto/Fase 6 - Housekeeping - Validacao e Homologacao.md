@@ -1,8 +1,8 @@
 # Fase 6 — Housekeeping — Validação e Homologação
 
-Versão: 1.1 (Fase 6 encerrada funcionalmente — Incremento 1 + Incremento 2A publicados em `origin/feature/housekeeping`; Files/Evidências auditado e deliberadamente deferido — §30 — documento vivo, atualizado progressivamente a cada checkpoint)
+Versão: 1.2 (Fase 6 encerrada funcionalmente e **integrada em `master`** por fast-forward puro — Incremento 1 + Incremento 2A; Files/Evidências auditado e deliberadamente deferido — §30 — documento vivo, atualizado progressivamente a cada checkpoint)
 
-Status: **Fase 6 (Housekeeping e Portal da Faxineira) CONCLUÍDA FUNCIONALMENTE**, composta por Incremento 1 (Housekeeping Foundation) e Incremento 2A (Portal da Faxineira Core) — ambos concluídos, homologados e publicados em `origin/feature/housekeeping`. Checkpoints 0-6 de ambos os incrementos concluídos (§4-§29). **Files/Evidências** (anteriormente denominado "Incremento 2B" durante o planejamento) foi auditado e deliberadamente **deferido** por decisão explícita do usuário — é requisito real e documentado do produto, não descartado, porém não bloqueia o encerramento funcional desta fase; permanece como escopo futuro sem fase de implementação atribuída (§30). Status da integração de `feature/housekeeping` em `master`: ver §30.6.
+Status: **Fase 6 (Housekeeping e Portal da Faxineira) CONCLUÍDA FUNCIONALMENTE E INTEGRADA EM `master`**, composta por Incremento 1 (Housekeeping Foundation) e Incremento 2A (Portal da Faxineira Core) — ambos concluídos, homologados, publicados em `origin/feature/housekeeping` e integrados em `master`/`origin/master` por fast-forward puro (hash `15c6fdc4669d5ffaba57f14ef3857ea2232daa2c`). Checkpoints 0-6 de ambos os incrementos concluídos (§4-§29). **Files/Evidências** (anteriormente denominado "Incremento 2B" durante o planejamento) foi auditado e deliberadamente **deferido** por decisão explícita do usuário — é requisito real e documentado do produto, não descartado, porém não bloqueia o encerramento funcional desta fase; permanece como escopo futuro sem fase de implementação atribuída (§30). `feature/housekeeping` preservada como histórico; nenhuma tag foi criada.
 
 ---
 
@@ -957,4 +957,4 @@ Auditoria estritamente documental e de código (read-only — nenhuma implementa
 - **Incremento 1** (Housekeeping Foundation) — concluído; homologado; publicado em `origin/feature/housekeeping`.
 - **Incremento 2A** (Portal da Faxineira Core) — concluído; homologado; publicado em `origin/feature/housekeeping`.
 - **Files/Evidências** — deferido; não implementado; não bloqueia o encerramento funcional da Fase 6; exige planejamento/aprovação futura. (Anteriormente denominado "Incremento 2B" durante o planejamento.)
-- **Integração em `master`**: autorizada pelo usuário (fast-forward puro); execução registrada nesta mesma sessão — ver atualização de status ao final deste documento assim que concluída.
+- **Integração em `master`**: concluída. `feature/housekeeping` integrada em `master` por **fast-forward puro** (sem merge commit, sem rebase, sem squash, sem force). `master`/`origin/master` sincronizados no hash `15c6fdc4669d5ffaba57f14ef3857ea2232daa2c` (`git push origin master`: `b4835de..15c6fdc`). `feature/housekeeping` preservada, local e remota, como histórico. Nenhuma tag foi criada.
