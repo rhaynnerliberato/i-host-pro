@@ -14,6 +14,69 @@ public class ReservationsSourceConventionTests
     private static string RepositoryRoot([CallerFilePath] string thisFilePath = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(thisFilePath)!, "..", ".."));
 
+    // Fase 7, Incremento 1 (Agenda Foundation, Checkpoint 1) legitimately
+    // introduces a local, read-only PROJECTION of Housekeeping's own
+    // Cleaning (never a duplicate aggregate — see
+    // CleaningScheduleProjectionEntry's own doc comment) plus the Wolverine
+    // adapters that feed it, and mirrors Housekeeping's own
+    // CleaningStatusCodeMapper string values (including "Completed") for
+    // Cleaning.Status — a different concept from Reservation.Status, which
+    // this file's other tests guard separately. Both concerns share the
+    // English words "Cleaning"/"Completed", which the plain substring
+    // matches below would otherwise also flag as false positives. Excluded
+    // explicitly, by exact file, rather than loosening the fragments
+    // themselves — a real duplicate Cleaning aggregate, or a genuinely new
+    // Reservation.Status value, anywhere else in this Bounded Context must
+    // still fail these tests.
+    private static readonly string[] Fase7IncrementoUmAllowedFiles =
+    [
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Messaging", "CleaningCreatedHandler.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Messaging", "CleaningAssignedHandler.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Messaging", "CleaningStartedHandler.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Messaging", "CleaningInspectionStartedHandler.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Messaging", "CleaningCompletedHandler.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Messaging", "CleaningCancelledHandler.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Messaging", "CleaningInTransitHandler.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Messaging", "CleaningInterruptedHandler.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Messaging", "CleaningNeedsHelpHandler.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Messaging", "CleaningNeedsMaterialHandler.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Projections", "CleaningScheduleProjectionEntry.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Projections", "CleaningScheduleProjectionSynchronizer.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Persistence", "Mappings", "CleaningScheduleProjectionEntryConfiguration.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Messaging", "ReservationsMessageExecutionScope.cs"),
+        Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "ReservationsModuleExtensions.cs"),
+    ];
+
     private static string[] ReservationsSourceFiles()
     {
         var srcDirectory = Path.Combine(RepositoryRoot(), "src", "Contexts", "Reservations");
@@ -94,7 +157,10 @@ public class ReservationsSourceConventionTests
     public void No_source_file_implements_an_out_of_scope_capability()
     {
         // Fase 3, Incremento 1 plan, item 14: none of these capabilities
-        // exist in this Bounded Context yet.
+        // exist in this Bounded Context yet. "class Cleaning"/"record
+        // Cleaning" guards against Reservations declaring its own DUPLICATE
+        // Cleaning aggregate — see Fase7IncrementoUmAllowedFiles' own doc
+        // comment for the legitimate, excluded exception.
         string[] forbiddenFragments =
         [
             "Airbnb", "Booking.com", "iCal", "ICalendar", "class Payment", "record Payment",
@@ -103,6 +169,7 @@ public class ReservationsSourceConventionTests
         ];
 
         var offendingFiles = ReservationsSourceFiles()
+            .Where(path => !Fase7IncrementoUmAllowedFiles.Contains(path))
             .Where(path =>
             {
                 var content = File.ReadAllText(path);
@@ -118,10 +185,16 @@ public class ReservationsSourceConventionTests
     public void Only_Confirmed_and_Cancelled_statuses_are_declared()
     {
         // Fase 3, Incremento 1 plan, item 6: "não implementar Completed,
-        // NoShow ou outros estados agora."
+        // NoShow ou outros estados agora." — about Reservation.Status only;
+        // see Fase7IncrementoUmAllowedFiles' own doc comment for why the
+        // Cleaning-projection files legitimately use the word "Completed"
+        // for an unrelated concept (Cleaning.Status, mirroring
+        // Housekeeping's own CleaningStatusCodeMapper) and are excluded here
+        // too.
         string[] forbiddenFragments = ["Completed", "NoShow", "\"completed\"", "\"no_show\""];
 
         var offendingFiles = ReservationsSourceFiles()
+            .Where(path => !Fase7IncrementoUmAllowedFiles.Contains(path))
             .Where(path =>
             {
                 var content = File.ReadAllText(path);
@@ -134,8 +207,15 @@ public class ReservationsSourceConventionTests
     }
 
     [Fact]
-    public void Exactly_one_migration_exists()
+    public void Only_the_known_approved_migrations_exist()
     {
+        // Fase 3, Incremento 1's InitialCreate, plus Fase 7, Incremento 1's
+        // (Agenda Foundation, Checkpoint 1) AddCleaningScheduleProjection —
+        // updated explicitly, by exact expected name, rather than merely
+        // relaxed to "any count," so an unapproved future migration still
+        // fails this test the same way an unapproved capability would.
+        string[] approvedMigrationSuffixes = ["_InitialCreate", "_AddCleaningScheduleProjection"];
+
         var migrationsDirectory = Path.Combine(
             RepositoryRoot(), "src", "Contexts", "Reservations",
             "IHostPro.Contexts.Reservations.Infrastructure", "Persistence", "Migrations");
@@ -148,7 +228,8 @@ public class ReservationsSourceConventionTests
             .Where(name => !name!.EndsWith(".Designer", StringComparison.Ordinal))
             .ToArray();
 
-        migrationFiles.Should().ContainSingle("only the Incremento 1 InitialCreate migration may exist");
-        migrationFiles.Single()!.Should().EndWith("_InitialCreate");
+        migrationFiles.Should().HaveCount(approvedMigrationSuffixes.Length);
+        foreach (var suffix in approvedMigrationSuffixes)
+            migrationFiles.Should().ContainSingle(name => name!.EndsWith(suffix, StringComparison.Ordinal));
     }
 }
