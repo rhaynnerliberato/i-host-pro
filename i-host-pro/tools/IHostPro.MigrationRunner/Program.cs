@@ -490,12 +490,39 @@ try
                 exchange.BindQueue("configuration.policy-updated", "policy_updated");
             })
             // Fase 6, Incremento 1, Checkpoint 1: Housekeeping's OWN published
-            // events (CleaningCreated/Assigned/Started/InspectionStarted/
-            // Completed/Cancelled) — no queue bound here yet, since no other
-            // Bounded Context consumes them this increment; the exchange only
-            // needs to exist so IHostPro.Api's publish-side routing has a
-            // real destination.
-            .DeclareExchange("housekeeping-events", exchange => exchange.ExchangeType = ExchangeType.Topic);
+            // events. Fase 7, Incremento 1 (Agenda Foundation, Checkpoint 1)
+            // binds the first external subscriber — Reservation & Scheduling's
+            // own "reservations.cleaning-schedule-projection" queue — same
+            // decoupled pub/sub pattern as property-management-events/
+            // reservation-events above: Housekeeping never needs to know
+            // Reservations is listening.
+            //
+            // Checkpoint 1 closure (status-coverage gap fix): generalized
+            // from the initial six-routing-key set to all ten real Cleaning
+            // events except cleaning_delayed. cleaning_needs_help/
+            // cleaning_needs_material were already published by Housekeeping
+            // since Incremento 2A but never routed by IHostPro.Api at all — a
+            // real defect fixed alongside this queue-binding generalization
+            // (see Documento 07 §29.4). cleaning_in_transit/cleaning_interrupted
+            // are brand-new events (Documento 07 §29.5-§29.6) for the two
+            // remaining real Cleaning.Status transitions that previously
+            // published nothing. cleaning_delayed remains deliberately NOT
+            // bound — it changes no field the Agenda projection displays
+            // (Documento 07 §29.8).
+            .DeclareExchange("housekeeping-events", exchange =>
+            {
+                exchange.ExchangeType = ExchangeType.Topic;
+                exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_created");
+                exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_assigned");
+                exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_in_transit");
+                exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_started");
+                exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_inspection_started");
+                exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_completed");
+                exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_interrupted");
+                exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_needs_help");
+                exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_needs_material");
+                exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_cancelled");
+            });
     });
 
     using (var messagingTopologyHost = messagingTopologyHostBuilder.Build())

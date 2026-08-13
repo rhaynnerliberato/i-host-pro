@@ -422,13 +422,26 @@ try
 
         RouteConfigurationEvent<PolicyUpdated>("policy_updated");
 
-        // Housekeeping's first Integration Events (Fase 6, Incremento 1) —
+        // Housekeeping's Integration Events (Fase 6, Incremento 1 plan) —
         // its own topic exchange, never any other context's.
-        // CleaningDelayed/CleaningNeedsHelp/CleaningNeedsMaterial (Documento
-        // 07 §6) are deliberately NOT routed here — all three are
-        // Faxineira-initiated self-service actions (Portal da Faxineira,
-        // Incremento 2), never published by this increment's administrative
-        // lifecycle.
+        //
+        // Fase 7, Incremento 1 (Agenda Foundation, Checkpoint 1 closure)
+        // real defect found and fixed: this comment previously claimed
+        // CleaningNeedsHelp/CleaningNeedsMaterial were "deliberately NOT
+        // routed here... never published by this increment's administrative
+        // lifecycle" — true when written (Fase 6, Incremento 1), but
+        // Incremento 2A's Portal da Faxineira DID add real command handlers
+        // (MarkCleaningWaitingHelpCommandHandler/MarkOwnCleaningWaitingHelpCommandHandler
+        // and their Material counterparts) that stage these events in
+        // Housekeeping's own outbox — with no matching route, they were
+        // staged but never actually delivered to RabbitMQ. Both are routed
+        // below now. CleaningInTransit/CleaningInterrupted are new events
+        // (Checkpoint 1 closure, approved) for the two remaining real
+        // Cleaning.Status transitions that previously published nothing at
+        // all. CleaningDelayed remains deliberately NOT routed — it carries
+        // no field any real consumer displays and corresponds to no
+        // Cleaning.Status transition (ReportOwnCleaningDelayCommandHandler
+        // never calls a Cleaning transition method).
         const string housekeepingEventsExchange = "housekeeping-events";
 
         void RouteHousekeepingEvent<TEvent>(string routingKey) where TEvent : IntegrationEvent =>
@@ -439,9 +452,13 @@ try
 
         RouteHousekeepingEvent<CleaningCreated>("cleaning_created");
         RouteHousekeepingEvent<CleaningAssigned>("cleaning_assigned");
+        RouteHousekeepingEvent<CleaningInTransit>("cleaning_in_transit");
         RouteHousekeepingEvent<CleaningStarted>("cleaning_started");
         RouteHousekeepingEvent<CleaningInspectionStarted>("cleaning_inspection_started");
         RouteHousekeepingEvent<CleaningCompleted>("cleaning_completed");
+        RouteHousekeepingEvent<CleaningInterrupted>("cleaning_interrupted");
+        RouteHousekeepingEvent<CleaningNeedsHelp>("cleaning_needs_help");
+        RouteHousekeepingEvent<CleaningNeedsMaterial>("cleaning_needs_material");
         RouteHousekeepingEvent<CleaningCancelled>("cleaning_cancelled");
     });
 

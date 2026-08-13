@@ -10,16 +10,21 @@ using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Messaging;
 using IHostPro.Contexts.Identity.Infrastructure;
+using IHostPro.Contexts.Reservations.Infrastructure;
+using IHostPro.Contexts.Reservations.Infrastructure.Messaging;
+using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using JasperFx;
+using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Wolverine;
 using Wolverine.EntityFrameworkCore;
 using Wolverine.Postgresql;
 using Wolverine.RabbitMQ;
+using Wolverine.Runtime;
 
 Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
@@ -76,6 +81,16 @@ try
     // — see HousekeepingModuleExtensions' own doc comment.
     builder.Services.AddHousekeepingModule(builder.Configuration);
 
+    // Reservations module — Agenda Foundation slice only (Fase 7, Incremento
+    // 1, Checkpoint 1): Worker needs ReservationsDbContext + the minimal
+    // projection-consumer registrations to keep CleaningScheduleProjection in
+    // sync with Housekeeping's own Cleaning events — never the full
+    // AddReservationsCommandDispatch (HTTP command/query dispatch, Api-only
+    // by that method's own design) — see ReservationsModuleExtensions'
+    // AddReservationsScheduleProjectionConsumer doc comment.
+    builder.Services.AddReservationsModule(builder.Configuration);
+    builder.Services.AddReservationsScheduleProjectionConsumer();
+
     // IHostPro.Worker hosts every Bounded Context's message handlers and Sagas,
     // kept in a separate process from IHostPro.Api so message processing can
     // scale independently of HTTP traffic (Architecture Principles, Section 2).
@@ -117,6 +132,19 @@ try
             "housekeeping_messaging",
             typeof(HousekeepingDbContext));
 
+        // Reservations' own durable outbox (Fase 3, Incremento 1 — publish
+        // side, IHostPro.Api). Enrolled here too from Fase 7, Incremento 1
+        // (Agenda Foundation, Checkpoint 1) — this is the FIRST checkpoint
+        // Reservations consumes any message; the ancillary store must be
+        // enrolled in THIS process for IDbContextOutbox<ReservationsDbContext>/
+        // IReservationsTransactionExecutor to resolve inside a Wolverine
+        // handler (same empirically-confirmed requirement as Housekeeping's
+        // own — see the comment on UseEntityFrameworkCoreTransactions below).
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("Reservations")!,
+            "reservations_messaging",
+            typeof(ReservationsDbContext));
+
         // Required in addition to EnrollAncillaryPostgresqlOutbox above —
         // same empirically-confirmed requirement documented in
         // IHostPro.Api's Program.cs for Identity's own outbox: without this,
@@ -146,6 +174,14 @@ try
         // is scoped to exactly this one type — it does not weaken Wolverine's
         // strict codegen for any other chain (PolicyUpdated included).
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Housekeeping.Application.IHousekeepingMessageExecutionScope>();
+
+        // ADR-016 (Fase 7, Checkpoint 1 CLOSURE) — same rationale as
+        // Housekeeping's own AlwaysUseServiceLocationFor above:
+        // ReservationsMessageExecutionScope is the single, deliberately-
+        // authorized place in Reservations that holds IServiceScopeFactory,
+        // so Wolverine's codegen needs this explicit opt-out for exactly
+        // this one type.
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Reservations.Application.IReservationsMessageExecutionScope>();
 
         opts.Policies.AddMiddleware(
             typeof(TenantResolutionMiddleware),
@@ -192,11 +228,31 @@ try
         opts.ListenToRabbitQueue("housekeeping.property-projection");
         opts.ListenToRabbitQueue("housekeeping.reservation-projection");
 
+        // Reservations' first consumed Integration Events (Fase 7, Incremento
+        // 1 — Agenda Foundation, Checkpoint 1): the ten Cleaning lifecycle
+        // events IHostPro.Api actually routes to housekeeping-events —
+        // every real Cleaning event except CleaningDelayed (CleaningCreated/
+        // Assigned/InTransit/Started/InspectionStarted/Completed/
+        // Interrupted/NeedsHelp/NeedsMaterial/Cancelled) — generalized from
+        // an initial CleaningCreated-only real
+        // transport proof, CleaningCreatedScheduleProjectionWorkerRoundTripTests).
+        // The handlers live in Reservations.Infrastructure, a separate
+        // assembly from this entry assembly, so it must be explicitly
+        // included in Wolverine's handler discovery. The queue itself, and
+        // its bindings to the housekeeping-events topic exchange, are
+        // provisioned exclusively by IHostPro.MigrationRunner (same
+        // single-provisioning-authority pattern as every other messaging
+        // object in this platform) — this process only attaches a consumer
+        // to the already-existing queue.
+        opts.Discovery.IncludeAssembly(typeof(CleaningCreatedHandler).Assembly);
+        opts.ListenToRabbitQueue("reservations.cleaning-schedule-projection");
+
         // Real defect found and fixed (Checkpoint 6 homologação, ADR-015
-        // spike): IHostPro.Api/Program.cs already routes every Housekeeping
-        // Cleaning lifecycle event (CleaningCreated/Assigned/Started/
-        // InspectionStarted/Completed/Cancelled) to the housekeeping-events
-        // topic exchange, since Api is where every HTTP-triggered lifecycle
+        // spike): IHostPro.Api/Program.cs already routes every real Cleaning
+        // lifecycle event except CleaningDelayed (Fase 7, Incremento 1,
+        // Checkpoint 1 closure — generalized from the smaller Fase 6 list)
+        // to the housekeeping-events topic exchange, since Api is where
+        // every HTTP-triggered lifecycle
         // transition runs. CleaningCancelled is the ONE Housekeeping event
         // also published from THIS process — ReservationProjectionAndCancellationReaction's
         // automatic reaction to a real ReservationCancelled — and this
