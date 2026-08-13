@@ -415,7 +415,34 @@ public sealed class WebE2EFixture : IAsyncLifetime
                     exchange.BindQueue("housekeeping.reservation-projection", "reservation_created");
                     exchange.BindQueue("housekeeping.reservation-projection", "reservation_cancelled");
                 })
-                .DeclareExchange("housekeeping-events", exchange => exchange.ExchangeType = ExchangeType.Topic)
+                // Fase 7, Incremento 1, Checkpoint 3: was declared with NO
+                // queue bound at all — the real Worker subprocess this
+                // fixture starts calls opts.ListenToRabbitQueue on
+                // "reservations.cleaning-schedule-projection" (Reservations'
+                // own CleaningScheduleProjection consumer, added Fase 7
+                // Checkpoint 1), which crashed the Worker at startup with
+                // AMQP 404 NOT_FOUND the instant it tried to listen on a
+                // queue that had never been declared — found the same way
+                // as the ConnectionStrings__Reservations gap above (a real
+                // ScheduleAgendaE2ETests run, real crash log). Binds all ten
+                // real Cleaning lifecycle routing keys, mirroring
+                // IHostPro.MigrationRunner's own declaration exactly
+                // (cleaning_delayed deliberately excluded — see
+                // MigrationRunner's own comment, Documento 07 §29.8).
+                .DeclareExchange("housekeeping-events", exchange =>
+                {
+                    exchange.ExchangeType = ExchangeType.Topic;
+                    exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_created");
+                    exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_assigned");
+                    exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_in_transit");
+                    exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_started");
+                    exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_inspection_started");
+                    exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_completed");
+                    exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_interrupted");
+                    exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_needs_help");
+                    exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_needs_material");
+                    exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_cancelled");
+                })
                 // Fase 5, Checkpoint 7 homologação: was missing entirely — the
                 // same "configuration-events" gap already found and fixed in
                 // IHostPro.MigrationRunner (see the Fase 5 homologation doc,
@@ -480,6 +507,47 @@ public sealed class WebE2EFixture : IAsyncLifetime
 
         await dbContext.SaveChangesAsync();
         await transaction.CommitAsync();
+    }
+
+    /// <summary>
+    /// Provisions a SECOND, fully independent tenant + ADMIN directly via EF
+    /// Core, mirroring <see cref="SeedTenantAndAdminAsync"/> exactly — for the
+    /// one real-browser scenario that genuinely needs two tenants in the same
+    /// running system (proving one tenant's Agenda never shows another
+    /// tenant's data). No other E2E suite has needed this: every other
+    /// cross-tenant/RLS assertion in this codebase is already covered by real
+    /// integration tests reading under a different tenant context, never by
+    /// driving a second browser session — this is the first Playwright
+    /// scenario for which that substitution would not be equivalent (the
+    /// Agenda's own frontend query/render path only runs in a real browser).
+    /// Each call provisions a brand-new tenant, safe to call more than once
+    /// per test run.
+    /// </summary>
+    public async Task<(Guid TenantId, string TenantSlugValue, string AdminEmail, string AdminPassword)> CreateAdditionalTenantWithAdminAsync()
+    {
+        var tenantId = Guid.NewGuid();
+        var slugValue = $"e2e-second-{tenantId:N}"[..24];
+        var adminEmail = $"admin-{tenantId:N}@e2e-second.test";
+        const string adminPassword = "Correct-Horse-Battery-Staple-55!";
+
+        await using var dbContext = CreateIdentityDbContext(tenantId);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('app.tenant_id', {tenantId.ToString()}, true)");
+
+        var tenant = Tenant.Provision(tenantId, TenantSlug.Create(slugValue), "E2E Second Tenant", DateTimeOffset.UtcNow);
+        dbContext.Tenants.Add(tenant);
+
+        var hasher = new Argon2PasswordHasher(new KonsciousArgon2idPrimitive(), Options.Create(new Argon2Options()));
+        var now = DateTimeOffset.UtcNow;
+        var adminHash = PasswordHash.FromEncoded(hasher.HashPassword(null!, adminPassword));
+        var admin = User.Register(Guid.NewGuid(), tenantId, Email.Create(adminEmail), "E2E Second Tenant Admin", adminHash, now);
+        dbContext.Users.Add(admin);
+        dbContext.UserRoles.Add(new UserRole(tenantId, admin.Id, "ADMIN", now, assignedByUserId: null));
+
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return (tenantId, slugValue, adminEmail, adminPassword);
     }
 
     private IdentityDbContext CreateIdentityDbContext(Guid? tenantId = null)
@@ -663,6 +731,19 @@ public sealed class WebE2EFixture : IAsyncLifetime
         // Housekeeping) was silently exercising a Worker that immediately
         // crashed at boot.
         psi.Environment["ConnectionStrings__Platform"] = _appConnectionString;
+        // Fase 7, Incremento 1, Checkpoint 3: same class of defect as the
+        // Platform one above, found the same way (a real ScheduleAgendaE2ETests
+        // run failing every Cleaning-dependent test with a
+        // WaitUntilKnownToHousekeepingAsync timeout, root-caused by reading
+        // this exact subprocess's own crash — "Missing connection string
+        // 'ConnectionStrings:Reservations'."). Real Program.cs enrolls
+        // Reservations' own ancillary outbox in the Worker since Fase 7
+        // Checkpoint 1 (Agenda Foundation, CleaningScheduleProjection
+        // consumer) — the checked-in appsettings.json gained the same
+        // missing key in the same investigation (see Fase 7 homologação
+        // document, Checkpoint 3), but this fixture's own env var overrides
+        // are a separate list and needed the identical fix.
+        psi.Environment["ConnectionStrings__Reservations"] = _appConnectionString;
         psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";
         psi.Environment["Identity__Jwt__Audience"] = "ihostpro-api-test";
         psi.Environment["Identity__Jwt__AccessTokenLifetime"] = "00:15:00";
