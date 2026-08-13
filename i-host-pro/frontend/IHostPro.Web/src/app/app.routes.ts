@@ -58,6 +58,12 @@ export const routes: Routes = [
         data: { titleKey: 'layout.nav.housekeeping', permissions: ['CLEANINGS:MANAGE'] },
         loadComponent: () => import('./features/housekeeping/cleanings-list/cleanings-list').then((m) => m.CleaningsList),
       },
+      {
+        path: 'schedule',
+        canActivate: [permissionGuard],
+        data: { titleKey: 'layout.nav.schedule', permissions: ['SCHEDULE:MANAGE', 'SCHEDULE:READ'] },
+        loadComponent: () => import('./features/schedule/schedule-calendar/schedule-calendar').then((m) => m.ScheduleCalendar),
+      },
     ],
   },
   {

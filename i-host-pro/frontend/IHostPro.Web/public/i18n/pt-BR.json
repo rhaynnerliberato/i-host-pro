@@ -36,7 +36,8 @@
       "condominiums": "Condomínios",
       "reservations": "Reservas",
       "policies": "Políticas",
-      "housekeeping": "Limpezas"
+      "housekeeping": "Limpezas",
+      "schedule": "Agenda"
     }
   },
   "home": {
@@ -586,6 +587,39 @@
         "notFound": "Faxina não encontrada.",
         "generic": "Não foi possível concluir a ação. Tente novamente."
       }
+    }
+  },
+  "schedule": {
+    "title": "Agenda",
+    "today": "Hoje",
+    "day": "Dia",
+    "week": "Semana",
+    "month": "Mês",
+    "empty": "Nenhum evento neste período.",
+    "loadError": "Não foi possível carregar a agenda.",
+    "filters": {
+      "eventType": "Tipo",
+      "eventTypeAll": "Todos",
+      "eventTypeReservation": "Reservas",
+      "eventTypeCleaning": "Faxinas"
+    },
+    "types": {
+      "Reservation": "Reserva",
+      "Cleaning": "Faxina"
+    },
+    "status": {
+      "confirmed": "Confirmada",
+      "cancelled": "Cancelada",
+      "Pending": "Pendente",
+      "Assigned": "Atribuída",
+      "InTransit": "Em deslocamento",
+      "Started": "Em andamento",
+      "InInspection": "Em inspeção",
+      "Completed": "Concluída",
+      "Cancelled": "Cancelada",
+      "Interrupted": "Interrompida",
+      "WaitingMaterials": "Aguardando materiais",
+      "WaitingHelp": "Aguardando ajuda"
     }
   }
 }

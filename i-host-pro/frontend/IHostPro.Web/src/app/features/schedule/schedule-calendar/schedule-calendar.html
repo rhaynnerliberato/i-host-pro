@@ -1,0 +1,33 @@
+<div class="schedule-page">
+  <div class="schedule-header">
+    <h1>{{ 'schedule.title' | transloco }}</h1>
+
+    <form class="schedule-filters" [formGroup]="filterForm">
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'schedule.filters.eventType' | transloco }}</mat-label>
+        <mat-select formControlName="eventType" (selectionChange)="applyEventTypeFilter()">
+          <mat-option value="">{{ 'schedule.filters.eventTypeAll' | transloco }}</mat-option>
+          <mat-option value="Reservation">{{ 'schedule.filters.eventTypeReservation' | transloco }}</mat-option>
+          <mat-option value="Cleaning">{{ 'schedule.filters.eventTypeCleaning' | transloco }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </form>
+  </div>
+
+  @if (state() === 'loading') {
+    <div class="schedule-status schedule-status-loading" aria-live="polite">
+      <mat-progress-spinner diameter="24" mode="indeterminate" />
+    </div>
+  }
+  @if (state() === 'empty') {
+    <p class="schedule-status schedule-status-empty" aria-live="polite">{{ 'schedule.empty' | transloco }}</p>
+  }
+  @if (state() === 'error') {
+    <div class="schedule-status schedule-status-error" aria-live="assertive">
+      <p>{{ 'schedule.loadError' | transloco }}</p>
+      <button mat-button type="button" (click)="retry()">{{ 'common.retry' | transloco }}</button>
+    </div>
+  }
+
+  <full-calendar [options]="calendarOptions" />
+</div>

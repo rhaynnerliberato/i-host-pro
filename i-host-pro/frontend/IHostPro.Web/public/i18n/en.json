@@ -36,7 +36,8 @@
       "condominiums": "Condominiums",
       "reservations": "Reservations",
       "policies": "Policies",
-      "housekeeping": "Housekeeping"
+      "housekeeping": "Housekeeping",
+      "schedule": "Schedule"
     }
   },
   "home": {
@@ -586,6 +587,39 @@
         "notFound": "Cleaning not found.",
         "generic": "The action could not be completed. Please try again."
       }
+    }
+  },
+  "schedule": {
+    "title": "Schedule",
+    "today": "Today",
+    "day": "Day",
+    "week": "Week",
+    "month": "Month",
+    "empty": "No events in this period.",
+    "loadError": "Unable to load the schedule.",
+    "filters": {
+      "eventType": "Type",
+      "eventTypeAll": "All",
+      "eventTypeReservation": "Reservations",
+      "eventTypeCleaning": "Cleanings"
+    },
+    "types": {
+      "Reservation": "Reservation",
+      "Cleaning": "Cleaning"
+    },
+    "status": {
+      "confirmed": "Confirmed",
+      "cancelled": "Cancelled",
+      "Pending": "Pending",
+      "Assigned": "Assigned",
+      "InTransit": "On the way",
+      "Started": "In progress",
+      "InInspection": "In inspection",
+      "Completed": "Completed",
+      "Cancelled": "Cancelled",
+      "Interrupted": "Interrupted",
+      "WaitingMaterials": "Waiting for materials",
+      "WaitingHelp": "Waiting for help"
     }
   }
 }

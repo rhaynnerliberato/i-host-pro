@@ -36,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { labelKey: 'layout.nav.reservations', path: '/reservations', icon: 'event', requiredPermission: 'RESERVATIONS:MANAGE' },
   { labelKey: 'layout.nav.policies', path: '/policies', icon: 'rule', requiredPermission: ['POLICIES:READ', 'POLICIES:MANAGE'] },
   { labelKey: 'layout.nav.housekeeping', path: '/housekeeping', icon: 'cleaning_services', requiredPermission: 'CLEANINGS:MANAGE' },
+  { labelKey: 'layout.nav.schedule', path: '/schedule', icon: 'calendar_month', requiredPermission: ['SCHEDULE:MANAGE', 'SCHEDULE:READ'] },
 ];
 
 @Component({

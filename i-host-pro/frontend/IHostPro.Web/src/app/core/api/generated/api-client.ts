@@ -3943,6 +3943,99 @@ export class Client {
     }
 
     /**
+     * @param from (optional) 
+     * @param to (optional) 
+     * @param propertyId (optional) 
+     * @param housekeeperUserId (optional) 
+     * @param eventType (optional) 
+     * @return OK
+     */
+    schedule(from?: Date | undefined, to?: Date | undefined, propertyId?: string | undefined, housekeeperUserId?: string | undefined, eventType?: string | undefined): Observable<ScheduleItemResponse[]> {
+        let url_ = this.baseUrl + "/api/v1/schedule?";
+        if (from === null)
+            throw new globalThis.Error("The parameter 'from' cannot be null.");
+        else if (from !== undefined)
+            url_ += "from=" + encodeURIComponent(from ? "" + from.toISOString() : "") + "&";
+        if (to === null)
+            throw new globalThis.Error("The parameter 'to' cannot be null.");
+        else if (to !== undefined)
+            url_ += "to=" + encodeURIComponent(to ? "" + to.toISOString() : "") + "&";
+        if (propertyId === null)
+            throw new globalThis.Error("The parameter 'propertyId' cannot be null.");
+        else if (propertyId !== undefined)
+            url_ += "propertyId=" + encodeURIComponent("" + propertyId) + "&";
+        if (housekeeperUserId === null)
+            throw new globalThis.Error("The parameter 'housekeeperUserId' cannot be null.");
+        else if (housekeeperUserId !== undefined)
+            url_ += "housekeeperUserId=" + encodeURIComponent("" + housekeeperUserId) + "&";
+        if (eventType === null)
+            throw new globalThis.Error("The parameter 'eventType' cannot be null.");
+        else if (eventType !== undefined)
+            url_ += "eventType=" + encodeURIComponent("" + eventType) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processSchedule(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processSchedule(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<ScheduleItemResponse[]>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<ScheduleItemResponse[]>;
+        }));
+    }
+
+    protected processSchedule(response: HttpResponseBase): Observable<ScheduleItemResponse[]> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ScheduleItemResponse[];
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
      * @param body (optional) 
      * @return Created
      */
@@ -5086,6 +5179,17 @@ export interface RoleResponse {
     code?: string | undefined;
     name?: string | undefined;
     permissionCodes?: string[] | undefined;
+}
+
+export interface ScheduleItemResponse {
+    id?: string;
+    type?: string | undefined;
+    propertyId?: string;
+    startAtUtc?: Date;
+    endAtUtc?: Date | undefined;
+    status?: string | undefined;
+    housekeeperUserId?: string | undefined;
+    sourceReferenceId?: string;
 }
 
 export interface SetChecklistItemRequest {
