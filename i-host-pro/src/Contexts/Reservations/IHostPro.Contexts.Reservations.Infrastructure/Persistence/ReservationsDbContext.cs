@@ -1,6 +1,7 @@
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Reservations.Domain;
+using IHostPro.Contexts.Reservations.Infrastructure.Projections;
 using Microsoft.EntityFrameworkCore;
 using Wolverine.EntityFrameworkCore;
 
@@ -27,6 +28,13 @@ public sealed class ReservationsDbContext : BaseDbContext
 
     public DbSet<Reservation> Reservations => Set<Reservation>();
     public DbSet<ReservationAuditEntry> ReservationAuditLog => Set<ReservationAuditEntry>();
+
+    /// <summary>
+    /// Local read-model of Housekeeping's own Cleanings (Fase 7, Incremento
+    /// 1 — Agenda Foundation) — see <see cref="Projections.CleaningScheduleProjectionEntry"/>.
+    /// </summary>
+    public DbSet<Projections.CleaningScheduleProjectionEntry> CleaningScheduleProjection =>
+        Set<Projections.CleaningScheduleProjectionEntry>();
 
     public ReservationsDbContext(DbContextOptions<ReservationsDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)

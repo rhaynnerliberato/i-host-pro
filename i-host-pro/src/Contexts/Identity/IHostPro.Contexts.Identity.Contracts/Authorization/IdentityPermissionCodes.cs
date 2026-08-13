@@ -69,4 +69,18 @@ public static class IdentityPermissionCodes
     /// </summary>
     public const string CleaningsManage = "CLEANINGS:MANAGE";
     public const string CleaningsManageOwnCleaning = "CLEANINGS:MANAGE:OWN_CLEANING";
+
+    /// <summary>
+    /// Fase 7, Incremento 1 (Agenda Foundation). Already seeded into the
+    /// persisted catalog since <c>IdentityCatalogSeed</c>'s original Fase 1
+    /// migration (ADMIN=manage, OPERATOR=manage, HOUSEKEEPER=read,
+    /// AI_AGENT=read — Documento 09 §5-§7); promoted here only now because
+    /// <c>ScheduleController</c> needs to reference them by value for the
+    /// first time. No new migration required. <c>SCHEDULE:READ:OWN_OWNER</c>
+    /// remains unpromoted — Property Owner access is deliberately deferred
+    /// this increment (no owner→property mapping available inside
+    /// Reservation &amp; Scheduling yet — Checkpoint 0 gate).
+    /// </summary>
+    public const string ScheduleManage = "SCHEDULE:MANAGE";
+    public const string ScheduleRead = "SCHEDULE:READ";
 }

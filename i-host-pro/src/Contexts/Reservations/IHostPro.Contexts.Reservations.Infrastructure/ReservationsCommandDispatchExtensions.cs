@@ -4,6 +4,7 @@ using IHostPro.BuildingBlocks.Domain;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Reservations.Application;
 using IHostPro.Contexts.Reservations.Application.Reservations;
+using IHostPro.Contexts.Reservations.Application.Schedule;
 using IHostPro.Contexts.Reservations.Domain;
 using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 using Mediator;
@@ -60,6 +61,10 @@ public static class ReservationsCommandDispatchExtensions
         services.AddScoped<IReservationAuditWriter, ReservationAuditWriter>();
         services.AddScoped<IReservationConflictGuard, ReservationConflictGuard>();
 
+        // Fase 7, Incremento 1 (Agenda Foundation, Checkpoint 1).
+        services.AddScoped<IValidator<ListScheduleQuery>, ListScheduleQueryValidator>();
+        services.AddScoped<IScheduleReader, ScheduleReader>();
+
         // Backs every write command's transactional step — see
         // ReservationsOutboxTransactionExecutor's own doc comment.
         services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
@@ -81,6 +86,9 @@ public static class ReservationsCommandDispatchExtensions
         services.AddScoped<
             IPipelineBehavior<GetReservationDetailQuery, Result<ReservationResult>>,
             TenantTransactionBehavior<GetReservationDetailQuery, Result<ReservationResult>, ReservationsDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<ListScheduleQuery, Result<IReadOnlyList<ScheduleItemResult>>>,
+            TenantTransactionBehavior<ListScheduleQuery, Result<IReadOnlyList<ScheduleItemResult>>, ReservationsDbContext>>();
 
         return services;
     }

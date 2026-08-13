@@ -81,7 +81,11 @@ public static class IdentityAuthorizationExtensions
             .AddPolicy(IdentityPermissionCodes.CleaningsManage, policy =>
                 policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.CleaningsManage)))
             .AddPolicy(IdentityPermissionCodes.CleaningsManageOwnCleaning, policy =>
-                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.CleaningsManageOwnCleaning)));
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.CleaningsManageOwnCleaning)))
+            .AddPolicy(IdentityPermissionCodes.ScheduleManage, policy =>
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.ScheduleManage)))
+            .AddPolicy(IdentityPermissionCodes.ScheduleRead, policy =>
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.ScheduleRead)));
 
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

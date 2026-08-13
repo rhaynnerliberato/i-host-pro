@@ -5,6 +5,13 @@
     <ProjectReference Include="..\IHostPro.Contexts.Reservations.Application\IHostPro.Contexts.Reservations.Application.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Domain\IHostPro.BuildingBlocks.Domain.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
+    <!-- Fase 7, Incremento 1 (Agenda Foundation): local, async, event-driven
+         projection of Housekeeping's own CleaningCreated — never a direct
+         reference to Housekeeping.Domain/Application/Infrastructure, only
+         its public Contracts (Architecture Principles §14 absolute
+         prohibition: Reservation & Scheduling ↔ Housekeeping direto). -->
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="..\..\Housekeeping\IHostPro.Contexts.Housekeeping.Contracts\IHostPro.Contexts.Housekeeping.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
