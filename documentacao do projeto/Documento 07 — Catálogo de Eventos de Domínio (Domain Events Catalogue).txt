@@ -797,3 +797,91 @@ Mesma convenção do ADR-013 — exchange próprio `configuration-events` (decla
 28.3 Consumidor
 
 Consumidor inicial e único neste incremento: invalidação de cache dentro do próprio contexto Configuration & Policy (processo `IHostPro.Worker`) — nunca um consumidor em Reservations ou qualquer outro Bounded Context (§10 da instrução de aprovação: "Não criar consumidor em Reservations neste incremento").
+
+29. Eventos do Módulo Faxinas — Payload e Roteamento reais consumidos pela Agenda (Fase 7, Incremento 1 — Agenda Foundation)
+
+Complementa a lista prospectiva do §6 ("Eventos do Módulo Faxinas") com o payload e roteamento reais dos eventos de Faxinas efetivamente consumidos pela Agenda — registrados agora porque a Fase 7 (Agenda Foundation) é o primeiro consumidor externo real destes eventos, fora do próprio contexto Housekeeping. Inicialmente esta seção cobria somente CleaningCreated (Checkpoint 1, gate de transporte real); estendida no fechamento do Checkpoint 1 (§29.4-§29.7) para cobrir a cobertura completa de transições de `Cleaning.Status` que a projeção da Agenda precisa refletir. `CleaningDelayed` permanece documentado apenas pelo nome no §6 — não consumido pela Agenda (ver §29.8). `CleaningStarted`/`CleaningInspectionStarted`/`CleaningCompleted`/`CleaningCancelled` também permanecem documentados apenas pelo nome no §6 — cada payload é idêntico em forma ao de `CleaningCreated`/`CleaningAssigned` (somente `CleaningId`, herdado do envelope), sem necessidade de retro-documentação individual.
+
+Anexado como seção nova ao final do documento, sem renumerar nenhuma seção existente — mesmo critério já usado para o §27 (Reservations) e §28 (Configuration & Policy).
+
+29.1 Payload de CleaningCreated
+
+AggregateType = "Cleaning"; AggregateId = id da Cleaning recém-criada. ActorType é sempre "User" (criação é sempre administrativa/manual neste incremento — Fase 6, Checkpoint 0 gate); ActorId é o id do Administrador/Operador que criou a Cleaning.
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| CleaningId | Guid | Redundante com AggregateId |
+| PropertyId | Guid | Identificador opaco do Imóvel — nunca código/nome/endereço |
+| ReservationId | Guid? | Id da Reserva referenciada; null quando a Cleaning foi criada sem referência a uma Reserva — nunca inferido |
+| Status | string | Código estável do status inicial — sempre "Pending" (toda Cleaning nasce Pending) |
+| ScheduledAtUtc | DateTimeOffset? | Horário operacional agendado da Cleaning — originado de `Cleaning.ScheduledAtUtc`, nunca recalculado a partir de `Reservation.CheckOutAt`, `DateTime.UtcNow`, do momento de criação ou do `Timestamp` de publicação do próprio evento (que é apenas o instante de publicação, não a data agendada). Deliberadamente opcional: uma Cleaning pode ser criada sem horário agendado (`CreateCleaningRequest` já permite isso desde o Incremento 2A — "quando omitido, a faxina simplesmente não participa da ordenação por agenda até um administrador defini-lo"); um consumidor deve tratar `null` como "sem horário conhecido", nunca como uma data padrão/`DateTimeOffset.MinValue`. Adicionado neste incremento — envelopes publicados antes desta mudança não possuem este campo e desserializam-no como `null`, tratado exatamente da mesma forma. |
+
+29.2 Roteamento RabbitMQ de CleaningCreated
+
+Mesma convenção do ADR-013 — exchange `housekeeping-events` (já declarado desde a Fase 6, Incremento 1), tipo topic, routing key = nome do evento em snake_case. Roteamento em si não foi alterado por este incremento — apenas o payload.
+
+| Evento | Exchange | Routing Key | Registrado desde |
+|---|---|---|---|
+| CleaningCreated | housekeeping-events | cleaning_created | Fase 6, Incremento 1 (payload original); campo `ScheduledAtUtc` adicionado na Fase 7, Incremento 1 |
+
+29.3 Consumidor
+
+Novo consumidor a partir deste incremento: projeção local assíncrona dentro do contexto Reservation & Scheduling (implementação técnica `Reservations`, processo `IHostPro.Worker`), usada exclusivamente para compor a Agenda unificada (Fase 7, Incremento 1). Nunca uma leitura síncrona — Reservations/Agenda não acessa `HousekeepingDbContext` nem qualquer API do Housekeeping diretamente (proibição absoluta, `Architecture Principles.md §14`).
+
+29.4 CleaningNeedsHelp e CleaningNeedsMaterial — correção de roteamento (Checkpoint 1, fechamento)
+
+Ambos os eventos já existiam desde o Incremento 2A (Portal da Faxineira) — publicados por `MarkCleaningWaitingHelpCommandHandler`/`MarkOwnCleaningWaitingHelpCommandHandler` (`CleaningNeedsHelp`) e seus equivalentes de Material (`CleaningNeedsMaterial`) — mas `IHostPro.Api/Program.cs` nunca os roteava para a exchange `housekeeping-events`: eram enfileirados no outbox do Housekeeping, porém nunca efetivamente entregues ao broker. Defeito real encontrado durante o fechamento do Checkpoint 1 da Agenda Foundation, corrigido registrando a regra de roteamento oficial idêntica à dos demais eventos de Faxinas.
+
+Payload: apenas `CleaningId` (herdado do envelope) — nenhum campo adicional, mesma forma de `CleaningStarted`/`CleaningCancelled`.
+
+| Evento | Exchange | Routing Key | Registrado desde |
+|---|---|---|---|
+| CleaningNeedsHelp | housekeeping-events | cleaning_needs_help | Incremento 2A (payload); roteamento corrigido na Fase 7, Incremento 1, Checkpoint 1 |
+| CleaningNeedsMaterial | housekeeping-events | cleaning_needs_material | Incremento 2A (payload); roteamento corrigido na Fase 7, Incremento 1, Checkpoint 1 |
+
+Consumidor: a mesma projeção local da Agenda (§29.3) — aplica `Status = WaitingHelp`/`Status = WaitingMaterials` (nomes reais do enum `CleaningStatus`, `Documento 06 §5`) à linha já existente (criada por `CleaningCreated`).
+
+29.5 CleaningInTransit — novo evento (Checkpoint 1, fechamento)
+
+Publicado quando uma Cleaning transiciona `Assigned` → `InTransit` (self-service, `MarkOwnCleaningInTransitCommandHandler`) — transição real do aggregate que, até este fechamento, não publicava evento algum. Aprovado porque a Agenda é agora um consumidor externo legítimo do lifecycle e, sem o evento, não existe forma arquiteturalmente válida (sem consulta síncrona) de manter a projeção correta.
+
+Payload: apenas `CleaningId` — deliberadamente sem `PropertyId`/`HousekeeperUserId`/descrição: o único consumidor real só precisa identificar a Cleaning e aplicar a transição a uma linha que já possui.
+
+| Evento | Exchange | Routing Key | Registrado desde |
+|---|---|---|---|
+| CleaningInTransit | housekeeping-events | cleaning_in_transit | Fase 7, Incremento 1, Checkpoint 1 (novo) |
+
+Consumidor: a mesma projeção local da Agenda — aplica `Status = InTransit`.
+
+29.6 CleaningInterrupted — novo evento (Checkpoint 1, fechamento)
+
+Publicado quando uma Cleaning transiciona `Started` → `Interrupted` (administrativo, `MarkCleaningInterruptedCommandHandler`) — mesma decisão e mesma justificativa do §29.5. Até este fechamento, esta transição não publicava evento algum (registrado assim desde a Fase 6).
+
+Payload: apenas `CleaningId` — deliberadamente sem causa/motivo: o único consumidor real só precisa identificar a Cleaning e aplicar a transição.
+
+| Evento | Exchange | Routing Key | Registrado desde |
+|---|---|---|---|
+| CleaningInterrupted | housekeeping-events | cleaning_interrupted | Fase 7, Incremento 1, Checkpoint 1 (novo) |
+
+Consumidor: a mesma projeção local da Agenda — aplica `Status = Interrupted`.
+
+29.7 Matriz completa de cobertura de Status da Agenda
+
+| Transição real do aggregate | Integration Event | Routing Key | Consumido pela Agenda | Status resultante na projeção |
+|---|---|---|---|---|
+| Nascimento | CleaningCreated | cleaning_created | Sim | Pending |
+| Pending → Assigned | CleaningAssigned | cleaning_assigned | Sim | Assigned |
+| Assigned → InTransit | CleaningInTransit | cleaning_in_transit | Sim | InTransit |
+| Assigned/InTransit → Started | CleaningStarted | cleaning_started | Sim | Started |
+| Started → InInspection | CleaningInspectionStarted | cleaning_inspection_started | Sim | InInspection |
+| InInspection → Completed | CleaningCompleted | cleaning_completed | Sim | Completed |
+| Started → Interrupted | CleaningInterrupted | cleaning_interrupted | Sim | Interrupted |
+| Started → WaitingMaterials | CleaningNeedsMaterial | cleaning_needs_material | Sim | WaitingMaterials |
+| Started → WaitingHelp | CleaningNeedsHelp | cleaning_needs_help | Sim | WaitingHelp |
+| Pending/Assigned → Cancelled | CleaningCancelled | cleaning_cancelled | Sim | Cancelled |
+
+Todas as dez transições reais de `Cleaning.Status` (`Documento 06 §5`, enum `CleaningStatus`) publicam um Integration Event roteado para `housekeeping-events` e são refletidas pela projeção da Agenda — nenhum status "best effort"/aproximado permanece.
+
+29.8 CleaningDelayed — não consumido (justificativa explícita)
+
+`CleaningDelayed` não é consumido pela Agenda porque não altera `Cleaning.Status` nem qualquer outro campo materializado pela projeção — `ReportOwnCleaningDelayCommandHandler` nunca chama um método de transição de `Cleaning`, apenas publica uma notificação. Consumi-lo seria um no-op sem efeito observável. Não foi inventada uma nova data por inferência a partir deste evento.
