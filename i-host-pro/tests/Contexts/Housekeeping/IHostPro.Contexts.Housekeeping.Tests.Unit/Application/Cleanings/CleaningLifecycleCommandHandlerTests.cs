@@ -234,36 +234,47 @@ public class CleaningLifecycleCommandHandlerTests
         result.Error.Code.Should().Be(HousekeepingErrorCodes.InvalidCleaningTransition);
     }
 
-    // --- MarkCleaningInterruptedCommandHandler: Started -> Interrupted (no event) ---
+    // --- MarkCleaningInterruptedCommandHandler: Started -> Interrupted (publishes CleaningInterrupted, Fase 7 Checkpoint 1 closure) ---
 
     [Fact]
-    public async Task MarkInterrupted_from_Started_succeeds_and_audits_but_enqueues_no_event()
+    public async Task MarkInterrupted_from_Started_succeeds_audits_and_enqueues_CleaningInterrupted()
     {
         var cleaning = StartedCleaning();
         var repository = FakeCleaningRepository.WithCleaning(cleaning);
         var auditWriter = new FakeHousekeepingAuditWriter();
+        var eventCollector = new FakeIntegrationEventCollector();
         var handler = new MarkCleaningInterruptedCommandHandler(
-            new PassThroughCleaningTransitionExecutor(), repository, auditWriter, new FixedTimeProvider(Now));
+            new PassThroughCleaningTransitionExecutor(), repository, auditWriter, eventCollector, new FixedTimeProvider(Now));
 
         var result = await handler.Handle(new MarkCleaningInterruptedCommand(TenantId, ActorId, cleaning.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be("Interrupted");
         auditWriter.RecordedEntries.Should().ContainSingle(e => e.ActionCode == "cleaning_interrupted");
+
+        var events = eventCollector.EnqueuedEvents.OfType<CleaningInterrupted>().ToArray();
+        events.Should().ContainSingle();
+        events[0].TenantId.Should().Be(TenantId);
+        events[0].AggregateId.Should().Be(cleaning.Id);
+        events[0].AggregateType.Should().Be("Cleaning");
+        events[0].CleaningId.Should().Be(cleaning.Id);
+        events[0].ActorId.Should().Be(ActorId.ToString());
     }
 
     [Fact]
-    public async Task MarkInterrupted_from_Assigned_fails_with_InvalidCleaningTransition()
+    public async Task MarkInterrupted_from_Assigned_fails_with_InvalidCleaningTransition_and_enqueues_no_event()
     {
         var cleaning = AssignedCleaning();
         var repository = FakeCleaningRepository.WithCleaning(cleaning);
+        var eventCollector = new FakeIntegrationEventCollector();
         var handler = new MarkCleaningInterruptedCommandHandler(
-            new PassThroughCleaningTransitionExecutor(), repository, new FakeHousekeepingAuditWriter(), new FixedTimeProvider(Now));
+            new PassThroughCleaningTransitionExecutor(), repository, new FakeHousekeepingAuditWriter(), eventCollector, new FixedTimeProvider(Now));
 
         var result = await handler.Handle(new MarkCleaningInterruptedCommand(TenantId, ActorId, cleaning.Id), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be(HousekeepingErrorCodes.InvalidCleaningTransition);
+        eventCollector.EnqueuedEvents.Should().BeEmpty();
     }
 
     // --- MarkCleaningWaitingMaterialsCommandHandler: Started -> WaitingMaterials (publishes CleaningNeedsMaterial, Fase 6 Incremento 2A) ---

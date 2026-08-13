@@ -36,8 +36,8 @@ public class CreateCleaningCommandHandlerTests
         return new Fixture(repository, auditWriter, eventCollector, handler);
     }
 
-    private static CreateCleaningCommand Command(Guid? reservationId = null) =>
-        new(TenantId, ActorId, PropertyId, reservationId);
+    private static CreateCleaningCommand Command(Guid? reservationId = null, DateTimeOffset? scheduledAtUtc = null) =>
+        new(TenantId, ActorId, PropertyId, reservationId, scheduledAtUtc);
 
     [Fact]
     public async Task A_valid_request_creates_the_cleaning_as_Pending()
@@ -119,6 +119,33 @@ public class CreateCleaningCommandHandlerTests
         events[0].AggregateType.Should().Be("Cleaning");
         events[0].PropertyId.Should().Be(PropertyId);
         events[0].Status.Should().Be("Pending");
+    }
+
+    [Fact]
+    public async Task Creation_with_a_schedule_publishes_CleaningCreated_with_the_exact_persisted_ScheduledAtUtc()
+    {
+        var fixture = CreateFixture();
+        var scheduledAtUtc = new DateTimeOffset(2026, 1, 5, 14, 0, 0, TimeSpan.Zero);
+
+        var result = await fixture.Handler.Handle(Command(scheduledAtUtc: scheduledAtUtc), CancellationToken.None);
+
+        var events = fixture.EventCollector.EnqueuedEvents.OfType<CleaningCreated>().ToArray();
+        events.Should().ContainSingle();
+        events[0].ScheduledAtUtc.Should().Be(result.Value.ScheduledAtUtc);
+        events[0].ScheduledAtUtc.Should().Be(scheduledAtUtc);
+    }
+
+    [Fact]
+    public async Task Creation_without_a_schedule_publishes_CleaningCreated_with_ScheduledAtUtc_null_never_a_default_date()
+    {
+        var fixture = CreateFixture();
+
+        var result = await fixture.Handler.Handle(Command(scheduledAtUtc: null), CancellationToken.None);
+
+        var events = fixture.EventCollector.EnqueuedEvents.OfType<CleaningCreated>().ToArray();
+        events.Should().ContainSingle();
+        result.Value.ScheduledAtUtc.Should().BeNull();
+        events[0].ScheduledAtUtc.Should().BeNull();
     }
 
     private static void AssertNoSideEffect(Fixture fixture)

@@ -1,11 +1,18 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
 using IHostPro.Contexts.Housekeeping.Application.Errors;
+using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Domain;
 
 namespace IHostPro.Contexts.Housekeeping.Application.Cleanings;
 
 /// <inheritdoc cref="MarkOwnCleaningInTransitCommand"/>
+/// <remarks>
+/// Publishes <see cref="CleaningInTransit"/> (Fase 7, Incremento 1 — Agenda
+/// Foundation, Checkpoint 1 closure — new event, approved). Same
+/// transaction/outbox atomicity as every other Cleaning transition — never a
+/// side channel.
+/// </remarks>
 public sealed class MarkOwnCleaningInTransitCommandHandler : ICommandHandler<MarkOwnCleaningInTransitCommand, CleaningResult>
 {
     private static readonly Error CleaningNotFoundError = new(
@@ -16,17 +23,20 @@ public sealed class MarkOwnCleaningInTransitCommandHandler : ICommandHandler<Mar
     private readonly ICleaningTransitionExecutor _executor;
     private readonly IRepository<Cleaning, Guid> _repository;
     private readonly IHousekeepingAuditWriter _auditWriter;
+    private readonly IIntegrationEventCollector _eventCollector;
     private readonly TimeProvider _timeProvider;
 
     public MarkOwnCleaningInTransitCommandHandler(
         ICleaningTransitionExecutor executor,
         IRepository<Cleaning, Guid> repository,
         IHousekeepingAuditWriter auditWriter,
+        IIntegrationEventCollector eventCollector,
         TimeProvider timeProvider)
     {
         _executor = executor;
         _repository = repository;
         _auditWriter = auditWriter;
+        _eventCollector = eventCollector;
         _timeProvider = timeProvider;
     }
 
@@ -51,6 +61,19 @@ public sealed class MarkOwnCleaningInTransitCommandHandler : ICommandHandler<Mar
             _auditWriter.Record(CleaningAuditEntry.Create(
                 Guid.NewGuid(), command.TenantId, command.ActorId, "Cleaning", command.CleaningId,
                 "cleaning_in_transit", ["status"], now));
+
+            var correlationId = Guid.NewGuid();
+
+            _eventCollector.Enqueue(new CleaningInTransit
+            {
+                TenantId = command.TenantId,
+                AggregateId = command.CleaningId,
+                AggregateType = "Cleaning",
+                CorrelationId = correlationId,
+                ActorType = "User",
+                ActorId = command.ActorId.ToString(),
+                CleaningId = command.CleaningId,
+            });
 
             return Result.Success(CreateCleaningCommandHandler.ToResult(cleaning));
         }, cancellationToken);

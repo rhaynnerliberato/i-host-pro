@@ -1,18 +1,18 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
 using IHostPro.Contexts.Housekeeping.Application.Errors;
+using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Domain;
 
 namespace IHostPro.Contexts.Housekeeping.Application.Cleanings;
 
 /// <inheritdoc cref="MarkCleaningInterruptedCommand"/>
 /// <remarks>
-/// No Integration Event is published for this transition — Documento 07 §6
-/// catalogs no dedicated event for it (only <c>CleaningDelayed</c>/
-/// <c>CleaningNeedsHelp</c>/<c>CleaningNeedsMaterial</c>, all deferred to
-/// the Portal da Faxineira, Incremento 2, per <c>Housekeeping.Contracts</c>'
-/// own csproj doc comment) — the audit trail is this transition's only
-/// record this increment.
+/// Publishes <see cref="CleaningInterrupted"/> (Fase 7, Incremento 1 —
+/// Agenda Foundation, Checkpoint 1 closure — new event, approved; this
+/// transition previously published nothing at all — see the same doc
+/// comment's history). Same transaction/outbox atomicity as every other
+/// Cleaning transition — never a side channel.
 /// </remarks>
 public sealed class MarkCleaningInterruptedCommandHandler : ICommandHandler<MarkCleaningInterruptedCommand, CleaningResult>
 {
@@ -24,17 +24,20 @@ public sealed class MarkCleaningInterruptedCommandHandler : ICommandHandler<Mark
     private readonly ICleaningTransitionExecutor _executor;
     private readonly IRepository<Cleaning, Guid> _repository;
     private readonly IHousekeepingAuditWriter _auditWriter;
+    private readonly IIntegrationEventCollector _eventCollector;
     private readonly TimeProvider _timeProvider;
 
     public MarkCleaningInterruptedCommandHandler(
         ICleaningTransitionExecutor executor,
         IRepository<Cleaning, Guid> repository,
         IHousekeepingAuditWriter auditWriter,
+        IIntegrationEventCollector eventCollector,
         TimeProvider timeProvider)
     {
         _executor = executor;
         _repository = repository;
         _auditWriter = auditWriter;
+        _eventCollector = eventCollector;
         _timeProvider = timeProvider;
     }
 
@@ -59,6 +62,19 @@ public sealed class MarkCleaningInterruptedCommandHandler : ICommandHandler<Mark
             _auditWriter.Record(CleaningAuditEntry.Create(
                 Guid.NewGuid(), command.TenantId, command.ActorId, "Cleaning", command.CleaningId,
                 "cleaning_interrupted", ["status"], now));
+
+            var correlationId = Guid.NewGuid();
+
+            _eventCollector.Enqueue(new CleaningInterrupted
+            {
+                TenantId = command.TenantId,
+                AggregateId = command.CleaningId,
+                AggregateType = "Cleaning",
+                CorrelationId = correlationId,
+                ActorType = "User",
+                ActorId = command.ActorId.ToString(),
+                CleaningId = command.CleaningId,
+            });
 
             return Result.Success(CreateCleaningCommandHandler.ToResult(cleaning));
         }, cancellationToken);

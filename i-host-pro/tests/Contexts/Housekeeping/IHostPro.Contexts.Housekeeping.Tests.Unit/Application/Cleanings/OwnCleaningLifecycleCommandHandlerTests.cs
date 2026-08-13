@@ -63,48 +63,61 @@ public class OwnCleaningLifecycleCommandHandlerTests
     // --- MarkOwnCleaningInTransitCommandHandler: Assigned -> InTransit ---
 
     [Fact]
-    public async Task MarkInTransit_from_Assigned_by_the_owning_housekeeper_succeeds()
+    public async Task MarkInTransit_from_Assigned_by_the_owning_housekeeper_succeeds_and_enqueues_CleaningInTransit()
     {
         var cleaning = AssignedCleaning();
         var repository = FakeCleaningRepository.WithCleaning(cleaning);
+        var eventCollector = new FakeIntegrationEventCollector();
         var handler = new MarkOwnCleaningInTransitCommandHandler(
-            new PassThroughCleaningTransitionExecutor(), repository, new FakeHousekeepingAuditWriter(), new FixedTimeProvider(Now));
+            new PassThroughCleaningTransitionExecutor(), repository, new FakeHousekeepingAuditWriter(), eventCollector, new FixedTimeProvider(Now));
 
         var result = await handler.Handle(
             new MarkOwnCleaningInTransitCommand(TenantId, HousekeeperUserId, cleaning.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be("InTransit");
+
+        var events = eventCollector.EnqueuedEvents.OfType<CleaningInTransit>().ToArray();
+        events.Should().ContainSingle();
+        events[0].TenantId.Should().Be(TenantId);
+        events[0].AggregateId.Should().Be(cleaning.Id);
+        events[0].AggregateType.Should().Be("Cleaning");
+        events[0].CleaningId.Should().Be(cleaning.Id);
+        events[0].ActorId.Should().Be(HousekeeperUserId.ToString());
     }
 
     [Fact]
-    public async Task MarkInTransit_by_a_different_housekeeper_fails_with_CleaningNotFound_never_Forbidden()
+    public async Task MarkInTransit_by_a_different_housekeeper_fails_with_CleaningNotFound_never_Forbidden_and_enqueues_no_event()
     {
         var cleaning = AssignedCleaning();
         var repository = FakeCleaningRepository.WithCleaning(cleaning);
+        var eventCollector = new FakeIntegrationEventCollector();
         var handler = new MarkOwnCleaningInTransitCommandHandler(
-            new PassThroughCleaningTransitionExecutor(), repository, new FakeHousekeepingAuditWriter(), new FixedTimeProvider(Now));
+            new PassThroughCleaningTransitionExecutor(), repository, new FakeHousekeepingAuditWriter(), eventCollector, new FixedTimeProvider(Now));
 
         var result = await handler.Handle(
             new MarkOwnCleaningInTransitCommand(TenantId, OtherHousekeeperUserId, cleaning.Id), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be(HousekeepingErrorCodes.CleaningNotFound);
+        eventCollector.EnqueuedEvents.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task MarkInTransit_from_Started_fails_with_InvalidCleaningTransition()
+    public async Task MarkInTransit_from_Started_fails_with_InvalidCleaningTransition_and_enqueues_no_event()
     {
         var cleaning = StartedCleaning();
         var repository = FakeCleaningRepository.WithCleaning(cleaning);
+        var eventCollector = new FakeIntegrationEventCollector();
         var handler = new MarkOwnCleaningInTransitCommandHandler(
-            new PassThroughCleaningTransitionExecutor(), repository, new FakeHousekeepingAuditWriter(), new FixedTimeProvider(Now));
+            new PassThroughCleaningTransitionExecutor(), repository, new FakeHousekeepingAuditWriter(), eventCollector, new FixedTimeProvider(Now));
 
         var result = await handler.Handle(
             new MarkOwnCleaningInTransitCommand(TenantId, HousekeeperUserId, cleaning.Id), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be(HousekeepingErrorCodes.InvalidCleaningTransition);
+        eventCollector.EnqueuedEvents.Should().BeEmpty();
     }
 
     // --- StartOwnCleaningCommandHandler: Assigned OR InTransit -> Started ---

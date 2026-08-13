@@ -91,6 +91,7 @@ public sealed class CreateCleaningCommandHandler : ICommandHandler<CreateCleanin
                 PropertyId = command.PropertyId,
                 ReservationId = command.ReservationId,
                 Status = CleaningStatusCodeMapper.ToCode(cleaning.Status),
+                ScheduledAtUtc = cleaning.ScheduledAtUtc,
             });
 
             return Result.Success(ToResult(cleaning));
