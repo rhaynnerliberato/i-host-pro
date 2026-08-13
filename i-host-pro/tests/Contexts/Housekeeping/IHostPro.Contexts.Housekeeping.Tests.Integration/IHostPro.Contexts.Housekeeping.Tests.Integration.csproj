@@ -39,6 +39,18 @@
     <ProjectReference Include="..\..\..\..\src\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Infrastructure\IHostPro.Contexts.Housekeeping.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\..\src\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Api\IHostPro.Contexts.Housekeeping.Api.csproj" />
     <ProjectReference Include="..\..\..\..\src\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Contracts\IHostPro.Contexts.PropertyManagement.Contracts.csproj" />
+    <!--
+      Test-only: PropertyManagement.Domain/Infrastructure let this project
+      seed a real Property aggregate directly via PropertyManagementDbContext
+      (mirrors ReservationCommandHandlerTests' own SeedActivePropertyAsync
+      precedent) and reference IHostPro.MigrationRunner to exercise the real
+      PropertyProjectionBootstrap (Fase 7, Incremento 1, Checkpoint 3) against
+      a Testcontainers Postgres — never a production reference from
+      Housekeeping's own src/ code.
+    -->
+    <ProjectReference Include="..\..\..\..\src\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Domain\IHostPro.Contexts.PropertyManagement.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Infrastructure\IHostPro.Contexts.PropertyManagement.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\..\tools\IHostPro.MigrationRunner\IHostPro.MigrationRunner.csproj" />
     <ProjectReference Include="..\..\..\..\src\Contexts\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
     <ProjectReference Include="..\..\..\..\src\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
     <!--

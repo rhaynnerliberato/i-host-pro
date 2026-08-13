@@ -121,6 +121,20 @@ try
         }
     }
 
+    // Fase 7, Incremento 1, Checkpoint 3 — one-time, idempotent backfill of
+    // housekeeping.property_projection for properties that existed before
+    // Housekeeping's PropertyCreated/PropertyActivated consumer did (see
+    // PropertyProjectionBootstrap.cs for the full rationale). Runs after every
+    // module's schema migrations so both property_management.properties and
+    // housekeeping.property_projection are guaranteed to exist. Deployment/
+    // data-migration concern only — never a Housekeeping runtime dependency.
+    var housekeepingConnectionString = builder.Configuration.GetConnectionString("Housekeeping")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Housekeeping'.");
+
+    log.LogInformation("Backfilling housekeeping.property_projection for pre-existing properties");
+
+    await PropertyProjectionBootstrap.RunAsync(housekeepingConnectionString, log, CancellationToken.None);
+
     // Wolverine's own Main message store (Fase 2, Incremento 1, Checkpoint 6
     // homologação — found and fixed during real-host startup validation):
     // IHostPro.Api registers Identity's and Property Management's outboxes as
