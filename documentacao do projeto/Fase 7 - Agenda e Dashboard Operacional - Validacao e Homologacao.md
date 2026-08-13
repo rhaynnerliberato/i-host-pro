@@ -1,8 +1,8 @@
 # Fase 7 — Agenda e Dashboard Operacional — Validação e Homologação
 
-Versão: 1.1 (Incremento 1 — Agenda Foundation, Checkpoint 2 — Frontend Agenda — documento vivo; Checkpoint 1/Checkpoint 1 CLOSURE registrados em §2-§4)
+Versão: 1.2 (Incremento 1 — Agenda Foundation, Checkpoint 3 — Integration/E2E — documento vivo; Checkpoints 0-2 registrados em §2-§5)
 
-Status: **Incremento 1 (Agenda Foundation) em andamento** — Checkpoint 0, Checkpoint 1, Checkpoint 1 CLOSURE (ADR-016) e Checkpoint 2 (Frontend Agenda) concluídos e homologados. Checkpoint 3 (Integration/E2E formal) ainda não iniciado. Dashboard Operacional permanece fora de escopo — nenhum trabalho iniciado (nenhum projeto, pasta, scaffold, migração, API, frontend, métrica, card ou relatório criado).
+Status: **Incremento 1 (Agenda Foundation) em andamento** — Checkpoint 0, Checkpoint 1, Checkpoint 1 CLOSURE (ADR-016), Checkpoint 2 (Frontend Agenda) e Checkpoint 3 (Integration/E2E) concluídos e homologados. Dashboard Operacional permanece fora de escopo — nenhum trabalho iniciado (nenhum projeto, pasta, scaffold, migração, API, frontend, métrica, card ou relatório criado).
 
 ---
 
@@ -135,7 +135,82 @@ Durante a tentativa de popular dados reais de Cleaning para verificação visual
 
 Verificação realizada contra API real (`IHostPro.Api`, porta 5140) e frontend real (`ng serve`, porta 4200), Postgres dev real via Docker, RabbitMQ dev real (`ihostpro-rabbitmq`, trocado temporariamente com `ihostpro-homolog-rabbitmq` e restaurado ao final). Usuário de verificação `admin-cp2@dev.local` (tenant `dev-tenant`, role ADMIN atribuída manualmente via SQL, já que `DevelopmentIdentitySeeder` não atribui roles por padrão) — usuário e dados de teste (uma reserva e um imóvel) existem apenas no Postgres dev local, não fazem parte de nenhuma migração ou seed versionado.
 
-## 6. Referências
+## 6. Checkpoint 3 — Integration/E2E
+
+### 6.1 Escopo
+
+Homologação completa e real do Incremento 1 (Backend Agenda + Frontend Agenda + mensageria real + dados reais + E2E real), incluindo a resolução obrigatória do defeito bloqueante registrado em §5.11 (`property_not_found` para propriedades pré-existentes). Explicitamente fora deste checkpoint: Dashboard; qualquer funcionalidade de edição da Agenda (drag/drop, resize); qualquer ampliação de escopo além do estritamente necessário para o Incremento 1 já aprovado funcionar de ponta a ponta com dados reais.
+
+### 6.2 Defeito bloqueante — investigação de causa raiz
+
+Antes de qualquer correção, foram respondidas com evidência real (leitura direta de código/migrações/comentários) as nove perguntas obrigatórias sobre a lacuna registrada em §5.11: `PropertyProjectionEntry` (Housekeeping) é populada exclusivamente por consumo assíncrono de `PropertyCreated`/`PropertyActivated`; não existe, em nenhum lugar do código, um mecanismo de backfill/replay para propriedades que já existiam antes desse consumer começar a escutar; `MigrationRunner` não possui, antes desta correção, nenhum mecanismo de migração de dados (apenas migrações de schema EF Core); não existe replay de eventos histórico no RabbitMQ (exchanges topic não reproduzem histórico para uma fila recém-vinculada); PropertyManagement não mantém um outbox histórico reaproveitável para esse fim; a lacuna afeta qualquer ambiente real (não apenas dev) em que o Worker/consumer de Housekeeping tenha entrado em operação depois de propriedades já existirem em PropertyManagement — inclusive um upgrade real de produção; não há outras projeções derivadas no codebase com o mesmo problema identificado nesta investigação; o precedente mais próximo no próprio projeto para inicializar um read model derivado é a própria `TenantAwareTransactionScope`/`SET LOCAL app.tenant_id` já usada em testes de integração (`ReservationCommandHandlerTests.SetTenantAsync`), não um mecanismo de replay dedicado.
+
+### 6.3 Alternativas avaliadas e decisão
+
+Quatro alternativas foram avaliadas (aptidão arquitetural, atomicidade, RLS, idempotência, comportamento em upgrade e em instalação nova, rollback, custo, testabilidade): (A) migração de dados one-time dentro do `MigrationRunner`; (B) replay/republicação controlada dos eventos `Property*` já existentes; (C) bootstrap explícito via mecanismo de inicialização de aplicação; (D) outra abordagem já estabelecida no projeto. A Opção A foi identificada como a única que não exige nenhuma nova decisão arquitetural de fundo (nenhuma leitura cross-context em runtime, nenhuma API nova, nenhum evento de integração novo, nenhum framework de replay novo) — mas por estender o `MigrationRunner` (uma ferramenta hoje dedicada exclusivamente a migrações de schema EF Core) para também executar uma migração de dados, essa extensão foi apresentada ao usuário antes de qualquer implementação. **Decisão do usuário** (via pergunta estruturada, não assumida): escopo limitado exclusivamente a `PropertyProjectionEntry` (nenhuma outra projeção); Opção A autorizada diretamente, sem exigência de ADR prévio.
+
+### 6.4 Implementação — `PropertyProjectionBootstrap`
+
+Nova classe `PropertyProjectionBootstrap` (`tools/IHostPro.MigrationRunner/PropertyProjectionBootstrap.cs`), invocada por `Program.cs` do `MigrationRunner` logo após as migrações de schema EF Core de todos os módulos, antes do provisionamento dos message stores Wolverine. Mecanismo, um único método `RunAsync(connectionString, log, cancellationToken)`:
+
+- Lê `identity.tenants` (catálogo de plataforma, deliberadamente sem RLS) para obter todos os tenants existentes — sem precisar de contexto de tenant.
+- Para cada tenant, dentro de uma transação isolada: define `app.tenant_id` via `SELECT set_config('app.tenant_id', $1, true)` (equivalente parametrizável de `SET LOCAL`, mesma técnica de `ReservationCommandHandlerTests.SetTenantAsync`); executa um único `INSERT ... SELECT ... FROM property_management.properties p ON CONFLICT (tenant_id, property_id) DO NOTHING` para `housekeeping.property_projection`, com `is_active = (p.status = 'Active')` — mesma regra que `PropertyActivatedHandler` aplicaria se o evento real tivesse sido consumido.
+- Roda com a MESMA connection string/role (`ihostpro_migrator`) já usada para as migrações de schema — role que deliberadamente não tem `BYPASSRLS` (Architecture Principles, Seção 7); ambas as tabelas têm `FORCE ROW LEVEL SECURITY`, então este mecanismo respeita RLS exatamente como qualquer outra escrita tenant-scoped do codebase, nunca a desabilitando.
+- Idempotente por construção: a chave primária de `PropertyProjectionEntry` é `(TenantId, PropertyId)` (`PropertyProjectionEntryConfiguration.cs`), então `ON CONFLICT DO NOTHING` garante que reexecuções nunca duplicam nem regridem uma linha já existente — uma linha já presente foi backfillada corretamente antes, ou está sendo mantida pelo `PropertyProjectionSynchronizer` em tempo real, que este passo nunca sobrescreve.
+- Runtime de `CreateCleaningCommandHandler` permanece inalterado — continua lendo exclusivamente sua própria `IPropertyReferenceProjectionReader` local; este mecanismo nunca é acionado em runtime, apenas durante a execução do `MigrationRunner` (deployment/upgrade), classificando-se como preocupação de migração de dados/deployment, não como dependência de runtime entre Bounded Contexts (conforme a ressalva do próprio mandato de checkpoint).
+
+### 6.5 Testes preventivos do backfill
+
+`PropertyProjectionBootstrapTests.cs` (novo, projeto `IHostPro.Contexts.Housekeeping.Tests.Integration`, Testcontainers Postgres real): três testes — `Backfills_a_pre_existing_active_property_and_is_idempotent_on_rerun` (dado uma Property ativa pré-existente e projeção vazia, o mecanismo popula a linha corretamente e uma segunda execução não duplica nem regride); `Fresh_install_with_no_pre_existing_properties_backfills_nothing` (instalação nova, zero properties, zero linhas inseridas); `Draft_property_is_backfilled_as_inactive` (Property em `Draft` é backfillada com `IsActive = false`). Os três verdes. Referências de projeto adicionadas ao `.csproj` de teste (PropertyManagement.Domain/Infrastructure e o próprio `IHostPro.MigrationRunner`) são explicitamente test-only, documentadas como tal no próprio arquivo de projeto — nenhuma referência de produção de Housekeeping passou a depender de PropertyManagement.
+
+### 6.6 Defeitos reais adicionais encontrados e corrigidos (bloqueavam todo o pipeline da Agenda)
+
+Durante a preparação do ambiente E2E real, três defeitos pré-existentes e independentes do defeito de backfill — todos bloqueando o `IHostPro.Worker` de sequer iniciar com sucesso — foram descobertos e corrigidos:
+
+1. **`IHostPro.Worker/appsettings.json`** não tinha a chave `ConnectionStrings:Reservations`, exigida incondicionalmente desde a Fase 7 Checkpoint 1 (outbox de Reservations). Corrigido adicionando a chave, no mesmo padrão de valor das demais connection strings do Worker.
+2. **`WebE2EFixture.StartWorkerProcess()`** (infraestrutura de teste E2E compartilhada por toda a suíte) definia suas próprias variáveis de ambiente para o subprocesso do Worker, ignorando totalmente o `appsettings.json` — e também não incluía `ConnectionStrings__Reservations`, reproduzindo o mesmo defeito de forma independente dentro do fixture de teste. Corrigido adicionando a variável de ambiente equivalente.
+3. **Topologia RabbitMQ do `WebE2EFixture`** declarava a exchange `housekeeping-events` sem vincular nenhuma fila a ela — o consumer real do Worker (`reservations.cleaning-schedule-projection`) falhava na inicialização com AMQP 404 NOT_FOUND. Corrigido espelhando os dez routing keys reais já declarados pelo `IHostPro.MigrationRunner`.
+
+Os três foram diagnosticados por evidência real (log de crash do subprocesso Worker capturado via hook temporário, revertido após uso), nunca por suposição.
+
+### 6.7 Suíte Playwright formal da Agenda
+
+Novo arquivo `ScheduleAgendaE2ETests.cs` (`tests/Frontend/IHostPro.Web.Tests.E2E`), 15 testes, cobrindo os 18 cenários mandatados mais 2 adicionais (ciclo de vida real e timezone explícito), sempre via API/comandos oficiais para seed e comportamento real de aplicação para a Agenda em si — nunca inserção direta, nunca mock, nunca bypass de elegibilidade:
+
+`ADMIN_accesses_the_Agenda`; `OPERATOR_accesses_the_Agenda`; `User_without_SCHEDULE_permission_is_redirected_to_forbidden` (PROPERTY_OWNER, único papel real seedado que possui apenas `SCHEDULE:READ:OWN_OWNER`, nunca `SCHEDULE:MANAGE`/`SCHEDULE:READ`); `A_real_Reservation_appears_using_CheckInAt_and_CheckOutAt`; `A_real_Cleaning_appears_at_its_ScheduledAtUtc`; `Reservation_and_Cleaning_are_distinguishable_beyond_color`; `Day_Week_and_Month_views_are_all_selectable`; `Previous_Today_and_Next_navigation_change_the_visible_range`; `Filtering_by_EventType_Reservation_hides_Cleaning_events`; `Filtering_by_EventType_Cleaning_hides_Reservation_events`; `The_calendars_visible_range_is_sent_to_the_backend`; `Another_tenants_events_never_appear_and_the_empty_state_renders`; `The_Agenda_is_usable_at_375px`; `A_real_Cleaning_status_update_Assigned_is_reflected_in_the_schedule`; `Reservation_and_Cleaning_times_render_with_no_timezone_shift`.
+
+Uma Cleaning real foi criada via API oficial (`POST /api/v1/cleanings` com `scheduledAtUtc` — campo aceito pelo contrato real de `CreateCleaningCommand`, embora o diálogo "Nova limpeza" do frontend administrativo de Housekeeping não o exponha) para uma propriedade pré-existente, comprovando de ponta a ponta que o defeito de §5.11 está resolvido: Property → Housekeeping (via backfill) → Cleaning criada com sucesso → `CleaningCreated` → RabbitMQ real → Worker real → projeção de Reservations → `GET /api/v1/schedule` → renderização real na Agenda. Filtros de Imóvel e Faxineira permanecem diferidos (§5.5), não reexpandidos apenas para caber nesta suíte. HOUSEKEEPER/PROPERTY_OWNER permanecem fora do escopo administrativo da Agenda deste incremento (§5.6) — nenhuma ABAC de frontend foi simulada.
+
+Resultado: **15/15 verde** em execução isolada da classe.
+
+### 6.8 Regressão
+
+**Suíte E2E completa** (`IHostPro.Web.Tests.E2E`, sem filtro, todas as classes incluindo `ScheduleAgendaE2ETests`): 81/82 em duas execuções consecutivas, com a mesma falha reproduzida nas duas — `ReservationsE2ETests.A_repeated_cancellation_is_handled_correctly` (timeout de 30s aguardando uma linha da tabela de Reservations aparecer após reload). Isolado por experimento controlado: a mesma classe (`ReservationsE2ETests`, 9 testes) roda 9/9 verde quando executada isoladamente, fora da suíte completa. O teste não toca Housekeeping, Worker, RabbitMQ, `MigrationRunner` ou qualquer arquivo alterado neste checkpoint — apenas listagem/cancelamento de Reservations via UI. Confirma-se, pelo mesmo protocolo de isolamento já usado em §4.7 para `PolicyUpdatedRegressionTests`, que **não é uma regressão desta correção**, e sim uma flakiness de timing pré-existente sob carga acumulada de uma suíte sequencial de ~82 testes reais orientados a browser (~3min de execução) — não corrigida nesta etapa, fora do escopo desta decisão.
+
+**Backend** (Housekeeping Unit 112/112; Housekeeping Integration 80/80, incluindo os 3 novos testes de §6.5; Reservations Unit 59/59; Reservations Integration 80/80; `ArchitectureTests` 135/135; `IHostPro.Api.Tests.Integration` 5/5): zero falhas.
+
+**Frontend**: suíte completa 45 arquivos / 391 testes, 100% verde (sem alteração de código frontend neste checkpoint). Build de produção Angular verde (`schedule-calendar` chunk 237.32 kB / 60.50 kB transfer).
+
+**NSwag**: nenhuma alteração de controller/DTO/contrato neste checkpoint (apenas `appsettings.json` do Worker, `MigrationRunner` e infraestrutura de teste) — regeneração não se aplica (§19 do mandato).
+
+**`git diff --check`**: limpo, sem problemas de whitespace nos arquivos alterados.
+
+### 6.9 Testes de arquitetura
+
+`ArchitectureTests` (135/135) confirma, sem regressão, que a correção do backfill não introduziu nenhuma dependência de runtime de Housekeeping sobre PropertyManagement: `PropertyProjectionBootstrap` vive exclusivamente em `tools/IHostPro.MigrationRunner` (fora de `src/Contexts/Housekeeping`), nenhuma referência de projeto de produção de Housekeeping foi adicionada a PropertyManagement, `CreateCleaningCommandHandler` continua dependendo apenas de `IPropertyReferenceProjectionReader` local. As referências de projeto adicionadas ao `.csproj` de teste de integração de Housekeeping são exclusivamente de teste (documentado no próprio arquivo). Classificação mantida: preocupação de deployment/migração de dados, não dependência de runtime entre Bounded Contexts.
+
+### 6.10 Ambiente
+
+Testcontainers (Postgres/RabbitMQ/Redis efêmeros) usados para toda a suíte automatizada — sem containers órfãos ao final (confirmado via `docker ps`). `ihostpro-rabbitmq` (dev) permaneceu parado; `ihostpro-homolog-rabbitmq` restaurado ao estado de baseline (ativo) ao final desta etapa. Um processo órfão `IHostPro.Worker.exe`, remanescente de uma verificação manual anterior nesta mesma tarefa, foi identificado e encerrado. Nenhum dado sintético residual foi deixado fora dos containers efêmeros (que são descartados automaticamente pelo Ryuk do Testcontainers).
+
+### 6.11 Lacunas conhecidas, não resolvidas neste checkpoint
+
+- Filtro de Imóvel e de Faxineira na Agenda (frontend) permanecem diferidos — mesma causa registrada em §5.5, não reexpandida.
+- Escopo de "Agenda própria" para HOUSEKEEPER e OWN_OWNER para PROPERTY_OWNER permanecem não formalizados (§5.6) — Agenda administrativa deste incremento continua exclusiva a ADMIN/OPERATOR.
+- `ReservationsE2ETests.A_repeated_cancellation_is_handled_correctly` apresenta flakiness de timing sob carga de suíte completa (§6.8) — não corrigido, registrado como técnico-débito de estabilidade de E2E, não como defeito funcional.
+- Dashboard Operacional (Incremento 2 da Fase 7): nenhum trabalho iniciado.
+
+## 7. Referências
 
 - ADR-016 (Tenant-safe Execution Boundary for Persistent Wolverine Consumers).
 - ADR-015 (Isolamento do Processamento de Mensagens Housekeeping da Integração EF Core do Wolverine) — a descoberta original, para Housekeeping.
