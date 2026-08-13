@@ -1,8 +1,8 @@
 # Fase 7 — Agenda e Dashboard Operacional — Validação e Homologação
 
-Versão: 1.2 (Incremento 1 — Agenda Foundation, Checkpoint 3 — Integration/E2E — documento vivo; Checkpoints 0-2 registrados em §2-§5)
+Versão: 1.3 (Incremento 1 — Agenda Foundation — CONCLUÍDO E PUBLICADO em master; Checkpoints 0-3 registrados em §2-§6)
 
-Status: **Incremento 1 (Agenda Foundation) em andamento** — Checkpoint 0, Checkpoint 1, Checkpoint 1 CLOSURE (ADR-016), Checkpoint 2 (Frontend Agenda) e Checkpoint 3 (Integration/E2E) concluídos e homologados. Dashboard Operacional permanece fora de escopo — nenhum trabalho iniciado (nenhum projeto, pasta, scaffold, migração, API, frontend, métrica, card ou relatório criado).
+Status: **Incremento 1 (Agenda Foundation) CONCLUÍDO E PUBLICADO** — Checkpoint 0, Checkpoint 1, Checkpoint 1 CLOSURE (ADR-016), Checkpoint 2 (Frontend Agenda) e Checkpoint 3 (Integration/E2E) concluídos, homologados e publicados em `master` (fast-forward, commit `b53b2cb`). **Incremento 2 (Dashboard Operacional) — NÃO INICIADO** — nenhum trabalho iniciado (nenhum projeto, pasta, scaffold, migração, API, frontend, métrica, card ou relatório criado).
 
 ---
 
