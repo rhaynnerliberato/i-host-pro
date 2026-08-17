@@ -68,6 +68,10 @@
     <ProjectReference Include="..\..\src\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Application\IHostPro.Contexts.Housekeeping.Application.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Infrastructure\IHostPro.Contexts.Housekeeping.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Api\IHostPro.Contexts.Housekeeping.Api.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Domain\IHostPro.Contexts.Dashboard.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Contracts\IHostPro.Contexts.Dashboard.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Application\IHostPro.Contexts.Dashboard.Application.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Infrastructure\IHostPro.Contexts.Dashboard.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
