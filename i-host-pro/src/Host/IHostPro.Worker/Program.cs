@@ -6,6 +6,8 @@ using IHostPro.BuildingBlocks.Messaging.Abstractions;
 using IHostPro.Contexts.Configuration.Contracts;
 using IHostPro.Contexts.Configuration.Infrastructure.Caching;
 using IHostPro.Contexts.Configuration.Infrastructure.Messaging;
+using IHostPro.Contexts.Dashboard.Infrastructure;
+using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Messaging;
@@ -91,6 +93,15 @@ try
     builder.Services.AddReservationsModule(builder.Configuration);
     builder.Services.AddReservationsScheduleProjectionConsumer();
 
+    // Dashboard & Reporting module (Fase 7, Incremento 2, Checkpoint 1) —
+    // event-consumer slice only (Overview API/HTTP dispatch is Checkpoint
+    // 2): DashboardDbContext + the four projection synchronizers' full DI
+    // graph, so the tenant-safe execution boundary
+    // (IDashboardMessageExecutionScope, ADR-016) can construct each, from
+    // its own child DI scope, for every consumed event — see
+    // DashboardModuleExtensions' own doc comment.
+    builder.Services.AddDashboardModule(builder.Configuration);
+
     // IHostPro.Worker hosts every Bounded Context's message handlers and Sagas,
     // kept in a separate process from IHostPro.Api so message processing can
     // scale independently of HTTP traffic (Architecture Principles, Section 2).
@@ -145,6 +156,17 @@ try
             "reservations_messaging",
             typeof(ReservationsDbContext));
 
+        // Dashboard & Reporting's own durable outbox (Fase 7, Incremento 2,
+        // Checkpoint 1) — this is the FIRST checkpoint Dashboard consumes
+        // any message; the ancillary store must be enrolled in THIS process
+        // for IDbContextOutbox<DashboardDbContext>/IDashboardTransactionExecutor
+        // to resolve inside a Wolverine handler (same empirically-confirmed
+        // requirement as Housekeeping's/Reservations' own).
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("Dashboard")!,
+            "dashboard_messaging",
+            typeof(DashboardDbContext));
+
         // Required in addition to EnrollAncillaryPostgresqlOutbox above —
         // same empirically-confirmed requirement documented in
         // IHostPro.Api's Program.cs for Identity's own outbox: without this,
@@ -182,6 +204,13 @@ try
         // so Wolverine's codegen needs this explicit opt-out for exactly
         // this one type.
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Reservations.Application.IReservationsMessageExecutionScope>();
+
+        // ADR-016, third application (Fase 7, Incremento 2, Checkpoint 1) —
+        // same rationale as Housekeeping's/Reservations' own
+        // AlwaysUseServiceLocationFor above: DashboardMessageExecutionScope
+        // is the single, deliberately-authorized place in Dashboard that
+        // holds IServiceScopeFactory.
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Dashboard.Application.IDashboardMessageExecutionScope>();
 
         opts.Policies.AddMiddleware(
             typeof(TenantResolutionMiddleware),
@@ -246,6 +275,29 @@ try
         // to the already-existing queue.
         opts.Discovery.IncludeAssembly(typeof(CleaningCreatedHandler).Assembly);
         opts.ListenToRabbitQueue("reservations.cleaning-schedule-projection");
+
+        // Dashboard & Reporting's consumed Integration Events (Fase 7,
+        // Incremento 2, Checkpoint 1) — four queues, each bound to MULTIPLE
+        // routing keys of an EXISTING exchange owned by another Bounded
+        // Context (property-management-events, reservation-events,
+        // housekeeping-events), never a new exchange of its own — same
+        // decoupled pub/sub pattern as Housekeeping's/Reservations' own
+        // queues above: the publishing context never needs to know
+        // Dashboard is listening. All four queues, and their bindings, are
+        // provisioned exclusively by IHostPro.MigrationRunner. The four
+        // projection synchronizers live in Dashboard.Infrastructure, a
+        // separate assembly from this entry assembly, so it must be
+        // explicitly included in Wolverine's handler discovery. Fully
+        // qualified below (never a blanket `using`) because
+        // Housekeeping.Infrastructure.Messaging/Reservations.Infrastructure.Messaging
+        // already declare their own same-named handler classes
+        // (ReservationCreatedHandler, PropertyCreatedHandler, etc.) for
+        // different events — a blanket using would collide.
+        opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
+        opts.ListenToRabbitQueue("dashboard.reservation-projection");
+        opts.ListenToRabbitQueue("dashboard.cleaning-projection");
+        opts.ListenToRabbitQueue("dashboard.property-projection");
+        opts.ListenToRabbitQueue("dashboard.occurrence-projection");
 
         // Real defect found and fixed (Checkpoint 6 homologação, ADR-015
         // spike): IHostPro.Api/Program.cs already routes every real Cleaning

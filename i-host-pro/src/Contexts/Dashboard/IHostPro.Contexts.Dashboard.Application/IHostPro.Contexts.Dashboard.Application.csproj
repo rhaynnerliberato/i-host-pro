@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fase 7, Incremento 2 (Dashboard & Reporting Foundation), Checkpoint 1: no
+    Commands/Queries yet (Overview API is Checkpoint 2) — no
+    Mediator.SourceGenerator needed, unlike every other context's own
+    Application project. Only IDashboardMessageExecutionScope (ADR-016 local
+    boundary, mirrors IHousekeepingMessageExecutionScope/
+    IReservationsMessageExecutionScope exactly) lives here, needing
+    BuildingBlocks.Application (IIntegrationEventHandler&lt;T&gt;) and
+    BuildingBlocks.Messaging.Abstractions (IntegrationEvent) transitively via
+    Contracts.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\IHostPro.Contexts.Dashboard.Domain\IHostPro.Contexts.Dashboard.Domain.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.Dashboard.Contracts\IHostPro.Contexts.Dashboard.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

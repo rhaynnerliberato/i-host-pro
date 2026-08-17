@@ -31,5 +31,10 @@
          first-ever Reservations wiring — consumes Housekeeping's own
          CleaningCreated into this context's local schedule projection. -->
     <ProjectReference Include="..\..\Contexts\Reservations\IHostPro.Contexts.Reservations.Infrastructure\IHostPro.Contexts.Reservations.Infrastructure.csproj" />
+    <!-- Fase 7, Incremento 2 (Dashboard & Reporting Foundation, Checkpoint
+         1): Worker's first-ever Dashboard wiring — consumes Reservations'/
+         Housekeeping's/Property Management's own events into this new
+         context's local read-model projections. -->
+    <ProjectReference Include="..\..\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Infrastructure\IHostPro.Contexts.Dashboard.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

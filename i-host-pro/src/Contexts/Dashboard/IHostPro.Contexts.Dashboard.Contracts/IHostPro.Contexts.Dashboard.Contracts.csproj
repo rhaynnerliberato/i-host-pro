@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fase 7, Incremento 2 (Dashboard & Reporting Foundation), Checkpoint 0/1:
+    Dashboard & Reporting is a terminal, event-consuming-only Bounded
+    Context (Architecture Principles §14) — it publishes no Integration
+    Event of its own this increment (Checkpoint 0 decision, §13). This
+    project stays empty of event contracts until a genuine need arises;
+    kept here only for structural consistency with every other Bounded
+    Context (a future consumer of Dashboard data would reference this
+    project, never Dashboard.Domain/Application/Infrastructure directly).
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Messaging.Abstractions\IHostPro.BuildingBlocks.Messaging.Abstractions.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
