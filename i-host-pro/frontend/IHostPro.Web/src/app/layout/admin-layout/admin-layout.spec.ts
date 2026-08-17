@@ -130,4 +130,36 @@ describe('AdminLayout nav item visibility', () => {
 
     expect(paths).not.toContain('/housekeeping');
   });
+
+  it('shows the "Dashboard" nav item to a user holding only DASHBOARD:MANAGE (OR semantics across an array)', () => {
+    const component = configure(['DASHBOARD:MANAGE']);
+
+    const paths = component['navItems']().map((item) => item.path);
+
+    expect(paths).toContain('/dashboard');
+  });
+
+  it('shows the "Dashboard" nav item to a user holding only DASHBOARD:READ (OR semantics across an array)', () => {
+    const component = configure(['DASHBOARD:READ']);
+
+    const paths = component['navItems']().map((item) => item.path);
+
+    expect(paths).toContain('/dashboard');
+  });
+
+  it('hides the "Dashboard" nav item from a user holding only DASHBOARD:READ:OWN_OWNER (no prefix matching)', () => {
+    const component = configure(['DASHBOARD:READ:OWN_OWNER']);
+
+    const paths = component['navItems']().map((item) => item.path);
+
+    expect(paths).not.toContain('/dashboard');
+  });
+
+  it('hides the "Dashboard" nav item from a user holding only DASHBOARD:USE', () => {
+    const component = configure(['DASHBOARD:USE']);
+
+    const paths = component['navItems']().map((item) => item.path);
+
+    expect(paths).not.toContain('/dashboard');
+  });
 });
