@@ -38,7 +38,7 @@ public class RegisterCleaningOccurrenceCommandHandlerTests
         var repository = FakeCleaningRepository.WithCleaning(cleaning);
         var writer = new FakeCleaningOccurrenceWriter();
         var handler = new RegisterCleaningOccurrenceCommandHandler(
-            new PassThroughHousekeepingTransactionExecutor(), repository, writer, new FixedTimeProvider(Now));
+            new PassThroughHousekeepingTransactionExecutor(), repository, writer, new FakeIntegrationEventCollector(), new FixedTimeProvider(Now));
 
         var result = await handler.Handle(
             new RegisterCleaningOccurrenceCommand(TenantId, HousekeeperUserId, cleaning.Id, "Damage", "Broken lamp"),
@@ -51,6 +51,42 @@ public class RegisterCleaningOccurrenceCommandHandlerTests
         writer.RecordedOccurrences.Should().ContainSingle(o => o.CleaningId == cleaning.Id && o.Type == OccurrenceType.Damage);
     }
 
+    /// <summary>
+    /// Fase 7, Incremento 2 (Dashboard &amp; Reporting Foundation), Checkpoint
+    /// 0/1 decision: this handler now publishes CleaningOccurrenceRegistered,
+    /// Dashboard's own event source for occurrence indicators — no
+    /// Description, no RegisteredByUserName, no PropertyId (never approved
+    /// for this event).
+    /// </summary>
+    [Fact]
+    public async Task Registering_an_occurrence_enqueues_exactly_one_CleaningOccurrenceRegistered_event_with_no_description_or_user_name()
+    {
+        var cleaning = StartedCleaningFor(HousekeeperUserId);
+        var repository = FakeCleaningRepository.WithCleaning(cleaning);
+        var eventCollector = new FakeIntegrationEventCollector();
+        var handler = new RegisterCleaningOccurrenceCommandHandler(
+            new PassThroughHousekeepingTransactionExecutor(), repository, new FakeCleaningOccurrenceWriter(), eventCollector, new FixedTimeProvider(Now));
+
+        var result = await handler.Handle(
+            new RegisterCleaningOccurrenceCommand(TenantId, HousekeeperUserId, cleaning.Id, "Damage", "Broken lamp"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var events = eventCollector.EnqueuedEvents.OfType<IHostPro.Contexts.Housekeeping.Contracts.CleaningOccurrenceRegistered>().ToArray();
+        events.Should().ContainSingle();
+        events[0].TenantId.Should().Be(TenantId);
+        events[0].CleaningId.Should().Be(cleaning.Id);
+        events[0].OccurrenceId.Should().Be(result.Value.Id);
+        events[0].OccurrenceType.Should().Be("Damage");
+        events[0].RegisteredAtUtc.Should().Be(Now);
+
+        typeof(IHostPro.Contexts.Housekeeping.Contracts.CleaningOccurrenceRegistered).GetProperties().Select(p => p.Name)
+            .Should().NotContain(new[] { "Description", "RegisteredByUserName", "PropertyId" });
+
+        var json = System.Text.Json.JsonSerializer.Serialize(events[0], events[0].GetType());
+        json.Should().NotContain("Broken lamp");
+    }
+
     [Fact]
     public async Task Registering_by_a_different_housekeeper_fails_with_CleaningNotFound_never_Forbidden()
     {
@@ -58,7 +94,7 @@ public class RegisterCleaningOccurrenceCommandHandlerTests
         var repository = FakeCleaningRepository.WithCleaning(cleaning);
         var writer = new FakeCleaningOccurrenceWriter();
         var handler = new RegisterCleaningOccurrenceCommandHandler(
-            new PassThroughHousekeepingTransactionExecutor(), repository, writer, new FixedTimeProvider(Now));
+            new PassThroughHousekeepingTransactionExecutor(), repository, writer, new FakeIntegrationEventCollector(), new FixedTimeProvider(Now));
 
         var result = await handler.Handle(
             new RegisterCleaningOccurrenceCommand(TenantId, OtherHousekeeperUserId, cleaning.Id, "Noise", null),
@@ -76,7 +112,7 @@ public class RegisterCleaningOccurrenceCommandHandlerTests
         var repository = FakeCleaningRepository.WithCleaning(cleaning);
         var writer = new FakeCleaningOccurrenceWriter();
         var handler = new RegisterCleaningOccurrenceCommandHandler(
-            new PassThroughHousekeepingTransactionExecutor(), repository, writer, new FixedTimeProvider(Now));
+            new PassThroughHousekeepingTransactionExecutor(), repository, writer, new FakeIntegrationEventCollector(), new FixedTimeProvider(Now));
 
         var result = await handler.Handle(
             new RegisterCleaningOccurrenceCommand(TenantId, HousekeeperUserId, cleaning.Id, "Theft", null),
@@ -92,7 +128,7 @@ public class RegisterCleaningOccurrenceCommandHandlerTests
     {
         var repository = FakeCleaningRepository.WithCleaning(null);
         var handler = new RegisterCleaningOccurrenceCommandHandler(
-            new PassThroughHousekeepingTransactionExecutor(), repository, new FakeCleaningOccurrenceWriter(), new FixedTimeProvider(Now));
+            new PassThroughHousekeepingTransactionExecutor(), repository, new FakeCleaningOccurrenceWriter(), new FakeIntegrationEventCollector(), new FixedTimeProvider(Now));
 
         var result = await handler.Handle(
             new RegisterCleaningOccurrenceCommand(TenantId, HousekeeperUserId, Guid.NewGuid(), "Breakage", null),

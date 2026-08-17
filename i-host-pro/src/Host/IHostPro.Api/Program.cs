@@ -460,6 +460,12 @@ try
         RouteHousekeepingEvent<CleaningNeedsHelp>("cleaning_needs_help");
         RouteHousekeepingEvent<CleaningNeedsMaterial>("cleaning_needs_material");
         RouteHousekeepingEvent<CleaningCancelled>("cleaning_cancelled");
+
+        // Fase 7, Incremento 2 (Dashboard & Reporting Foundation), Checkpoint
+        // 0/1 decision 3 — RegisterCleaningOccurrenceCommandHandler's own
+        // new event, Dashboard's initial (and, this increment, only)
+        // consumer.
+        RouteHousekeepingEvent<CleaningOccurrenceRegistered>("cleaning_occurrence_registered");
     });
 
     builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();
