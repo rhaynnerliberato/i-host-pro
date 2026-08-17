@@ -93,14 +93,16 @@ try
     builder.Services.AddReservationsModule(builder.Configuration);
     builder.Services.AddReservationsScheduleProjectionConsumer();
 
-    // Dashboard & Reporting module (Fase 7, Incremento 2, Checkpoint 1) —
-    // event-consumer slice only (Overview API/HTTP dispatch is Checkpoint
-    // 2): DashboardDbContext + the four projection synchronizers' full DI
-    // graph, so the tenant-safe execution boundary
-    // (IDashboardMessageExecutionScope, ADR-016) can construct each, from
-    // its own child DI scope, for every consumed event — see
-    // DashboardModuleExtensions' own doc comment.
+    // Dashboard & Reporting module (Fase 7, Incremento 2): DashboardDbContext
+    // + the four projection synchronizers' full DI graph, so the tenant-safe
+    // execution boundary (IDashboardMessageExecutionScope, ADR-016) can
+    // construct each, from its own child DI scope, for every consumed event
+    // — mirrors AddReservationsModule + AddReservationsScheduleProjectionConsumer's
+    // own two-call split exactly (Checkpoint 2 added AddDashboardModule to
+    // IHostPro.Api too, for the new Overview query — see
+    // DashboardModuleExtensions' own doc comment).
     builder.Services.AddDashboardModule(builder.Configuration);
+    builder.Services.AddDashboardProjectionConsumer();
 
     // IHostPro.Worker hosts every Bounded Context's message handlers and Sagas,
     // kept in a separate process from IHostPro.Api so message processing can

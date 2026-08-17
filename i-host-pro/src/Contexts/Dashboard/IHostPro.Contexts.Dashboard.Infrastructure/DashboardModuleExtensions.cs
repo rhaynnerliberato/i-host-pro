@@ -14,12 +14,15 @@ namespace IHostPro.Contexts.Dashboard.Infrastructure;
 
 /// <summary>
 /// Single composition-root entry point for the Dashboard &amp; Reporting
-/// module's event-consumer slice (Fase 7, Incremento 2, Checkpoint 1) —
-/// mirrors <c>ReservationsModuleExtensions.AddReservationsScheduleProjectionConsumer</c>
-/// exactly: this Bounded Context has no HTTP command/query dispatch this
-/// increment (Overview API is Checkpoint 2), so there is no separate
-/// "module" vs. "consumer" split yet — everything Dashboard needs lives in
-/// this single method. <c>IHostPro.Worker</c> calls this once.
+/// module's shared foundation (Fase 7, Incremento 2) — DbContext
+/// registration and <c>TimeProvider</c>, mirrors
+/// <c>ReservationsModuleExtensions.AddReservationsModule</c> exactly. Called
+/// by BOTH <c>IHostPro.Api</c> (Checkpoint 2's Overview query needs
+/// <see cref="DashboardDbContext"/>) and <c>IHostPro.Worker</c> (the
+/// projection synchronizers also need it) — the event-consumer-only slice
+/// lives in <see cref="AddDashboardProjectionConsumer"/> instead, called
+/// ONLY by <c>IHostPro.Worker</c> (mirrors
+/// <c>AddReservationsScheduleProjectionConsumer</c>'s own split exactly).
 /// </summary>
 public static class DashboardModuleExtensions
 {
@@ -33,6 +36,24 @@ public static class DashboardModuleExtensions
                 configuration.GetConnectionString("Dashboard"),
                 npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "dashboard")));
 
+        services.AddSingleton(TimeProvider.System);
+
+        return services;
+    }
+
+    /// <summary>
+    /// The event-consumer slice (Fase 7, Incremento 2, Checkpoint 1) — the
+    /// four projection synchronizers' full DI graph, so the tenant-safe
+    /// execution boundary (<see cref="IDashboardMessageExecutionScope"/>,
+    /// ADR-016) can construct each, from its own child DI scope, for every
+    /// consumed event. Deliberately separate from <see cref="AddDashboardModule"/>
+    /// — mirrors <c>AddReservationsScheduleProjectionConsumer</c>'s own doc
+    /// comment: <c>IHostPro.Api</c> only publishes Integration Events, it
+    /// never consumes messages (Architecture Principles, Section 2), so it
+    /// must never register these handlers.
+    /// </summary>
+    public static IServiceCollection AddDashboardProjectionConsumer(this IServiceCollection services)
+    {
         services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
         services.AddScoped<IDashboardTransactionExecutor, DashboardOutboxTransactionExecutor>();
 

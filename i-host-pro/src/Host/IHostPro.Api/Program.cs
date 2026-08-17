@@ -23,6 +23,7 @@ using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
+using IHostPro.Contexts.Dashboard.Infrastructure;
 using JasperFx;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -199,6 +200,17 @@ try
     // dispatching a Command/Query is an HTTP-request concern, never
     // registered in IHostPro.Worker's Program.cs.
     builder.Services.AddHousekeepingCommandDispatch();
+
+    // Dashboard & Reporting module (Fase 7, Incremento 2, Checkpoint 2) —
+    // DbContext registration. IHostPro.Api never registered this before
+    // Checkpoint 2 (Dashboard had no HTTP surface until the Overview query).
+    builder.Services.AddDashboardModule(builder.Configuration);
+
+    // Dashboard's Commands/Queries/handlers/validators/pipeline behaviors —
+    // mirrors AddReservationsCommandDispatch's placement exactly: dispatching
+    // a Command/Query is an HTTP-request concern, never registered in
+    // IHostPro.Worker's Program.cs.
+    builder.Services.AddDashboardQueryDispatch();
 
     // Wolverine's own Main message store (Fase 2, Incremento 1, Checkpoint 6
     // homologação — found and fixed during real-host startup validation):

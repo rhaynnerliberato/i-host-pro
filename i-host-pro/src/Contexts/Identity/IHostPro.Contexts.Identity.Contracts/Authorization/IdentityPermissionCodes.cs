@@ -83,4 +83,18 @@ public static class IdentityPermissionCodes
     /// </summary>
     public const string ScheduleManage = "SCHEDULE:MANAGE";
     public const string ScheduleRead = "SCHEDULE:READ";
+
+    /// <summary>
+    /// Fase 7, Incremento 2 (Dashboard &amp; Reporting Foundation). Already
+    /// seeded into the persisted catalog since <c>IdentityCatalogSeed</c>'s
+    /// original Fase 1 migration (ADMIN=manage, OPERATOR=read, AI_AGENT=use —
+    /// Documento 09 §5-§7); promoted here only now because
+    /// <c>DashboardController</c> needs to reference them by value for the
+    /// first time (Checkpoint 2). No new migration required.
+    /// <c>DASHBOARD:READ:OWN_OWNER</c> remains unpromoted — Property Owner
+    /// access is deliberately deferred this checkpoint (Checkpoint 2 scope
+    /// gate).
+    /// </summary>
+    public const string DashboardManage = "DASHBOARD:MANAGE";
+    public const string DashboardRead = "DASHBOARD:READ";
 }

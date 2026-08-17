@@ -56,6 +56,10 @@ namespace IHostPro.Contexts.Identity.Api.Authorization;
 /// already seeded into the persisted catalog (mapped to <c>HOUSEKEEPER</c>)
 /// since Fase 6, Incremento 1, but had no policy registered here until Fase
 /// 6, Incremento 2A — <c>MyCleaningsController</c> is its first consumer.
+///
+/// <see cref="IdentityPermissionCodes.DashboardManage"/>/<see cref="IdentityPermissionCodes.DashboardRead"/>
+/// follow the exact same pattern (Fase 7, Incremento 2, Checkpoint 2) —
+/// <c>DashboardController</c> is their first consumer.
 /// </summary>
 public static class IdentityAuthorizationExtensions
 {
@@ -85,7 +89,11 @@ public static class IdentityAuthorizationExtensions
             .AddPolicy(IdentityPermissionCodes.ScheduleManage, policy =>
                 policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.ScheduleManage)))
             .AddPolicy(IdentityPermissionCodes.ScheduleRead, policy =>
-                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.ScheduleRead)));
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.ScheduleRead)))
+            .AddPolicy(IdentityPermissionCodes.DashboardManage, policy =>
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.DashboardManage)))
+            .AddPolicy(IdentityPermissionCodes.DashboardRead, policy =>
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.DashboardRead)));
 
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

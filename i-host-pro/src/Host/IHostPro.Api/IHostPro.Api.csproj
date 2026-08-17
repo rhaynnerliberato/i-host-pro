@@ -51,6 +51,10 @@
     <ProjectReference Include="..\..\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Api\IHostPro.Contexts.Housekeeping.Api.csproj" />
     <ProjectReference Include="..\..\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Infrastructure\IHostPro.Contexts.Housekeeping.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Contracts\IHostPro.Contexts.Housekeeping.Contracts.csproj" />
+    <!-- Dashboard & Reporting module (Fase 7, Incremento 2, Checkpoint 2 —
+         Overview API is this module's first HTTP endpoint). -->
+    <ProjectReference Include="..\..\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Api\IHostPro.Contexts.Dashboard.Api.csproj" />
+    <ProjectReference Include="..\..\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Infrastructure\IHostPro.Contexts.Dashboard.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
