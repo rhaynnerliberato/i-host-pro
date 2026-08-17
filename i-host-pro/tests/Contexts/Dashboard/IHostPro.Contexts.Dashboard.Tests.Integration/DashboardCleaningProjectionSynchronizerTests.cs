@@ -4,8 +4,8 @@ using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.Contexts.Dashboard.Infrastructure;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
 using IHostPro.Contexts.Dashboard.Infrastructure.Projections;
+using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
-using IHostPro.Contexts.Reservations.Contracts;
 using JasperFx;
 using JasperFx.Resources;
 using Microsoft.EntityFrameworkCore;
@@ -21,19 +21,23 @@ using Wolverine.Postgresql;
 namespace IHostPro.Contexts.Dashboard.Tests.Integration;
 
 /// <summary>
-/// Fase 7, Incremento 2 — Dashboard &amp; Reporting Foundation, Checkpoint 1,
-/// §29 gate: drives <see cref="DashboardReservationProjectionSynchronizer"/>
-/// directly (bypassing Wolverine's own RabbitMQ dispatch, but never
-/// bypassing the real tenant-aware/RLS-protected PostgreSQL write path) to
-/// prove the out-of-order delivery guard (an event only applies if its own
-/// <c>Timestamp</c> is not earlier than the row's current
-/// <c>LastEventAtUtc</c>) never regresses the projection — the explicit
-/// proof §29 requires BEFORE this mechanism could be consolidated — plus
-/// redelivery idempotency and RLS fail-closed isolation. Mirrors
-/// <c>CleaningScheduleProjectionSynchronizerTests</c> (Reservations' own
-/// precedent for this exact style of test) closely.
+/// Fase 7, Incremento 2 (Checkpoint 2, mandate §6/§7/§8/§20) — closes a
+/// coverage gap surfaced during the Checkpoint 2 audit:
+/// <see cref="DashboardCleaningProjectionSynchronizer"/> (the CleaningCreated
+/// fan-out target this checkpoint's mandate specifically asks for evidence
+/// of) had zero dedicated test coverage since Checkpoint 1 — only
+/// <c>DashboardReservationProjectionSynchronizerTests</c> existed. Drives the
+/// synchronizer directly (bypassing RabbitMQ, never bypassing the real
+/// tenant-aware/RLS-protected PostgreSQL write path), mirroring
+/// <c>DashboardReservationProjectionSynchronizerTests</c>'s own structure —
+/// proportionally scoped to creation + one status transition + cancellation
+/// (CancelledAtUtc/CompletedAtUtc) + idempotency, not an exhaustive
+/// ten-event/out-of-order-guard proof (that mechanism is already proven
+/// generically by the Reservation tests — every synchronizer shares the
+/// exact same <c>_executor.ExecuteAsync</c> + <c>eventAtUtc &gt;= entry.LastEventAtUtc</c>
+/// guard).
 /// </summary>
-public class DashboardReservationProjectionSynchronizerTests : IClassFixture<DashboardReservationProjectionSynchronizerTests.Fixture>
+public class DashboardCleaningProjectionSynchronizerTests : IClassFixture<DashboardCleaningProjectionSynchronizerTests.Fixture>
 {
     private const string MainSchema = "platform_messaging";
     private const string DashboardOutboxSchema = "dashboard_messaging";
@@ -41,7 +45,7 @@ public class DashboardReservationProjectionSynchronizerTests : IClassFixture<Das
     private readonly string _migratorConnectionString;
     private readonly string _appConnectionString;
 
-    public DashboardReservationProjectionSynchronizerTests(Fixture fixture)
+    public DashboardCleaningProjectionSynchronizerTests(Fixture fixture)
     {
         _migratorConnectionString = fixture.MigratorConnectionString;
         _appConnectionString = fixture.AppConnectionString;
@@ -190,21 +194,15 @@ public class DashboardReservationProjectionSynchronizerTests : IClassFixture<Das
         return hostBuilder.Build();
     }
 
-    /// <summary>
-    /// Resolves the synchronizer from a fresh DI scope with the given tenant
-    /// already set on <see cref="ITenantContext"/> — mirrors how a real
-    /// consumed message's tenant-resolution middleware would populate it in
-    /// <c>IHostPro.Worker</c>, one scope per message.
-    /// </summary>
-    private static async Task InvokeAsync(IHost host, Guid tenantContextTenantId, Func<DashboardReservationProjectionSynchronizer, Task> action)
+    private static async Task InvokeAsync(IHost host, Guid tenantContextTenantId, Func<DashboardCleaningProjectionSynchronizer, Task> action)
     {
         using var scope = host.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<TenantContext>().SetTenant(tenantContextTenantId);
-        var synchronizer = scope.ServiceProvider.GetRequiredService<DashboardReservationProjectionSynchronizer>();
+        var synchronizer = scope.ServiceProvider.GetRequiredService<DashboardCleaningProjectionSynchronizer>();
         await action(synchronizer);
     }
 
-    private async Task<DashboardReservationProjectionEntry?> ReadEntryAsync(Guid tenantId, Guid reservationId)
+    private async Task<DashboardCleaningProjectionEntry?> ReadEntryAsync(Guid tenantId, Guid cleaningId)
     {
         var tenantContext = new TenantContext();
         tenantContext.SetTenant(tenantId);
@@ -212,14 +210,14 @@ public class DashboardReservationProjectionSynchronizerTests : IClassFixture<Das
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
         await SetTenantAsync(dbContext, tenantId);
 
-        var entry = await dbContext.ReservationProjection.AsNoTracking()
-            .FirstOrDefaultAsync(r => r.TenantId == tenantId && r.ReservationId == reservationId);
+        var entry = await dbContext.CleaningProjection.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.TenantId == tenantId && c.CleaningId == cleaningId);
 
         await transaction.CommitAsync();
         return entry;
     }
 
-    private async Task<int> CountEntriesAsync(Guid tenantId, Guid reservationId)
+    private async Task<int> CountEntriesAsync(Guid tenantId, Guid cleaningId)
     {
         var tenantContext = new TenantContext();
         tenantContext.SetTenant(tenantId);
@@ -227,8 +225,7 @@ public class DashboardReservationProjectionSynchronizerTests : IClassFixture<Das
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
         await SetTenantAsync(dbContext, tenantId);
 
-        var count = await dbContext.ReservationProjection
-            .CountAsync(r => r.TenantId == tenantId && r.ReservationId == reservationId);
+        var count = await dbContext.CleaningProjection.CountAsync(c => c.TenantId == tenantId && c.CleaningId == cleaningId);
 
         await transaction.CommitAsync();
         return count;
@@ -248,200 +245,167 @@ public class DashboardReservationProjectionSynchronizerTests : IClassFixture<Das
 
     // ---- Event builders -----------------------------------------------------
 
-    private static ReservationCreated NewCreated(
-        Guid tenantId, Guid reservationId, Guid propertyId, DateTimeOffset timestamp,
-        DateTimeOffset? checkInAt = null, DateTimeOffset? checkOutAt = null) => new()
+    private static CleaningCreated NewCreated(
+        Guid tenantId, Guid cleaningId, Guid propertyId, DateTimeOffset timestamp, DateTimeOffset? scheduledAtUtc = null) => new()
     {
         TenantId = tenantId,
-        AggregateId = reservationId,
-        AggregateType = "Reservation",
+        AggregateId = cleaningId,
+        AggregateType = "Cleaning",
         CorrelationId = Guid.NewGuid(),
         ActorType = "User",
         ActorId = Guid.NewGuid().ToString(),
         Timestamp = timestamp,
-        ReservationId = reservationId,
+        CleaningId = cleaningId,
         PropertyId = propertyId,
-        Status = "confirmed",
-        CheckInAt = checkInAt,
-        CheckOutAt = checkOutAt,
+        Status = "Pending",
+        ScheduledAtUtc = scheduledAtUtc,
     };
 
-    private static ReservationUpdated NewUpdated(
-        Guid tenantId, Guid reservationId, DateTimeOffset timestamp, DateTimeOffset? checkInAt, DateTimeOffset? checkOutAt) => new()
+    private static CleaningStarted NewStarted(Guid tenantId, Guid cleaningId, DateTimeOffset timestamp) => new()
     {
         TenantId = tenantId,
-        AggregateId = reservationId,
-        AggregateType = "Reservation",
+        AggregateId = cleaningId,
+        AggregateType = "Cleaning",
         CorrelationId = Guid.NewGuid(),
         ActorType = "User",
         ActorId = Guid.NewGuid().ToString(),
         Timestamp = timestamp,
-        ReservationId = reservationId,
-        ChangedFields = ["check_in_at", "check_out_at"],
-        CheckInAt = checkInAt,
-        CheckOutAt = checkOutAt,
+        CleaningId = cleaningId,
     };
 
-    private static ReservationCancelled NewCancelled(Guid tenantId, Guid reservationId, DateTimeOffset timestamp) => new()
+    private static CleaningCompleted NewCompleted(Guid tenantId, Guid cleaningId, Guid propertyId, DateTimeOffset timestamp) => new()
     {
         TenantId = tenantId,
-        AggregateId = reservationId,
-        AggregateType = "Reservation",
+        AggregateId = cleaningId,
+        AggregateType = "Cleaning",
         CorrelationId = Guid.NewGuid(),
         ActorType = "User",
         ActorId = Guid.NewGuid().ToString(),
         Timestamp = timestamp,
-        ReservationId = reservationId,
-        PropertyId = Guid.NewGuid(),
+        CleaningId = cleaningId,
+        PropertyId = propertyId,
     };
 
-    // ---- ReservationCreated -------------------------------------------------
+    private static CleaningCancelled NewCancelled(Guid tenantId, Guid cleaningId, DateTimeOffset timestamp) => new()
+    {
+        TenantId = tenantId,
+        AggregateId = cleaningId,
+        AggregateType = "Cleaning",
+        CorrelationId = Guid.NewGuid(),
+        ActorType = "User",
+        ActorId = Guid.NewGuid().ToString(),
+        Timestamp = timestamp,
+        CleaningId = cleaningId,
+    };
+
+    // ---- CleaningCreated (the fan-out target this checkpoint's mandate requires evidence for) ----
 
     [Fact]
-    public async Task ReservationCreated_inserts_a_new_row_with_the_real_CheckInAt_and_CheckOutAt()
+    public async Task CleaningCreated_inserts_a_new_row_with_the_real_ScheduledAtUtc()
     {
         using var host = BuildHost();
         var tenantId = Guid.NewGuid();
-        var reservationId = Guid.NewGuid();
+        var cleaningId = Guid.NewGuid();
         var propertyId = Guid.NewGuid();
-        var checkInAt = new DateTimeOffset(2026, 9, 1, 14, 0, 0, TimeSpan.Zero);
-        var checkOutAt = new DateTimeOffset(2026, 9, 5, 11, 0, 0, TimeSpan.Zero);
+        var scheduledAtUtc = new DateTimeOffset(2026, 9, 1, 8, 0, 0, TimeSpan.Zero);
         var now = DateTimeOffset.UtcNow;
 
-        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCreated(tenantId, reservationId, propertyId, now, checkInAt, checkOutAt)));
+        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCreated(tenantId, cleaningId, propertyId, now, scheduledAtUtc)));
 
-        var entry = await ReadEntryAsync(tenantId, reservationId);
+        var entry = await ReadEntryAsync(tenantId, cleaningId);
         entry.Should().NotBeNull();
         entry!.PropertyId.Should().Be(propertyId);
-        entry.Status.Should().Be("confirmed");
-        entry.CheckInAt.Should().Be(checkInAt);
-        entry.CheckOutAt.Should().Be(checkOutAt);
+        entry.Status.Should().Be("Pending");
+        entry.ScheduledAtUtc.Should().Be(scheduledAtUtc);
     }
 
     [Fact]
-    public async Task ReservationCreated_is_idempotent_on_redelivery_and_never_creates_a_duplicate_row()
+    public async Task CleaningCreated_is_idempotent_on_redelivery_and_never_creates_a_duplicate_row()
     {
         using var host = BuildHost();
         var tenantId = Guid.NewGuid();
-        var reservationId = Guid.NewGuid();
-        var created = NewCreated(tenantId, reservationId, Guid.NewGuid(), DateTimeOffset.UtcNow);
+        var cleaningId = Guid.NewGuid();
+        var created = NewCreated(tenantId, cleaningId, Guid.NewGuid(), DateTimeOffset.UtcNow);
 
         await InvokeAsync(host, tenantId, s => s.HandleAsync(created));
         await InvokeAsync(host, tenantId, s => s.HandleAsync(created));
 
-        (await CountEntriesAsync(tenantId, reservationId)).Should().Be(1);
+        (await CountEntriesAsync(tenantId, cleaningId)).Should().Be(1);
     }
 
-    // ---- ReservationUpdated / ReservationCancelled ---------------------------
-
     [Fact]
-    public async Task ReservationUpdated_with_a_newer_Timestamp_updates_CheckInAt_and_CheckOutAt()
+    public async Task CleaningStarted_updates_the_status_to_Started()
     {
         using var host = BuildHost();
         var tenantId = Guid.NewGuid();
-        var reservationId = Guid.NewGuid();
+        var cleaningId = Guid.NewGuid();
         var t0 = DateTimeOffset.UtcNow;
-        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCreated(
-            tenantId, reservationId, Guid.NewGuid(), t0, t0.AddDays(1), t0.AddDays(3))));
+        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCreated(tenantId, cleaningId, Guid.NewGuid(), t0)));
 
-        var newCheckInAt = t0.AddDays(2);
-        var newCheckOutAt = t0.AddDays(4);
-        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewUpdated(tenantId, reservationId, t0.AddMinutes(1), newCheckInAt, newCheckOutAt)));
+        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewStarted(tenantId, cleaningId, t0.AddMinutes(1))));
 
-        var entry = await ReadEntryAsync(tenantId, reservationId);
-        entry!.CheckInAt.Should().BeCloseTo(newCheckInAt, TimeSpan.FromMilliseconds(1));
-        entry.CheckOutAt.Should().BeCloseTo(newCheckOutAt, TimeSpan.FromMilliseconds(1));
+        var entry = await ReadEntryAsync(tenantId, cleaningId);
+        entry!.Status.Should().Be("Started");
+        entry.StartedAtUtc.Should().BeCloseTo(t0.AddMinutes(1), TimeSpan.FromMilliseconds(1));
     }
 
+    /// <summary>Checkpoint 2 mandate §8: CompletedAtUtc must trace to CleaningCompleted.Timestamp.</summary>
     [Fact]
-    public async Task ReservationCancelled_with_a_newer_Timestamp_sets_status_to_cancelled_and_leaves_dates_untouched()
+    public async Task CleaningCompleted_sets_the_status_to_Completed_and_records_CompletedAtUtc()
     {
         using var host = BuildHost();
         var tenantId = Guid.NewGuid();
-        var reservationId = Guid.NewGuid();
+        var cleaningId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
         var t0 = DateTimeOffset.UtcNow;
-        var checkInAt = t0.AddDays(1);
-        var checkOutAt = t0.AddDays(3);
-        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCreated(tenantId, reservationId, Guid.NewGuid(), t0, checkInAt, checkOutAt)));
+        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCreated(tenantId, cleaningId, propertyId, t0)));
 
-        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCancelled(tenantId, reservationId, t0.AddMinutes(1))));
+        var completedAt = t0.AddHours(1);
+        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCompleted(tenantId, cleaningId, propertyId, completedAt)));
 
-        var entry = await ReadEntryAsync(tenantId, reservationId);
-        entry!.Status.Should().Be("cancelled");
-        entry.CheckInAt.Should().BeCloseTo(checkInAt, TimeSpan.FromMilliseconds(1));
-        entry.CheckOutAt.Should().BeCloseTo(checkOutAt, TimeSpan.FromMilliseconds(1));
+        var entry = await ReadEntryAsync(tenantId, cleaningId);
+        entry!.Status.Should().Be("Completed");
+        entry.CompletedAtUtc.Should().BeCloseTo(completedAt, TimeSpan.FromMilliseconds(1));
     }
 
+    /// <summary>Checkpoint 2 mandate §7: CancelledAtUtc must trace to CleaningCancelled.Timestamp, and stale redelivery must never regress it.</summary>
     [Fact]
-    public async Task A_status_updating_event_for_a_Reservation_whose_ReservationCreated_was_never_projected_is_silently_ignored()
+    public async Task CleaningCancelled_sets_the_status_to_Cancelled_and_records_CancelledAtUtc()
     {
         using var host = BuildHost();
         var tenantId = Guid.NewGuid();
-        var reservationId = Guid.NewGuid();
-
-        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCancelled(tenantId, reservationId, DateTimeOffset.UtcNow)));
-
-        (await ReadEntryAsync(tenantId, reservationId)).Should().BeNull(
-            "a status-updating event before ReservationCreated must never fabricate a row on its own");
-    }
-
-    // ---- Out-of-order delivery guard (Checkpoint 0 decision, §29) -----------
-
-    [Fact]
-    public async Task An_out_of_order_older_ReservationUpdated_never_regresses_a_newer_already_applied_state()
-    {
-        using var host = BuildHost();
-        var tenantId = Guid.NewGuid();
-        var reservationId = Guid.NewGuid();
+        var cleaningId = Guid.NewGuid();
         var t0 = DateTimeOffset.UtcNow;
-        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCreated(
-            tenantId, reservationId, Guid.NewGuid(), t0, t0.AddDays(1), t0.AddDays(3))));
+        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCreated(tenantId, cleaningId, Guid.NewGuid(), t0)));
 
-        // A genuinely newer update is applied first (as if it arrived before
-        // an older, delayed redelivery/out-of-order message).
-        var newerCheckInAt = t0.AddDays(5);
-        var newerCheckOutAt = t0.AddDays(7);
-        await InvokeAsync(host, tenantId, s => s.HandleAsync(
-            NewUpdated(tenantId, reservationId, t0.AddMinutes(10), newerCheckInAt, newerCheckOutAt)));
+        var cancelledAt = t0.AddMinutes(30);
+        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCancelled(tenantId, cleaningId, cancelledAt)));
 
-        // An OLDER event (Timestamp before the row's current LastEventAtUtc)
-        // arrives afterward — the out-of-order guard must reject it,
-        // never overwriting the already-applied newer state.
-        var staleCheckInAt = t0.AddDays(1);
-        var staleCheckOutAt = t0.AddDays(3);
-        await InvokeAsync(host, tenantId, s => s.HandleAsync(
-            NewUpdated(tenantId, reservationId, t0.AddMinutes(1), staleCheckInAt, staleCheckOutAt)));
-
-        var entry = await ReadEntryAsync(tenantId, reservationId);
-        entry!.CheckInAt.Should().BeCloseTo(newerCheckInAt, TimeSpan.FromMilliseconds(1), "an out-of-order older event must never regress an already-applied newer state");
-        entry.CheckOutAt.Should().BeCloseTo(newerCheckOutAt, TimeSpan.FromMilliseconds(1));
+        var entry = await ReadEntryAsync(tenantId, cleaningId);
+        entry!.Status.Should().Be("Cancelled");
+        entry.CancelledAtUtc.Should().BeCloseTo(cancelledAt, TimeSpan.FromMilliseconds(1));
     }
 
     [Fact]
-    public async Task An_out_of_order_older_ReservationCancelled_never_regresses_a_newer_already_applied_state()
+    public async Task An_out_of_order_older_CleaningCancelled_never_regresses_a_newer_already_applied_state()
     {
         using var host = BuildHost();
         var tenantId = Guid.NewGuid();
-        var reservationId = Guid.NewGuid();
+        var cleaningId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
         var t0 = DateTimeOffset.UtcNow;
-        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCreated(tenantId, reservationId, Guid.NewGuid(), t0)));
+        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCreated(tenantId, cleaningId, propertyId, t0)));
 
-        // A newer update is applied first.
-        var newCheckInAt = t0.AddDays(2);
-        var newCheckOutAt = t0.AddDays(4);
-        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewUpdated(tenantId, reservationId, t0.AddMinutes(10), newCheckInAt, newCheckOutAt)));
+        var completedAt = t0.AddHours(2);
+        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCompleted(tenantId, cleaningId, propertyId, completedAt)));
 
-        // An older Cancelled event (predating the update above) must never
-        // apply — the row must remain "confirmed" with the newer dates.
-        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCancelled(tenantId, reservationId, t0.AddMinutes(1))));
+        // A stale Cancelled (Timestamp before the row's current LastEventAtUtc) arrives afterward.
+        await InvokeAsync(host, tenantId, s => s.HandleAsync(NewCancelled(tenantId, cleaningId, t0.AddMinutes(1))));
 
-        var entry = await ReadEntryAsync(tenantId, reservationId);
-        entry!.Status.Should().Be("confirmed", "an out-of-order older Cancelled must never regress an already-applied newer state");
-        entry.CheckInAt.Should().BeCloseTo(newCheckInAt, TimeSpan.FromMilliseconds(1));
-        entry.CheckOutAt.Should().BeCloseTo(newCheckOutAt, TimeSpan.FromMilliseconds(1));
+        var entry = await ReadEntryAsync(tenantId, cleaningId);
+        entry!.Status.Should().Be("Completed", "an out-of-order older Cancelled must never regress an already-applied newer Completed state");
+        entry.CancelledAtUtc.Should().BeNull();
     }
-
-    // ---- RLS fail-closed ------------------------------------------------
 
     [Fact]
     public async Task A_status_updating_event_is_invisible_when_the_message_scope_tenant_does_not_match_the_rows_owning_tenant_RLS_fail_closed()
@@ -449,21 +413,14 @@ public class DashboardReservationProjectionSynchronizerTests : IClassFixture<Das
         using var host = BuildHost();
         var ownerTenantId = Guid.NewGuid();
         var otherTenantId = Guid.NewGuid();
-        var reservationId = Guid.NewGuid();
+        var cleaningId = Guid.NewGuid();
         var t0 = DateTimeOffset.UtcNow;
-        await InvokeAsync(host, ownerTenantId, s => s.HandleAsync(NewCreated(ownerTenantId, reservationId, Guid.NewGuid(), t0)));
+        await InvokeAsync(host, ownerTenantId, s => s.HandleAsync(NewCreated(ownerTenantId, cleaningId, Guid.NewGuid(), t0)));
 
-        // The event payload still claims the row's real TenantId, but the
-        // DI-scoped ITenantContext (which drives the RLS session, exactly as
-        // a real tenant-resolution-middleware-populated scope would) is
-        // deliberately set to a DIFFERENT tenant — simulating a
-        // misrouted/misresolved scope. RLS must make the row invisible
-        // regardless of what the event's own TenantId column says.
-        await InvokeAsync(host, otherTenantId, s => s.HandleAsync(
-            NewCancelled(ownerTenantId, reservationId, t0.AddMinutes(1))));
+        await InvokeAsync(host, otherTenantId, s => s.HandleAsync(NewCancelled(ownerTenantId, cleaningId, t0.AddMinutes(1))));
 
-        var entry = await ReadEntryAsync(ownerTenantId, reservationId);
+        var entry = await ReadEntryAsync(ownerTenantId, cleaningId);
         entry.Should().NotBeNull();
-        entry!.Status.Should().Be("confirmed", "a mismatched tenant scope must never be able to update another tenant's row, even carrying the correct TenantId in the payload");
+        entry!.Status.Should().Be("Pending", "a mismatched tenant scope must never be able to update another tenant's row");
     }
 }

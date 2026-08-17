@@ -15,6 +15,10 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="7.*" />
+    <!-- DashboardOverviewEndpointsTests builds a real ASP.NET Core
+         TestServer host (Checkpoint 2) — mirrors ScheduleEndpointsTests'
+         own precedent. -->
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.0" />
     <!-- Explicit pin — see IHostPro.Contexts.Identity.Api.csproj for the MSB3277 rationale. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
@@ -58,6 +62,15 @@
     <ProjectReference Include="..\..\..\..\src\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Infrastructure\IHostPro.Contexts.PropertyManagement.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Domain\IHostPro.Contexts.Identity.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
+    <!--
+      Test-only dependency on Identity.Api: builds a realistic host with a
+      REAL JWT issued/validated by Identity's own stack (the platform has one
+      shared authentication scheme, not one per Bounded Context) — mirrors
+      ReservationsEndpointsTests/ScheduleEndpointsTests' own precedent
+      exactly. Never a production reference from Dashboard's own src/ code.
+    -->
+    <ProjectReference Include="..\..\..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Api\IHostPro.Contexts.Identity.Api.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Api\IHostPro.Contexts.Dashboard.Api.csproj" />
     <ProjectReference Include="..\..\..\..\src\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\..\tools\IHostPro.MigrationRunner\IHostPro.MigrationRunner.csproj" />
   </ItemGroup>

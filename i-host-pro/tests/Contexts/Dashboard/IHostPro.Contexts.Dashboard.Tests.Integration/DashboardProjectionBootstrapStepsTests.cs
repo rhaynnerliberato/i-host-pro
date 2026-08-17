@@ -94,6 +94,7 @@ public class DashboardProjectionBootstrapStepsTests : IClassFixture<DashboardPro
             reservation.Status.Should().Be("cancelled");
             reservation.CheckInAt.Should().NotBeNull();
             reservation.CheckOutAt.Should().NotBeNull();
+            reservation.CancelledAtUtc.Should().NotBeNull("the source reservation was already Cancelled before bootstrap ran");
 
             var cleaning = await dbContext.CleaningProjection.SingleAsync(c => c.CleaningId == cleaningId);
             cleaning.PropertyId.Should().Be(propertyId);
@@ -117,6 +118,37 @@ public class DashboardProjectionBootstrapStepsTests : IClassFixture<DashboardPro
         (await CountCleaningProjectionAsync(tenantId)).Should().Be(1);
         (await CountPropertyProjectionAsync(tenantId)).Should().Be(1);
         (await CountOccurrenceProjectionAsync(tenantId)).Should().Be(1);
+    }
+
+    /// <summary>
+    /// Checkpoint 2 mandate, §13/§21/§37: CancelledAtUtc must be backfilled
+    /// from the real source timestamp, not a fabricated value — Reservations'
+    /// <c>updated_at</c> (reliable because Cancel always touches it and
+    /// Cancelled is terminal) and Housekeeping's own dedicated
+    /// <c>cancelled_at_utc</c> column.
+    /// </summary>
+    [Fact]
+    public async Task Backfills_CancelledAtUtc_from_the_real_source_timestamp_for_both_reservations_and_cleanings()
+    {
+        var tenantId = Guid.NewGuid();
+        await SeedTenantAsync(tenantId);
+
+        var propertyId = await SeedActivePropertyAsync(tenantId);
+        var cancelledAt = DateTimeOffset.UtcNow.AddDays(-2);
+        var reservationId = await SeedCancelledReservationAsync(tenantId, propertyId, cancelledAt);
+        var cleaningId = await SeedCancelledCleaningAsync(tenantId, propertyId, cancelledAt);
+
+        await RunAllStepsAsync();
+
+        await using var dbContext = CreateDashboardDbContext(tenantId);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var reservation = await dbContext.ReservationProjection.SingleAsync(r => r.ReservationId == reservationId);
+        reservation.CancelledAtUtc.Should().BeCloseTo(cancelledAt, TimeSpan.FromSeconds(1));
+
+        var cleaning = await dbContext.CleaningProjection.SingleAsync(c => c.CleaningId == cleaningId);
+        cleaning.CancelledAtUtc.Should().BeCloseTo(cancelledAt, TimeSpan.FromSeconds(1));
     }
 
     // ---- Bootstrap execution --------------------------------------------
@@ -170,13 +202,13 @@ public class DashboardProjectionBootstrapStepsTests : IClassFixture<DashboardPro
         return property.Id;
     }
 
-    private async Task<Guid> SeedCancelledReservationAsync(Guid tenantId, Guid propertyId)
+    private async Task<Guid> SeedCancelledReservationAsync(Guid tenantId, Guid propertyId, DateTimeOffset? cancelledAt = null)
     {
         var now = DateTimeOffset.UtcNow;
         var reservation = Reservation.Create(
             Guid.NewGuid(), tenantId, propertyId, "Test Guest", null,
             now.AddDays(20), now.AddDays(24), guestCount: 2, now);
-        reservation.Cancel(now);
+        reservation.Cancel(cancelledAt ?? now);
 
         var tenantContext = new TenantContext();
         tenantContext.SetTenant(tenantId);
@@ -190,6 +222,28 @@ public class DashboardProjectionBootstrapStepsTests : IClassFixture<DashboardPro
         await transaction.CommitAsync();
 
         return reservation.Id;
+    }
+
+    private async Task<Guid> SeedCancelledCleaningAsync(Guid tenantId, Guid propertyId, DateTimeOffset cancelledAt)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var cleaning = Cleaning.Create(
+            Guid.NewGuid(), tenantId, propertyId, reservationId: null, createdByUserId: Guid.NewGuid(), now,
+            scheduledAtUtc: now.AddDays(1));
+        cleaning.Cancel(cancelledAt);
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateHousekeepingDbContext(tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        dbContext.Cleanings.Add(cleaning);
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return cleaning.Id;
     }
 
     private async Task<Guid> SeedPendingCleaningAsync(Guid tenantId, Guid propertyId)

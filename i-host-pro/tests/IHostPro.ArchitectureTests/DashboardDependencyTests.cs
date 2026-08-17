@@ -43,6 +43,56 @@ public class DashboardDependencyTests
         result.IsSuccessful.Should().BeTrue(BuildFailureMessage(result));
     }
 
+    /// <summary>Fase 7, Incremento 2, Checkpoint 2 — GetDashboardOverviewQuery/its validator/handler must never reference EF Core directly.</summary>
+    [Fact]
+    public void Application_Should_Not_Depend_On_EfCore()
+    {
+        var result = Types.InAssembly(typeof(IHostPro.Contexts.Dashboard.Application.IDashboardMessageExecutionScope).Assembly)
+            .Should()
+            .NotHaveDependencyOn("Microsoft.EntityFrameworkCore")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(BuildFailureMessage(result));
+    }
+
+    /// <summary>
+    /// Fase 7, Incremento 2, Checkpoint 2 — Dashboard.Api may reference ONLY
+    /// Identity.Contracts (IdentityPermissionCodes) — never Identity's
+    /// Application/Infrastructure/Api, and never Dashboard.Infrastructure
+    /// directly (mirrors ReservationsDependencyTests' own
+    /// Api_Depends_On_Identity_Contracts_Only... test exactly).
+    /// </summary>
+    [Fact]
+    public void Api_Depends_On_Identity_Contracts_Only_Never_Identity_Application_Infrastructure_Or_Api_And_Never_Dashboard_Infrastructure()
+    {
+        var apiAssembly = typeof(IHostPro.Contexts.Dashboard.Api.AssemblyReference).Assembly;
+
+        var result = Types.InAssembly(apiAssembly)
+            .Should()
+            .NotHaveDependencyOnAny(
+                "IHostPro.Contexts.Identity.Domain",
+                "IHostPro.Contexts.Identity.Application",
+                "IHostPro.Contexts.Identity.Infrastructure",
+                "IHostPro.Contexts.Identity.Api",
+                "IHostPro.Contexts.Dashboard.Infrastructure",
+                "Microsoft.EntityFrameworkCore")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(BuildFailureMessage(result));
+    }
+
+    /// <summary>Fase 7, Incremento 2, Checkpoint 2 — DashboardController delegates every query through the Mediator dispatcher, never touching DashboardDbContext.</summary>
+    [Fact]
+    public void Api_Never_References_DashboardDbContext()
+    {
+        var result = Types.InAssembly(typeof(IHostPro.Contexts.Dashboard.Api.AssemblyReference).Assembly)
+            .Should()
+            .NotHaveDependencyOn("IHostPro.Contexts.Dashboard.Infrastructure.Persistence.DashboardDbContext")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(BuildFailureMessage(result));
+    }
+
     [Fact]
     public void Contracts_Should_Not_Depend_On_AspNetCore_Or_EfCore_Or_Domain_Or_Infrastructure()
     {
