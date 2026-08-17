@@ -380,6 +380,7 @@ public sealed class CleaningCreatedScheduleProjectionWorkerRoundTripTests : IAsy
         ["ConnectionStrings__Reservations"] = _appConnectionString,
         ["ConnectionStrings__Configuration"] = _appConnectionString,
         ["ConnectionStrings__Housekeeping"] = _appConnectionString,
+        ["ConnectionStrings__Dashboard"] = _appConnectionString,
         ["ConnectionStrings__Platform"] = _appConnectionString,
         ["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test",
         ["Identity__Jwt__Audience"] = "ihostpro-api-test",
@@ -427,6 +428,7 @@ public sealed class CleaningCreatedScheduleProjectionWorkerRoundTripTests : IAsy
         psi.Environment["ConnectionStrings__Reservations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Configuration"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__Dashboard"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _migratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;
         psi.Environment["RabbitMq__VirtualHost"] = "/";

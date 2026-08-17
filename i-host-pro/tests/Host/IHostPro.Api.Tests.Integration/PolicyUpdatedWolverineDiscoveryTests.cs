@@ -2,18 +2,9 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
-using IHostPro.BuildingBlocks.Infrastructure.Messaging;
-using JasperFx.Resources;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Testcontainers.PostgreSql;
 using Testcontainers.RabbitMq;
 using Testcontainers.Redis;
-using Wolverine;
-using Wolverine.RabbitMQ;
-using Wolverine.Runtime;
-using Wolverine.Transports;
 
 namespace IHostPro.Api.Tests.Integration;
 
@@ -63,9 +54,14 @@ namespace IHostPro.Api.Tests.Integration;
 /// </summary>
 public sealed class PolicyUpdatedWolverineDiscoveryTests : IAsyncLifetime
 {
+    private const string AppRolePassword = "test_app_password";
+    private const string MigratorRolePassword = "test_migrator_password";
+
     private PostgreSqlContainer _postgresContainer = null!;
     private RabbitMqContainer _rabbitMqContainer = null!;
     private RedisContainer _redisContainer = null!;
+    private string _migratorConnectionString = null!;
+    private string _appConnectionString = null!;
 
     public async Task InitializeAsync()
     {
@@ -94,7 +90,44 @@ public sealed class PolicyUpdatedWolverineDiscoveryTests : IAsyncLifetime
             _rabbitMqContainer.StartAsync(),
             _redisContainer.StartAsync());
 
-        await DeclareConfigurationRabbitMqTopologyAsync();
+        var adminConnectionString = _postgresContainer.GetConnectionString();
+        await using (var adminConnection = new Npgsql.NpgsqlConnection(adminConnectionString))
+        {
+            await adminConnection.OpenAsync();
+            await using var command = adminConnection.CreateCommand();
+            command.CommandText = $"""
+                CREATE ROLE ihostpro_migrator LOGIN PASSWORD '{MigratorRolePassword}';
+                CREATE ROLE ihostpro_app LOGIN PASSWORD '{AppRolePassword}';
+                GRANT CREATE ON DATABASE ihostpro_test TO ihostpro_migrator;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var builder = new Npgsql.NpgsqlConnectionStringBuilder(adminConnectionString) { Username = "ihostpro_migrator", Password = MigratorRolePassword };
+        _migratorConnectionString = builder.ConnectionString;
+        builder.Username = "ihostpro_app";
+        builder.Password = AppRolePassword;
+        _appConnectionString = builder.ConnectionString;
+
+        // Fase 7, Incremento 2, Checkpoint 1 — real defect found and fixed in
+        // this TEST's own fixture (not production code): this method used to
+        // hand-declare only the exact RabbitMQ topology it already knew
+        // about, and needed patching every time a new Bounded Context's
+        // Worker-hosted consumers grew (already patched once for
+        // Housekeeping's own two queues — see the Fase 6 homologação
+        // narrative this class's own doc comment describes). Dashboard added
+        // a THIRD ancillary Postgresql store plus four more Worker-hosted
+        // queues, and this fixture's own hand-rolled Postgres container had
+        // no schema/role at all (no MigrationRunner ever ran against it) —
+        // replaced with the same MigrationRunner-based provisioning every
+        // other real-Worker-subprocess test in this project already uses,
+        // which declares the complete topology (including Dashboard's own
+        // four queues) and provisions every schema in one step, so this
+        // fixture never needs hand-patching again as new Bounded Contexts
+        // are added.
+        var (exitCode, output) = await RunMigrationRunnerAsync();
+        if (exitCode != 0)
+            throw new InvalidOperationException($"MigrationRunner failed with exit code {exitCode}. Output:\n{output}");
     }
 
     public async Task DisposeAsync()
@@ -104,87 +137,37 @@ public sealed class PolicyUpdatedWolverineDiscoveryTests : IAsyncLifetime
         await _postgresContainer.DisposeAsync();
     }
 
-    /// <summary>
-    /// Provisions the "configuration-events" topic exchange and the
-    /// "configuration.policy-updated" queue/binding exactly the way
-    /// IHostPro.MigrationRunner's own Program.cs does in production — same
-    /// public Wolverine DeclareExchange/BindQueue API, same
-    /// UseIHostProRabbitMq connection wiring, never a raw RabbitMQ.Client
-    /// call. IHostPro.Worker only ever attaches a consumer to an
-    /// already-existing queue (§13.7); it never declares topology itself, so
-    /// without this the subprocess below would have nothing to listen to.
-    ///
-    /// Fase 6, Checkpoint 6 homologação, real defect found and fixed in this
-    /// TEST's own fixture (not production code): this method predates
-    /// Housekeeping and originally declared only the Configuration &amp;
-    /// Policy topology. Since ADR-015's generalization, IHostPro.Worker's
-    /// Program.cs unconditionally calls ListenToRabbitQueue for
-    /// housekeeping.property-projection/housekeeping.reservation-projection
-    /// too (Worker hosts every Bounded Context's consumers in one process),
-    /// so the real Worker subprocess this test boots now fails outright at
-    /// startup with a real AMQP 404 ("no queue 'housekeeping.property-projection'
-    /// in vhost '/'") the instant it tries to listen to a queue this
-    /// fixture never provisioned — confirmed by a real failing run of this
-    /// exact test before this fix. Extended below to also declare the two
-    /// Housekeeping-owned queues (bound to Property Management's/
-    /// Reservations' own exchanges, exactly mirroring
-    /// IHostPro.MigrationRunner's own declarations) so this test keeps
-    /// exercising a real, fully-bootable Worker process rather than one that
-    /// crashes before ever reaching the PolicyUpdated listener this test
-    /// actually cares about.
-    /// </summary>
-    private async Task DeclareConfigurationRabbitMqTopologyAsync()
+    private async Task<(int ExitCode, string Output)> RunMigrationRunnerAsync()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["RabbitMq:Host"] = _rabbitMqContainer.Hostname,
-                ["RabbitMq:VirtualHost"] = "/",
-                ["RabbitMq:Username"] = RabbitMqBuilder.DefaultUsername,
-                ["RabbitMq:Password"] = RabbitMqBuilder.DefaultPassword,
-            })
-            .Build();
+        var dllPath = Path.Combine(FindSolutionRoot(), "tools", "IHostPro.MigrationRunner", "bin", "Release", "net10.0", "IHostPro.MigrationRunner.dll");
+        if (!File.Exists(dllPath))
+            throw new InvalidOperationException($"MigrationRunner build output not found at {dllPath}. Build IHostPro.MigrationRunner in Release configuration first.");
 
-        var topologyHostBuilder = Host.CreateApplicationBuilder();
-        topologyHostBuilder.UseWolverine(opts =>
+        var psi = new ProcessStartInfo("dotnet", $"\"{dllPath}\"")
         {
-            opts.UseIHostProRabbitMq(configuration, listen: false)
-                .DeclareExchange("configuration-events", exchange =>
-                {
-                    exchange.ExchangeType = ExchangeType.Topic;
-                    exchange.BindQueue("configuration.policy-updated", "policy_updated");
-                })
-                .DeclareExchange("property-management-events", exchange =>
-                {
-                    exchange.ExchangeType = ExchangeType.Topic;
-                    exchange.BindQueue("housekeeping.property-projection", "property_created");
-                    exchange.BindQueue("housekeeping.property-projection", "property_activated");
-                    exchange.BindQueue("housekeeping.property-projection", "property_deactivated");
-                    exchange.BindQueue("housekeeping.property-projection", "property_archived");
-                })
-                .DeclareExchange("reservation-events", exchange =>
-                {
-                    exchange.ExchangeType = ExchangeType.Topic;
-                    exchange.BindQueue("housekeeping.reservation-projection", "reservation_created");
-                    exchange.BindQueue("housekeeping.reservation-projection", "reservation_cancelled");
-                });
-        });
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.Environment["ConnectionStrings__Identity"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__PropertyManagement"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__Reservations"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__Configuration"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__Housekeeping"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__Dashboard"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__Platform"] = _migratorConnectionString;
+        psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;
+        psi.Environment["RabbitMq__VirtualHost"] = "/";
+        psi.Environment["RabbitMq__Username"] = RabbitMqBuilder.DefaultUsername;
+        psi.Environment["RabbitMq__Password"] = RabbitMqBuilder.DefaultPassword;
 
-        using var topologyHost = topologyHostBuilder.Build();
-        await topologyHost.SetupResources();
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start MigrationRunner process.");
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        var output = await stdoutTask + await stderrTask;
 
-        var runtime = topologyHost.Services.GetRequiredService<IWolverineRuntime>();
-        foreach (var transport in runtime.Options.Transports)
-        {
-            foreach (var endpoint in transport.Endpoints().OfType<IBrokerEndpoint>())
-            {
-                if (!await endpoint.CheckAsync())
-                {
-                    throw new InvalidOperationException(
-                        $"RabbitMQ topology provisioning failed: endpoint '{endpoint.Uri}' does not exist after SetupResources().");
-                }
-            }
-        }
+        return (process.ExitCode, output);
     }
 
     [Fact]
@@ -212,7 +195,11 @@ public sealed class PolicyUpdatedWolverineDiscoveryTests : IAsyncLifetime
             UseShellExecute = false,
         };
         psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
-        psi.Environment["ConnectionStrings__Identity"] = _postgresContainer.GetConnectionString();
+        psi.Environment["ConnectionStrings__Identity"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__Housekeeping"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__Reservations"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__Dashboard"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__Platform"] = _appConnectionString;
         psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";
         psi.Environment["Identity__Jwt__Audience"] = "ihostpro-api-test";
         psi.Environment["Identity__Jwt__AccessTokenLifetime"] = "00:15:00";

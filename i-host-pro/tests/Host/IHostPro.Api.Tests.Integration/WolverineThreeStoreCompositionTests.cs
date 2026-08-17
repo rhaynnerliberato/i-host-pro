@@ -1312,6 +1312,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         psi.Environment["ConnectionStrings__Reservations"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__Configuration"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = _fixture.MigratorConnectionString;
+        psi.Environment["ConnectionStrings__Dashboard"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _fixture.MigratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _fixture.RabbitMq.Hostname;
         psi.Environment["RabbitMq__VirtualHost"] = "/";
