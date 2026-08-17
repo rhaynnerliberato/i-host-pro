@@ -3,6 +3,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Configuration.Infrastructure.Persistence;
+using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
@@ -63,6 +64,7 @@ try
         typeof(ReservationsDbContext).Assembly,
         typeof(ConfigurationDbContext).Assembly,
         typeof(HousekeepingDbContext).Assembly,
+        typeof(DashboardDbContext).Assembly,
     };
 
     var moduleDbContextTypes = moduleAssemblies
@@ -121,19 +123,40 @@ try
         }
     }
 
-    // Fase 7, Incremento 1, Checkpoint 3 — one-time, idempotent backfill of
-    // housekeeping.property_projection for properties that existed before
-    // Housekeeping's PropertyCreated/PropertyActivated consumer did (see
-    // PropertyProjectionBootstrap.cs for the full rationale). Runs after every
-    // module's schema migrations so both property_management.properties and
-    // housekeeping.property_projection are guaranteed to exist. Deployment/
-    // data-migration concern only — never a Housekeeping runtime dependency.
+    // ADR-017 — Deployment-time Bootstrap for Event-derived Projections.
+    // Runs after every module's schema migrations so every source AND
+    // destination schema referenced below is guaranteed to exist. Each step
+    // is a one-time, idempotent backfill of a projection whose consumer
+    // could not have received historical events (RabbitMQ never replays to
+    // a newly-bound queue) — deployment/data-migration concern only, never a
+    // runtime dependency between Bounded Contexts. The list below is the
+    // single source of truth for which bootstrap steps exist and in what
+    // order they run — no discovery, no configuration, no implicit ordering.
     var housekeepingConnectionString = builder.Configuration.GetConnectionString("Housekeeping")
         ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Housekeeping'.");
 
-    log.LogInformation("Backfilling housekeeping.property_projection for pre-existing properties");
+    // Dashboard's four bootstrap steps read cross-schema (Reservations,
+    // Housekeeping, PropertyManagement) and write only to `dashboard` — same
+    // single-physical-database exception ADR-017 §12 grants MigrationRunner,
+    // reusing the ihostpro_migrator connection already used for Dashboard's
+    // own schema migrations.
+    var dashboardBootstrapConnectionString = builder.Configuration.GetConnectionString("Dashboard")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Dashboard'.");
 
-    await PropertyProjectionBootstrap.RunAsync(housekeepingConnectionString, log, CancellationToken.None);
+    var projectionBootstrapSteps = new List<IProjectionBootstrapStep>
+    {
+        new PropertyProjectionBootstrapStep(housekeepingConnectionString),
+        new DashboardReservationProjectionBootstrapStep(dashboardBootstrapConnectionString),
+        new DashboardCleaningProjectionBootstrapStep(dashboardBootstrapConnectionString),
+        new DashboardPropertyProjectionBootstrapStep(dashboardBootstrapConnectionString),
+        new DashboardOccurrenceProjectionBootstrapStep(dashboardBootstrapConnectionString),
+    };
+
+    foreach (var step in projectionBootstrapSteps)
+    {
+        log.LogInformation("Running projection bootstrap step {StepName}", step.Name);
+        await step.ExecuteAsync(log, CancellationToken.None);
+    }
 
     // Wolverine's own Main message store (Fase 2, Incremento 1, Checkpoint 6
     // homologação — found and fixed during real-host startup validation):
@@ -428,6 +451,50 @@ try
 
     log.LogInformation("Housekeeping's durable outbox provisioned");
 
+    // Dashboard & Reporting's own durable outbox (Fase 7, Incremento 2,
+    // Checkpoint 1) — mirrors every other context's provisioning above
+    // exactly, in its own schema (dashboard_messaging), never sharing any
+    // of the other five. Dashboard publishes no Integration Event of its
+    // own this increment (Checkpoint 0 decision, §13), but still needs this
+    // schema for IDbContextOutbox<DashboardDbContext> to resolve at all —
+    // same requirement already found for Housekeeping/Reservations.
+    var dashboardMigratorConnectionString = builder.Configuration.GetConnectionString("Dashboard")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Dashboard'.");
+
+    log.LogInformation("Provisioning Dashboard & Reporting's durable outbox (schema dashboard_messaging)");
+
+    var dashboardOutboxHostBuilder = Host.CreateApplicationBuilder();
+    dashboardOutboxHostBuilder.UseWolverine(opts =>
+    {
+        opts.EnrollAncillaryPostgresqlOutbox(
+            dashboardMigratorConnectionString, "dashboard_messaging", typeof(DashboardDbContext));
+        opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+        opts.UseEntityFrameworkCoreTransactions();
+    });
+
+    using (var dashboardOutboxHost = dashboardOutboxHostBuilder.Build())
+    {
+        await dashboardOutboxHost.SetupResources();
+    }
+
+    await using (var connection = new NpgsqlConnection(dashboardMigratorConnectionString))
+    {
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            GRANT USAGE ON SCHEMA dashboard_messaging TO ihostpro_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA dashboard_messaging TO ihostpro_app;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA dashboard_messaging TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA dashboard_messaging
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA dashboard_messaging
+              GRANT USAGE, SELECT ON SEQUENCES TO ihostpro_app;
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    log.LogInformation("Dashboard & Reporting's durable outbox provisioned");
+
     // RabbitMQ messaging topology (Checkpoint 6 homologação, third production
     // defect: neither IHostPro.Api nor IHostPro.Worker ever declared the
     // topic exchanges they publish/route to — AutoProvision defaults to
@@ -469,6 +536,17 @@ try
                 exchange.BindQueue("housekeeping.property-projection", "property_activated");
                 exchange.BindQueue("housekeeping.property-projection", "property_deactivated");
                 exchange.BindQueue("housekeeping.property-projection", "property_archived");
+                // Fase 7, Incremento 2 (Dashboard & Reporting Foundation),
+                // Checkpoint 1: bound to Dashboard's own
+                // "dashboard.property-projection" queue — same decoupled
+                // pub/sub pattern, a second, independent subscriber queue on
+                // this same exchange (Property Management never needs to
+                // know Dashboard is listening, exactly like it never needed
+                // to know about Housekeeping's own queue above).
+                exchange.BindQueue("dashboard.property-projection", "property_created");
+                exchange.BindQueue("dashboard.property-projection", "property_activated");
+                exchange.BindQueue("dashboard.property-projection", "property_deactivated");
+                exchange.BindQueue("dashboard.property-projection", "property_archived");
             })
             // Fase 6, Incremento 1, Checkpoint 1: bound to Housekeeping's own
             // "housekeeping.reservation-projection" queue — same decoupled
@@ -478,6 +556,17 @@ try
                 exchange.ExchangeType = ExchangeType.Topic;
                 exchange.BindQueue("housekeeping.reservation-projection", "reservation_created");
                 exchange.BindQueue("housekeeping.reservation-projection", "reservation_cancelled");
+                // Fase 7, Incremento 2 (Dashboard & Reporting Foundation),
+                // Checkpoint 1: bound to Dashboard's own
+                // "dashboard.reservation-projection" queue — a second,
+                // independent subscriber queue on this same exchange.
+                // Dashboard also needs ReservationUpdated (for current
+                // CheckInAt/CheckOutAt on reschedule), which no prior
+                // consumer needed — its own routing key is bound here for
+                // the first time.
+                exchange.BindQueue("dashboard.reservation-projection", "reservation_created");
+                exchange.BindQueue("dashboard.reservation-projection", "reservation_updated");
+                exchange.BindQueue("dashboard.reservation-projection", "reservation_cancelled");
             })
             // Fase 5, Incremento 1 (Policy Engine Foundation), Checkpoint 1:
             // declared ahead of PolicyUpdated (Checkpoint 6) — same
@@ -536,6 +625,28 @@ try
                 exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_needs_help");
                 exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_needs_material");
                 exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_cancelled");
+                // Fase 7, Incremento 2 (Dashboard & Reporting Foundation),
+                // Checkpoint 1: bound to Dashboard's own
+                // "dashboard.cleaning-projection" queue — a second,
+                // independent subscriber queue on this same exchange, same
+                // decoupled pub/sub pattern as Reservations' own queue above
+                // (Housekeeping never needs to know Dashboard is listening).
+                exchange.BindQueue("dashboard.cleaning-projection", "cleaning_created");
+                exchange.BindQueue("dashboard.cleaning-projection", "cleaning_assigned");
+                exchange.BindQueue("dashboard.cleaning-projection", "cleaning_in_transit");
+                exchange.BindQueue("dashboard.cleaning-projection", "cleaning_started");
+                exchange.BindQueue("dashboard.cleaning-projection", "cleaning_inspection_started");
+                exchange.BindQueue("dashboard.cleaning-projection", "cleaning_completed");
+                exchange.BindQueue("dashboard.cleaning-projection", "cleaning_interrupted");
+                exchange.BindQueue("dashboard.cleaning-projection", "cleaning_needs_help");
+                exchange.BindQueue("dashboard.cleaning-projection", "cleaning_needs_material");
+                exchange.BindQueue("dashboard.cleaning-projection", "cleaning_cancelled");
+                // Fase 7, Incremento 2, Checkpoint 0/1 decision 3:
+                // CleaningOccurrenceRegistered — a distinct queue from
+                // dashboard.cleaning-projection (mirrors Housekeeping's own
+                // convention of one queue per projection concern, even
+                // though both live on this same exchange).
+                exchange.BindQueue("dashboard.occurrence-projection", "cleaning_occurrence_registered");
             });
     });
 
