@@ -1,0 +1,172 @@
+<div class="dashboard-page">
+  <div class="dashboard-header">
+    <h1>{{ 'dashboard.title' | transloco }}</h1>
+    <div class="dashboard-header-actions">
+      @if (generatedAtUtc(); as generatedAt) {
+        <span class="dashboard-last-updated">{{ 'dashboard.lastUpdated' | transloco }}: {{ generatedAt | date: 'short' }}</span>
+      }
+      <button mat-stroked-button (click)="refresh()" [attr.aria-label]="'dashboard.refresh' | transloco">
+        <mat-icon>refresh</mat-icon>
+        {{ 'dashboard.refresh' | transloco }}
+      </button>
+    </div>
+  </div>
+
+  <section class="dashboard-period-selector" aria-label="{{ 'dashboard.period.title' | transloco }}">
+    <mat-button-toggle-group [value]="preset()" aria-label="{{ 'dashboard.period.title' | transloco }}">
+      <mat-button-toggle value="today" (click)="selectPreset('today')">{{ 'dashboard.period.today' | transloco }}</mat-button-toggle>
+      <mat-button-toggle value="last7" (click)="selectPreset('last7')">{{ 'dashboard.period.last7' | transloco }}</mat-button-toggle>
+      <mat-button-toggle value="last30" (click)="selectPreset('last30')">{{ 'dashboard.period.last30' | transloco }}</mat-button-toggle>
+      <mat-button-toggle value="custom" (click)="selectCustomPreset()">{{ 'dashboard.period.custom' | transloco }}</mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <h2 class="dashboard-period-label">
+      @if (periodLabelKind() === 'single') {
+        {{ period().from | date: 'shortDate' }}
+      } @else {
+        {{ period().from | date: 'shortDate' }} — {{ periodLastIncludedDay() | date: 'shortDate' }}
+      }
+    </h2>
+
+    @if (preset() === 'custom') {
+      <form class="dashboard-custom-range" [formGroup]="customRangeForm" (ngSubmit)="applyCustomRange()">
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'dashboard.period.from' | transloco }}</mat-label>
+          <input matInput type="date" formControlName="from" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'dashboard.period.to' | transloco }}</mat-label>
+          <input matInput type="date" formControlName="to" />
+        </mat-form-field>
+        <button mat-stroked-button type="submit">{{ 'dashboard.period.apply' | transloco }}</button>
+      </form>
+      @if (customRangeError(); as error) {
+        <p class="dashboard-period-error" role="alert">
+          {{ (error === 'windowTooLarge' ? 'dashboard.period.errors.windowTooLarge' : 'dashboard.period.errors.invalidRange') | transloco }}
+        </p>
+      }
+    }
+  </section>
+
+  @switch (phase()) {
+    @case ('loading') {
+      <div class="dashboard-state">
+        <mat-progress-spinner diameter="32" mode="indeterminate" />
+      </div>
+    }
+    @case ('error') {
+      <div class="dashboard-state">
+        <p>{{ 'dashboard.loadError' | transloco }}</p>
+        <button mat-button (click)="retry()">{{ 'common.retry' | transloco }}</button>
+      </div>
+    }
+    @case ('loaded') {
+      @if (refreshFailed()) {
+        <p class="dashboard-refresh-failed" role="alert">{{ 'dashboard.refreshFailed' | transloco }}</p>
+      }
+      @if (refreshing()) {
+        <mat-progress-spinner class="dashboard-refreshing" diameter="18" mode="indeterminate" [attr.aria-label]="'dashboard.refresh' | transloco" />
+      }
+
+      <section aria-labelledby="dashboard-section-period">
+        <h2 id="dashboard-section-period">{{ 'dashboard.sections.period' | transloco }}</h2>
+        <div class="dashboard-card-grid">
+          @for (card of periodMetricsCards(); track card.labelKey) {
+            <mat-card>
+              <mat-card-content>
+                <p class="dashboard-card-value">{{ card.value }}</p>
+                <p class="dashboard-card-label">{{ card.labelKey | transloco }}</p>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+      </section>
+
+      <section aria-labelledby="dashboard-section-operational">
+        <h2 id="dashboard-section-operational">{{ 'dashboard.sections.operational' | transloco }}</h2>
+        <div class="dashboard-card-grid">
+          @for (card of operationalCards(); track card.labelKey) {
+            <mat-card>
+              <mat-card-content>
+                <p class="dashboard-card-value">{{ card.value }}</p>
+                <p class="dashboard-card-label">{{ card.labelKey | transloco }}</p>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+      </section>
+
+      <section aria-labelledby="dashboard-section-properties">
+        <h2 id="dashboard-section-properties">{{ 'dashboard.sections.properties' | transloco }}</h2>
+        <div class="dashboard-card-grid">
+          @for (card of propertiesCards(); track card.labelKey) {
+            <mat-card>
+              <mat-card-content>
+                <p class="dashboard-card-value">{{ card.value }}</p>
+                <p class="dashboard-card-label">{{ card.labelKey | transloco }}</p>
+              </mat-card-content>
+            </mat-card>
+          }
+        </div>
+      </section>
+
+      <section aria-labelledby="dashboard-section-details" class="dashboard-details">
+        <h2 id="dashboard-section-details">{{ 'dashboard.sections.details' | transloco }}</h2>
+
+        <div class="dashboard-details-tables">
+          <div>
+            <h3>{{ 'dashboard.reservations.statusCounts.title' | transloco }}</h3>
+            @if (statusCounts().length === 0) {
+              <p>{{ 'dashboard.empty' | transloco }}</p>
+            } @else {
+              <div class="dashboard-table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">{{ 'dashboard.reservations.statusCounts.columns.status' | transloco }}</th>
+                      <th scope="col">{{ 'dashboard.reservations.statusCounts.columns.count' | transloco }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of statusCounts(); track row.status) {
+                      <tr>
+                        <td>{{ reservationStatusLabel(row.status) }}</td>
+                        <td>{{ row.count }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+
+          <div>
+            <h3>{{ 'dashboard.occurrences.byType.title' | transloco }}</h3>
+            @if (occurrenceTypes().length === 0) {
+              <p>{{ 'dashboard.empty' | transloco }}</p>
+            } @else {
+              <div class="dashboard-table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">{{ 'dashboard.occurrences.byType.columns.type' | transloco }}</th>
+                      <th scope="col">{{ 'dashboard.occurrences.byType.columns.count' | transloco }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of occurrenceTypes(); track row.type) {
+                      <tr>
+                        <td>{{ occurrenceTypeLabel(row.type) }}</td>
+                        <td>{{ row.count }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+        </div>
+      </section>
+    }
+  }
+</div>

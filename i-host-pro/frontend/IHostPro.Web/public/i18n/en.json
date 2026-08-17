@@ -37,7 +37,8 @@
       "reservations": "Reservations",
       "policies": "Policies",
       "housekeeping": "Housekeeping",
-      "schedule": "Schedule"
+      "schedule": "Schedule",
+      "dashboard": "Dashboard"
     }
   },
   "home": {
@@ -620,6 +621,86 @@
       "Interrupted": "Interrupted",
       "WaitingMaterials": "Waiting for materials",
       "WaitingHelp": "Waiting for help"
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "refresh": "Refresh",
+    "lastUpdated": "Last updated",
+    "empty": "No data in this period.",
+    "loadError": "Unable to load the dashboard.",
+    "refreshFailed": "Unable to refresh. Showing the last data loaded.",
+    "period": {
+      "title": "Period",
+      "today": "Today",
+      "last7": "Last 7 days",
+      "last30": "Last 30 days",
+      "custom": "Custom period",
+      "from": "From",
+      "to": "To",
+      "apply": "Apply",
+      "errors": {
+        "invalidRange": "Enter a valid range: the end date must be on or after the start date.",
+        "windowTooLarge": "The selected period cannot exceed 100 days."
+      }
+    },
+    "sections": {
+      "period": "Period summary",
+      "operational": "Current operation",
+      "properties": "Properties",
+      "details": "Details"
+    },
+    "reservations": {
+      "checkInsInPeriod": "Check-ins in the period",
+      "checkOutsInPeriod": "Check-outs in the period",
+      "cancelledInPeriod": "Reservations cancelled in the period",
+      "futureReservations": "Future reservations",
+      "statusCounts": {
+        "title": "Reservations by status",
+        "columns": {
+          "status": "Status",
+          "count": "Count"
+        },
+        "status": {
+          "confirmed": "Confirmed",
+          "cancelled": "Cancelled"
+        }
+      }
+    },
+    "housekeeping": {
+      "pending": "Pending cleanings",
+      "inProgress": "Cleanings in progress",
+      "interrupted": "Interrupted cleanings",
+      "completedInPeriod": "Cleanings completed in the period",
+      "cancelledInPeriod": "Cleanings cancelled in the period",
+      "delayed": "Delayed cleanings",
+      "waitingHelp": "Waiting for help",
+      "waitingMaterials": "Waiting for materials"
+    },
+    "properties": {
+      "active": "Active properties",
+      "inactive": "Inactive properties",
+      "archived": "Archived properties"
+    },
+    "occurrences": {
+      "totalInPeriod": "Occurrences in the period",
+      "byType": {
+        "title": "Occurrences by type",
+        "columns": {
+          "type": "Type",
+          "count": "Count"
+        },
+        "types": {
+          "Theft": "Theft",
+          "Breakage": "Breakage",
+          "ForgottenObject": "Forgotten object",
+          "Damage": "Damage",
+          "Animal": "Animal",
+          "Smoking": "Smoking",
+          "Noise": "Noise",
+          "MaterialShortage": "Material shortage"
+        }
+      }
     }
   }
 }

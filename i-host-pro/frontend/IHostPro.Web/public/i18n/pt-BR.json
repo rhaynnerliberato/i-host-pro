@@ -37,7 +37,8 @@
       "reservations": "Reservas",
       "policies": "Políticas",
       "housekeeping": "Limpezas",
-      "schedule": "Agenda"
+      "schedule": "Agenda",
+      "dashboard": "Dashboard"
     }
   },
   "home": {
@@ -620,6 +621,86 @@
       "Interrupted": "Interrompida",
       "WaitingMaterials": "Aguardando materiais",
       "WaitingHelp": "Aguardando ajuda"
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "refresh": "Atualizar",
+    "lastUpdated": "Última atualização",
+    "empty": "Nenhum dado neste período.",
+    "loadError": "Não foi possível carregar o dashboard.",
+    "refreshFailed": "Não foi possível atualizar. Exibindo os últimos dados carregados.",
+    "period": {
+      "title": "Período",
+      "today": "Hoje",
+      "last7": "Últimos 7 dias",
+      "last30": "Últimos 30 dias",
+      "custom": "Período personalizado",
+      "from": "De",
+      "to": "Até",
+      "apply": "Aplicar",
+      "errors": {
+        "invalidRange": "Informe um intervalo válido: a data final deve ser igual ou posterior à data inicial.",
+        "windowTooLarge": "O período selecionado não pode ultrapassar 100 dias."
+      }
+    },
+    "sections": {
+      "period": "Resumo do período",
+      "operational": "Operação atual",
+      "properties": "Imóveis",
+      "details": "Detalhes"
+    },
+    "reservations": {
+      "checkInsInPeriod": "Check-ins no período",
+      "checkOutsInPeriod": "Check-outs no período",
+      "cancelledInPeriod": "Reservas canceladas no período",
+      "futureReservations": "Reservas futuras",
+      "statusCounts": {
+        "title": "Reservas por status",
+        "columns": {
+          "status": "Status",
+          "count": "Quantidade"
+        },
+        "status": {
+          "confirmed": "Confirmada",
+          "cancelled": "Cancelada"
+        }
+      }
+    },
+    "housekeeping": {
+      "pending": "Faxinas pendentes",
+      "inProgress": "Faxinas em andamento",
+      "interrupted": "Faxinas interrompidas",
+      "completedInPeriod": "Faxinas concluídas no período",
+      "cancelledInPeriod": "Faxinas canceladas no período",
+      "delayed": "Faxinas atrasadas",
+      "waitingHelp": "Aguardando ajuda",
+      "waitingMaterials": "Aguardando material"
+    },
+    "properties": {
+      "active": "Imóveis ativos",
+      "inactive": "Imóveis inativos",
+      "archived": "Imóveis arquivados"
+    },
+    "occurrences": {
+      "totalInPeriod": "Ocorrências no período",
+      "byType": {
+        "title": "Ocorrências por tipo",
+        "columns": {
+          "type": "Tipo",
+          "count": "Quantidade"
+        },
+        "types": {
+          "Theft": "Furto",
+          "Breakage": "Quebra",
+          "ForgottenObject": "Objeto esquecido",
+          "Damage": "Dano",
+          "Animal": "Animal",
+          "Smoking": "Fumo",
+          "Noise": "Barulho",
+          "MaterialShortage": "Falta de material"
+        }
+      }
     }
   }
 }

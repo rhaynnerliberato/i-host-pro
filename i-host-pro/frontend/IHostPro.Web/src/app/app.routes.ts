@@ -64,6 +64,12 @@ export const routes: Routes = [
         data: { titleKey: 'layout.nav.schedule', permissions: ['SCHEDULE:MANAGE', 'SCHEDULE:READ'] },
         loadComponent: () => import('./features/schedule/schedule-calendar/schedule-calendar').then((m) => m.ScheduleCalendar),
       },
+      {
+        path: 'dashboard',
+        canActivate: [permissionGuard],
+        data: { titleKey: 'layout.nav.dashboard', permissions: ['DASHBOARD:MANAGE', 'DASHBOARD:READ'] },
+        loadComponent: () => import('./features/dashboard/dashboard-overview/dashboard-overview').then((m) => m.DashboardOverview),
+      },
     ],
   },
   {
