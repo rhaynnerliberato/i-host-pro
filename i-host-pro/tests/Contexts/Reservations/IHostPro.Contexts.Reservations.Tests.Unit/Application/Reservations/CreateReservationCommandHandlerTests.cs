@@ -158,17 +158,36 @@ public class CreateReservationCommandHandlerTests
         events[0].Status.Should().Be("confirmed");
     }
 
+    /// <summary>
+    /// Fase 7, Incremento 2 (Dashboard &amp; Reporting Foundation), Checkpoint
+    /// 0/1 decision: CheckInAt/CheckOutAt are the real operational temporal
+    /// dimension Dashboard needs and are now carried by this event —
+    /// GuestName/GuestPhone/GuestCount remain permanently excluded (never
+    /// approved, still personal/business-sensitive content).
+    /// </summary>
     [Fact]
-    public async Task No_guest_name_phone_or_schedule_content_ever_reaches_the_event()
+    public async Task No_guest_name_phone_or_count_ever_reaches_the_event()
     {
         await CreateFixture().Handler.Handle(Command(), CancellationToken.None);
 
         typeof(ReservationCreated).GetProperties().Select(p => p.Name)
-            .Should().NotContain(new[] { "GuestName", "GuestPhone", "CheckInAt", "CheckOutAt", "GuestCount" });
+            .Should().NotContain(new[] { "GuestName", "GuestPhone", "GuestCount" });
     }
 
     [Fact]
-    public async Task The_ReservationCreated_events_real_serialized_payload_carries_no_guest_name_phone_or_schedule_content()
+    public async Task The_ReservationCreated_event_carries_the_real_CheckInAt_and_CheckOutAt_values()
+    {
+        var fixture = CreateFixture();
+
+        await fixture.Handler.Handle(Command(), CancellationToken.None);
+
+        var evt = fixture.EventCollector.EnqueuedEvents.OfType<ReservationCreated>().Single();
+        evt.CheckInAt.Should().Be(CheckIn);
+        evt.CheckOutAt.Should().Be(CheckOut);
+    }
+
+    [Fact]
+    public async Task The_ReservationCreated_events_real_serialized_payload_carries_no_guest_name_or_phone()
     {
         const string guestName = "Sensitive Guest Name";
         const string guestPhone = "+5584988887777";
@@ -181,8 +200,6 @@ public class CreateReservationCommandHandlerTests
 
         json.Should().NotContain(guestName);
         json.Should().NotContain(guestPhone);
-        json.Should().NotContain(CheckIn.ToString("O"));
-        json.Should().NotContain(CheckOut.ToString("O"));
     }
 
     private static void AssertNoSideEffect(Fixture fixture)

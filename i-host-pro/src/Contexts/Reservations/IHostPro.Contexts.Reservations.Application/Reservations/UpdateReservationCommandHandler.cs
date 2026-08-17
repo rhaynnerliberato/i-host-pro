@@ -215,6 +215,8 @@ public sealed class UpdateReservationCommandHandler : ICommandHandler<UpdateRese
                     ActorId = command.ActorId.ToString(),
                     ReservationId = command.ReservationId,
                     ChangedFields = changedFields,
+                    CheckInAt = reservation.CheckInAt,
+                    CheckOutAt = reservation.CheckOutAt,
                 });
             }
 

@@ -8,9 +8,20 @@ namespace IHostPro.Contexts.Reservations.Contracts;
 /// born <c>Confirmed</c> this increment. <see cref="IntegrationEvent.AggregateId"/>/
 /// <see cref="IntegrationEvent.AggregateType"/> are the new reservation's
 /// id/<c>"Reservation"</c>. <see cref="IntegrationEvent.ActorId"/> is the
-/// Administrator/Operator who created it. Carries no guest name/phone/
-/// check-in/check-out/guest count — never personal or business-sensitive
-/// content (Fase 3, Incremento 1 plan, item 12).
+/// Administrator/Operator who created it. Carries no guest name/phone/guest
+/// count — never personal content (Fase 3, Incremento 1 plan, item 12).
+///
+/// <see cref="CheckInAt"/>/<see cref="CheckOutAt"/> (Fase 7, Incremento 2 —
+/// Dashboard & Reporting Foundation, Checkpoint 0/1 decision) are the real
+/// domain values from <c>Reservation.CheckInAt</c>/<c>Reservation.CheckOutAt</c>
+/// — the operational temporal dimension Dashboard needs, never PII, never
+/// recalculated. Nullable purely for additive-contract compatibility (a
+/// consumer built against this new shape reading an old, already-persisted
+/// envelope from before this field existed must receive <c>null</c>, never a
+/// deserialization failure or a fabricated default) — the producer always
+/// populates both, since every real <c>Reservation</c> always has both dates.
+/// A consumer must treat <c>null</c> as "unknown", never as
+/// <see cref="DateTimeOffset.MinValue"/>.
 /// </summary>
 public sealed record ReservationCreated : IntegrationEvent
 {
@@ -19,4 +30,8 @@ public sealed record ReservationCreated : IntegrationEvent
     public required Guid PropertyId { get; init; }
 
     public required string Status { get; init; }
+
+    public DateTimeOffset? CheckInAt { get; init; }
+
+    public DateTimeOffset? CheckOutAt { get; init; }
 }

@@ -198,15 +198,35 @@ public class UpdateReservationCommandHandlerTests
         fixture.EventCollector.EnqueuedEvents.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// Fase 7, Incremento 2 (Dashboard &amp; Reporting Foundation), Checkpoint
+    /// 0/1 decision: CheckInAt/CheckOutAt are the real, current post-update
+    /// operational temporal dimension Dashboard needs and are now carried by
+    /// this event — GuestName/GuestPhone/GuestCount remain permanently
+    /// excluded (never approved, still personal/business-sensitive content).
+    /// </summary>
     [Fact]
-    public void No_guest_name_phone_or_schedule_content_ever_reaches_the_ReservationUpdated_event()
+    public void No_guest_name_phone_or_count_ever_reaches_the_ReservationUpdated_event()
     {
         typeof(ReservationUpdated).GetProperties().Select(p => p.Name)
-            .Should().NotContain(new[] { "GuestName", "GuestPhone", "CheckInAt", "CheckOutAt", "GuestCount" });
+            .Should().NotContain(new[] { "GuestName", "GuestPhone", "GuestCount" });
     }
 
     [Fact]
-    public async Task The_ReservationUpdated_events_real_serialized_payload_carries_no_guest_name_phone_or_schedule_content()
+    public async Task The_ReservationUpdated_event_carries_the_current_CheckInAt_and_CheckOutAt_even_when_only_the_guest_name_changed()
+    {
+        var fixture = CreateFixture(ExistingReservation());
+
+        var result = await fixture.Handler.Handle(Command(guestName: Optional<string>.Of("New Name")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var evt = fixture.EventCollector.EnqueuedEvents.OfType<ReservationUpdated>().Single();
+        evt.CheckInAt.Should().Be(CheckIn);
+        evt.CheckOutAt.Should().Be(CheckOut);
+    }
+
+    [Fact]
+    public async Task The_ReservationUpdated_events_real_serialized_payload_carries_no_guest_name_or_phone()
     {
         const string newGuestName = "Sensitive New Name";
         var fixture = CreateFixture(ExistingReservation());
@@ -218,9 +238,7 @@ public class UpdateReservationCommandHandlerTests
         var json = System.Text.Json.JsonSerializer.Serialize(evt, evt.GetType());
 
         json.Should().NotContain(newGuestName);
-        json.Should().NotContain("Guest"); // the reservation's original guest name (ExistingReservation())
+        json.Should().NotContain("\"Guest\""); // the reservation's original guest name (ExistingReservation())
         json.Should().NotContain("+5584999999999"); // the reservation's original guest phone
-        json.Should().NotContain(CheckIn.ToString("O"));
-        json.Should().NotContain(CheckOut.ToString("O"));
     }
 }
