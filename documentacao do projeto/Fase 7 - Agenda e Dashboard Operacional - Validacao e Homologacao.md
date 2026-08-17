@@ -1,8 +1,8 @@
 # Fase 7 — Agenda e Dashboard Operacional — Validação e Homologação
 
-Versão: 1.4 (Incremento 1 — Agenda Foundation — CONCLUÍDO E PUBLICADO em master; Checkpoints 0-3 registrados em §2-§6. Incremento 2 — Dashboard & Reporting Foundation — Checkpoint 0 e Checkpoint 1 registrados em §8)
+Versão: 1.5 (Incremento 1 — Agenda Foundation — CONCLUÍDO E PUBLICADO em master; Checkpoints 0-3 registrados em §2-§6. Incremento 2 — Dashboard & Reporting Foundation — Checkpoint 0 e Checkpoint 1 registrados em §7; Checkpoint 2 registrado em §7.7)
 
-Status: **Incremento 1 (Agenda Foundation) CONCLUÍDO E PUBLICADO** — Checkpoint 0, Checkpoint 1, Checkpoint 1 CLOSURE (ADR-016), Checkpoint 2 (Frontend Agenda) e Checkpoint 3 (Integration/E2E) concluídos, homologados e publicados em `master` (fast-forward, commit `b53b2cb`). **Incremento 2 (Dashboard & Reporting Foundation) — EM ANDAMENTO** — Checkpoint 0 (Auditoria e Refinamento Read-Only) e Checkpoint 1 (Dashboard BC Foundation / Projections) concluídos nesta branch (`feature/dashboard-reporting`), registrados em §8; Checkpoint 2 (Overview API), Checkpoint 3 (Frontend Dashboard) e Checkpoint 4 (E2E/Homologação) ainda não iniciados. Reporting histórico/BI: incremento futuro separado, não iniciado.
+Status: **Incremento 1 (Agenda Foundation) CONCLUÍDO E PUBLICADO** — Checkpoint 0, Checkpoint 1, Checkpoint 1 CLOSURE (ADR-016), Checkpoint 2 (Frontend Agenda) e Checkpoint 3 (Integration/E2E) concluídos, homologados e publicados em `master` (fast-forward, commit `b53b2cb`). **Incremento 2 (Dashboard & Reporting Foundation) — EM ANDAMENTO** — Checkpoint 0 (Auditoria e Refinamento Read-Only), Checkpoint 1 (Dashboard BC Foundation / Projections) e Checkpoint 2 (Overview API) concluídos nesta branch (`feature/dashboard-reporting`), registrados em §7; Checkpoint 3 (Frontend Dashboard) e Checkpoint 4 (E2E/Homologação) ainda não iniciados. Reporting histórico/BI: incremento futuro separado, não iniciado.
 
 ---
 
@@ -265,8 +265,108 @@ Após as correções de §7.3/§7.4: **`IHostPro.Api.Tests.Integration` 19/19** 
 - Métricas de duração/SLA (tempo médio de limpeza, tempo até início/conclusão): deliberadamente não implementadas — `IntegrationEvent.Timestamp` não foi promovido a timestamp de negócio oficial para métricas históricas.
 - Bibliotecas de gráficos: nenhuma instalada — Dashboard Foundation usa exclusivamente Angular Material.
 - Distribuição por faxineira: `HousekeeperUserId` armazenado na projeção de Cleaning, mas não exposto — mesma decisão de não-exposição já registrada para a Agenda.
-- `PROPERTY_OWNER`/`OWN_OWNER` para o Dashboard: mesmo gap já registrado para a Agenda (§5.6), não duplicado silenciosamente.
-- Overview API (Checkpoint 2), Frontend Dashboard (Checkpoint 3), E2E/Homologação (Checkpoint 4): não iniciados.
+- `PROPERTY_OWNER`/`OWN_OWNER` para o Dashboard: mesmo gap já registrado para a Agenda (§5.6), não duplicado silenciosamente — `DASHBOARD:READ:OWN_OWNER` permanece deliberadamente não aceito pelo Checkpoint 2 (§7.7.5).
+- Frontend Dashboard (Checkpoint 3), E2E/Homologação (Checkpoint 4): não iniciados.
+
+### 7.7 Checkpoint 2 — Overview API
+
+### 7.7.1 Escopo
+
+Um único endpoint administrativo somente leitura, `GET /api/v1/dashboard/overview`, agregando os quatro grupos de indicadores aprovados no Checkpoint 0 (§7.1) — Reservations, Housekeeping, Properties, Occurrences — sempre por agregação real em PostgreSQL (`COUNT`/`GROUP BY`, nunca materialização em memória). Explicitamente fora deste checkpoint: qualquer endpoint por card (`/dashboard/reservations`, `/dashboard/cleanings`, `/dashboard/properties`, `/dashboard/occurrences` — nenhum foi criado); frontend Dashboard (Checkpoint 3); cache; SignalR/tempo real; novos eventos de integração; novos Bounded Contexts; Reporting histórico/BI.
+
+### 7.7.2 Contrato — `GET /api/v1/dashboard/overview`
+
+Parâmetros de query `from`/`to` (`DateTimeOffset`, ambos obrigatórios), semântica `[from, to)` uniforme para todo indicador temporal (`from` inclusivo, `to` exclusivo — comparação por instante real, não por data local). Janela máxima de 100 dias, uma DEC técnica explícita (não um requisito de negócio), espelhando exatamente o precedente já homologado de `ListScheduleQueryValidator.MaxWindow` (`GetDashboardOverviewQueryValidator.cs`: `TimeSpan.FromDays(100)`, `RuleFor(x => x.To).GreaterThan(x => x.From)`). O backend nunca decide "hoje" — nenhuma chamada a `DateTimeOffset.UtcNow`/`DateTime.Now`/fuso de servidor nesta decisão; `from`/`to` são sempre fornecidos pelo chamador.
+
+DTO de resposta (`DashboardOverviewResponse`): `Period{From,To}`, `Reservations`, `Housekeeping`, `Properties`, `Occurrences`, `GeneratedAtUtc` — zero PII em qualquer campo (confirmado por teste estrutural/payload, §7.7.8). Tenant sem nenhum dado retorna **200** com contadores zerados/arrays vazios/`Period` válido/`GeneratedAtUtc` válido — nunca 404.
+
+### 7.7.3 Matriz de indicadores (Métrica | Fonte | Filtro | Temporal × current-state | Notas)
+
+**Reservations** (`DashboardOverviewReader.GetReservationsOverviewAsync`, fonte `dashboard.reservation_projection`):
+
+| Métrica | Filtro | Tipo | Notas |
+|---|---|---|---|
+| `CheckInsInPeriod` | `CheckInAt ∈ [from,to)` ∧ `Status != cancelled` | Temporal | |
+| `CheckOutsInPeriod` | `CheckOutAt ∈ [from,to)` ∧ `Status != cancelled` | Temporal | |
+| `FutureReservations` | `CheckInAt >= nowUtc` ∧ `Status != cancelled` | Temporal (usa `nowUtc`, não `from`/`to`) | `nowUtc` vem de `TimeProvider`, nunca de `from`/`to` |
+| `CancelledInPeriod` | `CancelledAtUtc ∈ [from,to)` | Temporal | usa `CancelledAtUtc`, nunca `CheckInAt`/`UpdatedAt` genérico |
+| `StatusCounts` | nenhum (todas as linhas do tenant) | Current-state | `GroupBy(Status)`, reordenado client-side por `StringComparer.Ordinal` |
+
+**Housekeeping** (`GetHousekeepingOverviewAsync`, fonte `dashboard.cleaning_projection`):
+
+| Métrica | Filtro | Tipo | Notas |
+|---|---|---|---|
+| `Pending` | `Status ∈ {Pending, Assigned}` | Current-state | |
+| `InProgress` | `Status ∈ {InTransit, Started, InInspection, WaitingHelp, WaitingMaterials}` | Current-state | |
+| `Interrupted` | `Status == Interrupted` | Current-state | |
+| `CompletedInPeriod` | `CompletedAtUtc ∈ [from,to)` | Temporal | |
+| `CancelledInPeriod` | `CancelledAtUtc ∈ [from,to)` | Temporal | |
+| `Delayed` | `ScheduledAtUtc != null` ∧ `ScheduledAtUtc < nowUtc` ∧ `Status ∉ {Completed, Cancelled}` | Current-state (usa `nowUtc`) | `Interrupted` conta como atrasada; `ScheduledAtUtc == null` nunca conta |
+| `WaitingHelp` | `Status == WaitingHelp` | Current-state | |
+| `WaitingMaterials` | `Status == WaitingMaterials` | Current-state | |
+
+**Properties** (`GetPropertiesOverviewAsync`, fonte `dashboard.property_projection`, current-state, sem filtro temporal): `Active` (`Status == active`), `Inactive` (`Status == inactive`), `Archived` (`Status == archived`) — `Draft` deliberadamente não contabilizado (lista de três campos aprovada no Checkpoint 0/Checkpoint 2, §7.1/mandato §22).
+
+**Occurrences** (`GetOccurrencesOverviewAsync`, fonte `dashboard.occurrence_projection`, append-only, sem conceito de aberto/resolvido): `TotalInPeriod` (`RegisteredAtUtc ∈ [from,to)`), `ByType` (`GroupBy(Type)` sobre o mesmo filtro, reordenado por `StringComparer.Ordinal`).
+
+`GeneratedAtUtc` vem de `TimeProvider.GetUtcNow()`, computado uma única vez em `GetDashboardOverviewQueryHandler` e repassado explicitamente ao reader (`nowUtc`) — o reader nunca resolve "agora" internamente. `TimeProvider` (nunca `DateTimeOffset.UtcNow` cru) controla exatamente três pontos: `FutureReservations`, `Delayed`, `GeneratedAtUtc`.
+
+### 7.7.4 `CancelledAtUtc`/`CompletedAtUtc` — fonte real e backfill
+
+`CancelledAtUtc` foi adicionado a `DashboardReservationProjectionEntry` e `DashboardCleaningProjectionEntry` (migração `20260817173347_AddCancelledAtUtcToProjections`, nullable, `timestamp with time zone`). Fonte, em ambos os casos, é o `Timestamp` do próprio evento real de cancelamento (`ReservationCancelled.Timestamp`/`CleaningCancelled.Timestamp`), nunca um valor inventado — o guard de out-of-order (`LastEventAtUtc`) já existente desde o Checkpoint 1 se aplica sem alteração.
+
+- **Reservation**: `Reservation.Cancel()` é terminal — `UpdateReservationCommandHandler` rejeita (`CancelledReservationCannotBeModifiedError`) qualquer PATCH sobre uma reserva já cancelada, tornando `reservations.reservations.updated_at` um proxy historicamente confiável para o instante de cancelamento. Backfill (`DashboardReservationProjectionBootstrapStep`): `CASE WHEN r.status = 'Cancelled' THEN r.updated_at ELSE NULL END`.
+- **Cleaning**: `housekeeping.cleanings.cancelled_at_utc` já é uma coluna dedicada, real, mantida pelo próprio agregado `Cleaning` — sem necessidade de reconstrução. Backfill (`DashboardCleaningProjectionBootstrapStep`): copia diretamente `c.cancelled_at_utc`.
+- **`CompletedAtUtc`** (Cleaning) não é novo deste checkpoint — já existia desde o Checkpoint 1 (`CleaningCompleted.Timestamp`, mesma técnica), reutilizado sem alteração pela métrica `CompletedInPeriod`.
+
+Nenhuma aproximação foi necessária em nenhum dos dois casos — ambas as fontes históricas são reais e confiáveis; não houve necessidade de PARAR/reportar gap nesta frente.
+
+### 7.7.5 Autorização
+
+`DASHBOARD:MANAGE`/`DASHBOARD:READ` (`IdentityPermissionCodes`, novos), acesso se o usuário possuir QUALQUER um dos dois (padrão manual OR já usado por `ScheduleController`: `[Authorize]` de classe + `IAuthorizationService.AuthorizeAsync` tentando `DashboardManage`, então `DashboardRead`, `Forbid()` se ambos falharem — nunca um `[Authorize(Policy=...)]` único, já que o mecanismo de policy deste projeto é sempre exato, nunca OR). Políticas registradas em `IdentityAuthorizationExtensions.AddIdentityAuthorization()` (defeito real encontrado e corrigido durante este checkpoint: as duas políticas não existiam, causando `InvalidOperationException: No policy found` no primeiro teste HTTP real). ADMIN possui `DASHBOARD:MANAGE`, OPERATOR possui `DASHBOARD:READ`. `DASHBOARD:READ:OWN_OWNER` (PROPERTY_OWNER) e `DASHBOARD:USE` (AI_AGENT) são explicitamente negados — nenhum prefix match. Matriz real via `DashboardOverviewEndpointsTests` (HTTP real, `TestServer`): sem token → 401; ADMIN/OPERATOR → 200; PROPERTY_OWNER (`DASHBOARD:READ:OWN_OWNER`) → 403; AI_AGENT (`DASHBOARD:USE`) → 403; HOUSEKEEPER (nenhuma permissão de Dashboard) → 403.
+
+### 7.7.6 RLS e isolamento cross-tenant
+
+`DashboardDbContext` mantém o Global Query Filter/`FORCE ROW LEVEL SECURITY` já existente desde o Checkpoint 1, sem alteração — o caminho de leitura da Overview API nunca usa `IgnoreQueryFilters`, conexão raw, nem qualquer bypass. O caminho HTTP nunca participa de `IDashboardMessageExecutionScope`/Wolverine (essa fronteira é exclusiva dos consumers persistentes) — a query é servida via `TenantTransactionBehavior<GetDashboardOverviewQuery, Result<DashboardOverviewResult>, DashboardDbContext>`, mesmo mecanismo de transação tenant-aware já usado por `ScheduleReader`. Comprovado por `DashboardOverviewReaderTests.Tenant_isolation_...` (reader isolado) e `DashboardOverviewEndpointsTests.Overview_never_reflects_another_tenants_rows` (HTTP real, ponta a ponta) — nunca usando acesso admin/`BYPASSRLS` como evidência.
+
+### 7.7.7 SQL e índices
+
+Todo indicador é `COUNT`/`GROUP BY` traduzido pelo EF Core — nenhum `ToListAsync()` seguido de contagem em memória, nenhuma avaliação client-side, nenhuma stored procedure. Três novos índices, todos diretamente justificados pelas novas métricas period-filtered introduzidas neste checkpoint (nenhum índice adicionado "para parecer otimizado"): `(tenant_id, cancelled_at_utc)` em `reservation_projection`; `(tenant_id, cancelled_at_utc)` e `(tenant_id, completed_at_utc)` em `cleaning_projection`. Os demais campos consultados (`CheckInAt`/`CheckOutAt`/`Status` em Reservation; `Status`/`ScheduledAtUtc`/`PropertyId` em Cleaning) já possuíam índice desde o Checkpoint 1, sem alteração.
+
+### 7.7.8 PII
+
+Confirmado, por inspeção direta do DTO e por teste estrutural, que nenhum dos campos sensíveis listados no mandato (nome/telefone de hóspede, contagem pessoal de hóspedes, descrição de ocorrência, `RegisteredByUserId`/nome de usuário, endereço, valor financeiro) existe em `DashboardOverviewResponse` ou em qualquer um dos seus sub-objetos.
+
+### 7.7.9 Testes automatizados
+
+- **Unit** (`IHostPro.Contexts.Dashboard.Tests.Unit`, novo projeto): 8/8 — `GetDashboardOverviewQueryValidatorTests` (janela válida, `To==From`, `To<From`, exatamente 100 dias, mais de 100 dias, offsets UTC diferentes representando o mesmo instante) e `GetDashboardOverviewQueryHandlerTests` (o handler repassa `from`/`to`/`nowUtc` corretamente e nunca resolve "agora" internamente, via `TimeProvider`/reader fake).
+- **Integration — reader** (`DashboardOverviewReaderTests`, Testcontainers Postgres real, apenas schema `dashboard` migrado): 26/26 — fronteiras `[from,to)` de check-in/check-out/ocorrência, exclusão de reserva cancelada de `CheckInsInPeriod`, `FutureReservations` com `nowUtc` explícito, `CancelledInPeriod` usando `CancelledAtUtc` (nunca `CheckInAt`), `StatusCounts` sempre current-state, os sete agrupamentos de status de Housekeeping, seis cenários de `Delayed`, `WaitingHelp`/`WaitingMaterials` current-state, distribuição `ByType`, isolamento por tenant.
+- **Integration — HTTP** (`DashboardOverviewEndpointsTests`, `TestServer` real, sem Wolverine — a Overview é puro-leitura e `TenantAwareUnitOfWork<TDbContext>` não depende de Wolverine): 12/12 — matriz de autorização completa (§7.7.5), overview vazia → 200 com zeros, overview populada → contagens e período corretos, isolamento cross-tenant, `to==from` → 400, janela > 100 dias → 400, janela == 100 dias exatos → 200.
+- **Integration — fan-out da lacuna de cobertura (novo, fechado neste checkpoint)**: `DashboardCleaningProjectionSynchronizerTests` (7 testes) e `DashboardPropertyProjectionSynchronizerTests` (6 testes) — até este checkpoint, `DashboardCleaningProjectionSynchronizer`/`DashboardPropertyProjectionSynchronizer` não tinham nenhuma cobertura dedicada (diferente de `DashboardReservationProjectionSynchronizer`, que já tinha 10 testes desde o Checkpoint 1). Mesma técnica de dispatch direto via host Wolverine real + Postgres real (sem RabbitMQ): criação, idempotência de redelivery, uma transição de status representativa, guard de out-of-order, RLS fail-closed — incluindo a nova regra `CancelledAtUtc`/`CompletedAtUtc` de Cleaning.
+- **Integration — suíte completa do Dashboard**: **62/62** (49 pré-existentes do Checkpoint 1/início do Checkpoint 2 + 13 novos desta rodada).
+- **ArchitectureTests**: **150/150** — confirma, sem regressão: `Dashboard.Application` sem referência a EF Core; `Dashboard.Api` depende apenas de `Identity.Contracts` (nunca `Identity.Application`/`Infrastructure`/`Api`, nunca `Dashboard.Infrastructure`); `Dashboard.Api` nunca referencia `DashboardDbContext`; o controller expõe exatamente a única action `Overview` aprovada; nenhuma action declara `[AllowAnonymous]` ou um `[Authorize(Policy=...)]` de código único (deve ser o padrão manual OR); nenhuma action declara parâmetro `tenantId`/`actorId`.
+
+### 7.7.10 Evidência de regressão de fan-out (mecanismo keyed DI do Checkpoint 1)
+
+O mandato do Checkpoint 2 exigiu confirmação de que a correção de DI keyed do Checkpoint 1 (§7.3) permanece saudável após as mudanças deste checkpoint, para os três cenários reais de fan-out multi-consumidor no mesmo processo `IHostPro.Worker`. Registrando exatamente qual teste prova qual lado, todos executados nesta sessão contra RabbitMQ real + `IHostPro.Worker.dll` real (subprocess) + Postgres real:
+
+| Cenário | Lado A (consumidor pré-existente) | Lado Dashboard | Transporte |
+|---|---|---|---|
+| `ReservationCreated` → Housekeeping + Dashboard | `ReservationCreatedWorkerRoundTripTests` (valida `HousekeepingDbContext.ReservationProjection`, via `ReservationProjectionAndCancellationReaction`) | `DashboardReservationProjectionWorkerRoundTripTests` (valida `dashboard.reservation_projection`) | Real (RabbitMQ+Worker), **ambos os lados** |
+| `CleaningCreated` → Reservations/Agenda + Dashboard | `CleaningCreatedScheduleProjectionWorkerRoundTripTests` (valida `reservations.cleaning_schedule_projection`) | `DashboardCleaningProjectionSynchronizerTests` (novo — dispatch direto via Wolverine real + Postgres real, sem RabbitMQ) | Real apenas do lado Reservations/Agenda; lado Dashboard comprovado funcionalmente, não via RabbitMQ real |
+| `PropertyCreated`/`PropertyActivated` → Housekeeping + Dashboard | `PropertyEventsWorkerRoundTripTests` (valida apenas `HousekeepingDbContext.PropertyProjection.IsActive` — nunca a projeção do Dashboard) | `DashboardPropertyProjectionSynchronizerTests` (novo — dispatch direto) | Real apenas do lado Housekeeping; lado Dashboard comprovado funcionalmente, não via RabbitMQ real |
+
+Os cinco testes da tabela (mais `DashboardOccurrenceProjectionWorkerRoundTripTests`, cenário de consumidor único sem risco de colisão) foram executados nesta sessão, isoladamente, contra o `ihostpro-rabbitmq` de desenvolvimento parado (porta fixa 5672 exigida pelos Testcontainers destes testes) — **5/5 (mais o de Occurrence, 6/6 no total) verdes**; container de desenvolvimento restaurado ao final. Registrado honestamente: o cenário `ReservationCreated` tem prova real de transporte dos dois lados simultaneamente (o mesmo mecanismo de colisão documentado em §7.3 é exercido de fato); os cenários `CleaningCreated`/`PropertyCreated` têm prova real de transporte apenas do lado do consumidor pré-existente, complementada por prova funcional (não via RabbitMQ real) do lado Dashboard — mas o mecanismo de registro keyed (`AddKeyedScoped`/`GetRequiredKeyedService(HandlerKey)`) é estruturalmente idêntico para as 18 registrações de handler do Dashboard (confirmado por leitura direta de `DashboardModuleExtensions.AddDashboardProjectionConsumer`), então a prova real de transporte do caso `ReservationCreated` (o único cenário que efetivamente colidia antes da correção do Checkpoint 1) é a evidência mais forte disponível de que o mecanismo genérico continua correto — não uma prova direta e independente de cada um dos quatro pares específicos.
+
+### 7.7.11 Defeitos reais encontrados e corrigidos neste checkpoint
+
+1. **`ConnectionStrings:Dashboard` ausente em `IHostPro.Api/appsettings.json`**: o Checkpoint 1 registrou a chave em `IHostPro.Worker`/`IHostPro.MigrationRunner`, mas nunca em `IHostPro.Api` — inofensivo enquanto a Api não referenciava `DashboardDbContext`, mas teria quebrado a primeira execução real da Api assim que `AddDashboardModule`/`AddDashboardQueryDispatch` fossem ligados. Corrigido — correção localizada de configuração, mesmo padrão de valor das demais connection strings da Api. Verificado que nenhuma outra superfície de configuração precisa da mesma chave: `appsettings.Development.json` da Api/Worker e do `MigrationRunner` não possuem seção `ConnectionStrings` (apenas Logging/Serilog/seed); `docker-compose.yml` não expõe nenhuma connection string de aplicação (apenas containers de infraestrutura).
+2. **Duas políticas de autorização ausentes** (`DASHBOARD:MANAGE`/`DASHBOARD:READ` nunca registradas em `IdentityAuthorizationExtensions`) — encontrado pelo primeiro teste HTTP real (`InvalidOperationException: No policy found: DASHBOARD:MANAGE`). Corrigido.
+3. **Lacuna de cobertura de teste pré-existente do Checkpoint 1** (`DashboardCleaningProjectionSynchronizer`/`DashboardPropertyProjectionSynchronizer` sem nenhum teste dedicado) — encontrada durante a auditoria de evidência de fan-out deste checkpoint (§7.7.10) e fechada com os dois novos arquivos de teste registrados em §7.7.9.
+
+### 7.7.12 Regressão final e ambiente
+
+Release build da solução completa: verde. NSwag: cliente regenerado duas vezes contra a Api real em execução, byte a byte idêntico entre as duas execuções; contrato real confirmado (`GET /api/v1/dashboard/overview`, `from`/`to` obrigatórios, tipos corretos, 200/400/401/403 presentes, DTO sem PII, nenhuma rota extra de Dashboard). Build de produção Angular: verde (nenhuma feature funcional de frontend criada neste checkpoint — apenas o cliente gerado muda). `git diff --check`: limpo, com exceção das duas linhas de whitespace já conhecidas e pré-existentes do próprio template JSDoc do NSwag para parâmetros opcionais (`@param ... (optional) ` com espaço final — presentes em 55 ocorrências idênticas já commitadas no arquivo gerado inteiro, confirmadas via `git show HEAD:...api-client.ts`; nunca editado manualmente, conforme regra do mandato). Ambiente Docker restaurado ao estado original após os testes de transporte real (§7.7.10).
 
 ## 8. Referências
 
