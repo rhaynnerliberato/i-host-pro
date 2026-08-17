@@ -26,13 +26,17 @@ public sealed class DashboardCleaningProjectionEntryConfiguration : IEntityTypeC
         builder.Property(c => c.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
         builder.Property(c => c.StartedAtUtc).HasColumnName("started_at_utc");
         builder.Property(c => c.CompletedAtUtc).HasColumnName("completed_at_utc");
+        builder.Property(c => c.CancelledAtUtc).HasColumnName("cancelled_at_utc");
         builder.Property(c => c.LastEventAtUtc).HasColumnName("last_event_at_utc").IsRequired();
 
-        // MVP indicators (Checkpoint 0 decision, §23): current-state counts
-        // by status, atrasadas (ScheduledAtUtc < now AND status not
-        // terminal), by property.
+        // MVP indicators (Checkpoint 0 decision, §23; Checkpoint 2, §15/§20/
+        // §21): current-state counts by status, atrasadas (ScheduledAtUtc <
+        // now AND status not terminal), by property, completed/cancelled
+        // within an interval.
         builder.HasIndex(c => new { c.TenantId, c.Status });
         builder.HasIndex(c => new { c.TenantId, c.ScheduledAtUtc });
         builder.HasIndex(c => new { c.TenantId, c.PropertyId });
+        builder.HasIndex(c => new { c.TenantId, c.CompletedAtUtc });
+        builder.HasIndex(c => new { c.TenantId, c.CancelledAtUtc });
     }
 }

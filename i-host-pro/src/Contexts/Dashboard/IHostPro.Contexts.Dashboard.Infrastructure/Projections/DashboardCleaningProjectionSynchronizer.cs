@@ -86,7 +86,8 @@ public sealed class DashboardCleaningProjectionSynchronizer :
         UpdateAsync(@event.TenantId, @event.CleaningId, "WaitingMaterials", @event.Timestamp, NoAdditionalChange, cancellationToken);
 
     public Task HandleAsync(CleaningCancelled @event, CancellationToken cancellationToken = default) =>
-        UpdateAsync(@event.TenantId, @event.CleaningId, "Cancelled", @event.Timestamp, NoAdditionalChange, cancellationToken);
+        UpdateAsync(@event.TenantId, @event.CleaningId, "Cancelled", @event.Timestamp,
+            entry => entry.SetCancelled(@event.Timestamp), cancellationToken);
 
     private static void NoAdditionalChange(DashboardCleaningProjectionEntry entry)
     {

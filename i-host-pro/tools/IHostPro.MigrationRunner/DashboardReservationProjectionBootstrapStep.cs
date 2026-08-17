@@ -23,6 +23,13 @@ using Npgsql;
 /// bootstrap always has a Timestamp &gt;= this seed, so the out-of-order
 /// guard in <c>DashboardReservationProjectionSynchronizer</c> never rejects
 /// real, subsequent updates.
+///
+/// <c>CancelledAtUtc</c> (Fase 7, Incremento 2, Checkpoint 2) is backfilled
+/// from <c>reservations.reservations.updated_at</c> when the row's status is
+/// Cancelled — reliable because <c>Reservation.Cancel</c> always touches
+/// <c>updated_at</c> and Cancelled is terminal (every PATCH on an
+/// already-cancelled reservation is rejected), so no later write can ever
+/// advance it past the real cancellation instant.
 /// </summary>
 public sealed class DashboardReservationProjectionBootstrapStep : IProjectionBootstrapStep
 {
@@ -61,8 +68,9 @@ public sealed class DashboardReservationProjectionBootstrapStep : IProjectionBoo
             await using var backfillCommand = new NpgsqlCommand(
                 """
                 INSERT INTO dashboard.reservation_projection
-                    (tenant_id, reservation_id, property_id, check_in_at, check_out_at, status, last_event_at_utc)
-                SELECT r.tenant_id, r.id, r.property_id, r.check_in_at, r.check_out_at, LOWER(r.status), now()
+                    (tenant_id, reservation_id, property_id, check_in_at, check_out_at, status, cancelled_at_utc, last_event_at_utc)
+                SELECT r.tenant_id, r.id, r.property_id, r.check_in_at, r.check_out_at, LOWER(r.status),
+                    CASE WHEN r.status = 'Cancelled' THEN r.updated_at ELSE NULL END, now()
                 FROM reservations.reservations r
                 ON CONFLICT (tenant_id, reservation_id) DO NOTHING
                 """,

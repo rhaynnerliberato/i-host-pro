@@ -33,6 +33,16 @@ public sealed class DashboardCleaningProjectionEntry : ITenantOwned
     public DateTimeOffset? StartedAtUtc { get; private set; }
     public DateTimeOffset? CompletedAtUtc { get; private set; }
 
+    /// <summary>
+    /// Set exclusively by <c>CleaningCancelled.Timestamp</c> (Fase 7,
+    /// Incremento 2, Checkpoint 2 — Overview API's <c>CancelledInPeriod</c>
+    /// indicator needs an objective cancellation instant, not just the
+    /// current <see cref="Status"/>). Backfilled by the bootstrap step
+    /// directly from <c>housekeeping.cleanings.cancelled_at_utc</c> — a real,
+    /// dedicated column the <c>Cleaning</c> aggregate already maintains.
+    /// </summary>
+    public DateTimeOffset? CancelledAtUtc { get; private set; }
+
     /// <summary>Out-of-order delivery guard — see <c>DashboardReservationProjectionEntry</c>'s own doc comment.</summary>
     public DateTimeOffset LastEventAtUtc { get; private set; }
 
@@ -58,6 +68,8 @@ public sealed class DashboardCleaningProjectionEntry : ITenantOwned
     public void SetStarted(DateTimeOffset startedAtUtc) => StartedAtUtc = startedAtUtc;
 
     public void SetCompleted(DateTimeOffset completedAtUtc) => CompletedAtUtc = completedAtUtc;
+
+    public void SetCancelled(DateTimeOffset cancelledAtUtc) => CancelledAtUtc = cancelledAtUtc;
 
     public void SetStatus(string status, DateTimeOffset eventAtUtc)
     {

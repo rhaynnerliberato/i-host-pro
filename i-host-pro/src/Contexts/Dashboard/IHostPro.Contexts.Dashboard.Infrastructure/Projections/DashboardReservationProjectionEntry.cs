@@ -27,6 +27,19 @@ public sealed class DashboardReservationProjectionEntry : ITenantOwned
     public string Status { get; private set; } = null!;
 
     /// <summary>
+    /// Set exclusively by <c>ReservationCancelled.Timestamp</c> (Fase 7,
+    /// Incremento 2, Checkpoint 2 — Overview API's <c>CancelledInPeriod</c>
+    /// indicator needs an objective cancellation instant, not just the
+    /// current <see cref="Status"/>). Backfilled by the bootstrap step from
+    /// <c>reservations.reservations.updated_at</c> — reliable because
+    /// <c>Reservation.Cancel</c> always touches it and Cancelled is a
+    /// terminal state (<c>UpdateReservationCommandHandler</c> rejects every
+    /// PATCH on an already-cancelled reservation), so no later write can ever
+    /// advance <c>updated_at</c> past the actual cancellation instant.
+    /// </summary>
+    public DateTimeOffset? CancelledAtUtc { get; private set; }
+
+    /// <summary>
     /// Out-of-order delivery guard (Checkpoint 0 decision, §29) — an
     /// incoming event only applies if its own <c>IntegrationEvent.Timestamp</c>
     /// is not earlier than the last event actually applied to this row.
@@ -63,6 +76,7 @@ public sealed class DashboardReservationProjectionEntry : ITenantOwned
     public void Cancel(DateTimeOffset eventAtUtc)
     {
         Status = "cancelled";
+        CancelledAtUtc = eventAtUtc;
         LastEventAtUtc = eventAtUtc;
     }
 }

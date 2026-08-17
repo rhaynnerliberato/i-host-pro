@@ -18,6 +18,11 @@ using Npgsql;
 /// <c>LastEventAtUtc</c> is seeded with the bootstrap's own execution time
 /// (<c>now()</c>) for the same reason documented on
 /// <see cref="DashboardReservationProjectionBootstrapStep"/>.
+///
+/// <c>CancelledAtUtc</c> (Fase 7, Incremento 2, Checkpoint 2) is copied
+/// directly from <c>housekeeping.cleanings.cancelled_at_utc</c> — a real,
+/// dedicated column the <c>Cleaning</c> aggregate already maintains, no
+/// reconstruction needed.
 /// </summary>
 public sealed class DashboardCleaningProjectionBootstrapStep : IProjectionBootstrapStep
 {
@@ -56,8 +61,8 @@ public sealed class DashboardCleaningProjectionBootstrapStep : IProjectionBootst
             await using var backfillCommand = new NpgsqlCommand(
                 """
                 INSERT INTO dashboard.cleaning_projection
-                    (tenant_id, cleaning_id, property_id, housekeeper_user_id, scheduled_at_utc, status, started_at_utc, completed_at_utc, last_event_at_utc)
-                SELECT c.tenant_id, c.id, c.property_id, c.assigned_housekeeper_user_id, c.scheduled_at_utc, c.status, c.started_at_utc, c.completed_at_utc, now()
+                    (tenant_id, cleaning_id, property_id, housekeeper_user_id, scheduled_at_utc, status, started_at_utc, completed_at_utc, cancelled_at_utc, last_event_at_utc)
+                SELECT c.tenant_id, c.id, c.property_id, c.assigned_housekeeper_user_id, c.scheduled_at_utc, c.status, c.started_at_utc, c.completed_at_utc, c.cancelled_at_utc, now()
                 FROM housekeeping.cleanings c
                 ON CONFLICT (tenant_id, cleaning_id) DO NOTHING
                 """,
