@@ -71,16 +71,36 @@ public static class ReservationsModuleExtensions
         services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
         services.AddScoped<IReservationsTransactionExecutor, ReservationsOutboxTransactionExecutor>();
         services.AddScoped<CleaningScheduleProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<CleaningCreated>, CleaningScheduleProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<CleaningAssigned>, CleaningScheduleProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<CleaningInTransit>, CleaningScheduleProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<CleaningStarted>, CleaningScheduleProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<CleaningInspectionStarted>, CleaningScheduleProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<CleaningCompleted>, CleaningScheduleProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<CleaningInterrupted>, CleaningScheduleProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<CleaningNeedsHelp>, CleaningScheduleProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<CleaningNeedsMaterial>, CleaningScheduleProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<CleaningCancelled>, CleaningScheduleProjectionSynchronizer>();
+
+        // Keyed (Fase 7, Incremento 2, Checkpoint 1 — real-Worker regression
+        // found and fixed): IIntegrationEventHandler<T> is a shared generic
+        // interface, and Dashboard now ALSO registers handlers for these
+        // exact ten Cleaning lifecycle event types in the same
+        // IHostPro.Worker DI container. GetRequiredService<T>() for a type
+        // with multiple registrations silently returns the LAST one
+        // registered — an unkeyed registration here would let Dashboard's
+        // own module (registered after this one) shadow Reservations' own
+        // handler resolution. See ReservationsMessageExecutionScope.
+        services.AddKeyedScoped<IIntegrationEventHandler<CleaningCreated>, CleaningScheduleProjectionSynchronizer>(
+            ReservationsMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<CleaningAssigned>, CleaningScheduleProjectionSynchronizer>(
+            ReservationsMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<CleaningInTransit>, CleaningScheduleProjectionSynchronizer>(
+            ReservationsMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<CleaningStarted>, CleaningScheduleProjectionSynchronizer>(
+            ReservationsMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<CleaningInspectionStarted>, CleaningScheduleProjectionSynchronizer>(
+            ReservationsMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<CleaningCompleted>, CleaningScheduleProjectionSynchronizer>(
+            ReservationsMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<CleaningInterrupted>, CleaningScheduleProjectionSynchronizer>(
+            ReservationsMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<CleaningNeedsHelp>, CleaningScheduleProjectionSynchronizer>(
+            ReservationsMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<CleaningNeedsMaterial>, CleaningScheduleProjectionSynchronizer>(
+            ReservationsMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<CleaningCancelled>, CleaningScheduleProjectionSynchronizer>(
+            ReservationsMessageExecutionScope.HandlerKey);
 
         services.AddScoped<IReservationsMessageExecutionScope, ReservationsMessageExecutionScope>();
 

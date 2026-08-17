@@ -22,9 +22,21 @@ namespace IHostPro.Contexts.Reservations.Infrastructure.Messaging;
 /// observe the SAME resolved <see cref="ITenantContext"/> instance, entirely
 /// outside Wolverine's own per-message DI resolution (which is where the
 /// divergence was traced to — see ADR-016).
+///
+/// Resolves <see cref="IIntegrationEventHandler{TMessage}"/> via
+/// <see cref="HandlerKey"/> (Fase 7, Incremento 2, Checkpoint 1 — real-Worker
+/// regression found and fixed): that interface is shared across Bounded
+/// Contexts, and once Dashboard also registers handlers for the same ten
+/// Cleaning lifecycle event types this scope consumes, an unkeyed
+/// <c>GetRequiredService</c> would silently resolve whichever registration
+/// was added LAST across the whole composition root — not necessarily
+/// Reservations' own.
 /// </remarks>
 public sealed class ReservationsMessageExecutionScope : IReservationsMessageExecutionScope
 {
+    /// <summary>Keyed-DI key every Reservations <c>IIntegrationEventHandler&lt;T&gt;</c> registration must use — see this class's own remarks.</summary>
+    public const string HandlerKey = "reservations";
+
     private readonly IServiceScopeFactory _scopeFactory;
 
     public ReservationsMessageExecutionScope(IServiceScopeFactory scopeFactory) => _scopeFactory = scopeFactory;
@@ -38,7 +50,7 @@ public sealed class ReservationsMessageExecutionScope : IReservationsMessageExec
         var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
         tenantContext.SetTenant(tenantId);
 
-        var processor = scope.ServiceProvider.GetRequiredService<IIntegrationEventHandler<TMessage>>();
+        var processor = scope.ServiceProvider.GetRequiredKeyedService<IIntegrationEventHandler<TMessage>>(HandlerKey);
         await processor.HandleAsync(message, cancellationToken);
     }
 }

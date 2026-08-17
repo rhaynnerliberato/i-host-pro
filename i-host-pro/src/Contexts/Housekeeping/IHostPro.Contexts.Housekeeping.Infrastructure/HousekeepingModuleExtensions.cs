@@ -71,12 +71,29 @@ public static class HousekeepingModuleExtensions
         // adapters in Housekeeping.Infrastructure.Messaging. Each interface
         // registered separately (rather than a single shared instance) is
         // safe: both synchronizer classes are stateless per call.
-        services.AddScoped<IIntegrationEventHandler<PropertyCreated>, PropertyProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<PropertyActivated>, PropertyProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<PropertyDeactivated>, PropertyProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<PropertyArchived>, PropertyProjectionSynchronizer>();
-        services.AddScoped<IIntegrationEventHandler<ReservationCreated>, ReservationProjectionAndCancellationReaction>();
-        services.AddScoped<IIntegrationEventHandler<ReservationCancelled>, ReservationProjectionAndCancellationReaction>();
+        //
+        // Keyed (Fase 7, Incremento 2, Checkpoint 1 — real-Worker regression
+        // found and fixed): IIntegrationEventHandler<T> is a shared generic
+        // interface, and Dashboard now ALSO registers handlers for these
+        // exact event types in the same IHostPro.Worker DI container.
+        // GetRequiredService<T>() for a type with multiple registrations
+        // silently returns the LAST one registered — an unkeyed registration
+        // here would let Dashboard's own module (registered after this one)
+        // shadow Housekeeping's own handler resolution. The
+        // HousekeepingMessageExecutionScopeKey key scopes resolution to this
+        // context only — see HousekeepingMessageExecutionScope.
+        services.AddKeyedScoped<IIntegrationEventHandler<PropertyCreated>, PropertyProjectionSynchronizer>(
+            HousekeepingMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<PropertyActivated>, PropertyProjectionSynchronizer>(
+            HousekeepingMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<PropertyDeactivated>, PropertyProjectionSynchronizer>(
+            HousekeepingMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<PropertyArchived>, PropertyProjectionSynchronizer>(
+            HousekeepingMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<ReservationCreated>, ReservationProjectionAndCancellationReaction>(
+            HousekeepingMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<ReservationCancelled>, ReservationProjectionAndCancellationReaction>(
+            HousekeepingMessageExecutionScope.HandlerKey);
 
         // ADR-015 (Fase 6, Checkpoint 6) — isolates Housekeeping's own
         // tenant/persistence/transaction ownership from Wolverine's
