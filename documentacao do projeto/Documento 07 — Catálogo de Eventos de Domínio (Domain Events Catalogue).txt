@@ -729,7 +729,7 @@ Anexado como seção nova ao final do documento — deliberadamente não inserid
 
 27.1 Payloads dos Eventos do Incremento 1 (Fase 3)
 
-Nenhum dos três eventos inclui nome do hóspede, telefone do hóspede, datas de check-in/check-out, quantidade de hóspedes, ou qualquer valor anterior/posterior de campo alterado — apenas identificadores e, para ReservationUpdated, códigos estáveis de campo alterado — mesma regra do §13.1/§13.3/§14.1/§14.3.
+Nenhum dos três eventos inclui nome do hóspede, telefone do hóspede, quantidade de hóspedes, ou qualquer valor anterior/posterior de campo alterado — apenas identificadores e, para ReservationUpdated, códigos estáveis de campo alterado — mesma regra do §13.1/§13.3/§14.1/§14.3. **Atualizado pela Fase 7, Incremento 2 (Dashboard & Reporting Foundation), Checkpoint 0/1 — ver §27.3**: ReservationCreated/ReservationUpdated passaram a incluir CheckInAt/CheckOutAt (a dimensão temporal operacional, nunca PII) — datas de check-in/check-out não fazem mais parte da lista de conteúdo permanentemente excluído.
 
 Convenção comum aos três:
 
@@ -744,18 +744,28 @@ ReservationCreated
 | ReservationId | Guid | Redundante com AggregateId |
 | PropertyId | Guid | Identificador opaco do Imóvel — nunca código/nome/endereço |
 | Status | string | Código estável do status inicial — sempre "confirmed" neste incremento (toda Reserva nasce Confirmed) |
+| CheckInAt | DateTimeOffset? | (Fase 7, Incremento 2, §27.3) Valor real de `Reservation.CheckInAt`. Nullable apenas por compatibilidade aditiva — o produtor sempre popula com o valor real; nulo significa "evento anterior a esta mudança", nunca "desconhecido por design" |
+| CheckOutAt | DateTimeOffset? | (Fase 7, Incremento 2, §27.3) Valor real de `Reservation.CheckOutAt` — mesma regra de nullability de CheckInAt |
 
 ReservationUpdated
 | Campo | Tipo | Descrição |
 |---|---|---|
 | ReservationId | Guid | Redundante com AggregateId |
 | ChangedFields | string[] | Códigos estáveis dos campos efetivamente alterados, na ordem: "property_id", "guest_name", "guest_phone", "check_in_at", "check_out_at", "guest_count" — nunca o valor novo nem o anterior |
+| CheckInAt | DateTimeOffset? | (Fase 7, Incremento 2, §27.3) Valor ATUAL de `Reservation.CheckInAt` após esta atualização — sempre populado, independentemente de qual campo específico mudou (nunca exige diff no consumidor). Mesma regra de nullability de ReservationCreated |
+| CheckOutAt | DateTimeOffset? | (Fase 7, Incremento 2, §27.3) Valor ATUAL de `Reservation.CheckOutAt` após esta atualização — mesma regra de CheckInAt acima |
 
 ReservationCancelled
 | Campo | Tipo | Descrição |
 |---|---|---|
 | ReservationId | Guid | Redundante com AggregateId |
 | PropertyId | Guid | Identificador opaco do Imóvel no momento do cancelamento |
+
+27.3 Amendment — Fase 7, Incremento 2 (Dashboard & Reporting Foundation), Checkpoint 0/1
+
+Decisão do usuário (Checkpoint 0, decisão 2): alteração aditiva aprovada em ReservationCreated/ReservationUpdated para transportar CheckInAt/CheckOutAt — a dimensão temporal operacional que o novo Bounded Context Dashboard & Reporting precisa para materializar indicadores de check-ins/check-outs/reservas futuras/canceladas sem se tornar um HTTP aggregator sobre Reservations (Architecture Principles §14 — Dashboard & Reporting é um contexto terminal, apenas consome eventos). GuestName/GuestPhone/GuestCount permanecem permanentemente excluídos — nenhuma decisão os aprovou.
+
+Compatibility gate executado antes da alteração: verificado que o único consumidor real de ReservationCreated/ReservationCancelled (Housekeeping, `ReservationProjectionAndCancellationReaction`) lê exclusivamente TenantId/ReservationId/EventId/CorrelationId — nunca PropertyId/Status, e certamente nunca os novos campos — tornando a alteração aditiva segura sem exigir nenhuma migração de consumer existente. `ReservationUpdated` não tinha, até este checkpoint, nenhum consumidor real no código (`IIntegrationEventHandler<ReservationUpdated>` não existia em lugar nenhum), tornando essa alteração ainda mais segura. Serializador (System.Text.Json, via Wolverine) ignora campos desconhecidos por padrão — compatível em ambas as direções (consumidor novo lendo envelope antigo recebe `null`; consumidor antigo lendo envelope novo ignora os campos extras). Nenhum `ReservationCreatedV2` foi criado — desnecessário dado que a alteração é puramente aditiva e compatível.
 
 27.2 Roteamento RabbitMQ dos Eventos do Incremento 1 (Fase 3)
 
@@ -885,3 +895,21 @@ Todas as dez transições reais de `Cleaning.Status` (`Documento 06 §5`, enum `
 29.8 CleaningDelayed — não consumido (justificativa explícita)
 
 `CleaningDelayed` não é consumido pela Agenda porque não altera `Cleaning.Status` nem qualquer outro campo materializado pela projeção — `ReportOwnCleaningDelayCommandHandler` nunca chama um método de transição de `Cleaning`, apenas publica uma notificação. Consumi-lo seria um no-op sem efeito observável. Não foi inventada uma nova data por inferência a partir deste evento.
+
+29.9 CleaningOccurrenceRegistered — novo evento (Fase 7, Incremento 2 — Dashboard & Reporting Foundation, Checkpoint 0/1 decisão 3)
+
+Publicado quando um(a) faxineiro(a) registra uma `CleaningOccurrence` contra sua própria Cleaning (`RegisterCleaningOccurrenceCommandHandler`, Fase 6, Incremento 2A). Produtor: Housekeeping. Consumidor inicial: Dashboard & Reporting (novo Bounded Context, Supporting/terminal — Architecture Principles §3/§14).
+
+Payload:
+| Campo | Tipo | Descrição |
+|---|---|---|
+| OccurrenceId | Guid | Redundante com AggregateId |
+| CleaningId | Guid | A Cleaning à qual a ocorrência está vinculada |
+| OccurrenceType | string | Código estável do tipo (Theft, Breakage, ForgottenObject, Damage, Animal, Smoking, Noise, MaterialShortage — `OccurrenceTypeCodeMapper`) |
+| RegisteredAtUtc | DateTimeOffset | O timestamp real de `CleaningOccurrence.RegisteredAtUtc` — produzido diretamente na transição, nunca inferido |
+
+Deliberadamente excluído: `Description` (texto livre, pode conter PII/conteúdo sensível), `RegisteredByUserName` (Dashboard não armazena dados de exibição de usuário — Checkpoint 0 decisão 17), `PropertyId` (Dashboard resolve via `CleaningId` contra sua própria projeção local de Cleaning, nunca duplicado aqui), e qualquer referência de evidência/foto (Files permanece fora de escopo).
+
+Roteamento RabbitMQ: exchange `housekeeping-events` (o mesmo exchange dos dez eventos de ciclo de vida de `Cleaning` — §29.1-§29.7), routing key `cleaning_occurrence_registered`.
+
+Não foi criado nenhum outro evento de Occurrence (ex.: `OccurrenceResolved`) — `CleaningOccurrence` não possui lifecycle de resolução documentado neste incremento (Checkpoint 0 decisão 3).
