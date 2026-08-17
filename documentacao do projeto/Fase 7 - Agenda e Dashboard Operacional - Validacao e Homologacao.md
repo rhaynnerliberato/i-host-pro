@@ -1,8 +1,8 @@
 # Fase 7 — Agenda e Dashboard Operacional — Validação e Homologação
 
-Versão: 1.5 (Incremento 1 — Agenda Foundation — CONCLUÍDO E PUBLICADO em master; Checkpoints 0-3 registrados em §2-§6. Incremento 2 — Dashboard & Reporting Foundation — Checkpoint 0 e Checkpoint 1 registrados em §7; Checkpoint 2 registrado em §7.7)
+Versão: 1.6 (Incremento 1 — Agenda Foundation — CONCLUÍDO E PUBLICADO em master; Checkpoints 0-3 registrados em §2-§6. Incremento 2 — Dashboard & Reporting Foundation — Checkpoint 0 e Checkpoint 1 registrados em §7; Checkpoint 2 registrado em §7.7; Checkpoint 3 registrado em §7.8)
 
-Status: **Incremento 1 (Agenda Foundation) CONCLUÍDO E PUBLICADO** — Checkpoint 0, Checkpoint 1, Checkpoint 1 CLOSURE (ADR-016), Checkpoint 2 (Frontend Agenda) e Checkpoint 3 (Integration/E2E) concluídos, homologados e publicados em `master` (fast-forward, commit `b53b2cb`). **Incremento 2 (Dashboard & Reporting Foundation) — EM ANDAMENTO** — Checkpoint 0 (Auditoria e Refinamento Read-Only), Checkpoint 1 (Dashboard BC Foundation / Projections) e Checkpoint 2 (Overview API) concluídos nesta branch (`feature/dashboard-reporting`), registrados em §7; Checkpoint 3 (Frontend Dashboard) e Checkpoint 4 (E2E/Homologação) ainda não iniciados. Reporting histórico/BI: incremento futuro separado, não iniciado.
+Status: **Incremento 1 (Agenda Foundation) CONCLUÍDO E PUBLICADO** — Checkpoint 0, Checkpoint 1, Checkpoint 1 CLOSURE (ADR-016), Checkpoint 2 (Frontend Agenda) e Checkpoint 3 (Integration/E2E) concluídos, homologados e publicados em `master` (fast-forward, commit `b53b2cb`). **Incremento 2 (Dashboard & Reporting Foundation) — EM ANDAMENTO** — Checkpoint 0 (Auditoria e Refinamento Read-Only), Checkpoint 1 (Dashboard BC Foundation / Projections), Checkpoint 2 (Overview API) e Checkpoint 3 (Frontend Dashboard) concluídos nesta branch (`feature/dashboard-reporting`), registrados em §7; Checkpoint 4 (E2E/Homologação final do incremento) ainda não iniciado. Reporting histórico/BI: incremento futuro separado, não iniciado.
 
 ---
 
@@ -265,8 +265,8 @@ Após as correções de §7.3/§7.4: **`IHostPro.Api.Tests.Integration` 19/19** 
 - Métricas de duração/SLA (tempo médio de limpeza, tempo até início/conclusão): deliberadamente não implementadas — `IntegrationEvent.Timestamp` não foi promovido a timestamp de negócio oficial para métricas históricas.
 - Bibliotecas de gráficos: nenhuma instalada — Dashboard Foundation usa exclusivamente Angular Material.
 - Distribuição por faxineira: `HousekeeperUserId` armazenado na projeção de Cleaning, mas não exposto — mesma decisão de não-exposição já registrada para a Agenda.
-- `PROPERTY_OWNER`/`OWN_OWNER` para o Dashboard: mesmo gap já registrado para a Agenda (§5.6), não duplicado silenciosamente — `DASHBOARD:READ:OWN_OWNER` permanece deliberadamente não aceito pelo Checkpoint 2 (§7.7.5).
-- Frontend Dashboard (Checkpoint 3), E2E/Homologação (Checkpoint 4): não iniciados.
+- `PROPERTY_OWNER`/`OWN_OWNER` para o Dashboard: mesmo gap já registrado para a Agenda (§5.6), não duplicado silenciosamente — `DASHBOARD:READ:OWN_OWNER` permanece deliberadamente não aceito pelo Checkpoint 2 (§7.7.5) nem pelo frontend do Checkpoint 3 (§7.8.4).
+- E2E/Homologação final do Incremento 2 (Checkpoint 4): não iniciado.
 
 ### 7.7 Checkpoint 2 — Overview API
 
@@ -367,6 +367,80 @@ Os cinco testes da tabela (mais `DashboardOccurrenceProjectionWorkerRoundTripTes
 ### 7.7.12 Regressão final e ambiente
 
 Release build da solução completa: verde. NSwag: cliente regenerado duas vezes contra a Api real em execução, byte a byte idêntico entre as duas execuções; contrato real confirmado (`GET /api/v1/dashboard/overview`, `from`/`to` obrigatórios, tipos corretos, 200/400/401/403 presentes, DTO sem PII, nenhuma rota extra de Dashboard). Build de produção Angular: verde (nenhuma feature funcional de frontend criada neste checkpoint — apenas o cliente gerado muda). `git diff --check`: limpo, com exceção das duas linhas de whitespace já conhecidas e pré-existentes do próprio template JSDoc do NSwag para parâmetros opcionais (`@param ... (optional) ` com espaço final — presentes em 55 ocorrências idênticas já commitadas no arquivo gerado inteiro, confirmadas via `git show HEAD:...api-client.ts`; nunca editado manualmente, conforme regra do mandato). Ambiente Docker restaurado ao estado original após os testes de transporte real (§7.7.10).
+
+### 7.8 Checkpoint 3 — Frontend Dashboard
+
+#### 7.8.1 Escopo
+
+Frontend administrativo somente leitura do Dashboard Operacional, consumindo exclusivamente o Overview API já homologado no Checkpoint 2. Explicitamente fora deste checkpoint: gráficos/biblioteca de charts, SignalR/WebSocket, Reporting/BI histórico, exportação/PDF/Excel, acesso de `PROPERTY_OWNER`/HOUSEKEEPER/AI Agent, drill-down/navegação a partir dos cards, customização de layout, financeiro/ocupação. Nenhuma alteração de backend foi feita ou foi necessária.
+
+#### 7.8.2 Tecnologia e estrutura
+
+Nenhuma dependência nova instalada — apenas Angular Material (já presente) e o cliente NSwag já gerado. Feature própria em `frontend/IHostPro.Web/src/app/features/dashboard/` (não aninhada em `reservations`/`schedule`/`housekeeping`, mesma convenção de feature-folder das demais áreas administrativas):
+
+- `dashboard-period.ts` — helper puro (sem dependência de Angular) para os limites de dia local dos presets Hoje/Últimos 7/Últimos 30/personalizado, e para o parse de `<input type="date">` como data local (nunca `new Date(string)`, que o spec da linguagem interpreta como meia-noite UTC — exatamente a armadilha que este checkpoint precisava evitar para "hoje").
+- `dashboard.service.ts` — wrapper fino sobre `Client.overview(from, to)` gerado pelo NSwag, mesmo padrão de `ScheduleService`.
+- `dashboard-overview/` — o único componente de página (`DashboardOverview`), template e estilos.
+
+#### 7.8.3 Rota e navegação
+
+Rota `/dashboard` sob `AdminLayout` (nunca `PortalShell`), protegida por `permissionGuard` com `data.permissions: ['DASHBOARD:MANAGE', 'DASHBOARD:READ']` — match exato por código de permissão, mesmo mecanismo genérico já validado nos checkpoints anteriores (`permissionGuard` é data-driven; nenhuma lógica nova no guard foi necessária). Entrada "Dashboard" adicionada à navegação administrativa (`admin-layout.ts`), com a mesma semântica OR já usada por Políticas/Agenda.
+
+#### 7.8.4 Personas e matriz de permissão
+
+Disponível para ADMIN (`DASHBOARD:MANAGE`) e OPERATOR (`DASHBOARD:READ`). `DASHBOARD:READ:OWN_OWNER` (PROPERTY_OWNER) e `DASHBOARD:USE` (AI_AGENT) permanecem explicitamente negados — sem prefix matching. Comprovado em dois níveis: unitário (`admin-layout.spec.ts`, visibilidade do item de navegação para cada um dos quatro códigos) e navegador real com usuários reais e permissões reais atribuídas via SQL (ADMIN → acessa; OPERATOR → acessa; HOUSEKEEPER, sem nenhuma permissão de Dashboard → redirecionado para "Acesso negado" pelo `permissionGuard`, confirmando fail-closed).
+
+#### 7.8.5 Período — abertura padrão, presets e intervalo personalizado
+
+Abre sempre em "Hoje": `[início do dia local atual, início do dia local seguinte)`, calculado por componentes de data locais (`Date(y, m, d)`/`getFullYear`/`getMonth`/`getDate`) — nunca `Date.UTC`/parse de string ISO — para nunca deslizar um dia em fusos diferentes de UTC. Presets "Últimos 7/30 dias" cobrem exatamente 7/30 dias civis completos terminando hoje, inclusive: `[hoje−N+1, amanhã)`. Intervalo personalizado usa dois `<input type="date">` (mesmo padrão nativo já usado pelos filtros de Reservations — não `matDatepicker`, nunca antes usado no projeto), ambos os limites inclusivos, validado client-side (`from ≤ to`, janela ≤ 100 dias) antes de qualquer requisição — uma seleção inválida nunca chega a bater no backend, exibindo mensagem inline em vez disso. O rótulo do período nunca expõe timestamp UTC: mostra apenas a(s) data(s) local(is) formatada(s), um único dia para "Hoje" ou um intervalo "de–até" (usando o último dia INCLUSO, não o limite exclusivo bruto) para os demais.
+
+Prova de correção end-to-end via `read_network_requests` contra a API real (Docker Postgres/RabbitMQ, `IHostPro.Api` real na porta 5140, timezone do processo do navegador em UTC−3): "Hoje" gerou `from=2026-08-17T03:00:00.000Z&to=2026-08-18T03:00:00.000Z` — exatamente meia-noite local em ambos os limites, nunca meia-noite UTC; o intervalo personalizado 01–17/08 gerou `from=2026-08-01T03:00:00.000Z&to=2026-08-18T03:00:00.000Z` (17 dias inclusivos, boundary exclusivo correto). Complementado por 13 testes automatizados do helper (`dashboard-period.spec.ts`), incluindo um teste que alterna `process.env.TZ` entre `America/Sao_Paulo` e `Asia/Tokyo` no próprio processo Vitest para provar que a mesma data-parede local produz dois instantes UTC diferentes — ou seja, que o helper nunca fixa UTC internamente.
+
+#### 7.8.6 Layout e separação Período × Operação atual (mandato §13-14)
+
+Quatro seções, na ordem: **Resumo do período** (`CheckInsInPeriod`, `CheckOutsInPeriod`, `CancelledInPeriod` de Reservations; `CompletedInPeriod`, `CancelledInPeriod` de Housekeeping; `TotalInPeriod` de Occurrences — todas com rótulo explícito "...no período"); **Operação atual** (`FutureReservations` — deliberadamente aqui, não na seção de período, pois é relativo ao `TimeProvider` do backend, não ao filtro `[from,to)`, mandato §15; `Pending`/`InProgress`/`Interrupted`/`Delayed`/`WaitingHelp`/`WaitingMaterials` de Housekeeping); **Imóveis** (`Active`/`Inactive`/`Archived`, current-state, sem `Draft`); **Detalhes** (tabela `Reservas por status`, tabela `Ocorrências por tipo`). As 18 métricas-folha da resposta são cobertas exatamente uma vez cada — nenhuma omitida, nenhuma duplicada, nenhuma recalculada no frontend (mandato §18/§36: os cards leem os campos da resposta diretamente, nunca somam/derivam).
+
+#### 7.8.7 Cards, tabelas e mapeamento de status/tipo
+
+Cards `mat-card` simples (valor + rótulo), sem tendências/setas/percentuais/comparação com período anterior (dados que o backend não fornece). `Reservas por status` e `Ocorrências por tipo` usam `<table>` HTML semântica (com `<th scope="col">`) envolvida por um contêiner com `overflow-x: auto` — não `mat-table`, uma escolha deliberada de simplicidade para duas tabelas de duas colunas (evita a cerimônia de `matColumnDef` sem ganho real), mas preservando cabeçalhos reais e sem introduzir um componente customizado pesado. Mapeamento de status/tipo para rótulo i18n com fallback seguro: `reservationStatusLabel`/`occurrenceTypeLabel` comparam o resultado de `TranslocoService.translate(key)` contra a própria chave (Transloco retorna a chave quando não há tradução) — um código de status futuro/desconhecido nunca renderiza uma chave i18n quebrada, cai de volta ao código bruto (mandato §16).
+
+#### 7.8.8 Atualização — polling, refresh manual e estados
+
+Uma única pipeline RxJS (`switchMap` sobre um `Subject` próprio `triggerFetch$`, alimentado por: carga inicial via `startWith`, toda troca de período, o clique em "Atualizar", e um `interval(60000)`) — deliberadamente NÃO usando a ponte `toObservable(period)` do RxJS interop, cujo agendamento passa pelo `effect()` do Angular e tornaria a primeira carga e cada refetch por período dependentes de um flush de change detection em vez de disparar de forma síncrona e diretamente testável. `switchMap` cancela por construção qualquer requisição anterior ainda em voo quando um gatilho mais novo chega; `takeUntilDestroyed` encerra o polling quando o componente é destruído — sem assinatura órfã. Estado: `phase` (`loading`/`loaded`/`error`) só controla a view de página inteira na PRIMEIRA carga; toda atualização posterior (poll, troca de período, refresh manual) preserva os cards já carregados e alterna `refreshing` (indicador discreto) / `refreshFailed` (banner inline, sem descartar os dados já exibidos) — nunca reconstrói a tela vazia a cada 60s (mandato §29/§32). Overview vazio (zeros) é tratado como estado normal — nunca um erro; as duas tabelas de detalhe mostram individualmente "Nenhum dado neste período." quando vazias.
+
+#### 7.8.9 Defeito real encontrado e corrigido em navegador
+
+Verificação visual revelou que o toggle "Período personalizado" nunca revelava o formulário de intervalo — o `mat-button-toggle` correspondente não tinha nenhum `(click)`/handler ligado ao componente (os outros três toggles tinham `selectPreset(...)`), então clicar nele apenas mexia no estado visual interno do Material sem nunca atualizar o sinal `preset` do componente. Corrigido adicionando `selectCustomPreset()` (que só revela o formulário — não dispara requisição, mandato §10 — a requisição só ocorre em `applyCustomRange()`) e ligando-o ao `(click)` do toggle. Reverificado em navegador: revela o formulário corretamente; validação de intervalo inválido e de janela >100 dias testadas e corretas nesse mesmo fluxo.
+
+#### 7.8.10 Responsividade e acessibilidade
+
+Verificado em 375px real (`resize_window` + inspeção via JavaScript): `document.body.scrollWidth === document.body.clientWidth === window.innerWidth` (sem overflow horizontal); grid de cards (`grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr))`) resolve para 2 colunas de ~180px nessa largura; o contêiner da tabela de detalhes mantém `overflow-x: auto` isolado, nunca forçando o scroll da página inteira. Acessibilidade: hierarquia de headings real (`h1`/`h2`/`h3`), `<table>` com `<th scope="col">` reais (nunca apenas visual), botão "Atualizar" com `aria-label`, seções com `aria-labelledby` apontando para o próprio heading, mensagens de erro com `role="alert"`, nenhum status expresso somente por cor.
+
+#### 7.8.11 Testes automatizados
+
+- **`dashboard-period.spec.ts`**: 13 testes — Hoje, Últimos 7/30 dias, intervalo personalizado válido/inválido/>100 dias/dia único, `startOfLocalDay`, parse de input nativo, e o teste de independência de timezone via `process.env.TZ` (§7.8.5).
+- **`dashboard.service.spec.ts`**: 1 teste — delega para `Client.overview(from, to)`.
+- **`dashboard-overview.spec.ts`**: 31 testes — carga inicial (sucesso e erro), seleção de cada preset com os limites corretos, revelar/aplicar/validar intervalo personalizado, polling a cada 60s com temporizadores falsos (nunca reais, mandato §46), refresh manual, uma atualização em segundo plano que falha preserva os dados e marca `refreshFailed` (e uma atualização seguinte bem-sucedida limpa a marca), `switchMap` cancelando corretamente uma requisição superada por outra mais nova, os três grupos de cards refletindo os campos brutos da resposta (nunca recalculados), fallback seguro de rótulo de status/tipo desconhecido, e o rótulo de período (dia único vs. intervalo).
+- **`admin-layout.spec.ts`**: +4 testes — visibilidade do item "Dashboard" para `DASHBOARD:MANAGE` (mostra), `DASHBOARD:READ` (mostra), `DASHBOARD:READ:OWN_OWNER` isolado (esconde) e `DASHBOARD:USE` isolado (esconde).
+- **Suíte completa do frontend**: **48 arquivos, 440 testes, 100% verde** (391 pré-existentes + 49 novos: 13+1+31+4).
+
+#### 7.8.12 Verificação em navegador real
+
+API real (`IHostPro.Api`, porta 5140, seed de desenvolvimento habilitado apenas via variável de ambiente `Identity__DevelopmentSeed__AdminPassword` — nunca commitada em `appsettings.Development.json`, conforme a própria regra documentada em `DevelopmentSeedOptions`) e frontend real (`ng serve`, porta 4200), Postgres/RabbitMQ dev reais via Docker. Três usuários de verificação criados no tenant `dev-tenant` (um seedado pelo mecanismo oficial + dois inseridos via SQL reutilizando o mesmo hash Argon2 válido do usuário seedado, apenas para fins de teste local — nunca fazem parte de migração/seed versionado): `cp3-verify@dev.local` (ADMIN), `operator-cp3-verify@dev.local` (OPERATOR), `housekeeper-cp3-verify@dev.local` (HOUSEKEEPER). Confirmado visualmente: rota, navegação, todos os presets, intervalo personalizado (válido/inválido/>100 dias — defeito real encontrado e corrigido, §7.8.9), rótulo de período, as quatro seções com valores reais provenientes do Postgres dev (incluindo dados residuais de checkpoints anteriores: 2 imóveis ativos, 1 faxina interrompida, 1 reserva confirmada + 1 cancelada), tabelas de detalhe com tradução correta de status/tipo, `GeneratedAtUtc` exibido como "Última atualização" formatado localmente, zero erros no console em toda a sessão. Acesso OPERATOR confirmado (200/renderiza). Acesso HOUSEKEEPER confirmado negado ("Acesso negado"). Responsividade em 375px confirmada sem overflow. Ambiente restaurado ao final: processo da Api real encerrado, `appsettings.Development.json` revertido ao estado original (`Enabled: false`, `admin@dev.local`) — nenhuma credencial de desenvolvimento permanece configurada no arquivo versionado.
+
+#### 7.8.13 NSwag e regressão
+
+Nenhuma alteração de backend neste checkpoint — o cliente gerado (`api-client.ts`) permanece inalterado, regeneração não se aplica (mesmo raciocínio já registrado no Checkpoint 2 do Incremento 1, §6.8, para uma situação equivalente). `git diff --check`: limpo. Nenhuma migração, nenhum endpoint novo, nenhum DTO novo.
+
+#### 7.8.14 Lacunas conhecidas, deliberadamente diferidas
+
+- Gráficos/biblioteca de visualização: nenhuma instalada — mantém a decisão já registrada no Checkpoint 0 do Incremento 2 (§7.1, decisão 5).
+- SignalR/tempo real: não implementado — polling de 60s é o mecanismo de atualização aprovado para este MVP.
+- Reporting histórico/BI, exportação/PDF/Excel: fora de escopo, incremento futuro separado.
+- `PROPERTY_OWNER`/`OWN_OWNER`, HOUSEKEEPER, AI Agent: sem UI administrativa do Dashboard (§7.8.4).
+- Drill-down/navegação a partir de cards, customização de layout por usuário: deliberadamente não implementados (mandato §43-44).
+- Filtro por Imóvel/Faxineira no Dashboard: nunca fez parte do escopo aprovado (diferente da Agenda, que registrou esse gap por outro motivo, §5.5) — Overview API não expõe esses filtros.
+- E2E/Homologação final do Incremento 2 (Checkpoint 4): não iniciado.
 
 ## 8. Referências
 
