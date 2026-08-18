@@ -6,6 +6,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.Contexts.Housekeeping.Domain;
 using IHostPro.Contexts.Housekeeping.Domain.Enums;
 using IHostPro.Contexts.Housekeeping.Infrastructure;
+using IHostPro.Contexts.Housekeeping.Infrastructure.Messaging;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.PropertyManagement.Contracts;
@@ -537,7 +538,11 @@ public class HousekeepingEventProjectionTests : IClassFixture<HousekeepingEventP
         var sp = scope.ServiceProvider;
         sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
 
-        var handler = sp.GetRequiredService<IIntegrationEventHandler<TEvent>>();
+        // Keyed (Fase 7, Incremento 2, Checkpoint 1 — see HousekeepingMessageExecutionScope's own
+        // remarks): IIntegrationEventHandler<T> is a shared generic interface, and Dashboard also
+        // registers handlers for these exact event types in the same composition root — an unkeyed
+        // resolution is no longer guaranteed to land on Housekeeping's own registration.
+        var handler = sp.GetRequiredKeyedService<IIntegrationEventHandler<TEvent>>(HousekeepingMessageExecutionScope.HandlerKey);
         await handler.HandleAsync(@event, CancellationToken.None);
     }
 
