@@ -1,7 +1,7 @@
 # ADR-018 — Workflow-issued Cross-context Commands
 
-Status: Aceito
-Data: 2026-08-18
+Status: Aceito (corrigida em Checkpoint 1.1 — ver Seção "Correção pós-publicação")
+Data: 2026-08-18 (correção: 2026-08-18)
 
 ## Contexto
 
@@ -22,10 +22,11 @@ A decisão obedece obrigatoriamente a:
 5. **Payload mínimo, nunca PII.** `CreateCleaningForReservation` carrega apenas `TenantId`, `ReservationId`, `PropertyId`, `CorrelationId`, `CausationId` — nenhum nome/telefone de hóspede, nenhum dado financeiro, nenhum payload JSON arbitrário.
 6. **Transporte `Send`, nunca `Publish`.** Existe exatamente um destinatário (Housekeeping) — o comando é roteado via `IMessageBus.SendAsync(...)`, nunca `PublishAsync`, e a topologia RabbitMQ usa uma exchange/fila dedicada e nomeada (`workflow-orchestration-commands` → `housekeeping.workflow-commands`), nunca uma exchange genérica de "comandos" compartilhada entre BCs.
 7. **Idempotência é responsabilidade do BC-alvo.** Entrega é at-least-once (Inline, sem durable inbox) — Housekeeping garante que a redelivery do mesmo comando nunca cria uma segunda Cleaning (ver Seção "Idempotência" abaixo).
-8. **Nenhuma alteração ao boundary de execução tenant-safe existente (ADR-015/016).** Housekeeping precisou de um novo método (`IHousekeepingMessageExecutionScope.ExecuteCommandAsync`), estritamente aditivo, na MESMA e única classe já autorizada a deter `IServiceScopeFactory` — nunca uma segunda classe, nunca uma abstração compartilhada entre contextos. O consumer de Workflow para `ReservationCreated` não precisou de nenhum boundary equivalente (`IWorkflowMessageExecutionScope`), por não tocar nenhum `DbContext` — criar essa classe apenas por simetria foi explicitamente rejeitado (ver Seção "Alternativas Consideradas").
+8. **Nenhuma alteração ao boundary de execução tenant-safe existente (ADR-015/016).** Housekeeping precisou de um novo método (`IHousekeepingMessageExecutionScope.ExecuteCommandAsync`), estritamente aditivo, na MESMA e única classe já autorizada a deter `IServiceScopeFactory` — nunca uma segunda classe, nunca uma abstração compartilhada entre contextos. O consumer de Workflow para `ReservationCreated` não precisou de nenhum boundary equivalente (`IWorkflowMessageExecutionScope`), por não tocar nenhum `DbContext` — criar essa classe apenas por simetria foi explicitamente rejeitado (ver Seção "Alternativas Consideradas"). `IReservationCancellationGuard` (Checkpoint 1.1 — ver Seção "Correção pós-publicação") não altera esse boundary: não detém `IServiceScopeFactory`, apenas opera sobre a `HousekeepingDbContext` já resolvida dentro da transação ambiente aberta pelo executor.
 9. **Keyed DI desde o primeiro commit.** `ReservationCreated` já tem consumidores (Housekeeping, Dashboard) no mesmo processo `IHostPro.Worker`. O novo consumidor de Workflow usa `AddKeyedScoped<IIntegrationEventHandler<ReservationCreated>, ...>("workflow")` — nunca registro não-keyed — desde o início, sem esperar por uma regressão real como aconteceu para Dashboard (Fase 7, Checkpoint 1).
-10. **`ScheduledAtUtc` nunca é derivado do checkout.** Confirmado por comentário already-existente em `CreateCleaningCommand.cs` (Fase 6): esse gatilho pertence à Fase 10. A Cleaning criada por este fluxo nasce sem horário agendado (`ScheduledAtUtc = null`) — decisão do usuário, Checkpoint 1.
-11. **A janela de corrida entre criação e cancelamento é aceita e documentada, não eliminada.** Ver Seção "Riscos Aceitos".
+10. **`ScheduledAtUtc` nunca é derivado do checkout.** Confirmado por comentário already-existente em `CreateCleaningCommand.cs` (Fase 6): esse gatilho pertence à Fase 10. A Cleaning criada por este fluxo nasce sem horário agendado (`ScheduledAtUtc = null`) — decisão do usuário, Checkpoint 1. O contrato `CreateCleaningForReservation` nunca carregou um campo `ScheduledAtUtc` — não há nada a remover, apenas a confirmar (Checkpoint 1.1).
+11. **A janela de corrida entre criação e cancelamento é eliminada deterministicamente, nunca apenas aceita como risco.** Corrigido no Checkpoint 1.1 — ver Seção "Correção pós-publicação". O invariante final: mensagens cross-context são entregues at-least-once, mas o BC-alvo é responsável por tornar seus EFEITOS de negócio idempotentes E cancellation-safe — nunca apenas idempotentes.
+12. **A orquestração (a decisão de negócio "ReservationCreated → enviar CreateCleaningForReservation") vive em `Workflow.Application`, nunca em `Workflow.Infrastructure`.** Corrigido no Checkpoint 1.1 — ver Seção "Correção pós-publicação". `Workflow.Infrastructure` permanece responsável exclusivamente pelo transporte: o adapter Wolverine fino e a implementação de `IWorkflowCommandDispatcher` (`WolverineWorkflowCommandDispatcher`, que apenas chama `IMessageBus.SendAsync`).
 
 ## Idempotência
 
@@ -33,7 +34,7 @@ A decisão obedece obrigatoriamente a:
 
 Decisão do usuário: a chave de idempotência é **"já existe uma Cleaning para este ReservationId com `CreatedByUserId == null`"** (ou seja, já criada por este mesmo fluxo automático) — nunca "qualquer Cleaning para este ReservationId". Reaproveita o campo `Cleaning.CreatedByUserId`, agora nullable (ver Seção "Ator do sistema"), sem exigir nenhuma coluna nova dedicada a proveniência.
 
-Proteção em duas camadas (nunca apenas `AnyAsync` → `Insert`, per decisão do usuário): verificação na Application antes de inserir, mais um índice único parcial no banco — `UNIQUE (tenant_id, reservation_id) WHERE created_by_user_id IS NULL` — que nunca conflita com o índice não-único geral já existente, e nunca impede múltiplas Cleanings manuais para o mesmo Reservation.
+Proteção em duas camadas (nunca apenas `AnyAsync` → `Insert`, per decisão do usuário): verificação na Application, mais um índice único parcial no banco — `UNIQUE (tenant_id, reservation_id) WHERE created_by_user_id IS NULL` — que nunca conflita com o índice não-único geral já existente, e nunca impede múltiplas Cleanings manuais para o mesmo Reservation. Desde o Checkpoint 1.1, a verificação de Application roda DENTRO da mesma transação protegida pelo lock de `IReservationCancellationGuard` (ver Seção "Correção pós-publicação") — o índice parcial permanece como defesa em profundidade contra uma corrida ao nível do banco, não mais como a única garantia real contra uma redelivery concorrente.
 
 ## Ator do sistema
 
@@ -57,14 +58,39 @@ Mudança aditiva/mecânica — nunca altera o comportamento do fluxo HTTP autent
 - Não introduz nenhuma dependência nova de runtime entre Workflow e o schema/DbContext de Housekeeping — a fronteira permanece exclusivamente o contrato público.
 
 ### Riscos Aceitos
-- **Janela de corrida entre criação e cancelamento**: se uma Reservation for cancelada exatamente entre a publicação de `ReservationCreated` e o processamento do comando por Housekeeping, o guard local best-effort (projeção `reservation_projection.is_cancelled`, atualizada de forma assíncrona e independente pela própria fila de projeção de Housekeeping) pode estar desatualizado no momento da verificação — infraestrutura atual (filas independentes, sem ordenação cross-queue, sem redelivery sob demanda) não permite eliminar essa janela deterministicamente sem uma nova decisão material de ordering/durability (fora do escopo deste Checkpoint). Risco aceito explicitamente pelo usuário, mesma classe de risco de consistência eventual já aceita em ADR-014 (janela de TOCTOU).
 - **Nenhum mecanismo de retry/dead-letter dedicado** para o novo comando — usa o comportamento padrão do Wolverine, sem política customizada, mesma decisão já registrada para todo o resto do sistema.
 - Qualquer futuro segundo comando cross-context (de Workflow para outro BC, ou de outro BC para um terceiro) exige sua própria ADR — esta decisão não generaliza automaticamente.
+- A janela de corrida entre criação e cancelamento, antes listada aqui como risco aceito, foi ELIMINADA deterministicamente no Checkpoint 1.1 — não é mais um risco desta ADR (ver Seção seguinte).
+
+## Correção pós-publicação (Checkpoint 1.1)
+
+O Checkpoint 1 foi publicado em `master` (commit `4180b6d`) mas a homologação corretiva identificou dois blockers antes de considerá-lo definitivamente aprovado:
+
+**Blocker 1 — cancellation safety best-effort.** A Seção "Riscos Aceitos" original aceitava uma janela de corrida entre `ReservationCreated`/`ReservationCancelled`/`CreateCleaningForReservation` — rejeitado na revisão: o invariante correto (nenhuma Reservation cancelada pode possuir uma Cleaning automatizada ATIVA) precisa ser garantido deterministicamente, não apenas best-effort.
+
+Correção: `IReservationCancellationGuard.AcquireLockAsync` (Housekeeping.Application/Infrastructure) — um `pg_advisory_xact_lock` real, com chave `(tenantId, reservationId)`, mesmo padrão já usado por `ReservationConflictGuard` (Reservations) e `LastAdministratorGuard` (Identity). É o PRIMEIRO statement dentro da transação de escrita de TODOS os três fluxos que tocam a referência local de uma Reservation em Housekeeping: `ReservationProjectionAndCancellationReaction.HandleAsync(ReservationCreated)`, `HandleAsync(ReservationCancelled)`, e `CreateCleaningForReservationCommandHandler.HandleAsync`. Como o lock não exige que a linha já exista (a chave é derivada apenas de `(tenantId, reservationId)`), o comando pode materializar sua própria referência (`IReservationReferenceProjection.EnsureExistsAsync`) mesmo quando chega antes da própria reação `ReservationCreated` de Housekeeping — sem leitura síncrona a Reservations, sem inventar dado de negócio. `ReservationProjectionEntry.MarkCancelled()` permanece monotônico (`false → true`, nunca revertido), o que garante que um `ReservationCreated` tardio nunca reative uma reserva já marcada cancelada.
+
+Provado deterministicamente (nunca apenas por repetição probabilística):
+- `Command_wins_the_lock_first_the_cleaning_it_creates_ends_up_cancelled` — comando cria, cancelamento aguarda o lock, cancela a Cleaning já visível.
+- `Cancellation_wins_the_lock_first_no_active_automated_cleaning_is_ever_created` — cancelamento marca primeiro, comando vê `IsCancelled=true` e nunca cria.
+- `Two_genuinely_concurrent_operations_for_the_same_reservation_never_violate_the_invariant` — barreira força os dois lados a disputar o lock real no mesmo instante; o invariante é verificado independentemente de qual lado vence.
+- `Cancelled_processed_before_Created_leaves_a_cancelled_tombstone_that_survives_the_late_Created` — ordem inversa de entrega.
+- `The_command_arriving_before_Housekeepings_own_ReservationCreated_reaction_still_creates_the_reference_and_the_cleaning` — comando adiantado.
+- Dois gates reais via RabbitMQ + Worker real + Postgres real, sem chamar nenhum handler diretamente.
+
+Todos em `CreateCleaningForReservationCancellationSafetyTests.cs` (Housekeeping.Tests.Integration) e `CreateCleaningForReservationWorkflowRoundTripTests.cs` (Api.Tests.Integration).
+
+**Blocker 2 — orquestração dentro de Infrastructure.** O BC Workflow Orchestration foi criado como um único projeto, `Workflow.Infrastructure`, contendo tanto o adapter de transporte quanto a decisão de negócio (`ReservationCreated → enviar CreateCleaningForReservation`) na mesma classe. Rejeitado: essa decisão é orquestração de aplicação, não transporte.
+
+Correção: novo projeto `IHostPro.Contexts.Workflow.Application` — zero dependência de Wolverine/EF Core/persistência (provado por `ArchitectureTests`). Contém `ReservationCreatedCleaningOrchestrator` (a use case, implementa `IIntegrationEventHandler<ReservationCreated>`) e `IWorkflowCommandDispatcher` (abstração mínima, deliberadamente não-genérica — mesma disciplina de `IHousekeepingMessageExecutionScope.ExecuteCreateCleaningForReservationAsync`, nunca um `IWorkflowCommandBus`/`ICommandDispatcher<T>` genérico). `Workflow.Infrastructure` passa a conter apenas o adapter Wolverine fino (`ReservationCreatedHandler`, inalterado) e `WolverineWorkflowCommandDispatcher` (a única implementação de `IWorkflowCommandDispatcher`, que apenas chama `IMessageBus.SendAsync`). Nenhuma mudança ao registro keyed DI existente, ao `IWorkflowMessageExecutionScope` (continua não existindo — Decisão Material 4 inalterada), nem à topologia RabbitMQ.
+
+**Defeito pré-existente, não relacionado, descoberto ao construir o gate real de cancelamento**: `Dashboard`'s own `ReservationProjectionSynchronizer` (Reservation, não Property) apresenta a MESMA classe de corrida já sinalizada para `PropertyProjectionSynchronizer` (Housekeeping) — reproduzido ao publicar `ReservationCreated` imediatamente seguido de `ReservationCancelled` para a mesma reserva. Fora de escopo deste Checkpoint (Dashboard, não Workflow/Housekeeping) — não corrigido aqui, sinalizado separadamente.
 
 ## Referências
 - `documentacao do projeto/Architecture Principles.md`, Seções 3, 9 e 14 (autorização arquitetural pré-existente para Workflow Orchestration enviar comandos)
+- ADR-003 (Persistência e Multi-Tenant — origem do padrão `pg_advisory_xact_lock` usado por `IReservationCancellationGuard`)
 - ADR-014 (precedente de exceção estrita e nomeada, nunca genérica)
 - ADR-015 (Isolamento do Processamento de Mensagens Housekeeping — mecanismo de execution-scope original)
 - ADR-016 (Tenant-safe Execution Boundary — generalização do mecanismo, decisão de manter duplicação por contexto)
-- `Fase 8 - Workflow Orchestration - Validacao e Homologacao.md`, Checkpoint 0 (auditoria completa) e Checkpoint 1 (implementação desta ADR)
-- `CreateCleaningForReservation.cs`, `CreateCleaningForReservationCommandHandler.cs`, `HousekeepingMessageExecutionScope.cs`
+- `Fase 8 - Workflow Orchestration - Validacao e Homologacao.md`, Checkpoint 0 (auditoria completa), Checkpoint 1 (implementação original) e Checkpoint 1.1 (correção)
+- `CreateCleaningForReservation.cs`, `CreateCleaningForReservationCommandHandler.cs`, `HousekeepingMessageExecutionScope.cs`, `IReservationCancellationGuard.cs`, `ReservationCancellationGuard.cs`, `ReservationCreatedCleaningOrchestrator.cs`, `IWorkflowCommandDispatcher.cs`, `WolverineWorkflowCommandDispatcher.cs`
