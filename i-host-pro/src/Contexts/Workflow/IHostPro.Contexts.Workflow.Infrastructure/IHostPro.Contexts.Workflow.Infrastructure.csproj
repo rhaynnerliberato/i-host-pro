@@ -4,6 +4,10 @@
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
     <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
     <ProjectReference Include="..\..\Housekeeping\IHostPro.Contexts.Housekeeping.Contracts\IHostPro.Contexts.Housekeeping.Contracts.csproj" />
+    <!-- Fase 8, Checkpoint 1.1: the orchestration use case now lives in
+         Workflow.Application; this project is transport-only (the Wolverine
+         adapter + the IWorkflowCommandDispatcher implementation). -->
+    <ProjectReference Include="..\IHostPro.Contexts.Workflow.Application\IHostPro.Contexts.Workflow.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

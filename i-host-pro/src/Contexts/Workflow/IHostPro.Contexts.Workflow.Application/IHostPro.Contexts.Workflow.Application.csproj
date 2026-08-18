@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fase 8, Checkpoint 1.1 — corrective homologation: the orchestration
+    use case (ReservationCreated -> CreateCleaningForReservation) belongs
+    here, never in Workflow.Infrastructure, which is transport-only. Zero
+    Wolverine/EF Core/persistence dependency by design — this project must
+    never gain one (see WorkflowOrchestrationArchitectureTests).
+    Reservations.Contracts/Housekeeping.Contracts referenced solely for the
+    Integration Event/command TYPES this checkpoint's single use case
+    consumes/produces — never their Application/Infrastructure/Api layers.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
+    <ProjectReference Include="..\..\Housekeeping\IHostPro.Contexts.Housekeeping.Contracts\IHostPro.Contexts.Housekeeping.Contracts.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

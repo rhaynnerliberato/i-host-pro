@@ -1,5 +1,6 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.Contexts.Reservations.Contracts;
+using IHostPro.Contexts.Workflow.Application;
 using IHostPro.Contexts.Workflow.Infrastructure.Messaging;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -10,8 +11,9 @@ namespace IHostPro.Contexts.Workflow.Infrastructure;
 /// module (Fase 8, Checkpoint 1) — consumed exclusively in
 /// <c>IHostPro.Worker</c>, never <c>IHostPro.Api</c> (this context has no
 /// HTTP surface this checkpoint — approved minimal-footprint decision: no
-/// Domain/Contracts/Api project, only Infrastructure, since CP1 has no
-/// aggregates, publishes nothing of its own, and exposes no endpoint).
+/// Domain/Contracts/Api project, only Application/Infrastructure, since CP1
+/// has no aggregates, publishes nothing of its own, and exposes no
+/// endpoint).
 /// </summary>
 public static class WorkflowModuleExtensions
 {
@@ -29,7 +31,17 @@ public static class WorkflowModuleExtensions
         // the ADR-015/016 scope-opening mechanism does not apply — the
         // keyed service is resolved directly from Wolverine's own
         // per-message scope (see ReservationCreatedHandler).
-        services.AddKeyedScoped<IIntegrationEventHandler<ReservationCreated>, CreateCleaningOnReservationCreated>(HandlerKey);
+        //
+        // Fase 8, Checkpoint 1.1: the use case itself
+        // (ReservationCreatedCleaningOrchestrator) now lives in
+        // Workflow.Application; this registration is unchanged in shape,
+        // only in which assembly the implementation comes from.
+        services.AddKeyedScoped<IIntegrationEventHandler<ReservationCreated>, ReservationCreatedCleaningOrchestrator>(HandlerKey);
+
+        // The transport-only implementation of the Application layer's
+        // dispatcher abstraction — exclusive to Workflow, no other context
+        // registers IWorkflowCommandDispatcher, so no keying is needed here.
+        services.AddScoped<IWorkflowCommandDispatcher, WolverineWorkflowCommandDispatcher>();
 
         return services;
     }
