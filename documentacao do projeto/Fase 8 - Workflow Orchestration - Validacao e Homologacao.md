@@ -1,8 +1,8 @@
 # Fase 8 — Workflow Orchestration — Validação e Homologação
 
-Versão: 1.2 (Checkpoint 0 — Auditoria e Refinamento Read-Only — registrado em §2; Checkpoint 1 — Minimal Workflow Foundation — registrado em §3; Checkpoint 1.1 — Correção de segurança e boundary — registrado em §3.11; Checkpoint 2 — Homologação Final e Encerramento — registrado em §5)
+Versão: 1.3 (Checkpoint 0 — Auditoria e Refinamento Read-Only — registrado em §2; Checkpoint 1 — Minimal Workflow Foundation — registrado em §3; Checkpoint 1.1 — Correção de segurança e boundary — registrado em §3.11; Checkpoint 2 — Homologação Final e Encerramento — registrado em §5; Checkpoint 2.1 — Correção de auditoria — registrado em §5.13)
 
-Status: **Fase 8 — Workflow Orchestration — CONCLUÍDA E PUBLICADA.** Checkpoint 0 concluído (auditoria completa). Checkpoint 1 homologado e publicado em `master`, corrigido no Checkpoint 1.1 (commit `bbac419`). Checkpoint 2 (homologação final, sem implementação nova) concluído — ver §5. Nenhum Workflow 02 iniciado; escopo futuro registrado em §5.10.
+Status: **Fase 8 — Workflow Orchestration — HOMOLOGADA, CONCLUÍDA E PUBLICADA.** Checkpoint 0 concluído (auditoria completa). Checkpoint 1 homologado e publicado em `master`, corrigido no Checkpoint 1.1 (commit `bbac419`). Checkpoint 2 (homologação final) publicado em `3376c62` com um gate de auditoria não honrado corretamente antes da publicação — corrigido no Checkpoint 2.1 (§5.13), que emite o registro estruturado de auditoria exigido por Documento 17 §28 e fecha definitivamente a homologação da Fase. Nenhum Workflow 02 iniciado; escopo futuro registrado em §5.10.
 
 ---
 
@@ -157,7 +157,7 @@ Investigação real do mecanismo de fato usado no fluxo `ReservationCreated → 
 3. **Campos registrados**: tipo da mensagem e um envelope-id interno do Wolverine, mais o timestamp implícito da linha de log. Nada estruturado além disso no nível de Workflow.
 4. **Contém os campos exigidos por Documento 17 §28** (workflow, gatilho, usuário/IA, horário, duração, resultado, erros)? Não, diretamente. O único registro parcial e REAL é `housekeeping.cleaning_audit_log` (`action_code = "cleaning_created_by_workflow"`, `tenant_id` via RLS, `occurred_at`) — mas é o audit trail do EFEITO em Housekeeping, não da decisão de despacho do Workflow: não inclui `ReservationId`, id do evento de origem, id do comando, nem falhas de dispatch.
 5. **PII?** Nenhuma, em nenhum dos dois casos.
-6. **Satisfaz proporcionalmente Documento 17 §28 para um workflow stateless de ação única?** Decisão do usuário (não decidida unilateralmente por este agente, per o protocolo de informação insuficiente da Engineering Constitution): **aceito como suficiente para este MVP**, com o gap registrado explicitamente aqui, sem nenhuma alteração de código. Não foi criado `WorkflowDbContext`/tabela de auditoria/BC de auditoria/evento novo. Uma auditoria estruturada completa de Workflow (campos: workflow name, TenantId, ReservationId, source event id, command id, resultado, erro) permanece como extensão futura possível, condicionada a uma necessidade real (ex.: monitoramento operacional, Documento 17 §31), não a esta Fase.
+6. **Satisfaz proporcionalmente Documento 17 §28 para um workflow stateless de ação única?** **Não — gap real, não fechado neste Checkpoint.** O mandato deste Checkpoint 2 exigia parar antes de versionar caso o mecanismo existente não satisfizesse proporcionalmente Documento 17 §28. Uma pergunta ao usuário (`AskUserQuestion`) foi feita e respondida ("Aceitar como suficiente, documentar o gap") — mas essa resposta autorizava registrar o gap na documentação, não substituía o gate de parada do próprio mandato antes da publicação. A publicação deste Checkpoint 2 (commit `3376c62`) ocorreu antes desse gate ser corretamente honrado — um erro de processo deste agente, não uma aprovação real do usuário para publicar com o gap em aberto. **Corrigido retroativamente no Checkpoint 2.1** (§5.13): `ReservationCreatedCleaningOrchestrator` passou a emitir um registro estruturado, PII-safe, do próprio ato de orquestração — sem nenhuma persistência nova (`WorkflowDbContext`/tabela de auditoria/BC de auditoria/evento novo continuam inexistentes). Ver §5.13 para a cronologia completa, a implementação e a matriz de evidência por campo.
 
 ### 5.5 Scheduling — decisão final
 
@@ -219,6 +219,81 @@ Executado após o Checkpoint 1.1 (nenhuma mudança de código neste Checkpoint 2
 
 **Fan-out de `ReservationCreated`** — evidência por teste real, não reafirmação sem prova: Housekeeping via `ReservationCreatedWorkerRoundTripTests`; Dashboard via `DashboardReservationProjectionWorkerRoundTripTests`; Workflow via `CreateCleaningForReservationWorkflowRoundTripTests.ReservationCreated_flows_through_real_Workflow_and_Housekeeping_Wolverine_chain_to_create_a_real_automated_Cleaning` — os três, verdes na regressão completa já registrada no fechamento do Checkpoint 1.1 e nesta rodada.
 
-### 5.12 Status final
+### 5.12 Status final (Checkpoint 2 — superado por §5.13)
 
-Todos os gates ficaram verdes. **Checkpoint 2 = APROVADO. Workflow Foundation = CONCLUÍDO. Fase 8 — Workflow Orchestration = CONCLUÍDA FUNCIONALMENTE.** Após a publicação deste checkpoint: **CONCLUÍDA E PUBLICADA.**
+Todos os gates técnicos deste Checkpoint 2 ficaram verdes, mas o gate de auditoria (§5.4, item 6) não foi corretamente honrado antes da publicação — ver §5.13 para a correção. **Este status foi incorreto quando publicado** (commit `3376c62`): a Fase 8 não podia ainda ser considerada `CONCLUÍDA E PUBLICADA` com esse gap em aberto sem a parada exigida pelo próprio mandato. Mantido aqui, sem edição retroativa do texto original, para preservar a cronologia real — a correção e o status final verdadeiro estão em §5.13.
+
+~~Todos os gates ficaram verdes. **Checkpoint 2 = APROVADO. Workflow Foundation = CONCLUÍDO. Fase 8 — Workflow Orchestration = CONCLUÍDA FUNCIONALMENTE.** Após a publicação deste checkpoint: **CONCLUÍDA E PUBLICADA.**~~ (ver §5.13)
+
+### 5.13 Checkpoint 2.1 — Correção de auditoria do Workflow Foundation
+
+#### 5.13.1 Cronologia honesta (correção, não substituição, do registro em §5.4/§5.12)
+
+1. O Checkpoint 2 investigou a evidência real de auditoria do fluxo `ReservationCreated → Workflow orchestrator → command dispatch` contra Documento 17 §28 e encontrou um gap real: nenhuma classe do fluxo emitia log estruturado próprio (§5.4).
+2. O mandato do Checkpoint 2 continha uma instrução explícita: se o mecanismo existente não satisfizer proporcionalmente Documento 17 §28, **PARE antes de versionar**, apresente o gap, e não crie `WorkflowDbContext`/tabela de auditoria/BC de auditoria/evento novo automaticamente.
+3. Diante da lacuna, este agente usou `AskUserQuestion` (per o protocolo de informação insuficiente da Engineering Constitution) e recebeu a resposta "Aceitar como suficiente, documentar o gap (Recommended)".
+4. Esse fluxo de aprovação leve não substituía o gate de parada explícito do próprio mandato do Checkpoint 2 — a resposta autorizava registrar o gap na documentação, não publicar a Fase como `CONCLUÍDA E PUBLICADA` com o gap em aberto. O Checkpoint 2 foi, ainda assim, publicado (commit `3376c62`) com a afirmação incorreta "gap aceito como proporcional por decisão sua — nenhum código novo".
+5. O usuário corrigiu esse relatório: não houve essa aprovação para publicar com o gap em aberto; o mandato exigia parar antes de versionar. Determinou-se o Checkpoint 2.1 — Correção de auditoria, corrigindo o código FORWARD (nunca rollback/rebase/force-push), implementando o registro estruturado que deveria ter existido antes da publicação do Checkpoint 2.
+
+Este é um erro de processo deste agente (não honrar o próprio gate do mandato antes de versionar), registrado aqui explicitamente e sem apagar a cronologia original em §5.4/§5.12 — apenas corrigido daqui em diante.
+
+#### 5.13.2 Implementação — logging estruturado, sem persistência nova
+
+`ReservationCreatedCleaningOrchestrator` (`Workflow.Application`) passa a injetar `TimeProvider` e `ILogger<ReservationCreatedCleaningOrchestrator>` (`Microsoft.Extensions.Logging.Abstractions`, o mesmo pacote/padrão já usado por `Identity.Application` em `LoginTenantBootstrapResolver`/`RefreshTokenTenantBootstrapResolver` — nenhum framework de logging/auditoria novo, nenhuma abstração wrapper). Emite exatamente um registro estruturado por ato de orquestração — sucesso ou falha, nunca ambos, nunca silencioso — nunca alterando a semântica de negócio/concorrência já existente (cancellation safety, idempotência — inalteradas, ver §5.13.4).
+
+`WolverineWorkflowCommandDispatcher` (`Workflow.Infrastructure`) registra, adicionalmente, uma falha estritamente de transporte (tipo da mensagem + `CorrelationId` + exceção) antes de relançar — nunca duplica o registro de negócio já emitido pelo orquestrador na mesma falha.
+
+Nenhuma persistência nova: `WorkflowDbContext`, tabela de auditoria, BC de Auditoria, `WorkflowInstance`/`WorkflowExecution`, Integration Event de auditoria — todos continuam inexistentes, exatamente como o mandato exigia.
+
+Investigação real (não suposição), per §9-11 do mandato: um probe real de compilação (atribuir o resultado `await`ado de `IMessageBus.SendAsync` a um tipo incompatível, ler o erro `CS0029` do compilador, reverter o probe imediatamente) confirmou que Wolverine 6.22.0 não expõe nenhum identificador de comando/envelope acessível a partir de `SendAsync` — por isso `CommandId` não é logado; `CorrelationId` (já carregado pelo comando) é o substituto disponível. `SourceEventId` usa `IntegrationEvent.EventId` do `ReservationCreated` que disparou o fluxo — o mesmo identificador já propagado como `CreateCleaningForReservation.CausationId` — deliberadamente não o envelope-id interno do Wolverine, que exigiria vazar uma dependência de Wolverine para dentro de `Workflow.Application` (`ArchitectureTests` prova essa dependência continua zero).
+
+#### 5.13.3 Matriz de evidência de auditoria — Documento 17 §28
+
+| Campo (Documento 17 §28) | Implementação | Evidência |
+|---|---|---|
+| workflow | `WorkflowName = "Workflow01_NewReservation"` (identificador fixo, nunca o nome da classe .NET) | Campo estruturado em toda entrada (sucesso e falha); observado no log real do Worker (`CreateCleaningForReservationWorkflowRoundTripTests`) |
+| gatilho | `Trigger = nameof(ReservationCreated)` | idem |
+| utilizador (quando houver) | Não aplicável — este fluxo nunca tem ator humano | `ActorType = "System"` sempre; nenhum `ActorId`/`UserId` inventado |
+| IA (quando aplicável) | Não aplicável — nenhum agente de IA participa deste fluxo nesta Fase | Coberto pelo mesmo `ActorType = "System"` — ausência é o valor correto, não um campo faltando |
+| horário | Timestamp implícito de cada entrada `ILogger`, mais `TimeProvider.GetUtcNow()` usado para `DurationMs` | Emitido em toda entrada; testável deterministicamente via `FixedTimeProvider` |
+| duração | `DurationMs` — mede exclusivamente a chamada de dispatch, nunca aguarda o processamento assíncrono de Housekeeping | `A_successful_dispatch_logs_...`/`A_failed_dispatch_logs_...` (Workflow.Tests.Unit) |
+| resultado | `Result = "CommandDispatched"` / `"CommandDispatchFailed"` — nunca `"CleaningCreated"` (resultado assíncrono posterior de Housekeeping) | idem, mais observado no log real do Worker |
+| erros | `LogError(ex, ...)` — exceção completa anexada à entrada estruturada; sempre `throw;` após logar (nunca engolida) | `A_failed_dispatch_logs_exactly_one_structured_error_entry_then_rethrows_without_swallowing` |
+
+Campos adicionais, além do mínimo de Documento 17 §28, incluídos por serem operacionalmente necessários para correlacionar o registro a uma Reservation/Tenant específica: `TenantId`, `ReservationId`, `SourceEventId`, `CorrelationId`, `Action`. PII: nenhum dos campos acima jamais foi ou é um nome/telefone/endereço de hóspede — `ReservationCreated` nunca carrega esses dados (Fase 3), e o orquestrador nunca os lê.
+
+#### 5.13.4 Testes
+
+- `A_successful_dispatch_logs_exactly_one_structured_information_entry_with_every_Documento17_28_audit_field` — sucesso, todos os campos, via `RecordingLogger` estruturado (assert por estado, nunca por parsing de string).
+- `A_failed_dispatch_logs_exactly_one_structured_error_entry_then_rethrows_without_swallowing` — falha do dispatcher (fake), `LogError` com todos os campos + `Result = "CommandDispatchFailed"`, exceção relançada (nunca engolida).
+- `Neither_the_success_nor_the_failure_audit_entry_ever_carries_a_key_outside_the_approved_non_PII_vocabulary` — teste de PII-safety: todo campo logado, em ambos os caminhos, pertence a um vocabulário fechado aprovado.
+- As 3 unit tests pré-existentes (dispatch, PII do comando, independência entre eventos) permanecem verdes com a nova assinatura de construtor.
+
+#### 5.13.5 Prova real de transporte
+
+`CreateCleaningForReservationWorkflowRoundTripTests.ReservationCreated_flows_through_real_Workflow_and_Housekeeping_Wolverine_chain_to_create_a_real_automated_Cleaning` — estendido para capturar o output real do processo `IHostPro.Worker` (RabbitMQ + Postgres reais, subprocesso não modificado) e afirmar que contém `"Workflow01_NewReservation"`, `"CommandDispatched"` e o `TenantId`/`ReservationId` da própria execução — não apenas as linhas genéricas de telemetria do Wolverine já observadas no Checkpoint 2 (§5.4, item 2). Passou.
+
+#### 5.13.6 Regressão proporcional
+
+| Gate | Resultado |
+|---|---|
+| Workflow Unit (6 testes: 3 pré-existentes + 3 novos de auditoria) | 6/6, verde |
+| ArchitectureTests — filtro Workflow | 11/11, verde |
+| ArchitectureTests (solução completa) | 161/161, verde |
+| Housekeeping Unit | 120/120, verde |
+| Housekeeping Integration — `CreateCleaningForReservationCancellationSafetyTests` (cancellation safety, inalterada) | 11/11, verde |
+| Real transport gate — `CreateCleaningForReservationWorkflowRoundTripTests` (3 testes: round trip + prova de auditoria, 2 gates de cancelamento) | 3/3, verde |
+| PolicyUpdated (regressão focada, composição do Worker alterada — `TimeProvider` registrado em `WorkflowModuleExtensions`) | 2/2, verde |
+| Release build (solução completa) | 0 erros |
+| `git diff --check` | limpo |
+| Ambiente | RabbitMQ de dev parado/reiniciado ao redor dos testes Testcontainers-based; sem conflito de porta; container restaurado |
+
+NSwag/Angular/MigrationRunner **não re-executados** — nenhuma mudança a HTTP/frontend/schema/migração/topologia RabbitMQ nesta correção (apenas logging estruturado e um registro `TimeProvider` adicional em DI), consistente com o próprio mandato do Checkpoint 2.1.
+
+#### 5.13.7 ADR-018
+
+Pequena atualização registrada — nova Seção "Correção pós-publicação (Checkpoint 2.1)", mais o item de decisão 13: o dispatch de um comando cross-context deve emitir um registro estruturado, PII-safe, do próprio ato de orquestração. Nenhuma ADR nova criada — este é um complemento à ADR-018 já existente, não uma decisão arquitetural independente.
+
+#### 5.13.8 Status final real
+
+Todos os gates (código, testes, prova real de transporte, regressão, documentação, ADR-018) ficaram verdes. **Checkpoint 2.1 = APROVADO. Fase 8 — Workflow Orchestration = HOMOLOGADA, CONCLUÍDA E PUBLICADA**, definitivamente, após a publicação deste checkpoint.

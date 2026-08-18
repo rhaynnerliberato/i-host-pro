@@ -1,7 +1,7 @@
 # ADR-018 — Workflow-issued Cross-context Commands
 
-Status: Aceito (corrigida em Checkpoint 1.1 — ver Seção "Correção pós-publicação")
-Data: 2026-08-18 (correção: 2026-08-18)
+Status: Aceito (corrigida em Checkpoint 1.1 — ver Seção "Correção pós-publicação"; complementada em Checkpoint 2.1 — auditoria estruturada, ver Seção "Correção pós-publicação (Checkpoint 2.1)")
+Data: 2026-08-18 (correção: 2026-08-18; complemento: 2026-08-18)
 
 ## Contexto
 
@@ -27,6 +27,7 @@ A decisão obedece obrigatoriamente a:
 10. **`ScheduledAtUtc` nunca é derivado do checkout.** Confirmado por comentário already-existente em `CreateCleaningCommand.cs` (Fase 6): esse gatilho pertence à Fase 10. A Cleaning criada por este fluxo nasce sem horário agendado (`ScheduledAtUtc = null`) — decisão do usuário, Checkpoint 1. O contrato `CreateCleaningForReservation` nunca carregou um campo `ScheduledAtUtc` — não há nada a remover, apenas a confirmar (Checkpoint 1.1).
 11. **A janela de corrida entre criação e cancelamento é eliminada deterministicamente, nunca apenas aceita como risco.** Corrigido no Checkpoint 1.1 — ver Seção "Correção pós-publicação". O invariante final: mensagens cross-context são entregues at-least-once, mas o BC-alvo é responsável por tornar seus EFEITOS de negócio idempotentes E cancellation-safe — nunca apenas idempotentes.
 12. **A orquestração (a decisão de negócio "ReservationCreated → enviar CreateCleaningForReservation") vive em `Workflow.Application`, nunca em `Workflow.Infrastructure`.** Corrigido no Checkpoint 1.1 — ver Seção "Correção pós-publicação". `Workflow.Infrastructure` permanece responsável exclusivamente pelo transporte: o adapter Wolverine fino e a implementação de `IWorkflowCommandDispatcher` (`WolverineWorkflowCommandDispatcher`, que apenas chama `IMessageBus.SendAsync`).
+13. **O dispatch de um comando cross-context deve emitir um registro estruturado, PII-safe, do próprio ato de orquestração (Documento 17 §28).** Corrigido no Checkpoint 2.1, após o Checkpoint 2 ter identificado a ausência desse registro como um gap real — ver Seção "Correção pós-publicação (Checkpoint 2.1)".
 
 ## Idempotência
 
@@ -86,11 +87,25 @@ Correção: novo projeto `IHostPro.Contexts.Workflow.Application` — zero depen
 
 **Defeito pré-existente, não relacionado, descoberto ao construir o gate real de cancelamento**: `Dashboard`'s own `ReservationProjectionSynchronizer` (Reservation, não Property) apresenta a MESMA classe de corrida já sinalizada para `PropertyProjectionSynchronizer` (Housekeeping) — reproduzido ao publicar `ReservationCreated` imediatamente seguido de `ReservationCancelled` para a mesma reserva. Fora de escopo deste Checkpoint (Dashboard, não Workflow/Housekeeping) — não corrigido aqui, sinalizado separadamente.
 
+## Correção pós-publicação (Checkpoint 2.1)
+
+O Checkpoint 2 (homologação final e encerramento) investigou, por exigência do próprio mandato, se o fluxo `ReservationCreated → Workflow orchestrator → command dispatch` produzia evidência real suficiente para os campos exigidos por Documento 17 §28 (workflow, gatilho, usuário/IA, horário, duração, resultado, erros). A investigação encontrou um gap real: nenhuma classe do fluxo emitia log estruturado próprio — a única evidência observável era a telemetria genérica do próprio Wolverine (envelope-id interno, tipo de mensagem), nunca os campos de negócio exigidos. O mandato do Checkpoint 2 exigia explicitamente parar antes de versionar caso esse gap fosse encontrado; a publicação do Checkpoint 2 (commit `3376c62`) ocorreu antes desse gate ser corretamente honrado — corrigido retroativamente no Checkpoint 2.1 (ver `Fase 8 - Workflow Orchestration - Validacao e Homologacao.md`, §5.13, para a cronologia completa).
+
+**Correção**: `ReservationCreatedCleaningOrchestrator` (`Workflow.Application`) passa a emitir exatamente um registro estruturado por ato de orquestração — sucesso ou falha, nunca ambos, nunca silencioso — via `ILogger<T>` (`Microsoft.Extensions.Logging.Abstractions`, o mesmo pacote e padrão já usados por `Identity.Application` em `LoginTenantBootstrapResolver`/`RefreshTokenTenantBootstrapResolver`). Nenhuma persistência nova: sem `WorkflowDbContext`, sem tabela de auditoria, sem BC de Auditoria, sem `WorkflowInstance`/`WorkflowExecution`, sem Integration Event novo — a auditoria é puramente um log estruturado, proporcional a um workflow stateless de ação única.
+
+Campos emitidos: `WorkflowName` (identificador fixo, `"Workflow01_NewReservation"` — nunca o nome da classe .NET), `Trigger` (`nameof(ReservationCreated)`), `ActorType` (sempre `"System"` — este fluxo não tem ator humano/IA), `TenantId`, `ReservationId`, `SourceEventId` (`IntegrationEvent.EventId` do `ReservationCreated` que disparou o fluxo — o mesmo identificador já propagado como `CreateCleaningForReservation.CausationId`; deliberadamente não o envelope-id interno do Wolverine, que exigiria vazar uma dependência de Wolverine para dentro de `Workflow.Application`), `CorrelationId`, `Action` (`nameof(CreateCleaningForReservation)`), `Result` (`"CommandDispatched"`/`"CommandDispatchFailed"` — nunca `"CleaningCreated"`, que é o resultado assíncrono posterior de Housekeeping, não o resultado deste ato), `DurationMs` (mede exclusivamente a própria chamada de dispatch — nunca o processamento de Housekeeping, que é assíncrono e nunca aguardado por este orquestrador). Nenhum campo de PII (nome/telefone/endereço de hóspede) jamais esteve disponível como input a este orquestrador para começo de conversa.
+
+Investigação real, não suposição: `IMessageBus.SendAsync` (Wolverine 6.22.0), quando `await`ado, não expõe nenhum identificador de comando/envelope acessível (confirmado por um probe real de compilação, revertido após a confirmação) — por isso nenhum `CommandId` é logado; `CorrelationId` é o substituto disponível, já carregado pelo próprio comando.
+
+`Workflow.Infrastructure`'s `WolverineWorkflowCommandDispatcher` registra, adicionalmente, uma falha estritamente de transporte (tipo da mensagem + `CorrelationId` + exceção) antes de relançar — nunca duplica o registro de negócio já emitido por `Workflow.Application` na mesma falha (a exceção propaga até o orquestrador, que já registra o resultado `"CommandDispatchFailed"` com todos os campos de negócio).
+
+Prova real: o log estruturado foi observado no processo `IHostPro.Worker` real, sobre RabbitMQ/Postgres reais (`CreateCleaningForReservationWorkflowRoundTripTests`), contendo `WorkflowName`, `Result` e o `TenantId`/`ReservationId` da própria execução — não apenas as linhas genéricas de telemetria do Wolverine já observadas no Checkpoint 2.
+
 ## Referências
 - `documentacao do projeto/Architecture Principles.md`, Seções 3, 9 e 14 (autorização arquitetural pré-existente para Workflow Orchestration enviar comandos)
 - ADR-003 (Persistência e Multi-Tenant — origem do padrão `pg_advisory_xact_lock` usado por `IReservationCancellationGuard`)
 - ADR-014 (precedente de exceção estrita e nomeada, nunca genérica)
 - ADR-015 (Isolamento do Processamento de Mensagens Housekeeping — mecanismo de execution-scope original)
 - ADR-016 (Tenant-safe Execution Boundary — generalização do mecanismo, decisão de manter duplicação por contexto)
-- `Fase 8 - Workflow Orchestration - Validacao e Homologacao.md`, Checkpoint 0 (auditoria completa), Checkpoint 1 (implementação original) e Checkpoint 1.1 (correção)
+- `Fase 8 - Workflow Orchestration - Validacao e Homologacao.md`, Checkpoint 0 (auditoria completa), Checkpoint 1 (implementação original), Checkpoint 1.1 (correção) e Checkpoint 2.1 (correção de auditoria)
 - `CreateCleaningForReservation.cs`, `CreateCleaningForReservationCommandHandler.cs`, `HousekeepingMessageExecutionScope.cs`, `IReservationCancellationGuard.cs`, `ReservationCancellationGuard.cs`, `ReservationCreatedCleaningOrchestrator.cs`, `IWorkflowCommandDispatcher.cs`, `WolverineWorkflowCommandDispatcher.cs`
