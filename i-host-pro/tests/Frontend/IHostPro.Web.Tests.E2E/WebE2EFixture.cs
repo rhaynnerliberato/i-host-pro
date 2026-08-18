@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
+using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Domain;
 using IHostPro.Contexts.Identity.Domain.ValueObjects;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
@@ -322,6 +323,14 @@ public sealed class WebE2EFixture : IAsyncLifetime
         // comments for the full real-failure narrative this gap caused.
         await using (var housekeepingDbContext = CreateHousekeepingDbContext())
             await housekeepingDbContext.Database.MigrateAsync();
+        // Fase 7, Incremento 2 (Dashboard & Reporting Foundation), Checkpoint 4:
+        // this fixture predates Dashboard entirely and never learned about its
+        // schema/outbox/topology/connection-string — the exact same class of
+        // gap already found and fixed here once per new Bounded Context
+        // (Housekeeping, then Reservations, then Configuration). Added by
+        // mirroring IHostPro.MigrationRunner's own real declarations exactly.
+        await using (var dashboardDbContext = CreateDashboardDbContext())
+            await dashboardDbContext.Database.MigrateAsync();
     }
 
     /// <summary>Mirrors IHostPro.MigrationRunner exactly: platform_messaging (Main) first, then the five Ancillary outboxes.</summary>
@@ -333,6 +342,12 @@ public sealed class WebE2EFixture : IAsyncLifetime
         await ProvisionMessageStoreSchemaAsync("reservations_messaging", typeof(IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext));
         await ProvisionMessageStoreSchemaAsync("configuration_messaging", typeof(IHostPro.Contexts.Configuration.Infrastructure.Persistence.ConfigurationDbContext));
         await ProvisionMessageStoreSchemaAsync("housekeeping_messaging", typeof(IHostPro.Contexts.Housekeeping.Infrastructure.Persistence.HousekeepingDbContext));
+        // Fase 7, Incremento 2, Checkpoint 4: Dashboard's own durable outbox
+        // (schema dashboard_messaging), mirroring MigrationRunner exactly —
+        // Dashboard publishes no Integration Event of its own, but still
+        // needs this schema for IDbContextOutbox<DashboardDbContext> to
+        // resolve at all inside the real Worker's TenantTransactionBehavior.
+        await ProvisionMessageStoreSchemaAsync("dashboard_messaging", typeof(DashboardDbContext));
     }
 
     private async Task ProvisionMessageStoreSchemaAsync(string schema, Type? dbContextType)
@@ -408,12 +423,31 @@ public sealed class WebE2EFixture : IAsyncLifetime
                     exchange.BindQueue("housekeeping.property-projection", "property_activated");
                     exchange.BindQueue("housekeeping.property-projection", "property_deactivated");
                     exchange.BindQueue("housekeeping.property-projection", "property_archived");
+                    // Fase 7, Incremento 2 (Dashboard & Reporting Foundation),
+                    // Checkpoint 4: a second, independent subscriber queue on
+                    // this same exchange — mirrors IHostPro.MigrationRunner's
+                    // own declaration exactly (Property Management never
+                    // needs to know Dashboard is listening, same
+                    // decoupled pub/sub pattern as Housekeeping's own queue
+                    // above).
+                    exchange.BindQueue("dashboard.property-projection", "property_created");
+                    exchange.BindQueue("dashboard.property-projection", "property_activated");
+                    exchange.BindQueue("dashboard.property-projection", "property_deactivated");
+                    exchange.BindQueue("dashboard.property-projection", "property_archived");
                 })
                 .DeclareExchange("reservation-events", exchange =>
                 {
                     exchange.ExchangeType = ExchangeType.Topic;
                     exchange.BindQueue("housekeeping.reservation-projection", "reservation_created");
                     exchange.BindQueue("housekeeping.reservation-projection", "reservation_cancelled");
+                    // Fase 7, Incremento 2, Checkpoint 4: Dashboard's own
+                    // subscriber queue, mirroring MigrationRunner exactly —
+                    // Dashboard also needs reservation_updated (current
+                    // CheckInAt/CheckOutAt on reschedule), which no prior
+                    // consumer needed.
+                    exchange.BindQueue("dashboard.reservation-projection", "reservation_created");
+                    exchange.BindQueue("dashboard.reservation-projection", "reservation_updated");
+                    exchange.BindQueue("dashboard.reservation-projection", "reservation_cancelled");
                 })
                 // Fase 7, Incremento 1, Checkpoint 3: was declared with NO
                 // queue bound at all — the real Worker subprocess this
@@ -442,6 +476,24 @@ public sealed class WebE2EFixture : IAsyncLifetime
                     exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_needs_help");
                     exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_needs_material");
                     exchange.BindQueue("reservations.cleaning-schedule-projection", "cleaning_cancelled");
+                    // Fase 7, Incremento 2, Checkpoint 4: Dashboard's own
+                    // subscriber queue for the same ten real Cleaning
+                    // lifecycle events, plus its own dedicated
+                    // occurrence-projection queue (a distinct queue from
+                    // dashboard.cleaning-projection, mirrors Housekeeping's
+                    // own one-queue-per-projection-concern convention) —
+                    // mirrors IHostPro.MigrationRunner's declaration exactly.
+                    exchange.BindQueue("dashboard.cleaning-projection", "cleaning_created");
+                    exchange.BindQueue("dashboard.cleaning-projection", "cleaning_assigned");
+                    exchange.BindQueue("dashboard.cleaning-projection", "cleaning_in_transit");
+                    exchange.BindQueue("dashboard.cleaning-projection", "cleaning_started");
+                    exchange.BindQueue("dashboard.cleaning-projection", "cleaning_inspection_started");
+                    exchange.BindQueue("dashboard.cleaning-projection", "cleaning_completed");
+                    exchange.BindQueue("dashboard.cleaning-projection", "cleaning_interrupted");
+                    exchange.BindQueue("dashboard.cleaning-projection", "cleaning_needs_help");
+                    exchange.BindQueue("dashboard.cleaning-projection", "cleaning_needs_material");
+                    exchange.BindQueue("dashboard.cleaning-projection", "cleaning_cancelled");
+                    exchange.BindQueue("dashboard.occurrence-projection", "cleaning_occurrence_registered");
                 })
                 // Fase 5, Checkpoint 7 homologação: was missing entirely — the
                 // same "configuration-events" gap already found and fixed in
@@ -589,6 +641,15 @@ public sealed class WebE2EFixture : IAsyncLifetime
         return new IHostPro.Contexts.Housekeeping.Infrastructure.Persistence.HousekeepingDbContext(options, new TenantContext());
     }
 
+    private DashboardDbContext CreateDashboardDbContext()
+    {
+        var options = new DbContextOptionsBuilder<DashboardDbContext>()
+            .UseNpgsql(_migratorConnectionString, npgsqlOptions =>
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "dashboard"))
+            .Options;
+        return new DashboardDbContext(options, new TenantContext());
+    }
+
     /// <summary>Mirrors <see cref="CreateIdentityDbContext"/>'s exact pattern: with no tenantId, the migrator connection (schema DDL only, e.g. <see cref="MigrateSchemasAsync"/>); with one, the app connection and a tenant-scoped <see cref="TenantContext"/>.</summary>
     private IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext CreateReservationsDbContext(Guid? tenantId = null)
     {
@@ -665,6 +726,12 @@ public sealed class WebE2EFixture : IAsyncLifetime
         psi.Environment["ConnectionStrings__Configuration"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _appConnectionString;
+        // Fase 7, Incremento 2, Checkpoint 4: same class of gap as the
+        // Housekeeping/Reservations/Platform keys above — the real
+        // IHostPro.Api process this fixture starts calls AddDashboardModule
+        // (Checkpoint 2, Overview API), which needs ConnectionStrings:Dashboard
+        // to point at THIS fixture's own ephemeral Postgres container.
+        psi.Environment["ConnectionStrings__Dashboard"] = _appConnectionString;
         psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";
         psi.Environment["Identity__Jwt__Audience"] = "ihostpro-api-test";
         psi.Environment["Identity__Jwt__AccessTokenLifetime"] = "00:15:00";
@@ -744,6 +811,13 @@ public sealed class WebE2EFixture : IAsyncLifetime
         // document, Checkpoint 3), but this fixture's own env var overrides
         // are a separate list and needed the identical fix.
         psi.Environment["ConnectionStrings__Reservations"] = _appConnectionString;
+        // Fase 7, Incremento 2, Checkpoint 4: same class of gap as
+        // Housekeeping/Platform/Reservations above — the real
+        // IHostPro.Worker process this fixture starts calls
+        // AddDashboardModule + AddDashboardProjectionConsumer (Checkpoint 1),
+        // which need ConnectionStrings:Dashboard to point at THIS fixture's
+        // own ephemeral Postgres container.
+        psi.Environment["ConnectionStrings__Dashboard"] = _appConnectionString;
         psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";
         psi.Environment["Identity__Jwt__Audience"] = "ihostpro-api-test";
         psi.Environment["Identity__Jwt__AccessTokenLifetime"] = "00:15:00";
