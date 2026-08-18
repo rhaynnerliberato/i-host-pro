@@ -220,6 +220,168 @@ public sealed class CreateCleaningForReservationWorkflowRoundTripTests : IAsyncL
         }
     }
 
+    /// <summary>
+    /// Fase 8, Checkpoint 1.1 corrective gate (§11.A of the corrective
+    /// mandate): a Reservation cancelled while the automated-Cleaning
+    /// COMMAND is still (plausibly) in flight, over REAL RabbitMQ/Worker/
+    /// Postgres, must never leave an active automated Cleaning — never
+    /// asserted by controlling which message wins (real transport gives no
+    /// such control), only that the invariant holds once both have settled.
+    ///
+    /// Waits for Housekeeping's OWN local reference
+    /// (<c>housekeeping.reservation_projection</c>) to exist before sending
+    /// the cancellation — this still genuinely races Cancel against the
+    /// cross-context COMMAND (Workflow → Housekeeping), which is what this
+    /// gate is about, without firing Cancel at the exact same instant as
+    /// Create. Firing both essentially simultaneously was found, while
+    /// building this test, to trigger a real, PRE-EXISTING, UNRELATED race
+    /// in Dashboard's own <c>ReservationProjectionSynchronizer</c> (a
+    /// duplicate-key error on <c>dashboard.reservation_projection</c>, the
+    /// same class of defect already flagged separately for
+    /// <c>PropertyProjectionSynchronizer</c>) — out of this checkpoint's
+    /// scope (Housekeeping's cancellation safety), not fixed here, flagged
+    /// separately instead (see this checkpoint's closure report).
+    /// </summary>
+    [Fact]
+    public async Task ReservationCancelled_racing_the_in_flight_command_over_real_transport_never_leaves_an_active_automated_Cleaning()
+    {
+        var tenantId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var propertyId = await SeedActivePropertyAsync(tenantId, capacity: 4, now);
+
+        StartWorkerProcess();
+        (await WaitForWorkerLogLineAsync(
+            "Started message listening at rabbitmq://queue/workflow.reservation-created-trigger", TimeSpan.FromSeconds(30)))
+            .Should().BeTrue();
+        (await WaitForWorkerLogLineAsync(
+            "Started message listening at rabbitmq://queue/housekeeping.workflow-commands", TimeSpan.FromSeconds(30)))
+            .Should().BeTrue();
+
+        using var signingKey = RSA.Create(2048);
+        var values = BuildApiEnvironment(signingKey.ExportRSAPrivateKeyPem());
+        foreach (var (key, value) in values)
+            Environment.SetEnvironmentVariable(key, value);
+
+        try
+        {
+            using var factory = new WebApplicationFactory<Program>();
+
+            Guid reservationId;
+            using (var scope = factory.Services.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+                var dispatcher = scope.ServiceProvider.GetRequiredService<IReservationsRequestDispatcher>();
+
+                var created = await dispatcher.Send(new CreateReservationCommand(
+                    tenantId, Guid.NewGuid(), propertyId, "Test Guest", null,
+                    now.AddDays(1), now.AddDays(5), GuestCount: 2));
+                created.IsSuccess.Should().BeTrue();
+                reservationId = created.Value.Id;
+            }
+
+            var referenceCreated = await WaitUntilAsync(
+                () => ReservationProjectionExistsInHousekeepingAsync(tenantId, reservationId), exists => exists, TimeSpan.FromSeconds(30));
+            referenceCreated.Should().BeTrue("Housekeeping's own ReservationCreated reaction must process before this test cancels the reservation");
+
+            using (var scope = factory.Services.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+                var dispatcher = scope.ServiceProvider.GetRequiredService<IReservationsRequestDispatcher>();
+                var cancelled = await dispatcher.Send(new CancelReservationCommand(tenantId, Guid.NewGuid(), reservationId));
+                cancelled.IsSuccess.Should().BeTrue();
+            }
+
+            var cancellationObserved = await WaitUntilAsync(
+                () => IsReservationCancelledInHousekeepingAsync(tenantId, reservationId), isCancelled => isCancelled, TimeSpan.FromSeconds(30));
+            if (!cancellationObserved)
+            {
+                string workerOutputSnapshot;
+                lock (_workerOutputLock) workerOutputSnapshot = _workerOutput.ToString();
+                Assert.Fail("Housekeeping's own ReservationCancelled reaction must eventually process over real transport. Worker output:\n" + workerOutputSnapshot);
+            }
+
+            // Grace window for a command still genuinely in flight at the
+            // moment IsCancelled flipped to settle — the invariant itself is
+            // guaranteed by the real advisory lock (proven deterministically
+            // in CreateCleaningForReservationCancellationSafetyTests), this
+            // wait exists only to let real, asynchronous message delivery
+            // finish, never as the correctness mechanism itself.
+            await Task.Delay(TimeSpan.FromSeconds(5));
+
+            await AssertNoActiveAutomatedCleaningAsync(tenantId, reservationId);
+        }
+        finally
+        {
+            foreach (var key in values.Keys)
+                Environment.SetEnvironmentVariable(key, null);
+        }
+    }
+
+    /// <summary>
+    /// Fase 8, Checkpoint 1.1 corrective gate (§11.B): the straightforward
+    /// create-then-cancel ordering, over the same real transport — the
+    /// automated Cleaning that was created must end up Cancelled.
+    /// </summary>
+    [Fact]
+    public async Task Reservation_created_then_cancelled_over_real_transport_ends_the_automated_Cleaning_Cancelled()
+    {
+        var tenantId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var propertyId = await SeedActivePropertyAsync(tenantId, capacity: 4, now);
+
+        StartWorkerProcess();
+        (await WaitForWorkerLogLineAsync(
+            "Started message listening at rabbitmq://queue/workflow.reservation-created-trigger", TimeSpan.FromSeconds(30)))
+            .Should().BeTrue();
+        (await WaitForWorkerLogLineAsync(
+            "Started message listening at rabbitmq://queue/housekeeping.workflow-commands", TimeSpan.FromSeconds(30)))
+            .Should().BeTrue();
+
+        using var signingKey = RSA.Create(2048);
+        var values = BuildApiEnvironment(signingKey.ExportRSAPrivateKeyPem());
+        foreach (var (key, value) in values)
+            Environment.SetEnvironmentVariable(key, value);
+
+        try
+        {
+            using var factory = new WebApplicationFactory<Program>();
+
+            Guid reservationId;
+            using (var scope = factory.Services.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+                var dispatcher = scope.ServiceProvider.GetRequiredService<IReservationsRequestDispatcher>();
+
+                var created = await dispatcher.Send(new CreateReservationCommand(
+                    tenantId, Guid.NewGuid(), propertyId, "Test Guest", null,
+                    now.AddDays(1), now.AddDays(5), GuestCount: 2));
+                created.IsSuccess.Should().BeTrue();
+                reservationId = created.Value.Id;
+            }
+
+            var cleaningCreated = await WaitUntilAsync(
+                () => CountCleaningsForReservationAsync(tenantId, reservationId), count => count > 0, TimeSpan.FromSeconds(30));
+            cleaningCreated.Should().BeTrue("the automated Cleaning must be created before this test cancels the reservation");
+
+            using (var scope = factory.Services.CreateScope())
+            {
+                scope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+                var dispatcher = scope.ServiceProvider.GetRequiredService<IReservationsRequestDispatcher>();
+                var cancelled = await dispatcher.Send(new CancelReservationCommand(tenantId, Guid.NewGuid(), reservationId));
+                cancelled.IsSuccess.Should().BeTrue();
+            }
+
+            var cleaningCancelled = await WaitUntilAsync(
+                () => GetSingleCleaningForReservationAsync(tenantId, reservationId), row => row.Status == "Cancelled", TimeSpan.FromSeconds(30));
+            cleaningCancelled.Should().BeTrue("the automated Cleaning must end up Cancelled once ReservationCancelled has been processed over real transport");
+        }
+        finally
+        {
+            foreach (var key in values.Keys)
+                Environment.SetEnvironmentVariable(key, null);
+        }
+    }
+
     // ---- Worker subprocess ----------------------------------------------
 
     private readonly System.Text.StringBuilder _workerOutput = new();
@@ -396,6 +558,92 @@ public sealed class CreateCleaningForReservationWorkflowRoundTripTests : IAsyncL
         var count = (long)(await command.ExecuteScalarAsync())!;
         await transaction.CommitAsync();
         return count;
+    }
+
+    private async Task<bool> ReservationProjectionExistsInHousekeepingAsync(Guid tenantId, Guid reservationId)
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using (var setCommand = connection.CreateCommand())
+        {
+            setCommand.CommandText = $"SET LOCAL app.tenant_id = '{tenantId:D}'";
+            await setCommand.ExecuteNonQueryAsync();
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT EXISTS (SELECT 1 FROM housekeeping.reservation_projection WHERE tenant_id = @tenantId AND reservation_id = @id)
+            """;
+        command.Parameters.AddWithValue("tenantId", tenantId);
+        command.Parameters.AddWithValue("id", reservationId);
+
+        var result = await command.ExecuteScalarAsync();
+        await transaction.CommitAsync();
+        return result is true;
+    }
+
+    private async Task<bool> IsReservationCancelledInHousekeepingAsync(Guid tenantId, Guid reservationId)
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using (var setCommand = connection.CreateCommand())
+        {
+            setCommand.CommandText = $"SET LOCAL app.tenant_id = '{tenantId:D}'";
+            await setCommand.ExecuteNonQueryAsync();
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT is_cancelled FROM housekeeping.reservation_projection
+            WHERE tenant_id = @tenantId AND reservation_id = @id
+            """;
+        command.Parameters.AddWithValue("tenantId", tenantId);
+        command.Parameters.AddWithValue("id", reservationId);
+
+        var result = await command.ExecuteScalarAsync();
+        await transaction.CommitAsync();
+        return result is true;
+    }
+
+    /// <summary>
+    /// Fase 8, Checkpoint 1.1's real invariant, checked directly against the
+    /// database: a cancelled Reservation may never have an automated
+    /// Cleaning (<c>created_by_user_id IS NULL</c>) left
+    /// Pending/Assigned/InTransit/anything but Cancelled — either none was
+    /// ever created, or the one that was must have ended up Cancelled.
+    /// </summary>
+    private async Task AssertNoActiveAutomatedCleaningAsync(Guid tenantId, Guid reservationId)
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using (var setCommand = connection.CreateCommand())
+        {
+            setCommand.CommandText = $"SET LOCAL app.tenant_id = '{tenantId:D}'";
+            await setCommand.ExecuteNonQueryAsync();
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT status FROM housekeeping.cleanings
+            WHERE tenant_id = @tenantId AND reservation_id = @id AND created_by_user_id IS NULL
+            """;
+        command.Parameters.AddWithValue("tenantId", tenantId);
+        command.Parameters.AddWithValue("id", reservationId);
+
+        var statuses = new List<string>();
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+                statuses.Add(reader.GetString(0));
+        }
+
+        await transaction.CommitAsync();
+
+        statuses.Should().AllSatisfy(status => status.Should().Be("Cancelled",
+            "a cancelled Reservation may never have an active (non-Cancelled) automated Cleaning"));
     }
 
     private sealed record CleaningRow(Guid PropertyId, string Status, Guid? CreatedByUserId, DateTimeOffset? ScheduledAtUtc);

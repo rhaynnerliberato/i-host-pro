@@ -1,6 +1,7 @@
 using FluentAssertions;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
 using IHostPro.Contexts.Housekeeping.Contracts;
+using IHostPro.Contexts.Workflow.Application;
 using IHostPro.Contexts.Workflow.Infrastructure.Messaging;
 using NetArchTest.Rules;
 
@@ -10,11 +11,13 @@ namespace IHostPro.ArchitectureTests;
 /// Enforces ADR-018 (Fase 8, Checkpoint 1 — Workflow Orchestration, first
 /// cross-context command) as a build-breaking guarantee rather than a
 /// comment: the command/event distinction, that only Workflow Orchestration
-/// may send <see cref="CreateCleaningForReservation"/>, and that Workflow's
-/// own consumer stays a thin, stateless adapter (no
+/// may send <see cref="CreateCleaningForReservation"/>, that Workflow's own
+/// Wolverine adapter stays a thin, stateless transport shim (no
 /// <see cref="IServiceScopeFactory"/>/DbContext — approved Decision
 /// Material 4, no <c>IWorkflowMessageExecutionScope</c> "just for
-/// symmetry").
+/// symmetry"), and — since Fase 8 Checkpoint 1.1's corrective review — that
+/// the orchestration USE CASE lives in <c>Workflow.Application</c>, never
+/// directly in the transport-only <c>Workflow.Infrastructure</c>.
 /// </summary>
 public class WorkflowOrchestrationArchitectureTests
 {
@@ -113,14 +116,157 @@ public class WorkflowOrchestrationArchitectureTests
     {
         // Single-entrypoint proof for Workflow's own consumer, same
         // discipline already applied to Housekeeping/Reservations/
-        // Dashboard's own adapters.
+        // Dashboard's own adapters. Fase 8, Checkpoint 1.1: the two types
+        // are now the thin Wolverine adapter (ReservationCreatedHandler)
+        // and WolverineWorkflowCommandDispatcher (the Infrastructure-side
+        // implementation of Workflow.Application's IWorkflowCommandDispatcher)
+        // — the orchestration use case itself moved OUT of this namespace,
+        // into Workflow.Application.
         var handlerTypes = Types.InAssembly(typeof(ReservationCreatedHandler).Assembly)
             .That()
             .ResideInNamespace("IHostPro.Contexts.Workflow.Infrastructure.Messaging")
             .GetTypes();
 
         handlerTypes.Should().HaveCount(2,
-            "exactly two types are expected: the thin Wolverine adapter (ReservationCreatedHandler) and the " +
-            "IIntegrationEventHandler<ReservationCreated> implementation it delegates to (CreateCleaningOnReservationCreated)");
+            "exactly two types are expected: the thin Wolverine adapter (ReservationCreatedHandler) and " +
+            "WolverineWorkflowCommandDispatcher, the transport-only implementation of IWorkflowCommandDispatcher");
+    }
+
+    // ---- Fase 8, Checkpoint 1.1 — Workflow.Application/.Infrastructure layering ----
+
+    [Fact]
+    public void Workflow_Application_Never_Depends_On_Wolverine()
+    {
+        var result = Types.InAssembly(typeof(IWorkflowCommandDispatcher).Assembly)
+            .Should()
+            .NotHaveDependencyOnAny("Wolverine", "Wolverine.EntityFrameworkCore", "Wolverine.RabbitMQ")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            "Workflow.Application is the use-case layer — it must never depend on Wolverine, the transport " +
+            "mechanism Workflow.Infrastructure alone is responsible for (Checkpoint 1.1 corrective layering)");
+    }
+
+    [Fact]
+    public void Workflow_Application_Never_Depends_On_EntityFrameworkCore()
+    {
+        var result = Types.InAssembly(typeof(IWorkflowCommandDispatcher).Assembly)
+            .Should()
+            .NotHaveDependencyOn("Microsoft.EntityFrameworkCore")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            "Workflow.Application must stay stateless and persistence-free — no DbContext, no EF Core dependency " +
+            "at all (Decision Material 4, still true after the Application layer was introduced)");
+    }
+
+    [Fact]
+    public void Workflow_Application_Never_Depends_On_Workflow_Infrastructure()
+    {
+        var infrastructureAssemblyName = typeof(ReservationCreatedHandler).Assembly.GetName().Name!;
+
+        var result = Types.InAssembly(typeof(IWorkflowCommandDispatcher).Assembly)
+            .Should()
+            .NotHaveDependencyOn(infrastructureAssemblyName)
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            "the dependency must flow one way only — Infrastructure depends on Application's abstractions, " +
+            "never the reverse");
+    }
+
+    [Fact]
+    public void Workflow_Infrastructure_Depends_On_Workflow_Application()
+    {
+        // Types.Should().HaveDependencyOn(...) requires EVERY type in the
+        // selection to carry the dependency — ReservationCreatedHandler
+        // itself does not (it only needs the shared
+        // IIntegrationEventHandler<T> abstraction, resolved via keyed DI),
+        // so this checks the one Infrastructure type whose entire job IS
+        // bridging to Workflow.Application.
+        var applicationAssemblyName = typeof(IWorkflowCommandDispatcher).Assembly.GetName().Name!;
+
+        var result = Types.InAssembly(typeof(ReservationCreatedHandler).Assembly)
+            .That()
+            .HaveName(nameof(WolverineWorkflowCommandDispatcher))
+            .Should()
+            .HaveDependencyOn(applicationAssemblyName)
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            "WolverineWorkflowCommandDispatcher must actually implement Workflow.Application's " +
+            "IWorkflowCommandDispatcher — the whole point of the Checkpoint 1.1 layering split");
+    }
+
+    [Fact]
+    public void No_Other_Context_Assembly_References_Workflow_Application_Or_Infrastructure()
+    {
+        // Mirrors No_Other_Context_Assembly_References_CreateCleaningForReservation
+        // — Workflow Orchestration is a leaf consumer of other contexts'
+        // Contracts, never something another context depends back on.
+        var otherContextAssemblies = new[]
+        {
+            typeof(IHostPro.Contexts.Reservations.Domain.Reservation).Assembly,
+            typeof(IHostPro.Contexts.Reservations.Application.Optional<>).Assembly,
+            typeof(IHostPro.Contexts.Reservations.Infrastructure.Messaging.CleaningCreatedHandler).Assembly,
+            typeof(IHostPro.Contexts.Reservations.Api.AssemblyReference).Assembly,
+            typeof(IHostPro.Contexts.Housekeeping.Domain.Cleaning).Assembly,
+            typeof(IHostPro.Contexts.Housekeeping.Application.Cleanings.IReservationCancellationGuard).Assembly,
+            typeof(IHostPro.Contexts.Housekeeping.Infrastructure.HousekeepingModuleExtensions).Assembly,
+            typeof(IHostPro.Contexts.Dashboard.Domain.AssemblyReference).Assembly,
+            typeof(IHostPro.Contexts.Dashboard.Application.IDashboardMessageExecutionScope).Assembly,
+            typeof(IHostPro.Contexts.Dashboard.Infrastructure.Persistence.DashboardDbContext).Assembly,
+            typeof(IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence.PropertyManagementDbContext).Assembly,
+            typeof(IHostPro.Contexts.Identity.Infrastructure.Persistence.IdentityDbContext).Assembly,
+            typeof(IHostPro.Contexts.Configuration.Infrastructure.Messaging.PolicyUpdatedHandler).Assembly,
+        };
+
+        var workflowAssemblyNames = new[]
+        {
+            typeof(IWorkflowCommandDispatcher).Assembly.GetName().Name!,
+            typeof(ReservationCreatedHandler).Assembly.GetName().Name!,
+        };
+
+        foreach (var assembly in otherContextAssemblies.Distinct())
+        {
+            foreach (var workflowAssemblyName in workflowAssemblyNames)
+            {
+                var referencingTypes = Types.InAssembly(assembly)
+                    .That()
+                    .HaveDependencyOn(workflowAssemblyName)
+                    .GetTypes();
+
+                referencingTypes.Should().BeEmpty(
+                    $"{assembly.GetName().Name} must never depend on {workflowAssemblyName} — Workflow Orchestration " +
+                    "only ever consumes other contexts' Contracts, no other context depends back on it");
+            }
+        }
+    }
+
+    [Fact]
+    public void Workflow_Application_Only_References_Other_Bounded_Contexts_Through_Contracts()
+    {
+        // Structural proof that Workflow.Application's cross-context
+        // knowledge is limited to Reservations.Contracts/Housekeeping.Contracts
+        // (the Integration Event it consumes and the command it produces) —
+        // never those contexts' Domain/Application/Infrastructure/Api layers.
+        var forbiddenAssemblyNames = new[]
+        {
+            typeof(IHostPro.Contexts.Reservations.Domain.Reservation).Assembly.GetName().Name!,
+            typeof(IHostPro.Contexts.Reservations.Application.Optional<>).Assembly.GetName().Name!,
+            typeof(IHostPro.Contexts.Reservations.Infrastructure.Messaging.CleaningCreatedHandler).Assembly.GetName().Name!,
+            typeof(IHostPro.Contexts.Housekeeping.Domain.Cleaning).Assembly.GetName().Name!,
+            typeof(IHostPro.Contexts.Housekeeping.Application.Cleanings.IReservationCancellationGuard).Assembly.GetName().Name!,
+            typeof(IHostPro.Contexts.Housekeeping.Infrastructure.HousekeepingModuleExtensions).Assembly.GetName().Name!,
+        };
+
+        var result = Types.InAssembly(typeof(IWorkflowCommandDispatcher).Assembly)
+            .Should()
+            .NotHaveDependencyOnAny(forbiddenAssemblyNames)
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            "Workflow.Application must reference other Bounded Contexts exclusively via their public Contracts " +
+            "assemblies, never their Domain/Application/Infrastructure/Api layers");
     }
 }

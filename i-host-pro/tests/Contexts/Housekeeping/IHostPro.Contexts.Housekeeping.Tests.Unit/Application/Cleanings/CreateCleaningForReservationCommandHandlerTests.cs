@@ -6,11 +6,17 @@ using IHostPro.Contexts.Housekeeping.Tests.Unit.Infrastructure;
 namespace IHostPro.Contexts.Housekeeping.Tests.Unit.Application.Cleanings;
 
 /// <summary>
-/// Fase 8, Checkpoint 1 (Workflow Orchestration — ADR-018): covers the two
+/// Fase 8, Checkpoint 1/1.1 (Workflow Orchestration — ADR-018): covers the
 /// guards this automated flow needs that the HTTP flow
-/// (<see cref="CreateCleaningCommandHandlerTests"/>) does not — idempotency
-/// and the best-effort cancellation guard — plus the automated-actor
-/// shape (<c>CreatedByUserId</c>/<c>ScheduledAtUtc</c> both always null).
+/// (<see cref="CreateCleaningCommandHandlerTests"/>) does not — the
+/// per-reservation lock, ensuring the local reference, idempotency, and the
+/// now-deterministic cancellation guard (Checkpoint 1.1 corrected the CP1
+/// best-effort version) — plus the automated-actor shape
+/// (<c>CreatedByUserId</c>/<c>ScheduledAtUtc</c> both always null). The real
+/// concurrency proof for the lock lives in
+/// <c>CreateCleaningForReservationCancellationSafetyTests</c> (Housekeeping
+/// integration tests, real PostgreSQL) — these fakes only prove this
+/// handler's own sequencing and guard usage in isolation.
 /// </summary>
 public class CreateCleaningForReservationCommandHandlerTests
 {
@@ -24,6 +30,8 @@ public class CreateCleaningForReservationCommandHandlerTests
         FakeHousekeepingAuditWriter AuditWriter,
         FakeIntegrationEventCollector EventCollector,
         FakeCleaningReader CleaningReader,
+        FakeReservationReferenceProjection ReservationProjection,
+        FakeReservationCancellationGuard CancellationGuard,
         CreateCleaningForReservationCommandHandler Handler);
 
     private static Fixture CreateFixture(
@@ -34,10 +42,13 @@ public class CreateCleaningForReservationCommandHandlerTests
         var eventCollector = new FakeIntegrationEventCollector();
         var cleaningReader = FakeCleaningReader.WithDetail(null);
         cleaningReader.ExistsAutomated = alreadyCreatedAutomated;
+        var reservationProjection = FakeReservationReferenceProjection.With(exists: true, isCancelled: reservationIsCancelled);
+        var cancellationGuard = new FakeReservationCancellationGuard();
 
         var handler = new CreateCleaningForReservationCommandHandler(
             FakePropertyReferenceProjection.With(propertyIsKnownActive),
-            FakeReservationReferenceProjection.With(exists: true, isCancelled: reservationIsCancelled),
+            reservationProjection,
+            cancellationGuard,
             cleaningReader,
             new PassThroughHousekeepingTransactionExecutor(),
             repository,
@@ -45,7 +56,7 @@ public class CreateCleaningForReservationCommandHandlerTests
             eventCollector,
             new FixedTimeProvider(Now));
 
-        return new Fixture(repository, auditWriter, eventCollector, cleaningReader, handler);
+        return new Fixture(repository, auditWriter, eventCollector, cleaningReader, reservationProjection, cancellationGuard, handler);
     }
 
     private static CreateCleaningForReservation Command() => new()
@@ -101,6 +112,18 @@ public class CreateCleaningForReservationCommandHandlerTests
     }
 
     [Fact]
+    public async Task A_valid_command_acquires_the_reservation_lock_and_ensures_the_local_reference_before_creating()
+    {
+        var fixture = CreateFixture();
+
+        await fixture.Handler.HandleAsync(Command(), CancellationToken.None);
+
+        fixture.CancellationGuard.AcquiredLocks.Should().ContainSingle().Which.Should().Be((TenantId, ReservationId));
+        fixture.ReservationProjection.EnsureExistsCalled.Should().BeTrue(
+            "the command may legitimately arrive before Housekeeping's own ReservationCreated reaction has run");
+    }
+
+    [Fact]
     public async Task An_already_created_automated_cleaning_is_a_no_op_idempotency_layer_1()
     {
         var fixture = CreateFixture(alreadyCreatedAutomated: true);
@@ -108,16 +131,20 @@ public class CreateCleaningForReservationCommandHandlerTests
         await fixture.Handler.HandleAsync(Command(), CancellationToken.None);
 
         AssertNoSideEffect(fixture);
+        fixture.CancellationGuard.AcquiredLocks.Should().ContainSingle(
+            "the lock must still be acquired before the idempotency check runs");
     }
 
     [Fact]
-    public async Task A_reservation_already_marked_cancelled_by_the_local_projection_is_a_no_op_best_effort_guard()
+    public async Task A_reservation_already_marked_cancelled_is_a_no_op_deterministic_guard()
     {
         var fixture = CreateFixture(reservationIsCancelled: true);
 
         await fixture.Handler.HandleAsync(Command(), CancellationToken.None);
 
         AssertNoSideEffect(fixture);
+        fixture.CancellationGuard.AcquiredLocks.Should().ContainSingle(
+            "the lock must still be acquired before the cancellation check runs");
     }
 
     [Fact]
@@ -129,6 +156,8 @@ public class CreateCleaningForReservationCommandHandlerTests
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         AssertNoSideEffect(fixture);
+        fixture.CancellationGuard.AcquiredLocks.Should().BeEmpty(
+            "the property check runs before the write transaction opens — the lock is never reached");
     }
 
     private static void AssertNoSideEffect(Fixture fixture)

@@ -5,7 +5,7 @@ namespace IHostPro.Contexts.Housekeeping.Tests.Unit.Application.Cleanings;
 internal sealed class FakeReservationReferenceProjection : IReservationReferenceProjection
 {
     private readonly bool _exists;
-    private readonly bool _isCancelled;
+    private bool _isCancelled;
 
     private FakeReservationReferenceProjection(bool exists, bool isCancelled)
     {
@@ -17,8 +17,16 @@ internal sealed class FakeReservationReferenceProjection : IReservationReference
 
     public static FakeReservationReferenceProjection With(bool exists, bool isCancelled) => new(exists, isCancelled);
 
+    public bool EnsureExistsCalled { get; private set; }
+
     public Task<bool> ExistsAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken) =>
         Task.FromResult(_exists);
+
+    public Task EnsureExistsAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken)
+    {
+        EnsureExistsCalled = true;
+        return Task.CompletedTask;
+    }
 
     public Task<bool> IsCancelledAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken) =>
         Task.FromResult(_isCancelled);

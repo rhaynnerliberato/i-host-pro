@@ -73,6 +73,7 @@
     <ProjectReference Include="..\..\src\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Application\IHostPro.Contexts.Dashboard.Application.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Infrastructure\IHostPro.Contexts.Dashboard.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Api\IHostPro.Contexts.Dashboard.Api.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Workflow\IHostPro.Contexts.Workflow.Application\IHostPro.Contexts.Workflow.Application.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Workflow\IHostPro.Contexts.Workflow.Infrastructure\IHostPro.Contexts.Workflow.Infrastructure.csproj" />
   </ItemGroup>
 
