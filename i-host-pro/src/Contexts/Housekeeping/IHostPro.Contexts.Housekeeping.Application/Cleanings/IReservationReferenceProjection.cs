@@ -14,4 +14,19 @@ namespace IHostPro.Contexts.Housekeeping.Application.Cleanings;
 public interface IReservationReferenceProjection
 {
     Task<bool> ExistsAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Best-effort cancellation guard for the Workflow → Housekeeping
+    /// <c>CreateCleaningForReservation</c> flow (Fase 8, Checkpoint 1 —
+    /// ADR-018) — returns <c>true</c> only when this context's own
+    /// <c>ReservationCancelled</c> reaction has already run for
+    /// <paramref name="reservationId"/>. NEVER a consistency guarantee: the
+    /// independent, unordered RabbitMQ delivery of <c>ReservationCreated</c>
+    /// and <c>ReservationCancelled</c> means this can still return
+    /// <c>false</c> for a Reservation that was, in fact, already cancelled —
+    /// accepted risk, documented in ADR-018. Returns <c>false</c> (never
+    /// throws) when no projection row exists yet for
+    /// <paramref name="reservationId"/>.
+    /// </summary>
+    Task<bool> IsCancelledAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken);
 }

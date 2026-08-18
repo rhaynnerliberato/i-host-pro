@@ -32,4 +32,17 @@ public sealed class ReservationReferenceProjectionReader : IReservationReference
             .AsNoTracking()
             .AnyAsync(r => r.TenantId == tenantId && r.ReservationId == reservationId, cancellationToken);
     }
+
+    public async Task<bool> IsCancelledAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken)
+    {
+        var scopeTenantContext = new TenantContext();
+        scopeTenantContext.SetTenant(tenantId);
+
+        await using var transaction = await TenantAwareTransactionScope.BeginAsync(
+            _dbContext, scopeTenantContext, readOnly: true, cancellationToken);
+
+        return await _dbContext.ReservationProjection
+            .AsNoTracking()
+            .AnyAsync(r => r.TenantId == tenantId && r.ReservationId == reservationId && r.IsCancelled, cancellationToken);
+    }
 }

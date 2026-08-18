@@ -21,7 +21,13 @@ namespace IHostPro.Contexts.Housekeeping.Domain;
 public sealed class CleaningAuditEntry : Entity<Guid>, ITenantOwned
 {
     public Guid TenantId { get; private set; }
-    public Guid ActorUserId { get; private set; }
+
+    /// <summary>
+    /// <c>null</c> for automated/system-triggered actions (Fase 8, Checkpoint
+    /// 1 — ADR-018), mirroring <see cref="IHostPro.Contexts.Housekeeping.Domain.Cleaning.CreatedByUserId"/>'s
+    /// own nullability. Never exposed via any public HTTP contract.
+    /// </summary>
+    public Guid? ActorUserId { get; private set; }
     public string EntityType { get; private set; } = null!;
     public Guid AggregateId { get; private set; }
     public string ActionCode { get; private set; } = null!;
@@ -34,7 +40,7 @@ public sealed class CleaningAuditEntry : Entity<Guid>, ITenantOwned
     }
 
     private CleaningAuditEntry(
-        Guid id, Guid tenantId, Guid actorUserId, string entityType, Guid aggregateId,
+        Guid id, Guid tenantId, Guid? actorUserId, string entityType, Guid aggregateId,
         string actionCode, IReadOnlyList<string> changedFields, DateTimeOffset occurredAt)
         : base(id)
     {
@@ -48,7 +54,7 @@ public sealed class CleaningAuditEntry : Entity<Guid>, ITenantOwned
     }
 
     public static CleaningAuditEntry Create(
-        Guid id, Guid tenantId, Guid actorUserId, string entityType, Guid aggregateId,
+        Guid id, Guid tenantId, Guid? actorUserId, string entityType, Guid aggregateId,
         string actionCode, IReadOnlyList<string> changedFields, DateTimeOffset occurredAt)
     {
         if (string.IsNullOrWhiteSpace(entityType))

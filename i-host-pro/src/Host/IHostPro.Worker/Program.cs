@@ -15,6 +15,7 @@ using IHostPro.Contexts.Identity.Infrastructure;
 using IHostPro.Contexts.Reservations.Infrastructure;
 using IHostPro.Contexts.Reservations.Infrastructure.Messaging;
 using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
+using IHostPro.Contexts.Workflow.Infrastructure;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -103,6 +104,14 @@ try
     // DashboardModuleExtensions' own doc comment).
     builder.Services.AddDashboardModule(builder.Configuration);
     builder.Services.AddDashboardProjectionConsumer();
+
+    // Workflow Orchestration module (Fase 8, Checkpoint 1 — ADR-018):
+    // stateless — no DbContext, no aggregates, no persistence (approved
+    // Decision Material 4) — so, unlike every module above, there is no
+    // configuration to pass and no separate "module + consumer" split.
+    // Consumed exclusively in this process; IHostPro.Api never references
+    // it (no HTTP surface this checkpoint).
+    builder.Services.AddWorkflowModule();
 
     // IHostPro.Worker hosts every Bounded Context's message handlers and Sagas,
     // kept in a separate process from IHostPro.Api so message processing can
@@ -259,6 +268,14 @@ try
         opts.ListenToRabbitQueue("housekeeping.property-projection");
         opts.ListenToRabbitQueue("housekeeping.reservation-projection");
 
+        // Fase 8, Checkpoint 1 (Workflow Orchestration — ADR-018): Housekeeping's
+        // consumed cross-context COMMAND, CreateCleaningForReservation —
+        // same assembly as PropertyCreatedHandler above, already included.
+        // The queue itself, and its binding to the dedicated
+        // workflow-orchestration-commands exchange, is provisioned
+        // exclusively by IHostPro.MigrationRunner.
+        opts.ListenToRabbitQueue("housekeeping.workflow-commands");
+
         // Reservations' first consumed Integration Events (Fase 7, Incremento
         // 1 — Agenda Foundation, Checkpoint 1): the ten Cleaning lifecycle
         // events IHostPro.Api actually routes to housekeeping-events —
@@ -301,6 +318,21 @@ try
         opts.ListenToRabbitQueue("dashboard.property-projection");
         opts.ListenToRabbitQueue("dashboard.occurrence-projection");
 
+        // Workflow Orchestration's own single trigger consumer (Fase 8,
+        // Checkpoint 1 — ADR-018): a fourth, independent subscriber queue
+        // on the EXISTING reservation-events exchange (Reservations never
+        // needs to know Workflow is listening — same decoupled pub/sub
+        // pattern as Housekeeping's/Dashboard's own queues above). The
+        // queue itself, and its binding, is provisioned exclusively by
+        // IHostPro.MigrationRunner. ReservationCreatedHandler lives in
+        // Workflow.Infrastructure, a separate assembly from this entry
+        // assembly, so it must be explicitly included in Wolverine's
+        // handler discovery — fully qualified below (never a blanket
+        // `using`) for the same collision reason as Dashboard's own
+        // ReservationCreatedHandler above.
+        opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
+        opts.ListenToRabbitQueue("workflow.reservation-created-trigger");
+
         // Real defect found and fixed (Checkpoint 6 homologação, ADR-015
         // spike): IHostPro.Api/Program.cs already routes every real Cleaning
         // lifecycle event except CleaningDelayed (Fase 7, Incremento 1,
@@ -320,6 +352,27 @@ try
         const string housekeepingEventsExchange = "housekeeping-events";
         opts.PublishMessage(typeof(CleaningCancelled))
             .ToRabbitRoutingKey(housekeepingEventsExchange, "cleaning_cancelled", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        // Fase 8, Checkpoint 1 (Workflow Orchestration — ADR-018): the
+        // codebase's first cross-context COMMAND. Sent via IMessageBus.SendAsync
+        // (see CreateCleaningOnReservationCreated) rather than PublishAsync —
+        // there is exactly one destination Bounded Context (Housekeeping) —
+        // but the routing CONFIGURATION method is still PublishMessage,
+        // Wolverine's own fixed API name for "configure how this message
+        // type is routed" regardless of Send/Publish semantics at the call
+        // site (same as every other rule in this block). A dedicated,
+        // narrowly-scoped Direct exchange — never the generic/topic
+        // *-events exchanges above — makes clear this is not a fan-out
+        // event. No ancillary outbox enrollment needed: Workflow owns no
+        // DbContext, so this durable send uses Wolverine's own Main store
+        // (platform_messaging, already configured above) by default.
+        const string workflowOrchestrationCommandsExchange = "workflow-orchestration-commands";
+        opts.PublishMessage(typeof(CreateCleaningForReservation))
+            .ToRabbitRoutingKey(
+                workflowOrchestrationCommandsExchange, "create_cleaning_for_reservation",
+                exchange => exchange.ExchangeType = ExchangeType.Direct)
             .UseDurableOutbox()
             .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
     });

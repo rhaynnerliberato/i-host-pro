@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
+    <ProjectReference Include="..\..\Housekeeping\IHostPro.Contexts.Housekeeping.Contracts\IHostPro.Contexts.Housekeeping.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Fase 8, Checkpoint 1 — ADR-018: this context is stateless (no
+         WorkflowDbContext, no aggregates, no persistence — approved
+         Decision Material 4). Plain WolverineFx (IMessageBus,
+         [NonTransactional], MessageContext) only — never
+         WolverineFx.EntityFrameworkCore, which every other context's
+         Infrastructure project references solely because it owns a
+         DbContext this one does not have. -->
+    <PackageReference Include="WolverineFx" Version="6.22.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

@@ -567,6 +567,15 @@ try
                 exchange.BindQueue("dashboard.reservation-projection", "reservation_created");
                 exchange.BindQueue("dashboard.reservation-projection", "reservation_updated");
                 exchange.BindQueue("dashboard.reservation-projection", "reservation_cancelled");
+                // Fase 8, Checkpoint 1 (Workflow Orchestration — ADR-018): a
+                // third, independent subscriber queue on this same exchange
+                // — Workflow never needs Reservations to know it exists,
+                // same decoupled pub/sub pattern as Housekeeping's/
+                // Dashboard's own queues above. Bound to ONLY
+                // reservation_created (the single trigger this Checkpoint
+                // implements — approved decision, no ReservationUpdated/
+                // ReservationCancelled reaction this checkpoint).
+                exchange.BindQueue("workflow.reservation-created-trigger", "reservation_created");
             })
             // Fase 5, Incremento 1 (Policy Engine Foundation), Checkpoint 1:
             // declared ahead of PolicyUpdated (Checkpoint 6) — same
@@ -647,6 +656,21 @@ try
                 // convention of one queue per projection concern, even
                 // though both live on this same exchange).
                 exchange.BindQueue("dashboard.occurrence-projection", "cleaning_occurrence_registered");
+            })
+            // Fase 8, Checkpoint 1 (Workflow Orchestration — ADR-018): the
+            // codebase's first cross-context COMMAND, never an Integration
+            // Event — a deliberately separate, narrowly-scoped exchange
+            // from every *-events exchange above, Direct (not Topic) since
+            // there is exactly one sender (Workflow) and exactly one
+            // destination queue (Housekeeping's own), never a fan-out
+            // pattern. The queue name itself makes ownership explicit:
+            // Housekeeping owns and consumes it, mirroring every other
+            // queue's own "<owning context>.<purpose>" naming convention in
+            // this platform.
+            .DeclareExchange("workflow-orchestration-commands", exchange =>
+            {
+                exchange.ExchangeType = ExchangeType.Direct;
+                exchange.BindQueue("housekeeping.workflow-commands", "create_cleaning_for_reservation");
             });
     });
 

@@ -54,6 +54,14 @@ public static class HousekeepingModuleExtensions
         services.AddScoped<IPropertyReferenceProjection, PropertyReferenceProjectionReader>();
         services.AddScoped<IReservationReferenceProjection, ReservationReferenceProjectionReader>();
 
+        // Fase 8, Checkpoint 1 — ADR-018: handles the cross-context command
+        // CreateCleaningForReservation, sent exclusively by Workflow
+        // Orchestration. Not keyed — unlike IIntegrationEventHandler<T>,
+        // ICreateCleaningForReservationHandler is exclusive to Housekeeping,
+        // no other context registers it, so there is no resolution
+        // ambiguity to guard against.
+        services.AddScoped<ICreateCleaningForReservationHandler, CreateCleaningForReservationCommandHandler>();
+
         // Backs every write command's transactional step, AND the two
         // Worker-side event reactions below — see
         // HousekeepingOutboxTransactionExecutor's own doc comment.

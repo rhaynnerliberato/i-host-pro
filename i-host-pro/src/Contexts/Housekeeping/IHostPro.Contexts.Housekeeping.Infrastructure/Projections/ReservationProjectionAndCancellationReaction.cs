@@ -79,7 +79,12 @@ public sealed class ReservationProjectionAndCancellationReaction :
                 r => r.TenantId == @event.TenantId && r.ReservationId == @event.ReservationId, cancellationToken);
 
             if (projectionEntry is null)
-                _dbContext.ReservationProjection.Add(new ReservationProjectionEntry(@event.TenantId, @event.ReservationId));
+            {
+                projectionEntry = new ReservationProjectionEntry(@event.TenantId, @event.ReservationId);
+                _dbContext.ReservationProjection.Add(projectionEntry);
+            }
+
+            projectionEntry.MarkCancelled();
 
             var linkedCleanings = await _dbContext.Cleanings
                 .Where(c => c.ReservationId == @event.ReservationId

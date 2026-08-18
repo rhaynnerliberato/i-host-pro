@@ -36,5 +36,6 @@
          Housekeeping's/Property Management's own events into this new
          context's local read-model projections. -->
     <ProjectReference Include="..\..\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Infrastructure\IHostPro.Contexts.Dashboard.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Contexts\Workflow\IHostPro.Contexts.Workflow.Infrastructure\IHostPro.Contexts.Workflow.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

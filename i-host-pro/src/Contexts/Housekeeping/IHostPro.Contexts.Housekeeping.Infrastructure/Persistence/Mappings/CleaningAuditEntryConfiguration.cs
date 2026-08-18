@@ -19,7 +19,7 @@ public sealed class CleaningAuditEntryConfiguration : IEntityTypeConfiguration<C
         builder.Property(e => e.Id).HasColumnName("id").ValueGeneratedNever();
 
         builder.Property(e => e.TenantId).HasColumnName("tenant_id").IsRequired();
-        builder.Property(e => e.ActorUserId).HasColumnName("actor_user_id").IsRequired();
+        builder.Property(e => e.ActorUserId).HasColumnName("actor_user_id");
         builder.Property(e => e.EntityType).HasColumnName("entity_type").HasMaxLength(50).IsRequired();
         builder.Property(e => e.AggregateId).HasColumnName("aggregate_id").IsRequired();
         builder.Property(e => e.ActionCode).HasColumnName("action_code").HasMaxLength(50).IsRequired();

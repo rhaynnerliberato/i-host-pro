@@ -25,7 +25,19 @@ public sealed class Cleaning : AggregateRoot<Guid>, ITenantOwned
     public Guid? ReservationId { get; private set; }
     public Guid? AssignedHousekeeperUserId { get; private set; }
     public CleaningStatus Status { get; private set; }
-    public Guid CreatedByUserId { get; private set; }
+
+    /// <summary>
+    /// The Administrator/Operator who created this cleaning — <c>null</c>
+    /// when it was created automatically by a system reaction (Fase 8,
+    /// Checkpoint 1 — ADR-018: Workflow Orchestration's <c>ReservationCreated</c>
+    /// → <c>CreateCleaningForReservation</c> flow) rather than through the
+    /// authenticated administrative HTTP flow. No "system user" identity is
+    /// seeded for this — <c>null</c> is the actor, mirroring the existing
+    /// <c>ActorType = "System", ActorId = null</c> precedent already used by
+    /// <c>ReservationProjectionAndCancellationReaction</c> for automated
+    /// Integration Events.
+    /// </summary>
+    public Guid? CreatedByUserId { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
 
     /// <summary>
@@ -49,7 +61,7 @@ public sealed class Cleaning : AggregateRoot<Guid>, ITenantOwned
     }
 
     private Cleaning(
-        Guid id, Guid tenantId, Guid propertyId, Guid? reservationId, Guid createdByUserId, DateTimeOffset now,
+        Guid id, Guid tenantId, Guid propertyId, Guid? reservationId, Guid? createdByUserId, DateTimeOffset now,
         DateTimeOffset? scheduledAtUtc)
         : base(id)
     {
@@ -63,7 +75,7 @@ public sealed class Cleaning : AggregateRoot<Guid>, ITenantOwned
     }
 
     public static Cleaning Create(
-        Guid id, Guid tenantId, Guid propertyId, Guid? reservationId, Guid createdByUserId, DateTimeOffset now,
+        Guid id, Guid tenantId, Guid propertyId, Guid? reservationId, Guid? createdByUserId, DateTimeOffset now,
         DateTimeOffset? scheduledAtUtc = null) =>
         new(id, tenantId, propertyId, reservationId, createdByUserId, now.ToUniversalTime(), scheduledAtUtc);
 

@@ -2,6 +2,8 @@ using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
 using IHostPro.Contexts.Housekeeping.Application;
+using IHostPro.Contexts.Housekeeping.Application.Cleanings;
+using IHostPro.Contexts.Housekeeping.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace IHostPro.Contexts.Housekeeping.Infrastructure.Messaging;
@@ -53,5 +55,24 @@ public sealed class HousekeepingMessageExecutionScope : IHousekeepingMessageExec
 
         var processor = scope.ServiceProvider.GetRequiredKeyedService<IIntegrationEventHandler<TMessage>>(HandlerKey);
         await processor.HandleAsync(message, cancellationToken);
+    }
+
+    /// <inheritdoc cref="IHousekeepingMessageExecutionScope.ExecuteCreateCleaningForReservationAsync"/>
+    /// <remarks>
+    /// Resolves <see cref="ICreateCleaningForReservationHandler"/> unkeyed —
+    /// unlike <see cref="IIntegrationEventHandler{TMessage}"/>, it is
+    /// exclusive to Housekeeping, registered once, with no other context
+    /// competing for the same generic slot.
+    /// </remarks>
+    public async Task ExecuteCreateCleaningForReservationAsync(
+        CreateCleaningForReservation command, Guid messageId, CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+        tenantContext.SetTenant(command.TenantId);
+
+        var handler = scope.ServiceProvider.GetRequiredService<ICreateCleaningForReservationHandler>();
+        await handler.HandleAsync(command, cancellationToken);
     }
 }

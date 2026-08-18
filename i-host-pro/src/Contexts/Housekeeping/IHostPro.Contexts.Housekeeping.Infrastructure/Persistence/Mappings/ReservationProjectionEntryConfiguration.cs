@@ -19,5 +19,6 @@ public sealed class ReservationProjectionEntryConfiguration : IEntityTypeConfigu
 
         builder.Property(r => r.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(r => r.ReservationId).HasColumnName("reservation_id").IsRequired();
+        builder.Property(r => r.IsCancelled).HasColumnName("is_cancelled").IsRequired().HasDefaultValue(false);
     }
 }

@@ -4983,7 +4983,7 @@ export interface CleaningDetailResponse {
     reservationId?: string | undefined;
     assignedHousekeeperUserId?: string | undefined;
     status?: string | undefined;
-    createdByUserId?: string;
+    createdByUserId?: string | undefined;
     createdAtUtc?: Date;
     scheduledAtUtc?: Date | undefined;
     startedAtUtc?: Date | undefined;

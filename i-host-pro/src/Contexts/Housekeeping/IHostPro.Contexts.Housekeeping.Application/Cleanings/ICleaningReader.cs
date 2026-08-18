@@ -50,4 +50,23 @@ public interface ICleaningReader
     /// </summary>
     Task<CleaningResult?> GetByIdForHousekeeperAsync(
         Guid cleaningId, Guid housekeeperUserId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Idempotency guard for the Workflow → Housekeeping
+    /// <c>CreateCleaningForReservation</c> flow (Fase 8, Checkpoint 1 —
+    /// ADR-018) — <c>true</c> only when a Cleaning already exists for
+    /// <paramref name="reservationId"/> with <c>CreatedByUserId == null</c>
+    /// (i.e. already created by THIS automated flow), never when only a
+    /// manual (<c>CreatedByUserId != null</c>) Cleaning exists for the same
+    /// Reservation — those are a separate, deliberately unconstrained case
+    /// (see <c>CleaningConfiguration</c>'s own partial-unique-index comment).
+    /// Unlike every other member of this interface, this method takes
+    /// <paramref name="tenantId"/> explicitly and its implementation opens
+    /// its OWN tenant-scoped transaction — it is invoked from the
+    /// message-execution boundary, never from the Mediator/HTTP pipeline
+    /// this interface's other members rely on for their ambient RLS
+    /// transaction (mirrors <c>IPropertyReferenceProjection</c>/
+    /// <c>IReservationReferenceProjection</c>'s own self-contained pattern).
+    /// </summary>
+    Task<bool> ExistsAutomatedForReservationAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken);
 }

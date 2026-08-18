@@ -1,4 +1,5 @@
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
+using IHostPro.Contexts.Housekeeping.Contracts;
 
 namespace IHostPro.Contexts.Housekeeping.Application;
 
@@ -45,4 +46,21 @@ public interface IHousekeepingMessageExecutionScope
     Task ExecuteAsync<TMessage>(
         TMessage message, Guid tenantId, Guid messageId, CancellationToken cancellationToken)
         where TMessage : IntegrationEvent;
+
+    /// <summary>
+    /// Same tenant-safe scope-opening mechanism as <see cref="ExecuteAsync{TMessage}"/>,
+    /// for the cross-context command <see cref="CreateCleaningForReservation"/>
+    /// (Fase 8, Checkpoint 1 — ADR-018) instead of an
+    /// <see cref="IntegrationEvent"/> — a command is not an
+    /// <see cref="IntegrationEvent"/> (ADR-018's own central distinction),
+    /// so it cannot flow through <see cref="ExecuteAsync{TMessage}"/>'s own
+    /// generic constraint. Deliberately NOT a second generic
+    /// <c>ExecuteCommandAsync&lt;TCommand&gt;</c> over an open
+    /// command-handler abstraction — ADR-018 explicitly rejects a generic
+    /// command bus. Stays narrowly typed to the one command this context
+    /// currently receives; extended again, narrowly, if and when a second
+    /// one exists.
+    /// </summary>
+    Task ExecuteCreateCleaningForReservationAsync(
+        CreateCleaningForReservation command, Guid messageId, CancellationToken cancellationToken);
 }

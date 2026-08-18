@@ -11,7 +11,7 @@ public sealed record CleaningResult(
     Guid? ReservationId,
     Guid? AssignedHousekeeperUserId,
     string Status,
-    Guid CreatedByUserId,
+    Guid? CreatedByUserId,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ScheduledAtUtc,
     DateTimeOffset? StartedAtUtc,
