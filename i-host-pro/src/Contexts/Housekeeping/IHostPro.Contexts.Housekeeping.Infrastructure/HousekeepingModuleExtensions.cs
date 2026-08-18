@@ -54,6 +54,12 @@ public static class HousekeepingModuleExtensions
         services.AddScoped<IPropertyReferenceProjection, PropertyReferenceProjectionReader>();
         services.AddScoped<IReservationReferenceProjection, ReservationReferenceProjectionReader>();
 
+        // Fase 8, Checkpoint 1.1 — the real serialization point for the
+        // ReservationCreated/ReservationCancelled/CreateCleaningForReservation
+        // cancellation race corrected at CP1's homologation review. See its
+        // own doc comment for the pg_advisory_xact_lock mechanics.
+        services.AddScoped<IReservationCancellationGuard, ReservationCancellationGuard>();
+
         // Fase 8, Checkpoint 1 — ADR-018: handles the cross-context command
         // CreateCleaningForReservation, sent exclusively by Workflow
         // Orchestration. Not keyed — unlike IIntegrationEventHandler<T>,

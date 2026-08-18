@@ -1,6 +1,4 @@
 using IHostPro.BuildingBlocks.Application;
-using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
-using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Application.Cleanings;
 using Microsoft.EntityFrameworkCore;
 
@@ -118,21 +116,14 @@ public sealed class CleaningReader : ICleaningReader
         return cleaning is null ? null : ToResult(cleaning);
     }
 
+    /// <inheritdoc cref="ICleaningReader.ExistsAutomatedForReservationAsync"/>
     public async Task<bool> ExistsAutomatedForReservationAsync(
-        Guid tenantId, Guid reservationId, CancellationToken cancellationToken)
-    {
-        var scopeTenantContext = new TenantContext();
-        scopeTenantContext.SetTenant(tenantId);
-
-        await using var transaction = await TenantAwareTransactionScope.BeginAsync(
-            _dbContext, scopeTenantContext, readOnly: true, cancellationToken);
-
-        return await _dbContext.Cleanings
+        Guid tenantId, Guid reservationId, CancellationToken cancellationToken) =>
+        await _dbContext.Cleanings
             .AsNoTracking()
             .AnyAsync(
                 c => c.TenantId == tenantId && c.ReservationId == reservationId && c.CreatedByUserId == null,
                 cancellationToken);
-    }
 
     private static CleaningResult ToResult(Domain.Cleaning cleaning) => new(
         cleaning.Id,

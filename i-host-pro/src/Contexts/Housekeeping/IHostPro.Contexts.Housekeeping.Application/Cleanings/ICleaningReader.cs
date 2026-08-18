@@ -61,12 +61,18 @@ public interface ICleaningReader
     /// Reservation — those are a separate, deliberately unconstrained case
     /// (see <c>CleaningConfiguration</c>'s own partial-unique-index comment).
     /// Unlike every other member of this interface, this method takes
-    /// <paramref name="tenantId"/> explicitly and its implementation opens
-    /// its OWN tenant-scoped transaction — it is invoked from the
-    /// message-execution boundary, never from the Mediator/HTTP pipeline
-    /// this interface's other members rely on for their ambient RLS
-    /// transaction (mirrors <c>IPropertyReferenceProjection</c>/
-    /// <c>IReservationReferenceProjection</c>'s own self-contained pattern).
+    /// <paramref name="tenantId"/> explicitly.
+    ///
+    /// Fase 8, Checkpoint 1.1 (corrective homologation): deliberately does
+    /// NOT open its own transaction — it is called from within the SAME
+    /// already-open, lock-protected write transaction
+    /// <c>CreateCleaningForReservationCommandHandler</c> uses to create the
+    /// Cleaning, immediately after
+    /// <see cref="IReservationCancellationGuard.AcquireLockAsync"/> for the
+    /// same reservation — that ordering is what makes this check race-free
+    /// against a concurrent redelivery of the same command, rather than
+    /// relying solely on the database's partial unique index to reject the
+    /// duplicate after the fact.
     /// </summary>
     Task<bool> ExistsAutomatedForReservationAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken);
 }
