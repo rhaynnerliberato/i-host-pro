@@ -181,6 +181,21 @@ public sealed class CreateCleaningForReservationWorkflowRoundTripTests : IAsyncL
             (await CountCleaningsForReservationAsync(tenantId, reservationId)).Should().Be(1,
                 "exactly one automated Cleaning must exist for this reservation");
 
+            // ---- Fase 8, Checkpoint 2.1 (corrective audit gate): the real
+            // Worker process must emit the new structured, PII-safe audit
+            // entry for THIS run's own orchestration act — not merely a
+            // generic Wolverine transport message. WorkflowName, Result and
+            // this run's own TenantId/ReservationId together are specific
+            // enough that only ReservationCreatedCleaningOrchestrator's own
+            // success-path log line could satisfy all four simultaneously. ----
+            string workerOutputForAuditCheck;
+            lock (_workerOutputLock) workerOutputForAuditCheck = _workerOutput.ToString();
+            workerOutputForAuditCheck.Should().Contain("Workflow01_NewReservation")
+                .And.Contain("CommandDispatched")
+                .And.Contain(tenantId.ToString())
+                .And.Contain(reservationId.ToString(),
+                    "Documento 17 §28's audit requirement must be satisfied by a real, structured log entry over real transport — not just this test's own DB assertions");
+
             var automated = await GetSingleCleaningForReservationAsync(tenantId, reservationId);
             automated.PropertyId.Should().Be(propertyId);
             automated.Status.Should().Be("Pending");
