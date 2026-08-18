@@ -403,7 +403,7 @@ Consult when:
 
 Authoritative documents:
 
-`Fase 1 - Identity and Access - Validacao e Homologacao.md`, `Fase 2 - Property Management - Validacao e Homologacao.md`, `Fase 3 - Reservation Management - Validacao e Homologacao.md`, `Fase 4 - Frontend Foundation - Validacao e Homologacao.md`, `Fase 5 - Configuration and Policy - Validacao e Homologacao.md`, `Fase 6 - Housekeeping - Validacao e Homologacao.md`, `Fase 7 - Agenda e Dashboard Operacional - Validacao e Homologacao.md` (concluída funcionalmente — publicação pendente). Purely retrospective — never treat these as a forward-looking plan.
+`Fase 1 - Identity and Access - Validacao e Homologacao.md`, `Fase 2 - Property Management - Validacao e Homologacao.md`, `Fase 3 - Reservation Management - Validacao e Homologacao.md`, `Fase 4 - Frontend Foundation - Validacao e Homologacao.md`, `Fase 5 - Configuration and Policy - Validacao e Homologacao.md`, `Fase 6 - Housekeeping - Validacao e Homologacao.md`, `Fase 7 - Agenda e Dashboard Operacional - Validacao e Homologacao.md` (concluída e publicada), `Fase 8 - Workflow Orchestration - Validacao e Homologacao.md` (Checkpoint 0 concluído; Checkpoint 1 concluído funcionalmente — publicação pendente). Purely retrospective — never treat these as a forward-looking plan.
 
 ---
 
