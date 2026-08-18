@@ -18,6 +18,8 @@ internal sealed class FakeCleaningReader : ICleaningReader
 
     public static FakeCleaningReader WithSummaries(IReadOnlyList<CleaningSummaryResult> summaries) => new(null, summaries);
 
+    public bool ExistsAutomated { get; set; }
+
     public string? LastStatus { get; private set; }
     public Guid? LastPropertyId { get; private set; }
     public Guid? LastAssignedHousekeeperUserId { get; private set; }
@@ -61,4 +63,7 @@ internal sealed class FakeCleaningReader : ICleaningReader
 
         return Task.FromResult(_detail is not null && _detail.AssignedHousekeeperUserId == housekeeperUserId ? _detail : null);
     }
+
+    public Task<bool> ExistsAutomatedForReservationAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken) =>
+        Task.FromResult(ExistsAutomated);
 }

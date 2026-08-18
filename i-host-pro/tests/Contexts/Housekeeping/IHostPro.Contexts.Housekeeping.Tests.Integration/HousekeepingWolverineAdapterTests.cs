@@ -1,6 +1,7 @@
 using FluentAssertions;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
 using IHostPro.Contexts.Housekeeping.Application;
+using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Messaging;
 using IHostPro.Contexts.PropertyManagement.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
@@ -50,6 +51,16 @@ public sealed class HousekeepingWolverineAdapterTests
             CallCount++;
             CapturedMessage = message;
             CapturedTenantId = tenantId;
+            CapturedMessageId = messageId;
+            return Task.CompletedTask;
+        }
+
+        public Task ExecuteCreateCleaningForReservationAsync(
+            CreateCleaningForReservation command, Guid messageId, CancellationToken cancellationToken)
+        {
+            CallCount++;
+            CapturedMessage = command;
+            CapturedTenantId = command.TenantId;
             CapturedMessageId = messageId;
             return Task.CompletedTask;
         }
@@ -211,6 +222,38 @@ public sealed class HousekeepingWolverineAdapterTests
             scope.CapturedMessage.Should().BeSameAs(message);
             scope.CapturedTenantId.Should().Be(tenantId);
             scope.CapturedMessageId.Should().NotBe(Guid.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Fase 8, Checkpoint 1 (Workflow Orchestration — ADR-018): the seventh
+    /// thin Wolverine adapter, for the codebase's first cross-context
+    /// COMMAND rather than an IntegrationEvent — same "swap the one real
+    /// dependency, dispatch through Wolverine's own real routing" proof as
+    /// the six event adapters above.
+    /// </summary>
+    [Fact]
+    public async Task CreateCleaningForReservationHandler_passes_the_intact_command_and_a_real_MessageId_and_nothing_else()
+    {
+        var (host, scope) = await BuildHostAsync();
+        using (host)
+        {
+            var tenantId = Guid.NewGuid();
+            var message = new CreateCleaningForReservation
+            {
+                TenantId = tenantId,
+                ReservationId = Guid.NewGuid(),
+                PropertyId = Guid.NewGuid(),
+                CorrelationId = Guid.NewGuid(),
+            };
+
+            var bus = host.Services.GetRequiredService<IMessageBus>();
+            await bus.InvokeAsync(message);
+
+            scope.CallCount.Should().Be(1, "the adapter must delegate exactly once, with no retries or extra calls");
+            scope.CapturedMessage.Should().BeSameAs(message, "the adapter must pass the command through unmodified");
+            scope.CapturedTenantId.Should().Be(tenantId, "the adapter must pass command.TenantId, never a value derived elsewhere");
+            scope.CapturedMessageId.Should().NotBe(Guid.Empty, "the adapter must pass a real Wolverine-assigned envelope id");
         }
     }
 }

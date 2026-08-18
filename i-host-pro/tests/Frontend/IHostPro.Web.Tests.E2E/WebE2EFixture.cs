@@ -448,6 +448,12 @@ public sealed class WebE2EFixture : IAsyncLifetime
                     exchange.BindQueue("dashboard.reservation-projection", "reservation_created");
                     exchange.BindQueue("dashboard.reservation-projection", "reservation_updated");
                     exchange.BindQueue("dashboard.reservation-projection", "reservation_cancelled");
+                    // Fase 8, Checkpoint 1 (Workflow Orchestration —
+                    // ADR-018): Workflow's own subscriber queue, bound to
+                    // ONLY reservation_created (the single trigger this
+                    // checkpoint implements) — mirrors
+                    // IHostPro.MigrationRunner's own declaration exactly.
+                    exchange.BindQueue("workflow.reservation-created-trigger", "reservation_created");
                 })
                 // Fase 7, Incremento 1, Checkpoint 3: was declared with NO
                 // queue bound at all — the real Worker subprocess this
@@ -509,6 +515,15 @@ public sealed class WebE2EFixture : IAsyncLifetime
                 {
                     exchange.ExchangeType = ExchangeType.Topic;
                     exchange.BindQueue("configuration.policy-updated", "policy_updated");
+                })
+                // Fase 8, Checkpoint 1 (Workflow Orchestration — ADR-018):
+                // the codebase's first cross-context COMMAND exchange —
+                // Direct, single queue, mirrors IHostPro.MigrationRunner's
+                // own declaration exactly.
+                .DeclareExchange("workflow-orchestration-commands", exchange =>
+                {
+                    exchange.ExchangeType = ExchangeType.Direct;
+                    exchange.BindQueue("housekeeping.workflow-commands", "create_cleaning_for_reservation");
                 });
         });
 
