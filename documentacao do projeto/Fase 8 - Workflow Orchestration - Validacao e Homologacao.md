@@ -1,8 +1,8 @@
 # Fase 8 — Workflow Orchestration — Validação e Homologação
 
-Versão: 1.1 (Checkpoint 0 — Auditoria e Refinamento Read-Only — registrado em §2; Checkpoint 1 — Minimal Workflow Foundation — registrado em §3; Checkpoint 1.1 — Correção de segurança e boundary — registrado em §3.11)
+Versão: 1.2 (Checkpoint 0 — Auditoria e Refinamento Read-Only — registrado em §2; Checkpoint 1 — Minimal Workflow Foundation — registrado em §3; Checkpoint 1.1 — Correção de segurança e boundary — registrado em §3.11; Checkpoint 2 — Homologação Final e Encerramento — registrado em §5)
 
-Status: **Checkpoint 0 CONCLUÍDO** (auditoria completa, sem código, cinco decisões materiais resolvidas pelo usuário). **Checkpoint 1 PUBLICADO EM `master` (commit `4180b6d`), MAS PENDENTE DE HOMOLOGAÇÃO CORRETIVA** — a revisão pós-publicação identificou dois blockers que impedem a homologação definitiva: (1) a "cancellation safety" descrita em §3.6 foi publicada como best-effort, contrariando o gate explícito do Checkpoint 1; (2) o BC Workflow Orchestration foi criado apenas como `Workflow.Infrastructure`, colocando a orquestração de aplicação dentro da camada de transporte. Checkpoint 1.1 (correção de segurança e boundary) está em andamento — ver §3.11. **Checkpoint 2 NÃO INICIADO.**
+Status: **Fase 8 — Workflow Orchestration — CONCLUÍDA E PUBLICADA.** Checkpoint 0 concluído (auditoria completa). Checkpoint 1 homologado e publicado em `master`, corrigido no Checkpoint 1.1 (commit `bbac419`). Checkpoint 2 (homologação final, sem implementação nova) concluído — ver §5. Nenhum Workflow 02 iniciado; escopo futuro registrado em §5.10.
 
 ---
 
@@ -111,3 +111,114 @@ Testes: `ReservationCreatedCleaningOrchestratorTests` (novo projeto `Workflow.Te
 ## 4. Gate final e publicação
 
 Executado após o Checkpoint 1.1: regressão completa da solução (build Debug+Release, testes unitários/integração/arquitetura de todos os contextos afetados, `git diff --check`), build Angular, verificação de determinismo NSwag, MigrationRunner idempotente contra o Postgres de dev, e a sequência de publicação (push da feature, fast-forward para `master`, push de `master`, merge de volta na feature). Resultados registrados no relatório de fechamento do Checkpoint 1.1.
+
+## 5. Checkpoint 2 — Homologação Final e Encerramento
+
+Checkpoint sem implementação funcional nova. Objetivo: confirmar formalmente que o escopo refinado da Fase 8 foi entregue, executar o gate final proporcional, e publicar o status final da fase. Base confirmada no preflight: `master`, `origin/master`, `feature/workflow-orchestration` e `origin/feature/workflow-orchestration` todos em `bbac419863eb0151213161465bb25f722e013f76`, sem divergência.
+
+### 5.1 Critério oficial — Choreography vs Workflow Orchestration
+
+Registrado formalmente nesta Fase, para orientar toda decisão futura sobre onde uma nova reação a evento deve viver:
+
+**Choreography** — usar quando: o gatilho é um fato já publicado; a reação é simples e single-hop; o consumidor é stateless e pode decidir autonomamente, sem precisar coordenar múltiplas capacidades de múltiplos contextos. Exemplo real já existente: `ReservationCancelled` → Housekeeping cancela a Cleaning vinculada, diretamente, sem passar por Workflow.
+
+**Workflow Orchestration** — usar quando: existe um processo coordenador que precisa emitir uma intenção/comando explícito para outro BC agir; múltiplas ações ou processos precisam ser coordenados; ou, no futuro, houver espera, estado, retry humano ou temporização entre etapas. Exemplo real já existente: `ReservationCreated` → Workflow → `CreateCleaningForReservation` → Housekeeping (Workflow 01).
+
+Uma choreography existente nunca deve ser migrada para Workflow apenas para "centralizar tudo" — a migração só se justifica quando a reação deixa de ser single-hop/autônoma.
+
+### 5.2 Reclassificação dos candidatos a Workflow (reconfirmação do Checkpoint 0)
+
+Com os Bounded Contexts existentes hoje, não há um segundo workflow que justifique implementação nesta Fase:
+
+- **Workflow 01** (Nova Reserva → Cleaning): implementado (Checkpoint 1) e homologado (Checkpoint 1.1). Único workflow real desta Fase.
+- **Workflow 03**: já resolvido por choreography (`ReservationCancelled` → Housekeeping cancela a Cleaning, diretamente). Não migrar para Workflow — não é orquestração, é reação simples single-hop, per o critério de §5.1.
+- **Workflows 09–12**: capacidades internas/comandos diretos do próprio Housekeeping (assign/start/inspect/complete/cancel Cleaning). Não são orquestração cross-context — permanecem como comandos HTTP diretos de Housekeeping.
+- **Workflow 18** (reação a `PolicyUpdated`): já implementado como reação simples (Fase 5, Checkpoint 6) — invalidação de cache, single-hop, sem coordenação de múltiplas capacidades. Não duplicar dentro de Workflow.
+- **Demais workflows do catálogo** (Documento 17) que dependem de Communication, AI Agent, Finance/PIX, External Integrations, Audit ou outros módulos ainda não construídos: **DEFERIDOS** — sem os BCs correspondentes, não há o que orquestrar. Ver §5.10.
+
+Esta conclusão do Checkpoint 0 permanece verdadeira — nenhum deles foi implementado nesta Fase.
+
+### 5.3 Escopo final entregue
+
+Fluxo real, ponta a ponta:
+
+```
+ReservationCreated → Workflow Orchestration → CreateCleaningForReservation → Housekeeping → Cleaning real
+```
+
+Arquitetura entregue: primeiro comando cross-context do codebase; ADR-018; `Workflow.Application` (use case) + `Workflow.Infrastructure` (transporte); `Send` assíncrono (nunca `Publish`); keyed DI; idempotência em duas camadas; cancellation safety determinística (`pg_advisory_xact_lock`); ator de sistema (`null`, nunca um Guid inventado); prova real de transporte (RabbitMQ + Worker + Postgres); nenhum engine genérico de workflow. Isso constitui o Workflow Foundation desta Fase.
+
+### 5.4 Auditoria — evidência real e gap registrado
+
+Investigação real do mecanismo de fato usado no fluxo `ReservationCreated → Workflow orchestrator → command dispatch`, sem inventar nada novo:
+
+1. **Existe registro estruturado do workflow/action?** Não, no nível de domínio. Nenhuma classe do fluxo (`ReservationCreatedCleaningOrchestrator`, `WolverineWorkflowCommandDispatcher`, `ReservationCreatedHandler`) emite log estruturado próprio.
+2. **Onde?** A única evidência real observada (Worker real, teste de transporte passando) é a telemetria genérica do próprio Wolverine — linhas DBG como `"Received message from dbcontrol://.../"` e `"Enqueued for sending ReservationCreated#<envelope-id> to rabbitmq://exchange/..."`.
+3. **Campos registrados**: tipo da mensagem e um envelope-id interno do Wolverine, mais o timestamp implícito da linha de log. Nada estruturado além disso no nível de Workflow.
+4. **Contém os campos exigidos por Documento 17 §28** (workflow, gatilho, usuário/IA, horário, duração, resultado, erros)? Não, diretamente. O único registro parcial e REAL é `housekeeping.cleaning_audit_log` (`action_code = "cleaning_created_by_workflow"`, `tenant_id` via RLS, `occurred_at`) — mas é o audit trail do EFEITO em Housekeeping, não da decisão de despacho do Workflow: não inclui `ReservationId`, id do evento de origem, id do comando, nem falhas de dispatch.
+5. **PII?** Nenhuma, em nenhum dos dois casos.
+6. **Satisfaz proporcionalmente Documento 17 §28 para um workflow stateless de ação única?** Decisão do usuário (não decidida unilateralmente por este agente, per o protocolo de informação insuficiente da Engineering Constitution): **aceito como suficiente para este MVP**, com o gap registrado explicitamente aqui, sem nenhuma alteração de código. Não foi criado `WorkflowDbContext`/tabela de auditoria/BC de auditoria/evento novo. Uma auditoria estruturada completa de Workflow (campos: workflow name, TenantId, ReservationId, source event id, command id, resultado, erro) permanece como extensão futura possível, condicionada a uma necessidade real (ex.: monitoramento operacional, Documento 17 §31), não a esta Fase.
+
+### 5.5 Scheduling — decisão final
+
+`CreateCleaningForReservation` nunca transportou e continua sem transportar regra de scheduling. Cleaning automática: `ScheduledAtUtc = null`, sempre. Nenhuma derivação de `Reservation.CheckOutAt`. Essa regra pertence exclusivamente à futura Fase 10 — Check-in, Checkout e Operações do Hóspede — e não foi reaberta nesta Fase.
+
+### 5.6 Ator de sistema — decisão final
+
+Cleaning automática: `CreatedByUserId = null`. Evento/auditoria: `ActorType = "System"`, `ActorUserId = null`. Cleaning manual: continua exigindo um usuário autenticado real (`CreateCleaningCommand.ActorId`, `Guid` não-nulo, código intocado nesta Fase). Nenhum Guid de "usuário sistema" foi criado ou seedado.
+
+### 5.7 Invariantes de concorrência — registro final
+
+**Cancellation invariant**: após a convergência de todas as mensagens relacionadas, uma Reservation cancelada nunca possui uma Cleaning automatizada ATIVA. Estados finais permitidos: (A) nenhuma Cleaning automatizada foi criada, ou (B) a Cleaning automatizada existe com status `Cancelled`. Nunca: Reservation cancelada + Cleaning automatizada Pending/Assigned/InTransit/etc.
+
+**Mecanismo de serialização**: `pg_advisory_xact_lock`, chave `(TenantId, ReservationId)`, transacional — usado pelos três pontos que tocam a referência local de uma Reservation em Housekeeping (comando de criação, reação a `ReservationCreated`, reação a `ReservationCancelled`). Permanece um mecanismo pontual desta necessidade específica, nunca uma utility/framework de lock genérico.
+
+**Garantias comprovadas** (ver §3.11 para os testes que as provam): Created → Cancelled = safe; Cancelled → Created tardio = tombstone permanece cancelled (`IsCancelled` nunca reverte); comando → projection ainda não materializada = `EnsureExistsAsync` permite o processamento sem leitura síncrona a Reservations; comando vence o lock primeiro = cancelamento, ao rodar depois, cancela a Cleaning já visível; cancelamento vence o lock primeiro = comando nunca cria uma Cleaning ativa; redelivery (do comando ou do cancelamento) = idempotente.
+
+**Semântica do índice único**: uma Reservation pode possuir múltiplas Cleanings MANUAIS — inalterado, comportamento pré-existente à Fase 8. A constraint única parcial (`ix_cleanings_tenant_id_reservation_id_automated_unique`) vale exclusivamente para a Cleaning automatizada do Workflow 01. Não deve ser generalizada para `UNIQUE(TenantId, ReservationId)` sem uma nova decisão de domínio explícita.
+
+### 5.8 Arquitetura final
+
+Workflow Foundation permanece, definitivamente, `Workflow.Application` + `Workflow.Infrastructure` — sem `Workflow.Domain`, sem `Workflow.Contracts` próprio, sem `Workflow.Api`, sem `WorkflowDbContext`/schema/migration, sem `WorkflowInstance`/`WorkflowDefinition`/`WorkflowStep`/persistência de máquina de estados. Confirmado por inspeção real do código e por `ArchitectureTests` (161 testes, 100% verde): `Workflow.Application` sem Wolverine/EF Core/`Infrastructure`/`DbContext`; `Workflow.Infrastructure` restrito ao adapter Wolverine e à implementação do dispatcher. Orquestração de negócio vive em Application; transporte vive em Infrastructure — sem exceção.
+
+ADR-018 continua limitada: somente Workflow Orchestration pode emitir cross-context commands; o contrato do comando é definido pelo `*.Contracts` do BC-alvo (aqui, `Housekeeping.Contracts`); nenhum command bus genérico foi criado ou é planejado.
+
+Inventário confirmado — zero: `WorkflowStarted`/`WorkflowCompleted`/`WorkflowFailed`/`WorkflowActionDispatched`/`WorkflowStepCompleted` (nenhum Integration Event próprio de Workflow); permissões `WORKFLOW:*`; controller/endpoint HTTP de Workflow; superfície Workflow no frontend/NSwag; alteração ao modo Inline/at-least-once (sem Durable Inbox, sem retry policy customizada, sem scheduler) — tudo inalterado desde o Checkpoint 0.
+
+### 5.9 Dívida técnica registrada (não corrigida nesta Fase)
+
+- **`PropertyProjectionSynchronizer`** (Housekeeping) — corrida read-then-write pré-existente, descoberta no Checkpoint 1 (§3.9). `task_6b2837d1`. Não corrigida.
+- **`ReservationProjectionSynchronizer`** (Dashboard) — mesma classe de corrida, descoberta no Checkpoint 1.1 ao construir o gate real de cancelamento (§3.11). `task_ba854be2`. Não corrigida.
+
+Nenhuma das duas foi tratada como bloqueante para o encerramento desta Fase — ambas são pré-existentes ou têm causa raiz idêntica a um defeito já pré-existente, e ambas estão fora do escopo de Workflow Orchestration.
+
+### 5.10 Escopo deferido — futuro, não pendência desta Fase
+
+Registrado explicitamente como escopo futuro, condicionado às fases/decisões correspondentes — nunca tratado como "faltando para concluir a Fase 8": Workflow 02 e demais automações do catálogo condicionadas a capacidades ainda não construídas; workflows de Communication; workflows do AI Agent; Finance/PIX; External Integrations; um BC de Auditoria; espera/delay entre etapas; `WorkflowInstance`/`WorkflowDefinition` com estado persistido; máquina de estados persistida; Durable Inbox; UI de reprocessamento manual; Dashboard de monitoramento de workflows; permissões `WORKFLOW:*`; frontend de Workflow; um engine genérico; um workflow designer visual.
+
+### 5.11 Gate de regressão final
+
+Executado após o Checkpoint 1.1 (nenhuma mudança de código neste Checkpoint 2 — apenas verificação e documentação):
+
+| Gate | Resultado |
+|---|---|
+| Real transport gate (`CreateCleaningForReservationWorkflowRoundTripTests`, 3 testes) — execução 1 | 3/3, verde |
+| Real transport gate — execução 2 consecutiva | 3/3, verde, sem state leak, sem comando/Cleaning duplicados |
+| Concorrência determinística (`CreateCleaningForReservationCancellationSafetyTests`) | 11/11, verde |
+| Housekeeping Unit | 120/120, verde |
+| Housekeeping Integration | 92/92, verde (81 pré-existentes + 11 de concorrência) |
+| Workflow Unit | 3/3, verde |
+| ArchitectureTests (solução completa) | 161/161, verde |
+| PolicyUpdated (regressão focada, composição do Worker alterada na Fase 8) | 2/2, verde |
+| MigrationRunner (idempotência, 2 execuções contra Postgres de dev) | limpo, sem migration nova, topologia reafirmada |
+| Release build (solução completa) | 0 erros |
+| NSwag (regeneração contra API real) | zero drift |
+| Angular (build de produção) | verde |
+| `git diff --check` | limpo |
+| Ambiente | Testcontainers sem órfãos; RabbitMQ/Postgres de dev restaurados à baseline; portas livres |
+
+**Fan-out de `ReservationCreated`** — evidência por teste real, não reafirmação sem prova: Housekeeping via `ReservationCreatedWorkerRoundTripTests`; Dashboard via `DashboardReservationProjectionWorkerRoundTripTests`; Workflow via `CreateCleaningForReservationWorkflowRoundTripTests.ReservationCreated_flows_through_real_Workflow_and_Housekeeping_Wolverine_chain_to_create_a_real_automated_Cleaning` — os três, verdes na regressão completa já registrada no fechamento do Checkpoint 1.1 e nesta rodada.
+
+### 5.12 Status final
+
+Todos os gates ficaram verdes. **Checkpoint 2 = APROVADO. Workflow Foundation = CONCLUÍDO. Fase 8 — Workflow Orchestration = CONCLUÍDA FUNCIONALMENTE.** Após a publicação deste checkpoint: **CONCLUÍDA E PUBLICADA.**
