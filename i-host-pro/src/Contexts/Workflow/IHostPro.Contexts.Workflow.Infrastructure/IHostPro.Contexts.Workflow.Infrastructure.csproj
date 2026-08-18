@@ -20,6 +20,10 @@
          DbContext this one does not have. -->
     <PackageReference Include="WolverineFx" Version="6.22.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <!-- Fase 8, Checkpoint 2.1: narrow, transport-level failure logging in
+         WolverineWorkflowCommandDispatcher — never a duplicate of the
+         business-level audit Workflow.Application already emits. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
   </ItemGroup>
 
   <PropertyGroup>

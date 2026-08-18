@@ -38,6 +38,13 @@ public static class WorkflowModuleExtensions
         // only in which assembly the implementation comes from.
         services.AddKeyedScoped<IIntegrationEventHandler<ReservationCreated>, ReservationCreatedCleaningOrchestrator>(HandlerKey);
 
+        // Fase 8, Checkpoint 2.1: the orchestrator's own structured audit
+        // log needs a real timestamp source for DurationMs — mirrors every
+        // other module's own AddSingleton(TimeProvider.System) (see e.g.
+        // HousekeepingModuleExtensions), rather than relying on the Worker
+        // host's shared container already having one registered elsewhere.
+        services.AddSingleton(TimeProvider.System);
+
         // The transport-only implementation of the Application layer's
         // dispatcher abstraction — exclusive to Workflow, no other context
         // registers IWorkflowCommandDispatcher, so no keying is needed here.
