@@ -246,6 +246,16 @@ try
         // pattern already used for every other messaging object in this
         // platform) — this process only attaches a consumer to the
         // already-existing queue.
+        // ADR-020 (cross-phase corrective fix — Wolverine handler-chain
+        // isolation for cross-context event fan-out): PolicyUpdated has
+        // exactly one Wolverine-discovered handler class in this process
+        // (PolicyUpdatedHandler, which itself resolves the keyed
+        // IIntegrationEventHandler<PolicyUpdated> registrations via ordinary
+        // DI) — this is the ALREADY-homologated keyed-DI pattern, a
+        // different problem to the one ADR-020 fixes, and needs no sticky
+        // handler mapping: a message type with only one discovered handler
+        // class was never at risk of Wolverine's default handler-combining
+        // behaviour in the first place.
         opts.Discovery.IncludeAssembly(typeof(PolicyUpdatedHandler).Assembly);
         opts.ListenToRabbitQueue("configuration.policy-updated");
 
@@ -265,15 +275,35 @@ try
         // assembly, so it must be explicitly included in Wolverine's handler
         // discovery.
         opts.Discovery.IncludeAssembly(typeof(PropertyCreatedHandler).Assembly);
-        opts.ListenToRabbitQueue("housekeeping.property-projection");
-        opts.ListenToRabbitQueue("housekeeping.reservation-projection");
+
+        // ADR-020: PropertyCreated/Activated/Deactivated/Archived and
+        // ReservationCreated/Cancelled are each independently consumed by
+        // Housekeeping AND at least one other bounded context (see the
+        // fan-out inventory in the ADR) — without AddStickyHandler, Wolverine
+        // combines every discovered handler for the same CLR message type
+        // into one shared chain regardless of listening endpoint, so a
+        // delivery to ANY of the affected queues could run another bounded
+        // context's handler logic instead of (or in addition to) this one.
+        // Sticky-binding this queue's own four handler TYPES keeps it
+        // strictly isolated to Housekeeping's own logic; no topology change
+        // (same queue, same bindings, still provisioned by MigrationRunner).
+        opts.ListenToRabbitQueue("housekeeping.property-projection")
+            .AddStickyHandler(typeof(PropertyCreatedHandler))
+            .AddStickyHandler(typeof(PropertyActivatedHandler))
+            .AddStickyHandler(typeof(PropertyDeactivatedHandler))
+            .AddStickyHandler(typeof(PropertyArchivedHandler));
+
+        opts.ListenToRabbitQueue("housekeeping.reservation-projection")
+            .AddStickyHandler(typeof(ReservationCreatedHandler))
+            .AddStickyHandler(typeof(ReservationCancelledHandler));
 
         // Fase 8, Checkpoint 1 (Workflow Orchestration — ADR-018): Housekeeping's
         // consumed cross-context COMMAND, CreateCleaningForReservation —
         // same assembly as PropertyCreatedHandler above, already included.
         // The queue itself, and its binding to the dedicated
         // workflow-orchestration-commands exchange, is provisioned
-        // exclusively by IHostPro.MigrationRunner.
+        // exclusively by IHostPro.MigrationRunner. Single consumer by design
+        // (ADR-018) — not at risk, no sticky mapping needed.
         opts.ListenToRabbitQueue("housekeeping.workflow-commands");
 
         // Reservations' first consumed Integration Events (Fase 7, Incremento
@@ -293,7 +323,23 @@ try
         // object in this platform) — this process only attaches a consumer
         // to the already-existing queue.
         opts.Discovery.IncludeAssembly(typeof(CleaningCreatedHandler).Assembly);
-        opts.ListenToRabbitQueue("reservations.cleaning-schedule-projection");
+
+        // ADR-020: all ten Cleaning lifecycle events are independently
+        // consumed by Reservations/Agenda AND Dashboard — sticky-bind this
+        // queue's own ten handler types so a delivery here can never run
+        // Dashboard's handler logic instead (same rationale as Housekeeping's
+        // own sticky mapping above).
+        opts.ListenToRabbitQueue("reservations.cleaning-schedule-projection")
+            .AddStickyHandler(typeof(CleaningCreatedHandler))
+            .AddStickyHandler(typeof(CleaningAssignedHandler))
+            .AddStickyHandler(typeof(CleaningInTransitHandler))
+            .AddStickyHandler(typeof(CleaningStartedHandler))
+            .AddStickyHandler(typeof(CleaningInspectionStartedHandler))
+            .AddStickyHandler(typeof(CleaningCompletedHandler))
+            .AddStickyHandler(typeof(CleaningInterruptedHandler))
+            .AddStickyHandler(typeof(CleaningNeedsHelpHandler))
+            .AddStickyHandler(typeof(CleaningNeedsMaterialHandler))
+            .AddStickyHandler(typeof(CleaningCancelledHandler));
 
         // Dashboard & Reporting's consumed Integration Events (Fase 7,
         // Incremento 2, Checkpoint 1) — four queues, each bound to MULTIPLE
@@ -313,9 +359,43 @@ try
         // (ReservationCreatedHandler, PropertyCreatedHandler, etc.) for
         // different events — a blanket using would collide.
         opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
-        opts.ListenToRabbitQueue("dashboard.reservation-projection");
-        opts.ListenToRabbitQueue("dashboard.cleaning-projection");
-        opts.ListenToRabbitQueue("dashboard.property-projection");
+
+        // ADR-020: ReservationCreated and ReservationCancelled are each
+        // shared with at least one other bounded context (see the fan-out
+        // inventory) — ReservationUpdated is Dashboard's own, exclusive
+        // event (no other consumer exists anywhere in this process), so it
+        // is left un-sticky: a message type with only one discovered
+        // handler was never at risk of Wolverine's combining behaviour.
+        opts.ListenToRabbitQueue("dashboard.reservation-projection")
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.ReservationCreatedHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.ReservationCancelledHandler));
+
+        // ADR-020: all ten Cleaning lifecycle events are shared with
+        // Reservations/Agenda (see reservations.cleaning-schedule-projection
+        // above) — sticky-bind Dashboard's own ten handler types here too.
+        opts.ListenToRabbitQueue("dashboard.cleaning-projection")
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.CleaningCreatedHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.CleaningAssignedHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.CleaningInTransitHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.CleaningStartedHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.CleaningInspectionStartedHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.CleaningCompletedHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.CleaningInterruptedHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.CleaningNeedsHelpHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.CleaningNeedsMaterialHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.CleaningCancelledHandler));
+
+        // ADR-020: all four Property events are shared with Housekeeping
+        // (see housekeeping.property-projection above) — sticky-bind
+        // Dashboard's own four handler types here too.
+        opts.ListenToRabbitQueue("dashboard.property-projection")
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.PropertyCreatedHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.PropertyActivatedHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.PropertyDeactivatedHandler))
+            .AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.PropertyArchivedHandler));
+
+        // CleaningOccurrenceRegistered has exactly one consumer (Dashboard)
+        // in this process — not at risk, no sticky mapping needed.
         opts.ListenToRabbitQueue("dashboard.occurrence-projection");
 
         // Workflow Orchestration's own single trigger consumer (Fase 8,
@@ -330,8 +410,17 @@ try
         // handler discovery — fully qualified below (never a blanket
         // `using`) for the same collision reason as Dashboard's own
         // ReservationCreatedHandler above.
+        // ADR-020: ReservationCreated is shared with Housekeeping and
+        // Dashboard (see their own queues above) — sticky-bind Workflow's
+        // own single handler type here too, even though this queue only
+        // ever needed one handler: without this, Wolverine's default
+        // combining would still have pulled this queue's deliveries into
+        // the shared chain along with the other two bounded contexts'
+        // handlers, purely because they all discover a handler for the same
+        // CLR message type.
         opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
-        opts.ListenToRabbitQueue("workflow.reservation-created-trigger");
+        opts.ListenToRabbitQueue("workflow.reservation-created-trigger")
+            .AddStickyHandler(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler));
 
         // Real defect found and fixed (Checkpoint 6 homologação, ADR-015
         // spike): IHostPro.Api/Program.cs already routes every real Cleaning
