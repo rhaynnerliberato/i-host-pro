@@ -36,6 +36,9 @@ public sealed class ConfigurationDbContext : BaseDbContext
     public DbSet<PolicyAuditEntry> PolicyAuditLog => Set<PolicyAuditEntry>();
     public DbSet<GlobalPolicyValue> GlobalPolicyValues => Set<GlobalPolicyValue>();
 
+    /// <summary>Fase 9, Checkpoint 1 — "Comunicação e Integrações do MVP".</summary>
+    public DbSet<Template> Templates => Set<Template>();
+
     public ConfigurationDbContext(DbContextOptions<ConfigurationDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)
     {

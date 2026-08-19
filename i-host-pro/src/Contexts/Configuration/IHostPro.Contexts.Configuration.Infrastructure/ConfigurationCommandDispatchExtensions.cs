@@ -4,6 +4,7 @@ using IHostPro.BuildingBlocks.Domain;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Configuration.Application;
 using IHostPro.Contexts.Configuration.Application.Policies;
+using IHostPro.Contexts.Configuration.Application.Templates;
 using IHostPro.Contexts.Configuration.Infrastructure.Persistence;
 using IHostPro.Contexts.Configuration.Infrastructure.Resolution;
 using Mediator;
@@ -72,6 +73,31 @@ public static class ConfigurationCommandDispatchExtensions
         services.AddScoped<
             IPipelineBehavior<GetPolicyHistoryQuery, Result<IReadOnlyList<PolicyValueDetailResult>>>,
             TenantTransactionBehavior<GetPolicyHistoryQuery, Result<IReadOnlyList<PolicyValueDetailResult>>, ConfigurationDbContext>>();
+
+        // Fase 9, Checkpoint 1 — Template CRUD (administrative API only —
+        // Communication's own read path uses ITemplateReader directly,
+        // registered in AddConfigurationModule, never this Mediator
+        // pipeline). No publish/outbox step needed (Templates publish no
+        // Integration Event this checkpoint), so each command/query gets
+        // the same plain TenantTransactionBehavior wrapping used by the
+        // three read-only Policy queries above — no custom executor
+        // required.
+        services.AddScoped<ITemplateRepository, TemplateRepository>();
+        services.AddScoped<IValidator<CreateTemplateCommand>, CreateTemplateCommandValidator>();
+        services.AddScoped<IValidator<UpdateTemplateContentCommand>, UpdateTemplateContentCommandValidator>();
+
+        services.AddScoped<
+            IPipelineBehavior<CreateTemplateCommand, Result<TemplateResult>>,
+            TenantTransactionBehavior<CreateTemplateCommand, Result<TemplateResult>, ConfigurationDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<UpdateTemplateContentCommand, Result<TemplateResult>>,
+            TenantTransactionBehavior<UpdateTemplateContentCommand, Result<TemplateResult>, ConfigurationDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<SetTemplateActiveCommand, Result<TemplateResult>>,
+            TenantTransactionBehavior<SetTemplateActiveCommand, Result<TemplateResult>, ConfigurationDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<GetTemplateByKeyQuery, Result<TemplateResult>>,
+            TenantTransactionBehavior<GetTemplateByKeyQuery, Result<TemplateResult>, ConfigurationDbContext>>();
 
         return services;
     }

@@ -2,6 +2,7 @@ using IHostPro.Contexts.Configuration.Contracts;
 using IHostPro.Contexts.Configuration.Infrastructure.Caching;
 using IHostPro.Contexts.Configuration.Infrastructure.Persistence;
 using IHostPro.Contexts.Configuration.Infrastructure.Resolution;
+using IHostPro.Contexts.Configuration.Infrastructure.Templates;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +45,15 @@ public static class ConfigurationModuleExtensions
             sp.GetRequiredService<IPolicyValueCache>()));
         services.AddScoped<IEarlyCheckInPolicyReader, EarlyCheckInPolicyReader>();
         services.AddScoped<ILateCheckoutPolicyReader, LateCheckoutPolicyReader>();
+
+        // Fase 9, Checkpoint 1 — "Comunicação e Integrações do MVP": the
+        // general Configuration & Policy synchronous-query exception
+        // (Architecture Principles §14, Exceção 1) extended to Templates.
+        // Registered here (not only alongside the CRUD pipeline in
+        // AddConfigurationCommandDispatch) because Communication's own
+        // Wolverine consumer runs in IHostPro.Worker, and AddConfigurationModule
+        // already runs in both processes.
+        services.AddScoped<ITemplateReader, TemplateReader>();
 
         services.AddConfigurationPolicyCache(configuration);
 
