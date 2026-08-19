@@ -526,10 +526,15 @@ Lacunas explicitamente diferidas, não implementadas, nunca silenciosamente omit
 
 Fonte da verdade confirmada, sem duplicação: Agenda (Incremento 1) permanece a fonte real de eventos/horários de Cleaning/Reservation consumidos pelo Dashboard; Dashboard nunca recalcula nem reinterpreta esses dados — apenas agrega via suas próprias projeções locais alimentadas pelos mesmos eventos reais.
 
+#### 7.9.14 Correção transversal pós-homologação (ADR-020)
+
+**Registrado posteriormente, sem reabrir esta fase funcionalmente.** Durante a Fase 9 (Comunicação e Integrações do MVP), um teste real de transporte já homologado passou a falhar de forma reproduzível ao se adicionar um quarto Bounded Context consumindo `ReservationCreated` no mesmo processo `IHostPro.Worker`. A investigação revelou um defeito latente, transversal e anterior a esta fase: por padrão, o Wolverine combina em uma única cadeia de execução todos os handlers descobertos para o mesmo tipo de mensagem, independentemente do número de filas/listeners distintos configurados — Dashboard e Housekeeping (ambos introduzidos nesta Fase 7) já compartilhavam esse risco estrutural para `ReservationCreated`/`ReservationCancelled` e os quatro eventos de `Property`, mesmo antes de Communication existir. O defeito foi corrigido de forma transversal, com `AddStickyHandler` aplicado a cada fila afetada em `IHostPro.Worker/Program.cs`, e registrado em ADR-020. Ver ADR-020 (Isolamento de Handler Chains do Wolverine para Fan-out entre Bounded Contexts) para a investigação completa, a prova estrutural e de transporte real, e o escopo exato da correção — que não alterou nenhum comportamento funcional desta fase, apenas a composição interna de handler chains do Wolverine.
+
 ## 8. Referências
 
 - ADR-016 (Tenant-safe Execution Boundary for Persistent Wolverine Consumers).
 - ADR-015 (Isolamento do Processamento de Mensagens Housekeeping da Integração EF Core do Wolverine) — a descoberta original, para Housekeeping.
 - ADR-017 (Deployment-time Bootstrap for Event-derived Projections) — mecanismo de bootstrap do Dashboard, generalizando o precedente `PropertyProjectionBootstrap`.
+- ADR-020 (Isolamento de Handler Chains do Wolverine para Fan-out entre Bounded Contexts) — correção transversal pós-homologação, §7.9.14.
 - Documento 07 (Catálogo de Eventos de Domínio) — payload real dos dez eventos de ciclo de vida de `Cleaning`, incluindo os quatro corrigidos/novos na Fase 7 Incremento 1; §27.1/§27.3 (CheckInAt/CheckOutAt) e §29.9 (CleaningOccurrenceRegistered) da Fase 7 Incremento 2.
 - Documento 18 (Dashboards, Indicadores e Business Intelligence) — fonte da matriz de inventário de indicadores do Checkpoint 0.
