@@ -10,6 +10,7 @@
     <ProjectReference Include="..\..\src\Contexts\Configuration\IHostPro.Contexts.Configuration.Infrastructure\IHostPro.Contexts.Configuration.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Infrastructure\IHostPro.Contexts.Housekeeping.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Infrastructure\IHostPro.Contexts.Dashboard.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Infrastructure\IHostPro.Contexts.Communication.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -2,6 +2,7 @@ using System.Reflection;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
+using IHostPro.Contexts.Communication.Infrastructure.Persistence;
 using IHostPro.Contexts.Configuration.Infrastructure.Persistence;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
@@ -65,6 +66,7 @@ try
         typeof(ConfigurationDbContext).Assembly,
         typeof(HousekeepingDbContext).Assembly,
         typeof(DashboardDbContext).Assembly,
+        typeof(CommunicationDbContext).Assembly,
     };
 
     var moduleDbContextTypes = moduleAssemblies
@@ -576,6 +578,14 @@ try
                 // implements — approved decision, no ReservationUpdated/
                 // ReservationCancelled reaction this checkpoint).
                 exchange.BindQueue("workflow.reservation-created-trigger", "reservation_created");
+                // Fase 9, Checkpoint 1 ("Comunicação e Integrações do MVP"):
+                // a fourth, independent subscriber queue on this same
+                // exchange — Communication reacts DIRECTLY to
+                // ReservationCreated (choreography, Fase 8's own registered
+                // criterion — never through Workflow Orchestration).
+                // Reservations never needs to know Communication exists,
+                // same decoupled pub/sub pattern as every queue above.
+                exchange.BindQueue("communication.reservation-created-trigger", "reservation_created");
             })
             // Fase 5, Incremento 1 (Policy Engine Foundation), Checkpoint 1:
             // declared ahead of PolicyUpdated (Checkpoint 6) — same

@@ -37,5 +37,11 @@
          context's local read-model projections. -->
     <ProjectReference Include="..\..\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Infrastructure\IHostPro.Contexts.Dashboard.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Contexts\Workflow\IHostPro.Contexts.Workflow.Infrastructure\IHostPro.Contexts.Workflow.Infrastructure.csproj" />
+    <!-- Fase 9, Checkpoint 1 (Comunicação e Integrações do MVP): Worker's
+         first-ever Communication wiring — consumes Reservations' own
+         ReservationCreated to resolve a Template (Configuration) and read
+         the guest contact (Reservations, ADR-019), dispatching through a
+         fake WhatsApp connector this checkpoint. -->
+    <ProjectReference Include="..\..\Contexts\Communication\IHostPro.Contexts.Communication.Infrastructure\IHostPro.Contexts.Communication.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

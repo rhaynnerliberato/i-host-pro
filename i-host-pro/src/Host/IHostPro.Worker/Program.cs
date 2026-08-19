@@ -4,8 +4,10 @@ using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
 using IHostPro.Contexts.Configuration.Contracts;
+using IHostPro.Contexts.Configuration.Infrastructure;
 using IHostPro.Contexts.Configuration.Infrastructure.Caching;
 using IHostPro.Contexts.Configuration.Infrastructure.Messaging;
+using IHostPro.Contexts.Communication.Infrastructure;
 using IHostPro.Contexts.Dashboard.Infrastructure;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Contracts;
@@ -66,14 +68,17 @@ try
     // Program.cs for the corresponding registration.
     builder.Services.AddIdentityModule(builder.Configuration, builder.Environment.IsDevelopment());
 
-    // Configuration & Policy's cache (Fase 5, Incremento 1, Checkpoint 6) —
-    // only the cache is needed here, never ConfigurationDbContext/the typed
-    // readers/AddConfigurationModule: Worker's only job for this context is
-    // invalidating PolicyUpdated's cache entries, never reading or writing
-    // ConfigurationDbContext directly. Must point at the same physical Redis
-    // IHostPro.Api's own AddConfigurationModule (-> AddConfigurationPolicyCache)
-    // uses, or an invalidation here would never be visible to Api's reads.
-    builder.Services.AddConfigurationPolicyCache(builder.Configuration);
+    // Configuration & Policy (Fase 5, Incremento 1, Checkpoint 6 — cache;
+    // Fase 9, Checkpoint 1 — ConfigurationDbContext/ITemplateReader). Through
+    // Fase 8 this process only needed the cache (invalidating PolicyUpdated's
+    // entries), never ConfigurationDbContext/the typed readers directly.
+    // Communication's own Wolverine consumer (Fase 9) is the first thing in
+    // this process that needs ITemplateReader — resolving the active
+    // Template for a ReservationCreated trigger — so this now calls the full
+    // AddConfigurationModule (which itself still calls
+    // AddConfigurationPolicyCache internally, pointed at the same physical
+    // Redis IHostPro.Api uses, unchanged) rather than only the cache.
+    builder.Services.AddConfigurationModule(builder.Configuration);
     builder.Services.AddScoped<IIntegrationEventHandler<PolicyUpdated>, PolicyUpdatedCacheInvalidation>();
 
     // Housekeeping module (Fase 6, Incremento 1) — unlike Configuration &
@@ -104,6 +109,34 @@ try
     // DashboardModuleExtensions' own doc comment).
     builder.Services.AddDashboardModule(builder.Configuration);
     builder.Services.AddDashboardProjectionConsumer();
+
+    // Communication module (Fase 9, Checkpoint 1): CommunicationDbContext +
+    // the ReservationCreated-triggered messaging consumer's full DI graph,
+    // so the tenant-safe execution boundary (ICommunicationMessageExecutionScope,
+    // ADR-016) can construct it from its own child DI scope — mirrors
+    // AddDashboardModule + AddDashboardProjectionConsumer's own two-call
+    // split exactly. Communication publishes no Integration Event this
+    // checkpoint and has no HTTP surface, so IHostPro.Api never references
+    // this module (CommunicationModuleExtensions' own doc comment).
+    //
+    // Gated outside Production (CP1 closure review, post-implementation
+    // fix): AddCommunicationReservationConsumer registers the ONLY
+    // IOutboundMessageConnector this checkpoint has — FakeWhatsAppConnector,
+    // which always reports success without ever calling a real WhatsApp
+    // provider (none is contracted/implemented until Checkpoint 2). Without
+    // this gate, a real ReservationCreated in Production would silently mark
+    // a Message as Sent despite nothing ever being delivered — a false
+    // operational positive. Every existing test (WorkerRoundTrip suite,
+    // WebE2EFixture) explicitly launches this process with
+    // ASPNETCORE_ENVIRONMENT=Development, so this gate does not disable
+    // Communication in any of them — only a deployment with no explicit
+    // environment override (defaults to Production) or an explicit
+    // Production environment is affected.
+    if (!builder.Environment.IsProduction())
+    {
+        builder.Services.AddCommunicationModule(builder.Configuration);
+        builder.Services.AddCommunicationReservationConsumer();
+    }
 
     // Workflow Orchestration module (Fase 8, Checkpoint 1 — ADR-018):
     // stateless — no DbContext, no aggregates, no persistence (approved
@@ -222,6 +255,13 @@ try
         // is the single, deliberately-authorized place in Dashboard that
         // holds IServiceScopeFactory.
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Dashboard.Application.IDashboardMessageExecutionScope>();
+
+        // ADR-016, fourth application (Fase 9, Checkpoint 1) — same rationale
+        // as Housekeeping's/Reservations'/Dashboard's own
+        // AlwaysUseServiceLocationFor above: CommunicationMessageExecutionScope
+        // is the single, deliberately-authorized place in Communication that
+        // holds IServiceScopeFactory.
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Communication.Application.ICommunicationMessageExecutionScope>();
 
         opts.Policies.AddMiddleware(
             typeof(TenantResolutionMiddleware),
@@ -421,6 +461,48 @@ try
         opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
         opts.ListenToRabbitQueue("workflow.reservation-created-trigger")
             .AddStickyHandler(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler));
+
+        // Communication's own single trigger consumer (Fase 9, Checkpoint 1):
+        // a fourth, independent subscriber queue on the EXISTING
+        // reservation-events exchange (Reservations never needs to know
+        // Communication is listening — same decoupled pub/sub pattern as
+        // Housekeeping's/Dashboard's/Workflow's own queues above).
+        // Communication reacts DIRECTLY to ReservationCreated (choreography,
+        // Fase 8's own registered criterion — never through Workflow
+        // Orchestration). The queue itself, and its binding, is provisioned
+        // exclusively by IHostPro.MigrationRunner (unconditionally, by
+        // environment — topology provisioning is not gated, only whether
+        // THIS process listens to it, see below). ReservationCreatedHandler
+        // lives in Communication.Infrastructure, a separate assembly from
+        // this entry assembly, so it must be explicitly included in
+        // Wolverine's handler discovery — fully qualified below (never a
+        // blanket `using`) for the same collision reason as Dashboard's/
+        // Workflow's own ReservationCreatedHandler above.
+        //
+        // ADR-020: this is the fourth independent ReservationCreated
+        // consumer sharing the message type with Housekeeping/Dashboard/
+        // Workflow above (all three already sticky-bound) — without this
+        // AddStickyHandler, Communication's own deliveries would be at the
+        // same risk of Wolverine's default handler-chain-combining defect
+        // that ADR-020 corrected for the other three.
+        //
+        // Gated outside Production, mirroring the DI registration gate
+        // above (AddCommunicationModule/AddCommunicationReservationConsumer)
+        // exactly: this listener resolves a keyed handler that only exists
+        // in DI when that gate is open. Binding the listener unconditionally
+        // while gating only the DI registration would let Production
+        // consume from this queue with no handler registered for it —
+        // a runtime DI resolution failure per message, not a clean absence.
+        // Keeping both gates in the same condition means Production simply
+        // never listens to this queue at all — messages accumulate on it,
+        // unread, until Checkpoint 2 ships a real connector and lifts the
+        // gate; never a silent fake success, never a resolution crash.
+        if (!builder.Environment.IsProduction())
+        {
+            opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
+            opts.ListenToRabbitQueue("communication.reservation-created-trigger")
+                .AddStickyHandler(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.ReservationCreatedHandler));
+        }
 
         // Real defect found and fixed (Checkpoint 6 homologação, ADR-015
         // spike): IHostPro.Api/Program.cs already routes every real Cleaning

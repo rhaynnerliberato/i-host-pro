@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Domain\IHostPro.BuildingBlocks.Domain.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.Communication.Domain\IHostPro.Contexts.Communication.Domain.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.Communication.Application\IHostPro.Contexts.Communication.Application.csproj" />
+    <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!-- Fase 9, Checkpoint 1: Communication publishes no Integration Event
+         and needs no Wolverine outbox (see ICommunicationTransactionExecutor's
+         own doc comment) — so, unlike every other Bounded Context's own
+         Infrastructure project, this one does NOT reference
+         WolverineFx.EntityFrameworkCore. Only plain WolverineFx (the thin
+         transport adapter — MessageContext, [NonTransactional]). -->
+    <PackageReference Include="WolverineFx" Version="6.22.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
