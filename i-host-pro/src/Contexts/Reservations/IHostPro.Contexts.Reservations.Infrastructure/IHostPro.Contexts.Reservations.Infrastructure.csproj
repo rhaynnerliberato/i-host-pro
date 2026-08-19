@@ -27,6 +27,12 @@
          processes, mirroring Identity's/Property Management's own
          Infrastructure projects exactly. -->
     <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.22.0" />
+    <!-- Fase 9, Checkpoint 1 — ADR-019: structured, PII-safe audit logging
+         for ReservationGuestContactReader. Same abstractions-only package
+         Identity.Application/Workflow.Application already use for their own
+         Application-layer logging — never the concrete logging
+         implementation. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
   </ItemGroup>
 
   <PropertyGroup>

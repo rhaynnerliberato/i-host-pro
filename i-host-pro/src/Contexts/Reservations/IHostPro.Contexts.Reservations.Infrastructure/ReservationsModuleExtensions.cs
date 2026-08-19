@@ -1,6 +1,8 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Reservations.Application;
+using IHostPro.Contexts.Reservations.Contracts;
+using IHostPro.Contexts.Reservations.Infrastructure.Communication;
 using IHostPro.Contexts.Reservations.Infrastructure.Messaging;
 using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 using IHostPro.Contexts.Reservations.Infrastructure.Projections;
@@ -30,6 +32,15 @@ public static class ReservationsModuleExtensions
                 npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "reservations")));
 
         services.AddSingleton(TimeProvider.System);
+
+        // Fase 9, Checkpoint 1 — ADR-019: the single, purpose-limited
+        // synchronous query port Communication may use to read a guest's
+        // contact data for one Reservation. Registered here (not only in
+        // IHostPro.Api) because Communication's own Wolverine consumer runs
+        // in IHostPro.Worker, and AddReservationsModule already runs in both
+        // processes — mirrors PropertyManagementModuleExtensions' own
+        // registration of IPropertyReservationEligibilityReader (ADR-014).
+        services.AddScoped<IReservationGuestContactReader, ReservationGuestContactReader>();
 
         return services;
     }
