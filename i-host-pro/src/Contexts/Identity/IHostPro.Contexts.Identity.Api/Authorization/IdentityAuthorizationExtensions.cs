@@ -60,6 +60,11 @@ namespace IHostPro.Contexts.Identity.Api.Authorization;
 /// <see cref="IdentityPermissionCodes.DashboardManage"/>/<see cref="IdentityPermissionCodes.DashboardRead"/>
 /// follow the exact same pattern (Fase 7, Incremento 2, Checkpoint 2) —
 /// <c>DashboardController</c> is their first consumer.
+///
+/// <see cref="IdentityPermissionCodes.TemplatesManage"/>/<see cref="IdentityPermissionCodes.TemplatesRead"/>
+/// were already seeded into the persisted catalog since the platform's own
+/// initial migration, but had no policy registered here until Fase 9,
+/// Checkpoint 1 — <c>TemplatesController</c> is their first consumer.
 /// </summary>
 public static class IdentityAuthorizationExtensions
 {
@@ -93,7 +98,11 @@ public static class IdentityAuthorizationExtensions
             .AddPolicy(IdentityPermissionCodes.DashboardManage, policy =>
                 policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.DashboardManage)))
             .AddPolicy(IdentityPermissionCodes.DashboardRead, policy =>
-                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.DashboardRead)));
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.DashboardRead)))
+            .AddPolicy(IdentityPermissionCodes.TemplatesManage, policy =>
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.TemplatesManage)))
+            .AddPolicy(IdentityPermissionCodes.TemplatesRead, policy =>
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.TemplatesRead)));
 
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

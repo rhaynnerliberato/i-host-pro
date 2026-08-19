@@ -97,4 +97,16 @@ public static class IdentityPermissionCodes
     /// </summary>
     public const string DashboardManage = "DASHBOARD:MANAGE";
     public const string DashboardRead = "DASHBOARD:READ";
+
+    /// <summary>
+    /// Fase 9, Checkpoint 1 ("Comunicação e Integrações do MVP"). Already
+    /// seeded into the persisted catalog since <c>IdentityCatalogSeed</c>'s
+    /// original Fase 1 migration (ADMIN=manage, AI_AGENT=read — Documento 09
+    /// §5/§9/§15); promoted here only now because <c>TemplatesController</c>
+    /// needs to reference them by value for the first time. No new
+    /// migration required — reused exactly as-seeded, never a newly-invented
+    /// permission code.
+    /// </summary>
+    public const string TemplatesManage = "TEMPLATES:MANAGE";
+    public const string TemplatesRead = "TEMPLATES:READ";
 }
