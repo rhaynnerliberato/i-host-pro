@@ -2,7 +2,7 @@
 
 Versão: 1.2 (Checkpoint 0 — Auditoria Read-Only — registrado em §2; Checkpoint 1 — Communication Foundation + Templates + Fake WhatsApp Connector — registrado em §3, incluindo a correção definitiva do gate de segurança do conector/topologia em Production — §3.15/§3.16/§3.18)
 
-Status: **Checkpoint 1 — correção corretiva de Production safety validada (§3.15–§3.18.1), publicação AINDA NÃO realizada** (commit base `ae78af5`, correção aplicada forward na mesma branch `feature/communication-integrations`, sem rollback/rebase/force-push). Todos os gates de regressão exigidos passaram (§4/§5); commit, push e sincronização de branches ainda pendentes. **Fase 9 — Comunicação e Integrações do MVP — EM ANDAMENTO.** Checkpoint 2 (WhatsApp real), Checkpoint 3 (Airbnb) e Checkpoint 4 (homologação final da Fase) permanecem pendentes — nenhum dos três foi iniciado. Ver §6 para o escopo exato ainda em aberto.
+Status: **Checkpoint 1 — HOMOLOGADO E PUBLICADO** (correção definitiva do gate de Production incluída — commit base `ae78af5`, correção aplicada forward na mesma branch `feature/communication-integrations` em três commits — `017a5a5` fix, `dd520c2` test, `70f868f` docs —, publicada em `master`/`origin/master`/`feature/communication-integrations`/`origin/feature/communication-integrations`, todos convergindo em `70f868f`; sem rollback/rebase/force-push/squash/merge commit). **Fase 9 — Comunicação e Integrações do MVP — EM ANDAMENTO.** Checkpoint 2 (WhatsApp real), Checkpoint 3 (Airbnb) e Checkpoint 4 (homologação final da Fase) permanecem pendentes — nenhum dos três foi iniciado. Ver §6 para o escopo exato ainda em aberto.
 
 ---
 
