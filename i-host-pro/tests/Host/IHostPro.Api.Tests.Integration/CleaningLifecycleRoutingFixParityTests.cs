@@ -102,6 +102,7 @@ public sealed class CleaningLifecycleRoutingFixParityTests : IAsyncLifetime
         var values = new Dictionary<string, string?>
         {
             ["ASPNETCORE_ENVIRONMENT"] = "Development",
+            ["DOTNET_ENVIRONMENT"] = "Development",
             ["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test",
             ["Identity__Jwt__Audience"] = "ihostpro-api-test",
             ["Identity__Jwt__AccessTokenLifetime"] = "00:15:00",
@@ -118,6 +119,7 @@ public sealed class CleaningLifecycleRoutingFixParityTests : IAsyncLifetime
             ["ConnectionStrings__Reservations"] = _appConnectionString,
             ["ConnectionStrings__Configuration"] = _appConnectionString,
             ["ConnectionStrings__Housekeeping"] = _appConnectionString,
+            ["ConnectionStrings__Communication"] = _appConnectionString,
             ["ConnectionStrings__Dashboard"] = _appConnectionString,
             ["ConnectionStrings__Platform"] = _appConnectionString,
             ["Configuration__PolicyCache__ConnectionString"] = "localhost:6379",
@@ -174,6 +176,7 @@ public sealed class CleaningLifecycleRoutingFixParityTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__Reservations"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Configuration"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = migratorConnectionString;
+        psi.Environment["ConnectionStrings__Communication"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = migratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;

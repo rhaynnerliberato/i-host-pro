@@ -377,6 +377,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
             // never reads a port override) still connects successfully.
             ["OpenTelemetry__OtlpEndpoint"] = "http://localhost:14317",
             ["ASPNETCORE_ENVIRONMENT"] = "Development",
+            ["DOTNET_ENVIRONMENT"] = "Development",
         };
 
         foreach (var (key, value) in values)
@@ -1312,6 +1313,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         psi.Environment["ConnectionStrings__Reservations"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__Configuration"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = _fixture.MigratorConnectionString;
+        psi.Environment["ConnectionStrings__Communication"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _fixture.MigratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _fixture.RabbitMq.Hostname;

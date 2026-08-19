@@ -106,11 +106,13 @@ public sealed class HousekeepingWolverineDiscoveryTests : IAsyncLifetime
             UseShellExecute = false,
         };
         psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        psi.Environment["DOTNET_ENVIRONMENT"] = "Development";
         psi.Environment["ConnectionStrings__Identity"] = _appConnectionString;
         psi.Environment["ConnectionStrings__PropertyManagement"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Reservations"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Configuration"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__Communication"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _appConnectionString;
         psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";
@@ -243,6 +245,7 @@ public sealed class HousekeepingWolverineDiscoveryTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__Reservations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Configuration"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__Communication"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _migratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;

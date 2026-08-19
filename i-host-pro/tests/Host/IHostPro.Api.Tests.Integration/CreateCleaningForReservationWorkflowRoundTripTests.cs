@@ -459,11 +459,13 @@ public sealed class CreateCleaningForReservationWorkflowRoundTripTests : IAsyncL
     private Dictionary<string, string?> BuildWorkerEnvironment(string signingKeyPem) => new()
     {
         ["ASPNETCORE_ENVIRONMENT"] = "Development",
+        ["DOTNET_ENVIRONMENT"] = "Development",
         ["ConnectionStrings__Identity"] = _appConnectionString,
         ["ConnectionStrings__PropertyManagement"] = _appConnectionString,
         ["ConnectionStrings__Reservations"] = _appConnectionString,
         ["ConnectionStrings__Configuration"] = _appConnectionString,
         ["ConnectionStrings__Housekeeping"] = _appConnectionString,
+        ["ConnectionStrings__Communication"] = _appConnectionString,
         ["ConnectionStrings__Dashboard"] = _appConnectionString,
         ["ConnectionStrings__Platform"] = _appConnectionString,
         ["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test",
@@ -657,6 +659,12 @@ public sealed class CreateCleaningForReservationWorkflowRoundTripTests : IAsyncL
 
         await transaction.CommitAsync();
 
+        // TEMP DIAGNOSTIC — always dump worker output for root-cause analysis.
+        string workerOutputDiag;
+        lock (_workerOutputLock) workerOutputDiag = _workerOutput.ToString();
+        System.IO.File.WriteAllText(
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), "worker-diag-output.txt"), workerOutputDiag);
+
         statuses.Should().AllSatisfy(status => status.Should().Be("Cancelled",
             "a cancelled Reservation may never have an active (non-Cancelled) automated Cleaning"));
     }
@@ -727,6 +735,7 @@ public sealed class CreateCleaningForReservationWorkflowRoundTripTests : IAsyncL
         psi.Environment["ConnectionStrings__Reservations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Configuration"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__Communication"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _migratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;

@@ -735,6 +735,7 @@ public sealed class WebE2EFixture : IAsyncLifetime
 
         var psi = new ProcessStartInfo("dotnet", $"\"{dllPath}\" --urls {ApiBaseUrl}");
         psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        psi.Environment["DOTNET_ENVIRONMENT"] = "Development";
         psi.Environment["ConnectionStrings__Identity"] = _appConnectionString;
         psi.Environment["ConnectionStrings__PropertyManagement"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Reservations"] = _appConnectionString;
@@ -792,6 +793,7 @@ public sealed class WebE2EFixture : IAsyncLifetime
 
         var psi = new ProcessStartInfo("dotnet", $"\"{dllPath}\"");
         psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        psi.Environment["DOTNET_ENVIRONMENT"] = "Development";
         psi.Environment["ConnectionStrings__Identity"] = _appConnectionString;
         // Fase 6, Checkpoint 6 homologação: was missing entirely — the real
         // Worker subprocess this fixture starts calls AddHousekeepingModule,
