@@ -7,6 +7,7 @@ namespace IHostPro.Contexts.ExternalIntegrations.Tests.Unit.Application.WhatsApp
 public class WhatsAppIntegrationCommandHandlerTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Guid ActorUserId = Guid.NewGuid();
     private static readonly DateTimeOffset Now = new(2026, 8, 19, 12, 0, 0, TimeSpan.Zero);
     private static readonly FakeTimeProvider FixedTime = new(Now);
 
@@ -17,7 +18,7 @@ public class WhatsAppIntegrationCommandHandlerTests
         var handler = new ConfigureWhatsAppIntegrationCommandHandler(repository, FixedTime);
 
         var result = await handler.Handle(
-            new ConfigureWhatsAppIntegrationCommand(TenantId, "waba-1", "phone-1", "access-ref", "secret-ref", "verify-ref"),
+            new ConfigureWhatsAppIntegrationCommand(TenantId, ActorUserId, "waba-1", "phone-1", "access-ref", "secret-ref", "verify-ref"),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -41,7 +42,7 @@ public class WhatsAppIntegrationCommandHandlerTests
         var handler = new ConfigureWhatsAppIntegrationCommandHandler(repository, FixedTime);
 
         var result = await handler.Handle(
-            new ConfigureWhatsAppIntegrationCommand(TenantId, "new-waba", "new-phone", "new-access", "new-secret", null),
+            new ConfigureWhatsAppIntegrationCommand(TenantId, ActorUserId, "new-waba", "new-phone", "new-access", "new-secret", null),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
