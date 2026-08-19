@@ -119,8 +119,12 @@ public class IdentityRowLevelSecurityTests : IClassFixture<IdentityRowLevelSecur
         await using var dbContext = CreateDbContext(_migratorConnectionString, new TenantContext());
 
         (await dbContext.Roles.CountAsync()).Should().Be(7);
-        (await dbContext.Permissions.CountAsync()).Should().Be(32);
-        (await dbContext.RolePermissions.CountAsync()).Should().Be(39);
+        // Fase 9, Checkpoint 2.1: +1 permission (INTEGRATIONS:MANAGE) and its
+        // single ADMIN role mapping — the first genuinely new catalog entry
+        // since the platform-fixed-for-v1 seed (see IdentityCatalogSeed's own
+        // doc comment), explicitly approved by the CP2.1 mandate (Decisão K).
+        (await dbContext.Permissions.CountAsync()).Should().Be(33);
+        (await dbContext.RolePermissions.CountAsync()).Should().Be(40);
     }
 
     [Fact]

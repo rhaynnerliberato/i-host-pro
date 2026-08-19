@@ -78,6 +78,10 @@
     <ProjectReference Include="..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Domain\IHostPro.Contexts.Communication.Domain.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Application\IHostPro.Contexts.Communication.Application.csproj" />
     <ProjectReference Include="..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Infrastructure\IHostPro.Contexts.Communication.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Contracts\IHostPro.Contexts.ExternalIntegrations.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Domain\IHostPro.Contexts.ExternalIntegrations.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Application\IHostPro.Contexts.ExternalIntegrations.Application.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Infrastructure\IHostPro.Contexts.ExternalIntegrations.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
