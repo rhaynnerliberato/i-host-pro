@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\IHostPro.Contexts.ExternalIntegrations.Domain\IHostPro.Contexts.ExternalIntegrations.Domain.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.ExternalIntegrations.Application\IHostPro.Contexts.ExternalIntegrations.Application.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Domain\IHostPro.BuildingBlocks.Domain.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <!--
+    Deliberately no WolverineFx.EntityFrameworkCore package this checkpoint —
+    External Integrations publishes no Integration Event yet (CP2.1 mandate
+    §8: no outbound Integration Event in this checkpoint), so no
+    IDbContextOutbox<ExternalIntegrationsDbContext> is needed — same reason
+    CommunicationDbContext skips it (see its own doc comment).
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

@@ -5298,6 +5298,141 @@ export class Client {
         }
         return _observableOf(null as any);
     }
+
+    /**
+     * @return OK
+     */
+    whatsappGET(): Observable<WhatsAppIntegrationResponse> {
+        let url_ = this.baseUrl + "/api/v1/integrations/whatsapp";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processWhatsappGET(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processWhatsappGET(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<WhatsAppIntegrationResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<WhatsAppIntegrationResponse>;
+        }));
+    }
+
+    protected processWhatsappGET(response: HttpResponseBase): Observable<WhatsAppIntegrationResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as WhatsAppIntegrationResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @param body (optional) 
+     * @return OK
+     */
+    whatsappPUT(body?: ConfigureWhatsAppIntegrationRequest | undefined): Observable<WhatsAppIntegrationResponse> {
+        let url_ = this.baseUrl + "/api/v1/integrations/whatsapp";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(body);
+
+        let options_ : any = {
+            body: content_,
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("put", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processWhatsappPUT(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processWhatsappPUT(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<WhatsAppIntegrationResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<WhatsAppIntegrationResponse>;
+        }));
+    }
+
+    protected processWhatsappPUT(response: HttpResponseBase): Observable<WhatsAppIntegrationResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as WhatsAppIntegrationResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
 }
 
 export interface AddressRequest {
@@ -5398,6 +5533,14 @@ export interface CondominiumSummaryResponse {
     name?: string | undefined;
     createdAt?: Date;
     updatedAt?: Date;
+}
+
+export interface ConfigureWhatsAppIntegrationRequest {
+    wabaId?: string | undefined;
+    phoneNumberId?: string | undefined;
+    accessTokenSecretReference?: string | undefined;
+    appSecretSecretReference?: string | undefined;
+    verifyTokenSecretReference?: string | undefined;
 }
 
 export interface CreateCleaningRequest {
@@ -5760,6 +5903,18 @@ export interface UserResponse {
 export enum UserStatus {
     _1 = 1,
     _2 = 2,
+}
+
+export interface WhatsAppIntegrationResponse {
+    tenantId?: string;
+    wabaId?: string | undefined;
+    phoneNumberId?: string | undefined;
+    isEnabled?: boolean;
+    accessTokenConfigured?: boolean;
+    appSecretConfigured?: boolean;
+    verifyTokenConfigured?: boolean;
+    createdAtUtc?: Date | undefined;
+    updatedAtUtc?: Date | undefined;
 }
 
 export class ApiException extends Error {

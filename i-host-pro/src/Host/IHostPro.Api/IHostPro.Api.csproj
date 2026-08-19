@@ -55,6 +55,10 @@
          Overview API is this module's first HTTP endpoint). -->
     <ProjectReference Include="..\..\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Api\IHostPro.Contexts.Dashboard.Api.csproj" />
     <ProjectReference Include="..\..\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Infrastructure\IHostPro.Contexts.Dashboard.Infrastructure.csproj" />
+    <!-- External Integrations module (Fase 9, Checkpoint 2.1 — foundation
+         only: administrative WhatsApp integration configuration API). -->
+    <ProjectReference Include="..\..\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Api\IHostPro.Contexts.ExternalIntegrations.Api.csproj" />
+    <ProjectReference Include="..\..\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Infrastructure\IHostPro.Contexts.ExternalIntegrations.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

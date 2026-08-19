@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fase 9, Checkpoint 2.1 — External Integrations + Credential/Configuration
+    Foundation. This is the ONLY project of External Integrations any other
+    Bounded Context may reference (Architecture Principles §13, corrected by
+    ADR-021 to reconcile with §17). IMessagingProvider is a plain,
+    provider-neutral synchronous port — no BuildingBlocks.Messaging.Abstractions
+    reference needed yet (no Integration Event is published by this checkpoint).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

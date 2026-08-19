@@ -5,6 +5,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Communication.Infrastructure.Persistence;
 using IHostPro.Contexts.Configuration.Infrastructure.Persistence;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
+using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
@@ -67,6 +68,7 @@ try
         typeof(HousekeepingDbContext).Assembly,
         typeof(DashboardDbContext).Assembly,
         typeof(CommunicationDbContext).Assembly,
+        typeof(ExternalIntegrationsDbContext).Assembly,
     };
 
     var moduleDbContextTypes = moduleAssemblies

@@ -24,6 +24,7 @@ using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using IHostPro.Contexts.Dashboard.Infrastructure;
+using IHostPro.Contexts.ExternalIntegrations.Infrastructure;
 using JasperFx;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -211,6 +212,16 @@ try
     // a Command/Query is an HTTP-request concern, never registered in
     // IHostPro.Worker's Program.cs.
     builder.Services.AddDashboardQueryDispatch();
+
+    // External Integrations module (Fase 9, Checkpoint 2.1 — foundation
+    // only). DbContext registration is unconditional in every environment
+    // (schema/config is not an external side-effect); the Development-only
+    // credential provider is gated inside AddExternalIntegrationsModule
+    // itself. IHostPro.Worker never registers this checkpoint — the
+    // administrative configuration API is this module's only consumer so
+    // far (CP2.1 mandate §16/§20: real outbound wiring belongs to CP2.2).
+    builder.Services.AddExternalIntegrationsModule(builder.Configuration, builder.Environment.IsDevelopment());
+    builder.Services.AddExternalIntegrationsCommandDispatch();
 
     // Wolverine's own Main message store (Fase 2, Incremento 1, Checkpoint 6
     // homologação — found and fixed during real-host startup validation):
