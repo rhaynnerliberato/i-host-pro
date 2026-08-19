@@ -171,6 +171,8 @@ public sealed class CleaningLifecycleRoutingFixParityTests : IAsyncLifetime
             RedirectStandardError = true,
             UseShellExecute = false,
         };
+        psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        psi.Environment["DOTNET_ENVIRONMENT"] = "Development";
         psi.Environment["ConnectionStrings__Identity"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__PropertyManagement"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Reservations"] = migratorConnectionString;

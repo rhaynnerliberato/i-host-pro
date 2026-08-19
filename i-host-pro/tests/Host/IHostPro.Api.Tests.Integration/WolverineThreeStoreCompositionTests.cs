@@ -1308,6 +1308,8 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
             RedirectStandardError = true,
             UseShellExecute = false,
         };
+        psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        psi.Environment["DOTNET_ENVIRONMENT"] = "Development";
         psi.Environment["ConnectionStrings__Identity"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__PropertyManagement"] = _fixture.MigratorConnectionString;
         psi.Environment["ConnectionStrings__Reservations"] = _fixture.MigratorConnectionString;

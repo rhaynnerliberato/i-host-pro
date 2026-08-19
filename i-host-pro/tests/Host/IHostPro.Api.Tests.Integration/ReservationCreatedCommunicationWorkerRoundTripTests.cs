@@ -541,6 +541,8 @@ public sealed class ReservationCreatedCommunicationWorkerRoundTripTests : IAsync
             RedirectStandardError = true,
             UseShellExecute = false,
         };
+        psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        psi.Environment["DOTNET_ENVIRONMENT"] = "Development";
         psi.Environment["ConnectionStrings__Identity"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__PropertyManagement"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Reservations"] = _migratorConnectionString;
