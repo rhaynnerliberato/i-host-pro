@@ -76,6 +76,10 @@ O texto atual de §17, item 2, referencia `ExternalIntegrations.Abstractions` (`
 - `ExternalIntegrations.Contracts` passa a ter dois propósitos distintos (Integration Events publicados + uma interface síncrona provider-neutral) — uma extensão de escopo em relação ao texto original de §13 ("contendo apenas os Integration Events que ele publica"), registrada aqui como uma decisão explícita, não uma violação silenciosa. Se um sexto Bounded Context precisar do mesmo padrão (contrato síncrono + eventos no mesmo `Contracts`), essa generalização deve ser reavaliada then, não assumida agora.
 - Um quinto par de Bounded Contexts com comunicação síncrona aumenta ligeiramente a superfície de exceções ao modelo assíncrono padrão da plataforma — mitigado pelo mesmo argumento já aceito para as quatro exceções anteriores: cada uma resolve uma necessidade real e não composicional (resolução em tempo de requisição, ou aqui, PII que não deve transitar pelo broker).
 
+## Correção pós-publicação (Checkpoint 2.1.1)
+
+Não é uma nova decisão arquitetural — apenas um registro do mecanismo de auditoria já esperado pelo mandato do CP2.1 (Documento 17 §28-proporcional) e implementado nesta correção: alterações administrativas na configuração de `WhatsAppIntegration` (`ConfigureWhatsAppIntegrationCommand`) são auditadas via structured Application logging (`ILogger<T>`), mesmo padrão já usado por `Workflow.Application`/`Identity.Application` — nenhuma persistência de auditoria nova, nenhum secret ou PII no log. Ver `Fase 9 - Comunicacao e Integracoes do MVP - Validacao e Homologacao.md` §10 para o registro completo.
+
 ## Referências
 - `documentacao do projeto/Architecture Principles.md`, Seções 12, 13, 14, 17 (todas reconciliadas por esta ADR)
 - `Documento 05` §19, `Documento 19` §5 (mandato pré-existente: Connectors externos vivem em External Integrations)

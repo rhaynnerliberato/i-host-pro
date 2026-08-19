@@ -283,11 +283,13 @@ Primeira entrada genuinamente nova no catálogo de permissões desde o seed orig
 | Release build (solução completa) | 0 erros |
 | `git diff --check` | limpo |
 
-### 9.7 Gate bloqueado — `IHostPro.Api.Tests.Integration` (débito técnico pré-existente, não uma regressão do CP2.1)
+### 9.7 Gate adicional não-bloqueante — `IHostPro.Api.Tests.Integration` (relação com CP2.1 não demonstrada, investigado separadamente)
 
-A suíte completa (29 testes, ~20 fixtures) foi executada **4 vezes** (incluindo uma vez após um `wsl --shutdown` completo, com estado Docker genuinamente limpo confirmado por `docker ps -a`) — todas as 4 vezes reproduziram o mesmo padrão: exatamente uma fixture consegue vincular a porta fixa 5672 do RabbitMQ Testcontainers; toda fixture subsequente falha imediatamente com `Bind for 0.0.0.0:5672 failed: port is already allocated`. A investigação (timing dos eventos, teste manual de bind/release isolado bem-sucedido, estado limpo confirmado antes de cada tentativa) aponta para uma falha real de `IAsyncLifetime.DisposeAsync()` de exatamente uma fixture nunca liberar seu container — não um problema de ambiente acumulado, e não relacionado a nenhuma mudança do CP2.1 (nenhum arquivo de teste, nenhuma configuração do Testcontainers foi tocada nesta correção). Zero falhas de asserção de negócio em qualquer tentativa — 100% das falhas são o mesmo erro de infraestrutura Docker.
+**Achado factual, inalterado**: a suíte completa (29 testes, ~20 fixtures) foi executada **4 vezes** (incluindo uma vez após um `wsl --shutdown` completo, com estado Docker genuinamente limpo confirmado por `docker ps -a`) — todas as 4 vezes reproduziram o mesmo padrão: exatamente uma fixture consegue vincular a porta fixa 5672 do RabbitMQ Testcontainers; toda fixture subsequente falha imediatamente com `Bind for 0.0.0.0:5672 failed: port is already allocated`. O timing dos eventos e um teste manual de bind/release isolado bem-sucedido sugerem uma falha real de `IAsyncLifetime.DisposeAsync()` de exatamente uma fixture nunca liberar seu container. Zero falhas de asserção de negócio em qualquer tentativa — 100% das falhas são o mesmo erro de infraestrutura Docker. Nenhum arquivo de teste, nenhuma configuração do Testcontainers foi tocada por nenhuma das duas correções (CP2.1/CP2.1.1).
 
-**Decisão do usuário**: aceitar a evidência já reunida por outros meios (ArchitectureTests, testes unitários/integração de ExternalIntegrations e Identity, MigrationRunner contra infraestrutura real, Release build — todos limpos) e prosseguir com a publicação do CP2.1, registrando este gate como bloqueado por um bug de infraestrutura de teste pré-existente, a ser investigado separadamente, nunca escondido. Ambiente restaurado (containers órfãos removidos, RabbitMQ de dev reiniciado e saudável) após cada tentativa.
+**Correção de classificação (CP2.1.1)**: o fechamento original do CP2.1 registrou esta suíte como "débito técnico pré-existente, não uma regressão" com base em uma decisão que, na verdade, ainda não havia sido tomada explicitamente pelo usuário naquele momento — uma imprecisão cronológica corrigida aqui, não apagada. A linguagem também superestimava a conclusão: **não houve controle A/B contra um SHA anterior** provando que o problema já existia antes do CP2.1 — apenas uma observação repetida durante uma rodada de regressão ampla, cuja relação causal com qualquer mudança específica nunca foi demonstrada. Classificação correta: *"repeated Testcontainers fixed-port disposal failure observed during an additional broad regression gate; relationship to CP2.1 not demonstrated; tracked separately."* O que É sabido com evidência real: ocorreu repetidamente (4/4 tentativas); sobreviveu a um restart completo de WSL/Docker; nenhuma falha de asserção de negócio foi observada nos testes que conseguiram executar; a causa raiz exata da falha de disposal ainda não foi formalmente comprovada (apenas indícios de timing).
+
+**Decisão do usuário (CP2.1.1, agora sim explícita)**: esta suíte **não fazia parte dos gates obrigatórios** definidos para a foundation do CP2.1/CP2.1.1 quando a composição de mensageria do Worker não foi alterada — reclassificada como **gate diagnóstico adicional, não-bloqueante**. Uma investigação separada foi registrada (task de background) para a causa raiz do disposal, deliberadamente fora do escopo desta correção (mandato CP2.1.1 §31: não alterar `WithPortBinding`/`IAsyncLifetime`/paralelização/lifecycle do Testcontainers agora). Ambiente restaurado (containers órfãos removidos, RabbitMQ de dev reiniciado e saudável) após cada tentativa.
 
 ### 9.8 Escopo explicitamente NÃO implementado neste checkpoint
 
@@ -297,6 +299,43 @@ Meta HTTP real; envio real de WhatsApp; webhook (`ExternalIntegrations.Api` não
 
 Antes de iniciar o CP2.2 (conector real Meta), o usuário precisará providenciar, fora deste chat: (1) conta de desenvolvimento Meta for Developers; (2) test Phone Number ID (auto-provisionado pela Meta ao completar o "Get Started"); (3) token de acesso temporário/de teste; (4) definição do Utility Template real a ser usado no sandbox; (5) configuração desses valores localmente via User Secrets/variáveis de ambiente (nunca colados no chat). Instruções de configuração local podem ser fornecidas quando o CP2.2 for autorizado.
 
-## 10. Status final
+## 10. Checkpoint 2.1.1 — Correção de Auditoria da Configuração de External Integrations
 
-Checkpoint 1 = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO**. Checkpoint 2.0 = **CONCLUÍDO** (auditoria read-only, decisões A–L aprovadas). Checkpoint 2.1 = **HOMOLOGADO E PUBLICADO** (foundation apenas — External Integrations BC, `WhatsAppIntegration`, `INTEGRATIONS:MANAGE`; gate `IHostPro.Api.Tests.Integration` bloqueado por débito técnico pré-existente de infraestrutura de teste, aceito pelo usuário, registrado para investigação futura separada). **Fase 9 — Comunicação e Integrações do MVP = EM ANDAMENTO** — não tratar como concluída até o fechamento do Checkpoint 4. Checkpoint 2.2 (conector real) **não foi iniciado**.
+### 10.1 Cronologia honesta (nada apagado)
+
+1. CP2.1 (foundation) foi implementado e publicado em `7a44aed`.
+2. O relatório de fechamento do CP2.1 declarou "Auditoria: nenhuma implementada".
+3. Isso violava um gate já exigido pelo mandato do próprio CP2.1 (auditoria proporcional e PII-safe para alterações de configuração/credential references, proporcional a Documento 17 §28) — um gap real, não uma preferência nova.
+4. CP2.1 permaneceu **publicado**, porém **pendente de homologação corretiva de auditoria** até esta correção.
+5. CP2.1.1 adiciona auditoria estruturada, fix-forward, sem alterar nenhum comportamento de CP2.1 além disso.
+6. Nenhuma persistência nova de auditoria foi criada — nenhuma tabela, nenhum `AuditDbContext`, nenhum novo Bounded Context, nenhum Integration Event, nenhum outbox.
+7. Nenhum secret e nenhum PII entra no log estruturado — provado por teste com valores sentinela explícitos.
+8. O gate diagnóstico do Testcontainers/porta 5672 (§9.7) foi explicitamente reclassificado como não-bloqueante **somente nesta decisão posterior** — a linguagem anterior superestimava a conclusão ("pré-existente confirmado" sem controle A/B real); corrigido, não apagado.
+
+### 10.2 O que foi implementado
+
+**Ownership**: `ExternalIntegrations.Application`, nunca o Controller — mirrors o precedente de `ReservationCreatedCleaningOrchestrator` (Workflow.Application, ADR-018 §Checkpoint 2.1) e do padrão `ILogger<T>` já usado em `Identity.Application`.
+
+**Mecanismo**: um novo `IPipelineBehavior<ConfigureWhatsAppIntegrationCommand, Result<WhatsAppIntegrationResult>>` (`AuditConfigureWhatsAppIntegrationBehavior`), registrado para envolver (`wrap`) o já existente `TenantTransactionBehavior` — nunca dentro do handler. Essa é a única forma de logar `Result = "Success"` somente depois que a transação de fato commitou (mandato §11) sem alterar a fronteira transacional em si (mandato §16 proíbe explicitamente essa alteração) — o commit ocorre inteiramente dentro do `next()` que este behavior aguarda, antes de qualquer log ser emitido.
+
+**Ator**: `ConfigureWhatsAppIntegrationCommand` ganhou `ActorUserId` (um `Guid` primitivo), espelhando exatamente o precedente já existente `CreatePolicyValueVersionCommand.ActorId` (Configuration.Application) — nenhuma infraestrutura cross-cutting nova, nenhum `HttpContext`/`ClaimsPrincipal` passado à Application. O controller extrai `identity.UserId` (já obtido via `ExternalIntegrationsIdentityReader`, claims já validadas) e passa como primitivo.
+
+**Campos do log estruturado**: `AuditEvent = "WhatsAppIntegrationConfigurationChanged"`, `TenantId`, `IntegrationType = "WhatsApp"`, `Action = "Configure"`, `ActorType = "User"` (nunca `"System"` — mutation humana autenticada), `ActorUserId`, `Timestamp` (via `TimeProvider`, já registrado no módulo), `Result` (`"Success"`/`"Failed"`), `DurationMs`, e — somente em falha — `ErrorType` (`exception.GetType().Name`, nunca a mensagem completa nem stack trace). Deliberadamente **excluídos**: `WabaId`/`PhoneNumberId` (não são secrets, mas desnecessários para provar a mutação) e qualquer referência de secret (`AccessTokenSecretReference`/`AppSecretSecretReference`/`VerifyTokenSecretReference`) ou valor de secret.
+
+### 10.3 Testes — contagens exatas desta rodada
+
+| Suíte | Resultado |
+|---|---|
+| `ExternalIntegrations.Tests.Unit` | **16/16, verde** (10 pré-existentes + 5 novos do audit behavior + 1 de propagação de ator no controller) |
+| `ExternalIntegrations.Tests.Integration` | **13/13, verde** (inalterado — zero migration/schema nesta correção) |
+| `IHostPro.ArchitectureTests` (solução completa) | **185/185, verde** (inalterado — nenhuma regra nova de arquitetura necessária) |
+| Release build (solução completa) | 0 erros |
+| `git diff --check` | limpo |
+| MigrationRunner | não reexecutado — zero migration, zero mapeamento de `DbContext`, zero mudança de topologia (mandato §25) |
+| NSwag/Angular | não reexecutado — contrato HTTP (`ConfigureWhatsAppIntegrationRequest`) inalterado; `ActorUserId` nunca é enviado pelo cliente, sempre resolvido server-side (mandato §26) |
+
+Os testes novos provam: entrada de log de sucesso com todos os campos exigidos, emitida somente após `next()` completar (nunca antes); entrada de log de falha com `Result = "Failed"`, `ErrorType` correto, e a exceção sempre relançada (nunca engolida); ausência total de qualquer um dos cinco valores-sentinela de secret/config em qualquer campo capturado (incluindo dentro da própria exceção); vocabulário de chaves do log restrito exatamente ao conjunto aprovado; e que `ActorUserId` no command é sempre o id do usuário autenticado, nunca um valor potencialmente escolhido pelo cliente.
+
+## 11. Status final
+
+Checkpoint 1 = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO**. Checkpoint 2.0 = **CONCLUÍDO** (auditoria read-only, decisões A–L aprovadas). Checkpoint 2.1 = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO** (foundation + correção de auditoria CP2.1.1 — External Integrations BC, `WhatsAppIntegration`, `INTEGRATIONS:MANAGE`, auditoria estruturada PII-safe; gate diagnóstico `IHostPro.Api.Tests.Integration` reclassificado como não-bloqueante, relação com CP2.1 não demonstrada, investigado separadamente). **Fase 9 — Comunicação e Integrações do MVP = EM ANDAMENTO** — não tratar como concluída até o fechamento do Checkpoint 4. Checkpoint 2.2 (conector real) **não foi iniciado**.
