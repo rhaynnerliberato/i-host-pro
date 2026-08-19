@@ -55,6 +55,16 @@
     <ProjectReference Include="..\..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\src\Contexts\PropertyManagement\IHostPro.Contexts.PropertyManagement.Infrastructure\IHostPro.Contexts.PropertyManagement.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\src\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
+    <!--
+      ADR-020 spike (cross-phase Wolverine handler-chain-isolation
+      investigation) — needed only by WolverineHandlerChainIsolationBaselineTests's
+      own deliberately minimal, structural-diagnostic host (see that file's
+      own doc comment for why it does not use IHostPro.Api's full composition
+      root, unlike WolverineThreeStoreCompositionTests above). Workflow has no
+      HTTP surface, so IHostPro.Api never references it — this test needs it
+      directly.
+    -->
+    <ProjectReference Include="..\..\..\src\Contexts\Workflow\IHostPro.Contexts.Workflow.Infrastructure\IHostPro.Contexts.Workflow.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
