@@ -65,6 +65,15 @@
       directly.
     -->
     <ProjectReference Include="..\..\..\src\Contexts\Workflow\IHostPro.Contexts.Workflow.Infrastructure\IHostPro.Contexts.Workflow.Infrastructure.csproj" />
+    <!--
+      Fase 9, Checkpoint 1 real transport gate — needed only to read
+      communication.messages directly for assertions (IHostPro.Api itself
+      never references Communication, per CommunicationModuleExtensions'
+      own doc comment — the real consumer under test here is the separate
+      IHostPro.Worker.dll subprocess).
+    -->
+    <ProjectReference Include="..\..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Domain\IHostPro.Contexts.Communication.Domain.csproj" />
+    <ProjectReference Include="..\..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Infrastructure\IHostPro.Contexts.Communication.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

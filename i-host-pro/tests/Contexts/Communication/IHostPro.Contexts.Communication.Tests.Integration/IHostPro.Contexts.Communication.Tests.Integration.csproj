@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="10.0.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="7.*" />
+    <!-- Explicit pin — see IHostPro.Contexts.Identity.Api.csproj for the MSB3277 rationale. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.1.0" />
+    <PackageReference Include="WolverineFx.Postgresql" Version="6.22.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Domain\IHostPro.Contexts.Communication.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Application\IHostPro.Contexts.Communication.Application.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Infrastructure\IHostPro.Contexts.Communication.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Contexts\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>
