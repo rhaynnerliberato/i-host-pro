@@ -119,20 +119,28 @@ try
     // checkpoint and has no HTTP surface, so IHostPro.Api never references
     // this module (CommunicationModuleExtensions' own doc comment).
     //
-    // Gated outside Production (CP1 closure review, post-implementation
-    // fix): AddCommunicationReservationConsumer registers the ONLY
+    // Gated to Development ONLY (CP1 closure — corrective homologation):
+    // AddCommunicationReservationConsumer registers the ONLY
     // IOutboundMessageConnector this checkpoint has — FakeWhatsAppConnector,
     // which always reports success without ever calling a real WhatsApp
     // provider (none is contracted/implemented until Checkpoint 2). Without
-    // this gate, a real ReservationCreated in Production would silently mark
-    // a Message as Sent despite nothing ever being delivered — a false
-    // operational positive. Every existing test (WorkerRoundTrip suite,
-    // WebE2EFixture) explicitly launches this process with
-    // ASPNETCORE_ENVIRONMENT=Development, so this gate does not disable
-    // Communication in any of them — only a deployment with no explicit
-    // environment override (defaults to Production) or an explicit
-    // Production environment is affected.
-    if (!builder.Environment.IsProduction())
+    // this gate, a real ReservationCreated in any non-Development
+    // environment would silently mark a Message as Sent despite nothing
+    // ever being delivered — a false operational positive.
+    //
+    // Deliberately an ALLOWLIST (IsDevelopment()), never a denylist
+    // (!IsProduction()): the first corrective pass used !IsProduction(),
+    // which would have also left the fake connector active in Staging/QA/
+    // UAT/any custom environment name — the same false-positive risk this
+    // gate exists to close, just relocated. IsDevelopment() is the only
+    // condition under which this fake automation may run.
+    //
+    // Every existing test (WorkerRoundTrip suite, WebE2EFixture) explicitly
+    // launches this process with DOTNET_ENVIRONMENT=Development (the
+    // variable this Generic Host process actually reads — see the
+    // ASPNETCORE_ENVIRONMENT/DOTNET_ENVIRONMENT note below), so this gate
+    // does not disable Communication in any of them.
+    if (builder.Environment.IsDevelopment())
     {
         builder.Services.AddCommunicationModule(builder.Configuration);
         builder.Services.AddCommunicationReservationConsumer();
@@ -486,18 +494,25 @@ try
         // same risk of Wolverine's default handler-chain-combining defect
         // that ADR-020 corrected for the other three.
         //
-        // Gated outside Production, mirroring the DI registration gate
+        // Gated to Development ONLY, mirroring the DI registration gate
         // above (AddCommunicationModule/AddCommunicationReservationConsumer)
-        // exactly: this listener resolves a keyed handler that only exists
-        // in DI when that gate is open. Binding the listener unconditionally
-        // while gating only the DI registration would let Production
-        // consume from this queue with no handler registered for it —
-        // a runtime DI resolution failure per message, not a clean absence.
-        // Keeping both gates in the same condition means Production simply
-        // never listens to this queue at all — messages accumulate on it,
-        // unread, until Checkpoint 2 ships a real connector and lifts the
-        // gate; never a silent fake success, never a resolution crash.
-        if (!builder.Environment.IsProduction())
+        // exactly — same IsDevelopment() allowlist, same rationale: this
+        // listener resolves a keyed handler that only exists in DI when
+        // that gate is open. Binding the listener while gating only the DI
+        // registration would let a non-Development process consume from
+        // this queue with no handler registered for it — a runtime DI
+        // resolution failure per message, not a clean absence. Keeping both
+        // gates on the same condition means any non-Development process
+        // never listens to this queue at all. Outside Development, the
+        // corresponding queue/binding on the reservation-events exchange is
+        // ALSO not provisioned by IHostPro.MigrationRunner (see its own
+        // Program.cs, same IsDevelopment() condition) — a real
+        // ReservationCreated published there never reaches a queue with no
+        // consumer at all, closing the backlog risk that would otherwise
+        // exist between CP1 (no real connector) and CP2 (real connector
+        // activated): never a silent fake success, never a resolution
+        // crash, never an accumulating backlog to replay retroactively.
+        if (builder.Environment.IsDevelopment())
         {
             opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
             opts.ListenToRabbitQueue("communication.reservation-created-trigger")

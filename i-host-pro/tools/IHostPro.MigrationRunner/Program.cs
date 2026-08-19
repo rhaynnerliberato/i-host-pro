@@ -585,7 +585,27 @@ try
                 // criterion — never through Workflow Orchestration).
                 // Reservations never needs to know Communication exists,
                 // same decoupled pub/sub pattern as every queue above.
-                exchange.BindQueue("communication.reservation-created-trigger", "reservation_created");
+                //
+                // Provisioned in Development ONLY (CP1 closure — corrective
+                // homologation, same IsDevelopment() allowlist as
+                // IHostPro.Worker's own registration gate): CP1's only
+                // connector is FakeWhatsAppConnector, and IHostPro.Worker
+                // never listens to this queue outside Development (see its
+                // own Program.cs). Binding it here unconditionally would
+                // let a real ReservationCreated, in any non-Development
+                // environment, accumulate on a queue nothing consumes —
+                // exactly the backlog CP2's real connector must never be
+                // allowed to replay retroactively. This uses builder's own
+                // native IHostEnvironment (Host.CreateApplicationBuilder,
+                // the same Generic Host IHostPro.Worker uses) — no new
+                // configuration abstraction. Every other exchange/queue/
+                // binding on reservation-events (Housekeeping's/Dashboard's/
+                // Workflow's own) remains provisioned in every environment,
+                // unaffected.
+                if (builder.Environment.IsDevelopment())
+                {
+                    exchange.BindQueue("communication.reservation-created-trigger", "reservation_created");
+                }
             })
             // Fase 5, Incremento 1 (Policy Engine Foundation), Checkpoint 1:
             // declared ahead of PolicyUpdated (Checkpoint 6) — same
