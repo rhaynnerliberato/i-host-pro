@@ -230,6 +230,73 @@ Registrado para que nenhuma leitura futura confunda o fechamento do Checkpoint 1
 - **Checkpoint 3 — Airbnb**: não iniciado, zero código.
 - **Checkpoint 4 — Homologação final da Fase**: não iniciado, condicionado à conclusão dos Checkpoints 2 e 3.
 
-## 7. Status final
+## 7. Status do Checkpoint 1
 
-Checkpoint 1 = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO** (após a sequência de publicação em `8c2c38e` e o controle A/B do gate diagnóstico de `PolicyUpdatedRegressionTests`, ambos registrados nos relatórios de fechamento). **Fase 9 — Comunicação e Integrações do MVP = EM ANDAMENTO** — não tratar como concluída até o fechamento do Checkpoint 4.
+Checkpoint 1 = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO** (após a sequência de publicação em `8c2c38e` e o controle A/B do gate diagnóstico de `PolicyUpdatedRegressionTests`, ambos registrados nos relatórios de fechamento).
+
+## 8. Checkpoint 2.0 — Auditoria e Refinamento Read-Only do WhatsApp Real
+
+Auditoria completa, read-only (nenhum código alterado), comparando Meta WhatsApp Cloud API direta e Twilio (BSP), cobrindo onboarding, credenciais, encryption-at-rest, outbound/webhook, templates, consent/LGPD, idempotência, lifecycle, resiliência, PII/auditoria, rollout, arquitetura (External Integrations ACL, boundary síncrono) e escopo do MVP recomendado. Recomendação: **Meta WhatsApp Cloud API direta** (menor dependência — Twilio não elimina a necessidade de conta/WABA Meta própria, apenas adiciona uma segunda camada de vendor e uma taxa recorrente). Relatório completo de 74 itens apresentado ao usuário; nenhuma decisão material foi tomada silenciosamente — as 12 decisões materiais (A–L) foram apresentadas para aprovação explícita antes de qualquer implementação.
+
+## 9. Checkpoint 2.1 — External Integrations + Credential/Configuration Foundation
+
+### 9.1 Escopo aprovado
+
+Fundação apenas: Bounded Context **External Integrations** (Domain/Application/Infrastructure/Api/Contracts), configuração tenant-owned de integração WhatsApp (`WhatsAppIntegration`), permissão administrativa (`INTEGRATIONS:MANAGE`), abstração de credenciais (Development-only). Explicitamente **não** implementado neste checkpoint: chamada HTTP real à Meta, webhook, envio real de WhatsApp, `ProviderMessageId`/`Delivered`/`Read` em `Message`, provider template real, ativação de Production.
+
+### 9.2 Conflito documental §13/§14/§17 — resolvido antes do scaffold (ADR-021)
+
+Antes de criar qualquer projeto, a auditoria de pré-scaffold encontrou um conflito real entre `Architecture Principles.md` §17 (que pressupunha um projeto `ExternalIntegrations.Abstractions`) e §12/§13/§14 (que fecham `Contracts` como única superfície pública por-BC, e listam exatamente 4 exceções síncronas nomeadas, sem `Abstractions`). A implementação foi interrompida (`PARE`) e o conflito reportado ao usuário, sem resolução silenciosa.
+
+**Decisão do usuário**: rejeitar `ExternalIntegrations.Abstractions`; publicar `IMessagingProvider` (e futuros Integration Events de status) em `ExternalIntegrations.Contracts`, a mesma e única superfície pública que todo outro Bounded Context já usa; registrar a chamada Communication → External Integrations como a sexta exceção síncrona do Architecture Principles §14 (Exceção 6 — a numeração literal do documento já chegava a "Exceção 5" com ADR-019, então a nova entrada foi numerada 6, não 5, para não colidir). **ADR-021 — External Integrations ACL and Synchronous Provider Boundary** registra a decisão completa; `Architecture Principles.md` §13/§14/§17 foram corrigidas em conformidade.
+
+### 9.3 Scaffold implementado
+
+`IHostPro.Contexts.ExternalIntegrations.{Contracts,Domain,Application,Infrastructure,Api}` + `Tests.Unit` + `Tests.Integration`, seguindo exatamente a convenção de projeto por-BC já estabelecida (Architecture Principles §16).
+
+- **Contracts**: `IMessagingProvider.SendAsync(OutboundMessageRequest, CancellationToken) → OutboundMessageResult`, `ProviderFailureCategory` — deliberadamente provider-neutro (nenhum nome/tipo Meta/Twilio/Graph API aparece aqui; prova por `ArchitectureTests.Contracts_Assembly_Names_No_Real_Provider`). **Não consumido pela Communication ainda** — nenhum wiring artificial foi criado só para "usar" a interface; a ligação real pertence ao Checkpoint 2.2.
+- **Domain**: `WhatsAppIntegration` (agregado tenant-owned) — `WabaId`, `PhoneNumberId`, `IsEnabled` (sempre `false`, sem `Enable()`/`Disable()` exposto neste checkpoint), três referências de secret opcionais (`AccessTokenSecretReference`, `AppSecretSecretReference`, `VerifyTokenSecretReference`) — nunca um valor de secret real.
+- **Application**: `ConfigureWhatsAppIntegrationCommand`/`GetWhatsAppIntegrationQuery` (upsert + leitura, sem código de erro de negócio — ambas operações sempre têm sucesso), `IWhatsAppCredentialProvider` (porta, sem implementação de Production).
+- **Infrastructure**: `ExternalIntegrationsDbContext` (schema `external_integrations`, sem `MapWolverineEnvelopeStorage` — nenhum Integration Event publicado ainda), `DevelopmentWhatsAppCredentialProvider` (lê de `IConfiguration`/User Secrets, registrado apenas quando `IsDevelopment()` — resolver a porta fora de Development falha alto, nunca cai silenciosamente para a implementação de Development).
+- **Api**: `WhatsAppIntegrationController` (`GET`/`PUT` `/api/v1/integrations/whatsapp`, ambos exigindo `INTEGRATIONS:MANAGE`) — nunca aceita ou retorna um valor de secret, apenas booleanos `*Configured`.
+
+### 9.4 Persistência — `external_integrations.whatsapp_integrations`
+
+Schema/tabela novos via migration EF Core gerada por `dotnet ef migrations add` (nunca escrita à mão) — RLS `ENABLE`+`FORCE`, mesma política fail-closed (`current_setting('app.tenant_id', true)`) de todo outro Bounded Context, grants de menor privilégio idênticos ao padrão já estabelecido (`ihostpro_app`: SELECT/INSERT/UPDATE; sem CREATE/ALTER/DROP/BYPASSRLS), índice único em `tenant_id` (uma integração por tenant, CP2.0 Decisão E). Verificado diretamente contra Postgres real (`psql`) e por 13 testes de integração dedicados contra Testcontainers real (RLS fail-closed, isolamento entre tenants, índice único, referência de secret persistida literalmente sem transformação).
+
+### 9.5 `INTEGRATIONS:MANAGE`
+
+Primeira entrada genuinamente nova no catálogo de permissões desde o seed original da Fase 1 (todo outro código em `IdentityPermissionCodes` é uma "promoção" de um código já seedado, nunca uma entrada nova — ver o próprio comentário de `IdentityCatalogSeed`). Seedada via migration EF Core limpa (`InsertData`/`DeleteData`, nada além disso), ADMIN apenas, sem `INTEGRATIONS:READ`. Migration gerada por `dotnet ef migrations add` também corrigiu, como efeito colateral incidental e sem impacto de DDL real, uma divergência pré-existente do `IdentityDbContextModelSnapshot` (mapeamento Wolverine do outbox de Identity, presente desde o primeiro commit de `IdentityDbContext.cs`, nunca antes capturado no snapshot) — confirmado inofensivo por leitura direta da migration real gerada (contém exclusivamente as duas operações de dados da nova permissão) e por múltiplas execuções reais bem-sucedidas contra Postgres de dev.
+
+### 9.6 Testes — contagens exatas desta rodada
+
+| Suíte | Resultado |
+|---|---|
+| `IHostPro.ArchitectureTests` (solução completa) | **185/185, verde** (173 pré-existentes + 12 novos — nenhum `Abstractions`, Communication nunca referencia além de `Contracts`, sem dependência inversa, sem secret bruto, `WhatsAppIntegration` tenant-owned, etc.) |
+| `ExternalIntegrations.Tests.Unit` | **10/10, verde** |
+| `ExternalIntegrations.Tests.Integration` (Postgres real, RLS/isolamento/unicidade) | **13/13, verde** |
+| `Identity.Tests.Unit` | **470/470, verde** |
+| `Identity.Tests.Integration` | **419/419, verde** — 1 falha real encontrada e corrigida (`IdentityRowLevelSecurityTests`, contagem hardcoded de permissões 32→33/RolePermissions 39→40, consequência direta e esperada da nova permissão, não uma regressão) |
+| MigrationRunner (Postgres/RabbitMQ reais de dev) | 3 execuções, exit code 0 em todas, schema `external_integrations` provisionado e idempotente |
+| NSwag | determinístico, diff contido exclusivamente a `ConfigureWhatsAppIntegrationRequest`/`WhatsAppIntegrationResponse` |
+| Angular (build de produção) | verde |
+| Release build (solução completa) | 0 erros |
+| `git diff --check` | limpo |
+
+### 9.7 Gate bloqueado — `IHostPro.Api.Tests.Integration` (débito técnico pré-existente, não uma regressão do CP2.1)
+
+A suíte completa (29 testes, ~20 fixtures) foi executada **4 vezes** (incluindo uma vez após um `wsl --shutdown` completo, com estado Docker genuinamente limpo confirmado por `docker ps -a`) — todas as 4 vezes reproduziram o mesmo padrão: exatamente uma fixture consegue vincular a porta fixa 5672 do RabbitMQ Testcontainers; toda fixture subsequente falha imediatamente com `Bind for 0.0.0.0:5672 failed: port is already allocated`. A investigação (timing dos eventos, teste manual de bind/release isolado bem-sucedido, estado limpo confirmado antes de cada tentativa) aponta para uma falha real de `IAsyncLifetime.DisposeAsync()` de exatamente uma fixture nunca liberar seu container — não um problema de ambiente acumulado, e não relacionado a nenhuma mudança do CP2.1 (nenhum arquivo de teste, nenhuma configuração do Testcontainers foi tocada nesta correção). Zero falhas de asserção de negócio em qualquer tentativa — 100% das falhas são o mesmo erro de infraestrutura Docker.
+
+**Decisão do usuário**: aceitar a evidência já reunida por outros meios (ArchitectureTests, testes unitários/integração de ExternalIntegrations e Identity, MigrationRunner contra infraestrutura real, Release build — todos limpos) e prosseguir com a publicação do CP2.1, registrando este gate como bloqueado por um bug de infraestrutura de teste pré-existente, a ser investigado separadamente, nunca escondido. Ambiente restaurado (containers órfãos removidos, RabbitMQ de dev reiniciado e saudável) após cada tentativa.
+
+### 9.8 Escopo explicitamente NÃO implementado neste checkpoint
+
+Meta HTTP real; envio real de WhatsApp; webhook (`ExternalIntegrations.Api` não tem nenhum endpoint de webhook ainda); `ProviderMessageId`/`MessageStatus.Delivered`/`MessageStatus.Read` em `Communication`; mapeamento de provider template; ativação de Production (nenhum backend de secret de Production existe; `IsEnabled` permanece `false` sempre); pacote de resiliência HTTP (nenhum `HttpClient` real existe ainda); qualquer evento outbound com PII no RabbitMQ; migração do `FakeWhatsAppConnector` do CP1 (permanece exatamente como estava, Development-only).
+
+### 9.9 Pré-requisitos para o Checkpoint 2.2
+
+Antes de iniciar o CP2.2 (conector real Meta), o usuário precisará providenciar, fora deste chat: (1) conta de desenvolvimento Meta for Developers; (2) test Phone Number ID (auto-provisionado pela Meta ao completar o "Get Started"); (3) token de acesso temporário/de teste; (4) definição do Utility Template real a ser usado no sandbox; (5) configuração desses valores localmente via User Secrets/variáveis de ambiente (nunca colados no chat). Instruções de configuração local podem ser fornecidas quando o CP2.2 for autorizado.
+
+## 10. Status final
+
+Checkpoint 1 = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO**. Checkpoint 2.0 = **CONCLUÍDO** (auditoria read-only, decisões A–L aprovadas). Checkpoint 2.1 = **HOMOLOGADO E PUBLICADO** (foundation apenas — External Integrations BC, `WhatsAppIntegration`, `INTEGRATIONS:MANAGE`; gate `IHostPro.Api.Tests.Integration` bloqueado por débito técnico pré-existente de infraestrutura de teste, aceito pelo usuário, registrado para investigação futura separada). **Fase 9 — Comunicação e Integrações do MVP = EM ANDAMENTO** — não tratar como concluída até o fechamento do Checkpoint 4. Checkpoint 2.2 (conector real) **não foi iniciado**.
