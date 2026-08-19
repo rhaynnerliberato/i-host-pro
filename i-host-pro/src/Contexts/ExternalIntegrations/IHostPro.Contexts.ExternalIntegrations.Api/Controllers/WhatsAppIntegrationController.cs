@@ -63,6 +63,7 @@ public sealed class WhatsAppIntegrationController : ControllerBase
         var result = await _sender.Send(
             new ConfigureWhatsAppIntegrationCommand(
                 identity.TenantId,
+                identity.UserId,
                 request.WabaId,
                 request.PhoneNumberId,
                 request.AccessTokenSecretReference,

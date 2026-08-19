@@ -31,6 +31,17 @@ public static class ExternalIntegrationsCommandDispatchExtensions
 
         services.AddScoped<IWhatsAppIntegrationRepository, WhatsAppIntegrationRepository>();
 
+        // Fase 9, Checkpoint 2.1.1 — registered BEFORE TenantTransactionBehavior
+        // so it wraps AROUND it (this codebase's own convention: first-registered
+        // runs outermost, see the ValidationBehavior comment above). This is what
+        // lets the audit log "Success" only after TenantTransactionBehavior's own
+        // commit has genuinely completed inside the next() call this behavior
+        // awaits — never before it, and never by changing the transaction
+        // boundary itself (CP2.1.1 mandate §11/§16).
+        services.AddScoped<
+            IPipelineBehavior<ConfigureWhatsAppIntegrationCommand, Result<WhatsAppIntegrationResult>>,
+            AuditConfigureWhatsAppIntegrationBehavior>();
+
         services.AddScoped<
             IPipelineBehavior<ConfigureWhatsAppIntegrationCommand, Result<WhatsAppIntegrationResult>>,
             TenantTransactionBehavior<ConfigureWhatsAppIntegrationCommand, Result<WhatsAppIntegrationResult>, ExternalIntegrationsDbContext>>();
