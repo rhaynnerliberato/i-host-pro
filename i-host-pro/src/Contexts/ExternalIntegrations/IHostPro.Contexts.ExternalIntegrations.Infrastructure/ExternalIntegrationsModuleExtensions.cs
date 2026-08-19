@@ -1,4 +1,8 @@
 using IHostPro.Contexts.ExternalIntegrations.Application;
+using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppIntegrations;
+using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppTemplateMappings;
+using IHostPro.Contexts.ExternalIntegrations.Contracts;
+using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Meta;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -36,12 +40,47 @@ public static class ExternalIntegrationsModuleExtensions
 
         services.AddSingleton(TimeProvider.System);
 
+        // Repositories — unconditional in every environment, mirroring the
+        // DbContext registration above (Fase 9, Checkpoint 2.2): every call
+        // site (IHostPro.Api's command dispatch, MetaWhatsAppMessagingProvider)
+        // needs both, without depending on AddExternalIntegrationsCommandDispatch's
+        // Mediator-specific wiring.
+        services.AddScoped<IWhatsAppIntegrationRepository, WhatsAppIntegrationRepository>();
+        services.AddScoped<IWhatsAppTemplateMappingRepository, WhatsAppTemplateMappingRepository>();
+
         // Development-only (CP2.1 mandate §12): no Production backend exists
         // yet — resolving IWhatsAppCredentialProvider outside Development
         // must fail loudly (no registration), never silently fall back to
         // this one.
         if (isDevelopmentEnvironment)
             services.AddScoped<IWhatsAppCredentialProvider, DevelopmentWhatsAppCredentialProvider>();
+
+        // Fase 9, Checkpoint 2.2 — real Meta Cloud API outbound connector.
+        // Development-only, same rationale as IWhatsAppCredentialProvider
+        // above: MetaWhatsAppMessagingProvider depends on it, so gating both
+        // to Development is belt-and-suspenders (resolving IMessagingProvider
+        // outside Development already fails transitively — mandate §10: no
+        // fallback to Development credentials in any other environment).
+        //
+        // Registered here so it is resolvable directly (e.g. by a dedicated
+        // sandbox-proof test) without being wired into Communication's
+        // automatic ReservationCreated flow — that flow keeps using
+        // FakeWhatsAppConnector this checkpoint (mandate §46-49, Option A:
+        // WhatsAppIntegration.IsEnabled stays false/unchanged, so the real
+        // flow is accessible only via a direct provider/Application call).
+        if (isDevelopmentEnvironment)
+        {
+            services.Configure<MetaWhatsAppOptions>(configuration.GetSection("ExternalIntegrations:WhatsApp:Meta"));
+
+            services.AddHttpClient(MetaWhatsAppMessagingProvider.HttpClientName, (serviceProvider, client) =>
+            {
+                var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<MetaWhatsAppOptions>>().Value;
+                client.BaseAddress = new Uri("https://graph.facebook.com/");
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            });
+
+            services.AddScoped<IMessagingProvider, MetaWhatsAppMessagingProvider>();
+        }
 
         return services;
     }

@@ -119,6 +119,20 @@ public class MessageTests
 
         message.Status.Should().Be(MessageStatus.Sent);
         message.SentAtUtc.Should().Be(sentAt);
+        message.ProviderMessageId.Should().BeNull();
+    }
+
+    [Fact]
+    public void MarkSent_stores_the_providerMessageId_when_the_connector_reports_one()
+    {
+        var message = CreateMessage();
+        message.MarkQueued();
+        message.MarkSending();
+
+        message.MarkSent(Now.AddSeconds(5), "wamid.HBgL...");
+
+        message.Status.Should().Be(MessageStatus.Sent);
+        message.ProviderMessageId.Should().Be("wamid.HBgL...");
     }
 
     [Fact]

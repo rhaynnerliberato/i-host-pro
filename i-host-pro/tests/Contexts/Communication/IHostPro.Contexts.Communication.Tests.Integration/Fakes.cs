@@ -46,10 +46,13 @@ internal sealed class FakeOutboundMessageConnector : IOutboundMessageConnector
         _behavior = behavior;
 
     public static FakeOutboundMessageConnector Succeeding() =>
-        new(_ => new OutboundMessageDispatchResult(Success: true, FailureReason: null));
+        new(_ => new OutboundMessageDispatchResult(Success: true, ProviderMessageId: null, FailureReason: null));
+
+    public static FakeOutboundMessageConnector SucceedingWithProviderMessageId(string providerMessageId) =>
+        new(_ => new OutboundMessageDispatchResult(Success: true, ProviderMessageId: providerMessageId, FailureReason: null));
 
     public static FakeOutboundMessageConnector Rejecting(string failureReason) =>
-        new(_ => new OutboundMessageDispatchResult(Success: false, FailureReason: failureReason));
+        new(_ => new OutboundMessageDispatchResult(Success: false, ProviderMessageId: null, FailureReason: failureReason));
 
     public List<OutboundMessageDispatch> ReceivedDispatches { get; } = [];
 

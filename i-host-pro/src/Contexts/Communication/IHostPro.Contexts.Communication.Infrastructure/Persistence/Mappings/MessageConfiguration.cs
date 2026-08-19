@@ -32,8 +32,15 @@ public sealed class MessageConfiguration : IEntityTypeConfiguration<Message>
         builder.Property(m => m.SentAtUtc).HasColumnName("sent_at_utc");
         builder.Property(m => m.FailedAtUtc).HasColumnName("failed_at_utc");
         builder.Property(m => m.FailureReason).HasColumnName("failure_reason").HasMaxLength(100);
+        builder.Property(m => m.ProviderMessageId).HasColumnName("provider_message_id").HasMaxLength(200);
 
         builder.HasIndex(m => m.IdempotencyKey).IsUnique();
         builder.HasIndex(m => new { m.TenantId, m.ReservationId });
+
+        // Fase 9, Checkpoint 2.2 (mandate §26): a future webhook (Checkpoint
+        // 2.3) will need to look up a Message by the provider's own message
+        // id — indexed now since that real need is already known, never a
+        // global unique (tenant-scoped, mirrors every other index here).
+        builder.HasIndex(m => new { m.TenantId, m.ProviderMessageId });
     }
 }

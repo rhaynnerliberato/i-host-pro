@@ -31,6 +31,6 @@ public sealed class FakeWhatsAppConnector : IOutboundMessageConnector
             "[FAKE WhatsApp Connector — Development/Test only, no real API called] dispatching idempotencyKey {IdempotencyKey}",
             dispatch.IdempotencyKey);
 
-        return Task.FromResult(new OutboundMessageDispatchResult(Success: true, FailureReason: null));
+        return Task.FromResult(new OutboundMessageDispatchResult(Success: true, ProviderMessageId: null, FailureReason: null));
     }
 }

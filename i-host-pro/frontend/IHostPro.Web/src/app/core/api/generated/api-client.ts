@@ -5433,6 +5433,144 @@ export class Client {
         }
         return _observableOf(null as any);
     }
+
+    /**
+     * @return OK
+     */
+    templateMappingsGET(templateKey: string): Observable<WhatsAppTemplateMappingResponse> {
+        let url_ = this.baseUrl + "/api/v1/integrations/whatsapp/template-mappings/{templateKey}";
+        if (templateKey === undefined || templateKey === null)
+            throw new globalThis.Error("The parameter 'templateKey' must be defined.");
+        url_ = url_.replace("{templateKey}", encodeURIComponent("" + templateKey));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processTemplateMappingsGET(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processTemplateMappingsGET(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<WhatsAppTemplateMappingResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<WhatsAppTemplateMappingResponse>;
+        }));
+    }
+
+    protected processTemplateMappingsGET(response: HttpResponseBase): Observable<WhatsAppTemplateMappingResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as WhatsAppTemplateMappingResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @param body (optional) 
+     * @return OK
+     */
+    templateMappingsPUT(body?: ConfigureWhatsAppTemplateMappingRequest | undefined): Observable<WhatsAppTemplateMappingResponse> {
+        let url_ = this.baseUrl + "/api/v1/integrations/whatsapp/template-mappings";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(body);
+
+        let options_ : any = {
+            body: content_,
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("put", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processTemplateMappingsPUT(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processTemplateMappingsPUT(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<WhatsAppTemplateMappingResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<WhatsAppTemplateMappingResponse>;
+        }));
+    }
+
+    protected processTemplateMappingsPUT(response: HttpResponseBase): Observable<WhatsAppTemplateMappingResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as WhatsAppTemplateMappingResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
 }
 
 export interface AddressRequest {
@@ -5541,6 +5679,13 @@ export interface ConfigureWhatsAppIntegrationRequest {
     accessTokenSecretReference?: string | undefined;
     appSecretSecretReference?: string | undefined;
     verifyTokenSecretReference?: string | undefined;
+}
+
+export interface ConfigureWhatsAppTemplateMappingRequest {
+    templateKey?: string | undefined;
+    providerTemplateName?: string | undefined;
+    languageCode?: string | undefined;
+    parameterOrder?: string[] | undefined;
 }
 
 export interface CreateCleaningRequest {
@@ -5913,6 +6058,16 @@ export interface WhatsAppIntegrationResponse {
     accessTokenConfigured?: boolean;
     appSecretConfigured?: boolean;
     verifyTokenConfigured?: boolean;
+    createdAtUtc?: Date | undefined;
+    updatedAtUtc?: Date | undefined;
+}
+
+export interface WhatsAppTemplateMappingResponse {
+    tenantId?: string;
+    templateKey?: string | undefined;
+    providerTemplateName?: string | undefined;
+    languageCode?: string | undefined;
+    parameterOrder?: string[] | undefined;
     createdAtUtc?: Date | undefined;
     updatedAtUtc?: Date | undefined;
 }

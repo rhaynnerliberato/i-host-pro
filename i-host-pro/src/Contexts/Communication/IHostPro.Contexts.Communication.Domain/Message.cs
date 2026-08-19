@@ -33,6 +33,7 @@ public sealed class Message : AggregateRoot<Guid>, ITenantOwned
     public DateTimeOffset? SentAtUtc { get; private set; }
     public DateTimeOffset? FailedAtUtc { get; private set; }
     public string? FailureReason { get; private set; }
+    public string? ProviderMessageId { get; private set; }
 
     private Message()
     {
@@ -92,12 +93,19 @@ public sealed class Message : AggregateRoot<Guid>, ITenantOwned
         Status = MessageStatus.Sending;
     }
 
-    /// <summary>Enviando → Enviada.</summary>
-    public void MarkSent(DateTimeOffset sentAtUtc)
+    /// <summary>
+    /// Enviando → Enviada. <paramref name="providerMessageId"/> is the
+    /// provider's own opaque message identifier (e.g. a WhatsApp
+    /// <c>wamid</c>) — <see langword="null"/> for a connector that reports no
+    /// id (the CP1 fake connector) — never parsed/validated here (Fase 9,
+    /// Checkpoint 2.2 — provider-neutral, mandate §25/§26).
+    /// </summary>
+    public void MarkSent(DateTimeOffset sentAtUtc, string? providerMessageId = null)
     {
         EnsureStatus(MessageStatus.Sending, nameof(MarkSent));
         Status = MessageStatus.Sent;
         SentAtUtc = sentAtUtc;
+        ProviderMessageId = providerMessageId;
     }
 
     /// <summary>

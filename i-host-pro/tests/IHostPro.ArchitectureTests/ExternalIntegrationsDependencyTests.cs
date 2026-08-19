@@ -287,6 +287,134 @@ public class ExternalIntegrationsDependencyTests
             "WhatsAppIntegration must implement ITenantOwned for the Global Query Filter + RLS to apply");
     }
 
+    // ---- Fase 9, Checkpoint 2.2 (Meta WhatsApp Outbound Connector) ----------
+
+    /// <summary>
+    /// Mandate §45: Communication may know <see cref="IMessagingProvider"/>
+    /// exists, but must never know a real provider's own vocabulary —
+    /// no Meta/Graph/wamid-named type may appear anywhere in Communication's
+    /// three assemblies.
+    /// </summary>
+    [Fact]
+    public void Communication_Assemblies_Contain_No_Meta_Named_Type()
+    {
+        var assembliesToCheck = new[]
+        {
+            typeof(IHostPro.Contexts.Communication.Domain.Message).Assembly,
+            typeof(IHostPro.Contexts.Communication.Application.IOutboundMessageConnector).Assembly,
+            typeof(IHostPro.Contexts.Communication.Infrastructure.Persistence.CommunicationDbContext).Assembly,
+        };
+        var forbiddenSubstrings = new[] { "Meta", "Graph", "Wamid" };
+
+        foreach (var assembly in assembliesToCheck.Distinct())
+        {
+            // Scoped to this codebase's own types only — third-party/generated
+            // types (e.g. Mediator's own "ContainerMetadata") may coincidentally
+            // contain one of these substrings and are not this rule's concern.
+            var typeNames = Types.InAssembly(assembly).GetTypes()
+                .Select(t => t.FullName ?? t.Name)
+                .Where(name => name.StartsWith("IHostPro.", StringComparison.Ordinal))
+                .ToList();
+
+            foreach (var forbidden in forbiddenSubstrings)
+            {
+                typeNames.Should().NotContain(
+                    name => name.Contains(forbidden, StringComparison.Ordinal),
+                    $"{assembly.GetName().Name} must stay provider-neutral — no type name may reference '{forbidden}'");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Mandate §6: every Meta-specific type is confined to
+    /// <c>ExternalIntegrations.Infrastructure.Meta</c> — never in
+    /// <c>Contracts</c>/<c>Domain</c>/<c>Application</c>/<c>Api</c>.
+    /// </summary>
+    [Fact]
+    public void Meta_Named_Types_Only_Exist_In_The_Infrastructure_Meta_Namespace()
+    {
+        var assembliesToCheck = new[]
+        {
+            typeof(IMessagingProvider).Assembly, // Contracts
+            typeof(WhatsAppIntegration).Assembly, // Domain
+            typeof(IWhatsAppCredentialProvider).Assembly, // Application
+            typeof(IHostPro.Contexts.ExternalIntegrations.Api.Controllers.WhatsAppIntegrationController).Assembly, // Api
+        };
+        var forbiddenSubstrings = new[] { "Meta", "Graph", "Wamid" };
+
+        foreach (var assembly in assembliesToCheck.Distinct())
+        {
+            var typeNames = Types.InAssembly(assembly).GetTypes()
+                .Select(t => t.FullName ?? t.Name)
+                .Where(name => name.StartsWith("IHostPro.", StringComparison.Ordinal))
+                .ToList();
+
+            foreach (var forbidden in forbiddenSubstrings)
+            {
+                typeNames.Should().NotContain(
+                    name => name.Contains(forbidden, StringComparison.Ordinal),
+                    $"{assembly.GetName().Name} must never contain a Meta-named type — those are confined to ExternalIntegrations.Infrastructure.Meta");
+            }
+        }
+    }
+
+    /// <summary>Mandate §12/§13: zero automatic retry — no resilience/Polly package is referenced by Infrastructure.</summary>
+    [Fact]
+    public void Infrastructure_References_No_Resilience_Or_Polly_Package()
+    {
+        var referencedAssemblyNames = typeof(ExternalIntegrationsDbContext).Assembly
+            .GetReferencedAssemblies()
+            .Select(a => a.Name)
+            .Where(name => name is not null)
+            .ToList();
+
+        referencedAssemblyNames.Should().NotContain(name =>
+            name!.Contains("Polly", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("Resilience", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Mandate §16: no entity anywhere in External Integrations declares a raw access-token-shaped property outside the established secret-REFERENCE naming.</summary>
+    [Fact]
+    public void WhatsAppTemplateMapping_Never_Declares_A_Secret_Property()
+    {
+        var propertyNames = typeof(WhatsAppTemplateMapping)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(p => p.Name)
+            .ToList();
+
+        var suspiciousNames = propertyNames
+            .Where(name => name.Contains("Token", StringComparison.OrdinalIgnoreCase) || name.Contains("Secret", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        suspiciousNames.Should().BeEmpty("a template mapping carries no credential — never a token/secret-shaped property");
+    }
+
+    [Fact]
+    public void WhatsAppTemplateMapping_Is_Tenant_Owned()
+    {
+        typeof(ITenantOwned).IsAssignableFrom(typeof(WhatsAppTemplateMapping)).Should().BeTrue(
+            "WhatsAppTemplateMapping must implement ITenantOwned for the Global Query Filter + RLS to apply");
+    }
+
+    /// <summary>Mandate §27-33: DeliveryOutcomeUnknown must exist as a ProviderFailureCategory value, never as a new MessageStatus.</summary>
+    [Fact]
+    public void ProviderFailureCategory_Declares_DeliveryOutcomeUnknown()
+    {
+        Enum.GetNames<ProviderFailureCategory>().Should().Contain(nameof(ProviderFailureCategory.DeliveryOutcomeUnknown));
+    }
+
+    [Fact]
+    public void Communication_MessageStatus_Gains_No_New_Value_For_DeliveryOutcomeUnknown()
+    {
+        var names = Enum.GetNames<IHostPro.Contexts.Communication.Domain.MessageStatus>();
+
+        names.Should().NotContain(n =>
+            n.Contains("Unknown", StringComparison.OrdinalIgnoreCase) ||
+            n.Contains("Uncertain", StringComparison.OrdinalIgnoreCase) ||
+            n.Contains("Reprocess", StringComparison.OrdinalIgnoreCase),
+            "an ambiguous outcome maps to the existing Failed status plus a failure code — never a new MessageStatus value (mandate §27-31)");
+    }
+
     private static string BuildFailureMessage(TestResult result) =>
         result.FailingTypes is null
             ? "Architecture rule violated."

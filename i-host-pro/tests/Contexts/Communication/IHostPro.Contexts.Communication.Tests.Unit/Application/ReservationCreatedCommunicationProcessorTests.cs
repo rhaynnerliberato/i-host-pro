@@ -121,9 +121,30 @@ public class ReservationCreatedCommunicationProcessorTests
         connector.ReceivedDispatches.Should().ContainSingle();
         connector.ReceivedDispatches[0].Destination.Should().Be("+5511999998888");
         connector.ReceivedDispatches[0].Content.Should().Be("Check-in em 2026-08-20");
+        connector.ReceivedDispatches[0].TenantId.Should().Be(TenantId);
+        connector.ReceivedDispatches[0].TemplateKey.Should().Be("RESERVATION_CONFIRMATION");
+        connector.ReceivedDispatches[0].TemplateVariables.Should().ContainKey("CheckInDate").WhoseValue.Should().Be("2026-08-20");
 
         var message = repository.UpdatedMessages.Should().ContainSingle().Which;
         message.Status.Should().Be(MessageStatus.Sent);
+        connector.ReceivedDispatches[0].MessageId.Should().Be(message.Id);
+    }
+
+    [Fact]
+    public async Task HandleAsync_persists_the_providerMessageId_the_connector_reports_on_success()
+    {
+        var repository = FakeMessageRepository.WithExisting(null);
+        var connector = FakeOutboundMessageConnector.SucceedingWithProviderMessageId("wamid.HBgL...");
+        var processor = CreateProcessor(
+            FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            repository, connector);
+
+        await processor.HandleAsync(BuildEvent(), CancellationToken.None);
+
+        var message = repository.UpdatedMessages.Should().ContainSingle().Which;
+        message.Status.Should().Be(MessageStatus.Sent);
+        message.ProviderMessageId.Should().Be("wamid.HBgL...");
     }
 
     [Fact]

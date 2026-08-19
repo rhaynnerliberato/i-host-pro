@@ -193,6 +193,24 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         connector.ReceivedDispatches.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task ExecuteAsync_persists_the_providerMessageId_the_connector_reports_on_success()
+    {
+        var tenantId = Guid.NewGuid();
+        var reservationId = Guid.NewGuid();
+        var connector = FakeOutboundMessageConnector.SucceedingWithProviderMessageId("wamid.HBgL...");
+        using var serviceProvider = BuildServiceProvider(
+            new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent),
+            new ReservationGuestContact(reservationId, "+5511999998888"),
+            connector);
+
+        await ExecuteAsync(serviceProvider, NewEvent(tenantId, reservationId));
+
+        var message = await ReadMessageAsync(tenantId, reservationId);
+        message!.Status.Should().Be(MessageStatus.Sent);
+        message.ProviderMessageId.Should().Be("wamid.HBgL...");
+    }
+
     // ---- Redelivery idempotency --------------------------------------------
 
     [Fact]

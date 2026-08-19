@@ -80,7 +80,8 @@ public sealed class ReservationCreatedCommunicationProcessor : IIntegrationEvent
             return;
         }
 
-        var renderedContent = TemplateRenderer.Render(template.Content, BuildTemplateVariables(@event));
+        var templateVariables = BuildTemplateVariables(@event);
+        var renderedContent = TemplateRenderer.Render(template.Content, templateVariables);
 
         var guestContact = await _guestContactReader.GetGuestContactAsync(@event.TenantId, @event.ReservationId, cancellationToken);
 
@@ -107,7 +108,9 @@ public sealed class ReservationCreatedCommunicationProcessor : IIntegrationEvent
         try
         {
             dispatchResult = await _connector.SendAsync(
-                new OutboundMessageDispatch(guestContact.GuestPhone, renderedContent, idempotencyKey), cancellationToken);
+                new OutboundMessageDispatch(
+                    @event.TenantId, message.Id, guestContact.GuestPhone, TemplateKey, templateVariables, renderedContent, idempotencyKey),
+                cancellationToken);
         }
         catch (Exception ex)
         {
@@ -121,7 +124,7 @@ public sealed class ReservationCreatedCommunicationProcessor : IIntegrationEvent
         }
 
         if (dispatchResult.Success)
-            message.MarkSent(_timeProvider.GetUtcNow());
+            message.MarkSent(_timeProvider.GetUtcNow(), dispatchResult.ProviderMessageId);
         else
             message.MarkFailed(dispatchResult.FailureReason ?? ConnectorRejectedFailureReasonDefault, _timeProvider.GetUtcNow());
 

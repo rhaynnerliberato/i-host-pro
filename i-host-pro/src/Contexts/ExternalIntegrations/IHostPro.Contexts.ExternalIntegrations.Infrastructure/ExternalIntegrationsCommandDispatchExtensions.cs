@@ -4,6 +4,7 @@ using IHostPro.BuildingBlocks.Domain;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.ExternalIntegrations.Application;
 using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppIntegrations;
+using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppTemplateMappings;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
 using Mediator;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,12 +25,17 @@ public static class ExternalIntegrationsCommandDispatchExtensions
         services.AddExternalIntegrationsApplicationMediator();
 
         services.AddScoped<IValidator<ConfigureWhatsAppIntegrationCommand>, ConfigureWhatsAppIntegrationCommandValidator>();
+        services.AddScoped<IValidator<ConfigureWhatsAppTemplateMappingCommand>, ConfigureWhatsAppTemplateMappingCommandValidator>();
 
         // Validation runs first for every command — safe as a single open
         // generic, no tenant/transaction side effects to collide with.
         services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 
-        services.AddScoped<IWhatsAppIntegrationRepository, WhatsAppIntegrationRepository>();
+        // IWhatsAppIntegrationRepository/IWhatsAppTemplateMappingRepository are
+        // registered by AddExternalIntegrationsModule itself (Fase 9,
+        // Checkpoint 2.2) — every call site calls that before this method, and
+        // MetaWhatsAppMessagingProvider needs both without depending on this
+        // Mediator-specific dispatch registration.
 
         // Fase 9, Checkpoint 2.1.1 — registered BEFORE TenantTransactionBehavior
         // so it wraps AROUND it (this codebase's own convention: first-registered
@@ -48,6 +54,18 @@ public static class ExternalIntegrationsCommandDispatchExtensions
         services.AddScoped<
             IPipelineBehavior<GetWhatsAppIntegrationQuery, Result<WhatsAppIntegrationResult>>,
             TenantTransactionBehavior<GetWhatsAppIntegrationQuery, Result<WhatsAppIntegrationResult>, ExternalIntegrationsDbContext>>();
+
+        // Fase 9, Checkpoint 2.2 — WhatsAppTemplateMapping admin commands/
+        // queries, same TenantTransactionBehavior wiring as WhatsAppIntegration
+        // above. No audit behavior: a template mapping carries no secret and
+        // the CP2.1.1 audit gate was scoped specifically to credential/config
+        // mutation (WhatsAppIntegration) — not reused speculatively here.
+        services.AddScoped<
+            IPipelineBehavior<ConfigureWhatsAppTemplateMappingCommand, Result<WhatsAppTemplateMappingResult>>,
+            TenantTransactionBehavior<ConfigureWhatsAppTemplateMappingCommand, Result<WhatsAppTemplateMappingResult>, ExternalIntegrationsDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<GetWhatsAppTemplateMappingQuery, Result<WhatsAppTemplateMappingResult>>,
+            TenantTransactionBehavior<GetWhatsAppTemplateMappingQuery, Result<WhatsAppTemplateMappingResult>, ExternalIntegrationsDbContext>>();
 
         return services;
     }

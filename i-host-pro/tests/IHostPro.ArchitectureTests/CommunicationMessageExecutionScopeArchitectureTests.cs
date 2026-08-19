@@ -62,9 +62,11 @@ public class CommunicationMessageExecutionScopeArchitectureTests
             .DoNotHaveName(nameof(CommunicationMessageExecutionScope))
             .GetTypes();
 
-        adapterTypes.Should().HaveCount(2,
-            "two types are expected in this namespace this checkpoint: ReservationCreatedHandler (the thin " +
-            "Wolverine adapter) and FakeWhatsAppConnector (the CP1 deterministic connector double)");
+        adapterTypes.Should().HaveCount(3,
+            "three types are expected in this namespace this checkpoint: ReservationCreatedHandler (the thin " +
+            "Wolverine adapter), FakeWhatsAppConnector (the CP1 deterministic connector double), and " +
+            "ExternalIntegrationsWhatsAppConnector (Checkpoint 2.2's real IOutboundMessageConnector, not wired " +
+            "into this Wolverine-triggered flow — see its own doc comment)");
 
         var forbiddenDependencies = new[]
         {

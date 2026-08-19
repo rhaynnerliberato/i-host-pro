@@ -17,6 +17,13 @@
     <PackageReference Include="FluentAssertions" Version="7.*" />
     <!-- Explicit pin — see IHostPro.Contexts.Identity.Api.csproj for the MSB3277 rationale. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+    <!-- Fase 9, Checkpoint 2.2 — MetaWhatsAppSandboxProofTests: reads local
+         credentials the same way IHostPro.Api itself would (User Secrets/
+         environment variables), and needs IHttpClientFactory for the one
+         real, optional sandbox HTTP call. -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.1.0" />
     <PackageReference Include="xunit" Version="2.9.3" />

@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\IHostPro.Contexts.ExternalIntegrations.Domain\IHostPro.Contexts.ExternalIntegrations.Domain.csproj" />
     <ProjectReference Include="..\IHostPro.Contexts.ExternalIntegrations.Application\IHostPro.Contexts.ExternalIntegrations.Application.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.ExternalIntegrations.Contracts\IHostPro.Contexts.ExternalIntegrations.Contracts.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Domain\IHostPro.BuildingBlocks.Domain.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
   </ItemGroup>
@@ -21,6 +22,12 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!-- Fase 9, Checkpoint 2.2 — IHttpClientFactory for the real Meta Cloud
+         API outbound connector (mandate §11: never `new HttpClient()` per
+         call). No Polly/Microsoft.Extensions.Http.Resilience package —
+         zero automatic retry is a deliberate design decision (mandate
+         §12/§13), not a gap to fill later. -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
   </ItemGroup>
 
   <PropertyGroup>

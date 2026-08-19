@@ -15,6 +15,8 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="7.*" />
+    <!-- Explicit pin — see IHostPro.Contexts.Identity.Api.csproj for the MSB3277 rationale. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
@@ -30,6 +32,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Domain\IHostPro.Contexts.Communication.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Application\IHostPro.Contexts.Communication.Application.csproj" />
+    <!-- Fase 9, Checkpoint 2.2 — ExternalIntegrationsWhatsAppConnectorTests exercises
+         the real IOutboundMessageConnector adapter, which lives in
+         Infrastructure (mirrors FakeWhatsAppConnector's own placement). -->
+    <ProjectReference Include="..\..\..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Infrastructure\IHostPro.Contexts.Communication.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

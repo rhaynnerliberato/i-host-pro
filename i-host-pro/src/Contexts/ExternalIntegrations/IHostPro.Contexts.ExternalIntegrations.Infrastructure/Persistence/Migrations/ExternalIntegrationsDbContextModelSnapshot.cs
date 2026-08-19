@@ -77,6 +77,55 @@ namespace IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.Migr
 
                     b.ToTable("whatsapp_integrations", "external_integrations");
                 });
+
+            modelBuilder.Entity("IHostPro.Contexts.ExternalIntegrations.Domain.WhatsAppTemplateMapping", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("LanguageCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("language_code");
+
+                    b.Property<string>("ParameterOrder")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("parameter_order");
+
+                    b.Property<string>("ProviderTemplateName")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("provider_template_name");
+
+                    b.Property<string>("TemplateKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("template_key");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "TemplateKey")
+                        .IsUnique();
+
+                    b.ToTable("whatsapp_template_mappings", "external_integrations");
+                });
 #pragma warning restore 612, 618
         }
     }

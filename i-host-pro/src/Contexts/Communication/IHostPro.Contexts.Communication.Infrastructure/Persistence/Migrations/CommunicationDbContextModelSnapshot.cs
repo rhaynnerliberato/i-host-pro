@@ -59,6 +59,11 @@ namespace IHostPro.Contexts.Communication.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(300)")
                         .HasColumnName("idempotency_key");
 
+                    b.Property<string>("ProviderMessageId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("provider_message_id");
+
                     b.Property<string>("RenderedContent")
                         .IsRequired()
                         .HasColumnType("text")
@@ -92,6 +97,8 @@ namespace IHostPro.Contexts.Communication.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("IdempotencyKey")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "ProviderMessageId");
 
                     b.HasIndex("TenantId", "ReservationId");
 

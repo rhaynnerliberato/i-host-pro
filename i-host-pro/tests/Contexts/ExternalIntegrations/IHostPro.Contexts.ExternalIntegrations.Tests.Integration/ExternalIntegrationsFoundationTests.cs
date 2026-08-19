@@ -312,6 +312,144 @@ public class ExternalIntegrationsFoundationTests : IClassFixture<ExternalIntegra
             "only the caller-assigned opaque reference is ever persisted — never a real secret value, since no real secret ever reaches this boundary");
     }
 
+    // ---- WhatsAppTemplateMapping (Fase 9, Checkpoint 2.2) ----
+
+    [Fact]
+    public async Task Migration_creates_the_whatsapp_template_mappings_table()
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+
+        var tableNames = new HashSet<string>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'external_integrations'";
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                tableNames.Add(reader.GetString(0));
+        }
+
+        tableNames.Should().Contain("whatsapp_template_mappings");
+    }
+
+    [Fact]
+    public async Task ENABLE_and_FORCE_row_level_security_are_active_on_whatsapp_template_mappings()
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'whatsapp_template_mappings' AND relnamespace = 'external_integrations'::regnamespace";
+        await using var reader = await command.ExecuteReaderAsync();
+        (await reader.ReadAsync()).Should().BeTrue();
+
+        reader.GetBoolean(0).Should().BeTrue("ENABLE ROW LEVEL SECURITY must be active");
+        reader.GetBoolean(1).Should().BeTrue("FORCE ROW LEVEL SECURITY must be active — applies even to the table owner");
+    }
+
+    [Fact]
+    public async Task Correct_tenant_sees_its_own_template_mapping()
+    {
+        var (tenantId, mappingId) = await SeedTemplateMappingAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var mappings = await dbContext.WhatsAppTemplateMappings.ToListAsync();
+
+        mappings.Should().ContainSingle(m => m.Id == mappingId);
+    }
+
+    [Fact]
+    public async Task Different_tenant_sees_zero_rows_for_another_tenants_template_mapping()
+    {
+        var (_, mappingId) = await SeedTemplateMappingAsync();
+        var (unrelatedTenantId, _) = await SeedTemplateMappingAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(unrelatedTenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, unrelatedTenantId);
+
+        var visible = await dbContext.WhatsAppTemplateMappings.Where(m => m.Id == mappingId).ToListAsync();
+        visible.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_second_mapping_for_the_same_tenant_and_templateKey_is_rejected_by_the_unique_index()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        dbContext.WhatsAppTemplateMappings.Add(WhatsAppTemplateMapping.Create(
+            Guid.NewGuid(), tenantId, "RESERVATION_CONFIRMATION", "name-1", "pt_BR", ["CheckInDate"], DateTimeOffset.UtcNow));
+        await dbContext.SaveChangesAsync();
+
+        dbContext.WhatsAppTemplateMappings.Add(WhatsAppTemplateMapping.Create(
+            Guid.NewGuid(), tenantId, "RESERVATION_CONFIRMATION", "name-2", "en_US", ["CheckInDate"], DateTimeOffset.UtcNow));
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>("exactly one mapping is allowed per tenant+TemplateKey");
+    }
+
+    [Fact]
+    public async Task The_parameterOrder_round_trips_through_the_jsonb_column()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var mapping = WhatsAppTemplateMapping.Create(
+            Guid.NewGuid(), tenantId, "RESERVATION_CONFIRMATION", "reservation_confirmation_v1", "pt_BR",
+            ["GuestName", "CheckInDate"], DateTimeOffset.UtcNow);
+        dbContext.WhatsAppTemplateMappings.Add(mapping);
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        await using var readDbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var readTransaction = await readDbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(readDbContext, tenantId);
+        var reloaded = await readDbContext.WhatsAppTemplateMappings.AsNoTracking().SingleAsync(m => m.Id == mapping.Id);
+
+        reloaded.ParameterOrder.Should().Equal("GuestName", "CheckInDate");
+    }
+
+    private async Task<(Guid TenantId, Guid MappingId)> SeedTemplateMappingAsync()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var mapping = WhatsAppTemplateMapping.Create(
+            Guid.NewGuid(), tenantId, "RESERVATION_CONFIRMATION", "reservation_confirmation_v1", "pt_BR",
+            ["CheckInDate"], DateTimeOffset.UtcNow);
+        dbContext.WhatsAppTemplateMappings.Add(mapping);
+
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return (tenantId, mapping.Id);
+    }
+
     // ---- Helpers ----
 
     private async Task<(Guid TenantId, Guid IntegrationId)> SeedIntegrationAsync()

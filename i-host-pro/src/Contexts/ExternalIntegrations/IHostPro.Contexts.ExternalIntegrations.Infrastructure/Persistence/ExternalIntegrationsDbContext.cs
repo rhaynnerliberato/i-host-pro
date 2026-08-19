@@ -25,6 +25,7 @@ public sealed class ExternalIntegrationsDbContext : BaseDbContext
     public override string SchemaName => "external_integrations";
 
     public DbSet<WhatsAppIntegration> WhatsAppIntegrations => Set<WhatsAppIntegration>();
+    public DbSet<WhatsAppTemplateMapping> WhatsAppTemplateMappings => Set<WhatsAppTemplateMapping>();
 
     public ExternalIntegrationsDbContext(DbContextOptions<ExternalIntegrationsDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)

@@ -82,6 +82,7 @@
     <ProjectReference Include="..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Domain\IHostPro.Contexts.ExternalIntegrations.Domain.csproj" />
     <ProjectReference Include="..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Application\IHostPro.Contexts.ExternalIntegrations.Application.csproj" />
     <ProjectReference Include="..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Infrastructure\IHostPro.Contexts.ExternalIntegrations.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Api\IHostPro.Contexts.ExternalIntegrations.Api.csproj" />
   </ItemGroup>
 
 </Project>
