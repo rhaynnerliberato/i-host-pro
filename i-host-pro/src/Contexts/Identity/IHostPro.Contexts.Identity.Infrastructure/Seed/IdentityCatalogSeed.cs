@@ -24,10 +24,18 @@ namespace IHostPro.Contexts.Identity.Infrastructure.Seed;
 /// <c>ROLES:MANAGE</c> and <c>PERMISSIONS:MANAGE</c> are deliberately NOT
 /// seeded — no documented rule authorizes editing the role/permission catalog
 /// itself in this phase (Documento 09 §18 implies the catalog is
-/// platform-fixed for v1). <c>SYSTEM</c> and <c>INTEGRATION</c> roles are
-/// seeded with zero permissions — they are not represented in the §15 matrix,
-/// and their narrative capabilities (§10-§11) depend on Bounded Contexts
-/// (Platform, External Integrations) that do not exist yet.
+/// platform-fixed for v1). <c>SYSTEM</c> and <c>INTEGRATION</c> roles remain
+/// seeded with zero permissions — Documento 09 §10-§11 describe them as the
+/// SYSTEM-TO-SYSTEM actor identity for background jobs/external connectors,
+/// never a human administrator; that narrative capability still depends on
+/// Bounded Contexts (Platform, and the runtime activation of External
+/// Integrations) not yet built. <c>INTEGRATIONS:MANAGE</c> below is a
+/// different concept entirely — the human ADMIN capability to configure an
+/// integration's non-secret settings via an administrative API (Fase 9,
+/// Checkpoint 2.1) — and is, exceptionally, a genuinely new catalog entry
+/// approved explicitly for this checkpoint (CP2.0 audit + CP2.1 mandate,
+/// Decisão K), not a promotion of an already-seeded-but-unused code like
+/// every other constant in <c>IdentityPermissionCodes</c>.
 /// </summary>
 public static class IdentityCatalogSeed
 {
@@ -86,6 +94,10 @@ public static class IdentityCatalogSeed
         new Permission(IdentityPermissionCodes.UsersManage, "USERS", "MANAGE"),
         new Permission(IdentityPermissionCodes.RolesRead, "ROLES", "READ"),
         new Permission(IdentityPermissionCodes.PermissionsRead, "PERMISSIONS", "READ"),
+
+        // Fase 9, Checkpoint 2.1 — CP2.1 mandate §24: ADMIN only, no
+        // INTEGRATIONS:READ counterpart created by symmetry.
+        new Permission(IdentityPermissionCodes.IntegrationsManage, "INTEGRATIONS", "MANAGE"),
     ];
 
     public static IReadOnlyList<RolePermission> RolePermissions { get; } =
@@ -104,6 +116,7 @@ public static class IdentityCatalogSeed
         new RolePermission("ADMIN", IdentityPermissionCodes.UsersManage),
         new RolePermission("ADMIN", IdentityPermissionCodes.RolesRead),
         new RolePermission("ADMIN", IdentityPermissionCodes.PermissionsRead),
+        new RolePermission("ADMIN", IdentityPermissionCodes.IntegrationsManage),
 
         // OPERATOR — Documento 09 §6.
         new RolePermission("OPERATOR", "PROPERTIES:READ"),

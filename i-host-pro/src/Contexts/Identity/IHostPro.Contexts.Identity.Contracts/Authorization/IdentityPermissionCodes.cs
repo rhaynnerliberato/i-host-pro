@@ -109,4 +109,16 @@ public static class IdentityPermissionCodes
     /// </summary>
     public const string TemplatesManage = "TEMPLATES:MANAGE";
     public const string TemplatesRead = "TEMPLATES:READ";
+
+    /// <summary>
+    /// Fase 9, Checkpoint 2.1 ("External Integrations + Credential/
+    /// Configuration Foundation"). Unlike every other constant in this file,
+    /// this is a genuinely NEW catalog entry — not a promotion of an
+    /// already-seeded-but-unused code (Documento 09 §18 implies the catalog
+    /// is platform-fixed for v1; <c>IdentityCatalogSeed</c>'s own doc comment
+    /// confirms no documented rule authorized editing it before now). Added
+    /// only because the CP2.0 audit + CP2.1 mandate explicitly approved it
+    /// (Decisão K): ADMIN only, no <c>INTEGRATIONS:READ</c> counterpart.
+    /// </summary>
+    public const string IntegrationsManage = "INTEGRATIONS:MANAGE";
 }
