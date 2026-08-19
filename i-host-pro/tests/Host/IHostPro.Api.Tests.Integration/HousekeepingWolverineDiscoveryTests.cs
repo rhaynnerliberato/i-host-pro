@@ -113,6 +113,7 @@ public sealed class HousekeepingWolverineDiscoveryTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__Configuration"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Communication"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__ExternalIntegrations"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _appConnectionString;
         psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";
@@ -248,6 +249,7 @@ public sealed class HousekeepingWolverineDiscoveryTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__Configuration"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Communication"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__ExternalIntegrations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _migratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;

@@ -141,6 +141,7 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__Housekeeping"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Communication"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__ExternalIntegrations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _migratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;
         psi.Environment["RabbitMq__VirtualHost"] = "/";

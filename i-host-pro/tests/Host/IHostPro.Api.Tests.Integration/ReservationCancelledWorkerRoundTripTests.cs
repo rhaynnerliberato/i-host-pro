@@ -324,6 +324,7 @@ public sealed class ReservationCancelledWorkerRoundTripTests : IAsyncLifetime
         ["ConnectionStrings__Configuration"] = _appConnectionString,
         ["ConnectionStrings__Housekeeping"] = _appConnectionString,
         ["ConnectionStrings__Communication"] = _appConnectionString,
+        ["ConnectionStrings__ExternalIntegrations"] = _appConnectionString,
         ["ConnectionStrings__Dashboard"] = _appConnectionString,
         ["ConnectionStrings__Platform"] = _appConnectionString,
         ["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test",
@@ -501,6 +502,7 @@ public sealed class ReservationCancelledWorkerRoundTripTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__Configuration"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Communication"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__ExternalIntegrations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _migratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;

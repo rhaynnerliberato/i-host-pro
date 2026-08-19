@@ -120,6 +120,7 @@ public sealed class CleaningLifecycleRoutingFixParityTests : IAsyncLifetime
             ["ConnectionStrings__Configuration"] = _appConnectionString,
             ["ConnectionStrings__Housekeeping"] = _appConnectionString,
             ["ConnectionStrings__Communication"] = _appConnectionString,
+            ["ConnectionStrings__ExternalIntegrations"] = _appConnectionString,
             ["ConnectionStrings__Dashboard"] = _appConnectionString,
             ["ConnectionStrings__Platform"] = _appConnectionString,
             ["Configuration__PolicyCache__ConnectionString"] = "localhost:6379",
@@ -179,6 +180,7 @@ public sealed class CleaningLifecycleRoutingFixParityTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__Configuration"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Communication"] = migratorConnectionString;
+        psi.Environment["ConnectionStrings__ExternalIntegrations"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = migratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;
