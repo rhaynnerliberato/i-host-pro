@@ -2,6 +2,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.ExternalIntegrations.Domain;
 using Microsoft.EntityFrameworkCore;
+using Wolverine.EntityFrameworkCore;
 
 namespace IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
 
@@ -15,10 +16,16 @@ namespace IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
 /// independent layer of defense — mirrors every other Bounded Context's own
 /// DbContext exactly.
 ///
-/// Deliberately does NOT call <c>ModelBuilder.MapWolverineEnvelopeStorage</c>
-/// — External Integrations publishes no Integration Event this checkpoint
-/// (CP2.1 mandate §8) — mirrors <c>CommunicationDbContext</c>'s own precedent
-/// exactly.
+/// Fase 9, Checkpoint 2.3.3 (ADR-022 item 13): now calls
+/// <see cref="ModelBuilder.MapWolverineEnvelopeStorage(ModelBuilder, string?)"/>
+/// — External Integrations publishes its first Integration Event
+/// (<c>WhatsAppMessageStatusChanged</c>) this checkpoint, so
+/// <c>IDbContextOutbox&lt;ExternalIntegrationsDbContext&gt;</c> is now
+/// needed. The schema literal below must match
+/// <c>EnrollAncillaryPostgresqlOutbox(..., "external_integrations_messaging", ...)</c>
+/// in <c>IHostPro.Api</c>'s/<c>IHostPro.MigrationRunner</c>'s own
+/// <c>Program.cs</c> exactly — mirrors <c>ReservationsDbContext</c>'s own
+/// precedent and its own doc comment's warning.
 /// </summary>
 public sealed class ExternalIntegrationsDbContext : BaseDbContext
 {
@@ -40,6 +47,8 @@ public sealed class ExternalIntegrationsDbContext : BaseDbContext
         modelBuilder.UsePropertyAccessMode(PropertyAccessMode.PreferField);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ExternalIntegrationsDbContext).Assembly);
+
+        modelBuilder.MapWolverineEnvelopeStorage("external_integrations_messaging");
 
         base.OnModelCreating(modelBuilder);
     }

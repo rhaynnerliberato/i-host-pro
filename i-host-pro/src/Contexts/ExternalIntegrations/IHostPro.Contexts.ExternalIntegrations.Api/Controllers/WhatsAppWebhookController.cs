@@ -9,13 +9,16 @@ using Microsoft.Extensions.Logging;
 namespace IHostPro.Contexts.ExternalIntegrations.Api.Controllers;
 
 /// <summary>
-/// Meta WhatsApp webhook ingress (Fase 9, Checkpoint 2.3.1/2.3.2 — ADR-022).
-/// Verifies the caller is really Meta (GET verify-token handshake; POST
-/// <c>X-Hub-Signature-256</c> HMAC over the exact raw bytes), then resolves
+/// Meta WhatsApp webhook ingress (Fase 9, Checkpoint 2.3.1/2.3.2/2.3.3 —
+/// ADR-022). Verifies the caller is really Meta (GET verify-token handshake;
+/// POST <c>X-Hub-Signature-256</c> HMAC over the exact raw bytes), resolves
 /// each status entry's tenant and normalizes its status via
-/// <see cref="IWhatsAppWebhookStatusProcessor"/>. Still foundation-only past
-/// that: no <c>Message</c> lifecycle change, no Integration Event, no
-/// Wolverine — those belong to Checkpoint 2.3.3 (ADR-022, item 13).
+/// <see cref="IWhatsAppWebhookStatusProcessor"/>, then durably publishes each
+/// <c>Accepted</c> outcome via <see cref="IWhatsAppWebhookStatusEventPublisher"/>
+/// (Checkpoint 2.3.3, ADR-022 item 13) before returning 2xx. Still never
+/// touches <c>Communication.Message</c> directly — that lifecycle change
+/// happens exclusively in Communication's own Wolverine consumer, reacting
+/// to the published event, never a synchronous call from here.
 ///
 /// Never uses human JWT auth (<see cref="AllowAnonymousAttribute"/> — Meta is
 /// the caller, not a platform user) and never touches any tenant-owned data
@@ -44,21 +47,25 @@ public sealed class WhatsAppWebhookController : ControllerBase
     private const string RouteUnknown = "WhatsAppWebhookRouteUnknown";
     private const string StatusNormalized = "WhatsAppWebhookStatusNormalized";
     private const string StatusIgnored = "WhatsAppWebhookStatusIgnored";
+    private const string StatusEventPublished = "WhatsAppWebhookStatusEventPublished";
 
     private readonly IWhatsAppWebhookCredentialProvider _credentialProvider;
     private readonly IWebhookSignatureVerifier _signatureVerifier;
     private readonly IWhatsAppWebhookStatusProcessor _statusProcessor;
+    private readonly IWhatsAppWebhookStatusEventPublisher _eventPublisher;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
         IWhatsAppWebhookCredentialProvider credentialProvider,
         IWebhookSignatureVerifier signatureVerifier,
         IWhatsAppWebhookStatusProcessor statusProcessor,
+        IWhatsAppWebhookStatusEventPublisher eventPublisher,
         ILogger<WhatsAppWebhookController> logger)
     {
         _credentialProvider = credentialProvider;
         _signatureVerifier = signatureVerifier;
         _statusProcessor = statusProcessor;
+        _eventPublisher = eventPublisher;
         _logger = logger;
     }
 
@@ -129,11 +136,26 @@ public sealed class WhatsAppWebhookController : ControllerBase
 
         var outcomes = await _statusProcessor.ProcessAsync(rawBody, cancellationToken);
         foreach (var outcome in outcomes)
+        {
             LogOutcome(outcome);
+
+            // Fase 9, Checkpoint 2.3.3 (ADR-022 item 13/mandate §10/§11): a
+            // durable-outbox failure here must propagate uncaught — the
+            // default ASP.NET Core unhandled-exception response is 5xx,
+            // which is exactly what makes Meta retry this delivery. Never
+            // caught/swallowed into the 2xx path below.
+            if (outcome.Kind == WebhookStatusOutcomeKind.Accepted)
+            {
+                await _eventPublisher.PublishAsync(outcome, cancellationToken);
+                _logger.LogInformation("{AuditEvent}: tenant {TenantId}", StatusEventPublished, outcome.TenantId);
+            }
+        }
 
         // Every outcome kind returns 2xx here — Accepted/UnknownRoute/Malformed
         // are all permanent-for-this-payload classifications, never a reason
-        // to make Meta retry (Checkpoint 2.3.0 decision D).
+        // to make Meta retry (Checkpoint 2.3.0 decision D). An Accepted
+        // outcome only reaches this line once its event is already durably
+        // published (see the throw-propagates-to-5xx note above).
         return Ok();
     }
 

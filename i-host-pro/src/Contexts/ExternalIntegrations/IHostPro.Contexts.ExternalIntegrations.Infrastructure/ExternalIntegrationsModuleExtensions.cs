@@ -83,6 +83,16 @@ public static class ExternalIntegrationsModuleExtensions
         // just JSON parsing plus the route repository above.
         services.AddScoped<IWhatsAppWebhookStatusProcessor, MetaWebhookStatusProcessor>();
 
+        // Fase 9, Checkpoint 2.3.3 — durable outbox + webhook status event
+        // publishing (ADR-022 item 13). Unconditional, same rationale as the
+        // processor above: no secret, no external network call, and the
+        // webhook must durably publish in every environment, not just
+        // Development (unlike the outbound send path's credential/connector
+        // gates below).
+        services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
+        services.AddScoped<IExternalIntegrationsTransactionExecutor, ExternalIntegrationsOutboxTransactionExecutor>();
+        services.AddScoped<IWhatsAppWebhookStatusEventPublisher, WhatsAppWebhookStatusEventPublisher>();
+
         // Fase 9, Checkpoint 2.2 — real Meta Cloud API outbound connector.
         // Development-only, same rationale as IWhatsAppCredentialProvider
         // above: MetaWhatsAppMessagingProvider depends on it, so gating both

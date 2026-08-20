@@ -9,13 +9,14 @@
   </ItemGroup>
 
   <!--
-    Deliberately no WolverineFx.EntityFrameworkCore package this checkpoint —
-    External Integrations publishes no Integration Event yet (CP2.1 mandate
-    §8: no outbound Integration Event in this checkpoint), so no
-    IDbContextOutbox<ExternalIntegrationsDbContext> is needed — same reason
-    CommunicationDbContext skips it (see its own doc comment).
+    Fase 9, Checkpoint 2.3.3 (ADR-022 item 13) — WolverineFx.EntityFrameworkCore
+    added: External Integrations now provisions a durable outbox
+    (external_integrations_messaging schema) for WhatsAppMessageStatusChanged,
+    its first Integration Event. Mirrors every other Bounded Context's own
+    Infrastructure.csproj exactly (e.g. Reservations, version pinned identically).
   -->
   <ItemGroup>
+    <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.22.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <PrivateAssets>all</PrivateAssets>
