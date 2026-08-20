@@ -4,12 +4,13 @@ using IHostPro.Contexts.ExternalIntegrations.Domain;
 namespace IHostPro.Contexts.ExternalIntegrations.Tests.Unit.Domain;
 
 /// <summary>
-/// Fase 9, Checkpoint 2.3.2 mandate §45: deterministic coverage of the
+/// Fase 9, Checkpoint 2.3.2 mandate §45 (deterministic coverage of the
 /// idempotency/monotonicity foundation — ordering, duplicate, regression,
-/// the documented Sent→Read skip-Delivered case, and the Failed
-/// terminal-branch rules (including the reasoned Delivered/Read→Failed
-/// default flagged in <see cref="WhatsAppStatusTransitionClassifier"/>'s own
-/// remarks).
+/// the documented Sent→Read skip-Delivered case), corrected in Checkpoint
+/// 2.3.2.1 mandate §6/§10 to cover the full approved transition matrix:
+/// <c>Sent/Delivered → Failed</c> = Forward, <c>Read → Failed</c> =
+/// Regression (Read is terminal for Failed purposes; Delivered is not —
+/// see <see cref="WhatsAppStatusTransitionClassifier"/>'s own remarks).
 /// </summary>
 public class WhatsAppStatusTransitionClassifierTests
 {
@@ -62,6 +63,13 @@ public class WhatsAppStatusTransitionClassifierTests
     }
 
     [Fact]
+    public void Read_to_Sent_is_Regression()
+    {
+        WhatsAppStatusTransitionClassifier.Classify(ProviderMessageStatus.Read, ProviderMessageStatus.Sent)
+            .Should().Be(StatusTransitionClassification.Regression);
+    }
+
+    [Fact]
     public void Delivered_to_Sent_is_Regression()
     {
         WhatsAppStatusTransitionClassifier.Classify(ProviderMessageStatus.Delivered, ProviderMessageStatus.Sent)
@@ -69,23 +77,26 @@ public class WhatsAppStatusTransitionClassifierTests
     }
 
     [Fact]
-    public void Sent_to_Failed_is_the_one_pre_approved_forward_transition_into_Failed()
+    public void Sent_to_Failed_is_Forward()
     {
         WhatsAppStatusTransitionClassifier.Classify(ProviderMessageStatus.Sent, ProviderMessageStatus.Failed)
             .Should().Be(StatusTransitionClassification.Forward);
     }
 
     [Fact]
-    public void Delivered_to_Failed_is_Regression()
+    public void Delivered_to_Failed_is_Forward()
     {
+        // Checkpoint 2.3.2.1 correction: Delivered is NOT terminal — a later
+        // "failed" report is genuine new information, not noise to discard.
         WhatsAppStatusTransitionClassifier.Classify(ProviderMessageStatus.Delivered, ProviderMessageStatus.Failed)
-            .Should().Be(StatusTransitionClassification.Regression,
-                "a message already confirmed delivered has a stronger positive confirmation than a later failure report can override");
+            .Should().Be(StatusTransitionClassification.Forward);
     }
 
     [Fact]
     public void Read_to_Failed_is_Regression()
     {
+        // Read IS treated as terminal for Failed purposes — a "failed"
+        // report arriving after "read" is a late/regressive callback.
         WhatsAppStatusTransitionClassifier.Classify(ProviderMessageStatus.Read, ProviderMessageStatus.Failed)
             .Should().Be(StatusTransitionClassification.Regression);
     }
