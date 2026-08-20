@@ -17,6 +17,12 @@
     <PackageReference Include="FluentAssertions" Version="7.*" />
     <!-- Explicit pin — see IHostPro.Contexts.Identity.Api.csproj for the MSB3277 rationale. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+    <!-- Fase 9, Checkpoint 2.3.1 — WhatsAppWebhookControllerHttpTests: a real
+         ASP.NET Core TestServer (never WebApplicationFactory<IHostPro.Api.Program>
+         — that would require the full Postgres/RabbitMQ Testcontainers rig
+         this checkpoint's endpoint has no dependency on at all). Same package
+         already used by IHostPro.Api.Tests.Integration. -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
     <!-- Fase 9, Checkpoint 2.2 — MetaWhatsAppSandboxProofTests: reads local
          credentials the same way IHostPro.Api itself would (User Secrets/
          environment variables), and needs IHttpClientFactory for the one
@@ -41,6 +47,7 @@
     <ProjectReference Include="..\..\..\..\src\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Domain\IHostPro.Contexts.ExternalIntegrations.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Infrastructure\IHostPro.Contexts.ExternalIntegrations.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Api\IHostPro.Contexts.ExternalIntegrations.Api.csproj" />
   </ItemGroup>
 
 </Project>

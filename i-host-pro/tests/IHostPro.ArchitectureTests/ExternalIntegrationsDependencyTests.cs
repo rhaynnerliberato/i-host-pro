@@ -415,6 +415,54 @@ public class ExternalIntegrationsDependencyTests
             "an ambiguous outcome maps to the existing Failed status plus a failure code — never a new MessageStatus value (mandate §27-31)");
     }
 
+    // ---- Fase 9, Checkpoint 2.3.1 (WhatsApp Webhook Security Ingress) ------
+
+    /// <summary>
+    /// ADR-022, item 9: the webhook's own security types (controller,
+    /// signature verifier, app-level credential provider) must never
+    /// reference the tenant-owned credential path
+    /// (<see cref="IWhatsAppCredentialProvider"/>/<c>WhatsAppIntegration</c>/
+    /// <c>IWhatsAppIntegrationRepository</c>) — the webhook verifies its
+    /// caller before any <c>TenantId</c> is known, so it structurally cannot
+    /// resolve a tenant's own integration.
+    /// </summary>
+    [Fact]
+    public void WhatsAppWebhookController_Never_References_The_Tenant_Owned_Credential_Path()
+    {
+        var result = Types.InAssembly(typeof(IHostPro.Contexts.ExternalIntegrations.Api.Controllers.WhatsAppWebhookController).Assembly)
+            .That()
+            .HaveNameEndingWith("WebhookController")
+            .Should()
+            .NotHaveDependencyOnAny(
+                "IHostPro.Contexts.ExternalIntegrations.Application.IWhatsAppCredentialProvider",
+                "IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppIntegrations",
+                "IHostPro.Contexts.ExternalIntegrations.Domain")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(
+            "the webhook must verify its caller before any TenantId is known — it can never resolve credentials via " +
+            "the tenant-owned WhatsAppIntegration/IWhatsAppCredentialProvider path (ADR-022, item 9). " +
+            BuildFailureMessage(result));
+    }
+
+    /// <summary>
+    /// CP2.3.1 mandate §29/§30: this checkpoint touches no persistence and no
+    /// messaging at all — the webhook controller/its security dependencies
+    /// must have zero compile-time dependency on EF Core or Wolverine.
+    /// </summary>
+    [Fact]
+    public void Webhook_Security_Ingress_Has_No_Dependency_On_EfCore_Or_Wolverine()
+    {
+        var result = Types.InAssembly(typeof(IHostPro.Contexts.ExternalIntegrations.Api.Controllers.WhatsAppWebhookController).Assembly)
+            .That()
+            .HaveNameEndingWith("WebhookController")
+            .Should()
+            .NotHaveDependencyOnAny("Microsoft.EntityFrameworkCore", "WolverineFx")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(BuildFailureMessage(result));
+    }
+
     private static string BuildFailureMessage(TestResult result) =>
         result.FailingTypes is null
             ? "Architecture rule violated."
