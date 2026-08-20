@@ -55,6 +55,22 @@ public static class ExternalIntegrationsModuleExtensions
         if (isDevelopmentEnvironment)
             services.AddScoped<IWhatsAppCredentialProvider, DevelopmentWhatsAppCredentialProvider>();
 
+        // Fase 9, Checkpoint 2.3.1 — webhook security ingress (ADR-022).
+        // Same Development-only rationale as IWhatsAppCredentialProvider
+        // above, but a deliberately separate, app/deployment-level
+        // abstraction (ADR-022 item 8/9): the webhook must verify its caller
+        // before any TenantId is known, so it can never resolve credentials
+        // via the tenant-owned WhatsAppIntegration/IWhatsAppCredentialProvider
+        // path.
+        if (isDevelopmentEnvironment)
+            services.AddScoped<IWhatsAppWebhookCredentialProvider, DevelopmentWhatsAppWebhookCredentialProvider>();
+
+        // Unconditional in every environment (unlike the credential provider
+        // above): this is a stateless verification algorithm with no secret/
+        // network dependency of its own — only the credential SOURCE is
+        // Production-blocked, never the algorithm that consumes it.
+        services.AddSingleton<IWebhookSignatureVerifier, MetaWebhookSignatureVerifier>();
+
         // Fase 9, Checkpoint 2.2 — real Meta Cloud API outbound connector.
         // Development-only, same rationale as IWhatsAppCredentialProvider
         // above: MetaWhatsAppMessagingProvider depends on it, so gating both
