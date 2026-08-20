@@ -113,6 +113,31 @@ public class MetaWhatsAppMessagingProviderTests
         parameters[1].GetProperty("text").GetString().Should().Be("2026-08-20");
     }
 
+    [Fact]
+    public async Task SendAsync_omits_the_components_array_entirely_for_a_zero_parameter_template()
+    {
+        var mapping = WhatsAppTemplateMapping.Create(
+            Guid.NewGuid(), TenantId, "RESERVATION_CONFIRMATION", "hello_world", "en_US", [], DateTimeOffset.UtcNow);
+        var request = new OutboundMessageRequest(
+            TenantId, MessageId, "WhatsApp", "+5511999998888", "RESERVATION_CONFIRMATION",
+            new Dictionary<string, string>(), "idempotency-key");
+        var handler = RecordingHttpMessageHandler.Returning(
+            JsonResponse(HttpStatusCode.OK, new { messages = new[] { new { id = "wamid.ABC" } } }));
+        var provider = BuildProvider(handler, BuildIntegration(), mapping);
+
+        await provider.SendAsync(request, CancellationToken.None);
+
+        using var body = JsonDocument.Parse(handler.Requests[0].Body!);
+        var root = body.RootElement;
+        root.GetProperty("type").GetString().Should().Be("template");
+
+        var template = root.GetProperty("template");
+        template.GetProperty("name").GetString().Should().Be("hello_world");
+        template.GetProperty("language").GetProperty("code").GetString().Should().Be("en_US");
+        template.TryGetProperty("components", out _).Should().BeFalse(
+            "a zero-parameter template must omit the components key entirely, not send it as null");
+    }
+
     // ---- Success mapping ------------------------------------------------------
 
     [Fact]

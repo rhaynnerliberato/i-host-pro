@@ -37,6 +37,7 @@ public sealed class MetaTemplate
     public required MetaTemplateLanguage Language { get; init; }
 
     [JsonPropertyName("components")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<MetaTemplateComponent>? Components { get; init; }
 }
 
