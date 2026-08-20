@@ -16,17 +16,25 @@ namespace IHostPro.Contexts.ExternalIntegrations.Domain;
 /// never be treated as out-of-order.
 ///
 /// <c>Failed</c> is a terminal branch, never just a higher ordinal (mandate
-/// §25/§29): <c>Sent → Failed</c> is the one pre-approved forward transition
-/// into Failed (a message can be accepted synchronously and fail delivery
-/// asynchronously). <c>Delivered → Failed</c> and <c>Read → Failed</c> are
-/// classified as Regression, not Forward — this is a reasoned default, not
-/// an explicitly pre-approved rule: a message already confirmed delivered or
-/// read has a strictly stronger positive confirmation than "sent", so a
-/// later "failed" report contradicts already-established ground truth
-/// rather than genuinely advancing it. Flagged for review, not decided
-/// silently — see the Fase 9 checkpoint report for this checkpoint.
+/// §25/§29). Corrected in Checkpoint 2.3.2.1 after CP2.3.2's original
+/// closure report flagged its own <c>Delivered/Read → Failed</c> default as
+/// a reasoned-but-not-explicitly-approved decision, which the mandate
+/// required to gate on explicit approval rather than ship silently. The
+/// approved semantics (Checkpoint 2.3.2.1):
+/// <list type="bullet">
+/// <item><c>Sent → Failed</c> = Forward — a message can be accepted
+/// synchronously and fail delivery asynchronously.</item>
+/// <item><c>Delivered → Failed</c> = Forward — <c>Delivered</c> is NOT
+/// terminal; a later "failed" report from the provider is genuine new
+/// information (e.g. a downstream delivery failure detected after the
+/// device-level ack), not noise to be discarded.</item>
+/// <item><c>Read → Failed</c> = Regression (no-op) — <c>Read</c> IS treated
+/// as terminal for this checkpoint's lifecycle; a "failed" report arriving
+/// after "read" is a late/regressive callback, never something that should
+/// roll a message back from its strongest confirmed state.</item>
+/// </list>
 /// Anything reported after Failed is likewise Regression — Failed does not
-/// advance further once reached.
+/// advance further once reached (mandate §7/§29).
 /// </summary>
 public static class WhatsAppStatusTransitionClassifier
 {
@@ -50,9 +58,11 @@ public static class WhatsAppStatusTransitionClassifier
 
         if (incoming == ProviderMessageStatus.Failed)
         {
-            return previous == ProviderMessageStatus.Sent
-                ? StatusTransitionClassification.Forward
-                : StatusTransitionClassification.Regression; // Delivered/Read -> Failed contradicts a stronger prior confirmation.
+            // Read is terminal for Failed purposes; Sent/Delivered are not —
+            // see the class remarks (Checkpoint 2.3.2.1 correction).
+            return previous == ProviderMessageStatus.Read
+                ? StatusTransitionClassification.Regression
+                : StatusTransitionClassification.Forward;
         }
 
         return Rank[incoming] > Rank[previous.Value]
