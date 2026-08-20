@@ -27,6 +27,9 @@ public sealed class ExternalIntegrationsDbContext : BaseDbContext
     public DbSet<WhatsAppIntegration> WhatsAppIntegrations => Set<WhatsAppIntegration>();
     public DbSet<WhatsAppTemplateMapping> WhatsAppTemplateMappings => Set<WhatsAppTemplateMapping>();
 
+    /// <summary>Global, non-tenant-owned — see <see cref="Mappings.WhatsAppTenantRouteConfiguration"/>'s remarks.</summary>
+    public DbSet<WhatsAppTenantRoute> WhatsAppTenantRoutes => Set<WhatsAppTenantRoute>();
+
     public ExternalIntegrationsDbContext(DbContextOptions<ExternalIntegrationsDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)
     {

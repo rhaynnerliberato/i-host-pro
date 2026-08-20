@@ -1,6 +1,7 @@
 using IHostPro.Contexts.ExternalIntegrations.Application;
 using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppIntegrations;
 using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppTemplateMappings;
+using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppTenantRoutes;
 using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Meta;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
@@ -48,6 +49,12 @@ public static class ExternalIntegrationsModuleExtensions
         services.AddScoped<IWhatsAppIntegrationRepository, WhatsAppIntegrationRepository>();
         services.AddScoped<IWhatsAppTemplateMappingRepository, WhatsAppTemplateMappingRepository>();
 
+        // Fase 9, Checkpoint 2.3.2 — global (non-tenant-owned) routing
+        // directory. Unconditional like the repositories above: no secret,
+        // no external network call, just a plain table lookup.
+        services.AddScoped<IWhatsAppTenantRouteRepository, WhatsAppTenantRouteRepository>();
+        services.AddScoped<IWhatsAppTenantRouteResolver, WhatsAppTenantRouteResolver>();
+
         // Development-only (CP2.1 mandate §12): no Production backend exists
         // yet — resolving IWhatsAppCredentialProvider outside Development
         // must fail loudly (no registration), never silently fall back to
@@ -70,6 +77,11 @@ public static class ExternalIntegrationsModuleExtensions
         // network dependency of its own — only the credential SOURCE is
         // Production-blocked, never the algorithm that consumes it.
         services.AddSingleton<IWebhookSignatureVerifier, MetaWebhookSignatureVerifier>();
+
+        // Fase 9, Checkpoint 2.3.2 — webhook status normalization
+        // (ADR-022). Unconditional: no secret, no external network call —
+        // just JSON parsing plus the route repository above.
+        services.AddScoped<IWhatsAppWebhookStatusProcessor, MetaWebhookStatusProcessor>();
 
         // Fase 9, Checkpoint 2.2 — real Meta Cloud API outbound connector.
         // Development-only, same rationale as IWhatsAppCredentialProvider
