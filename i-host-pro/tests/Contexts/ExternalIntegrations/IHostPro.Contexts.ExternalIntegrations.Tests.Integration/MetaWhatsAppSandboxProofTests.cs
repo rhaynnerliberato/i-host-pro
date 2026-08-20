@@ -27,6 +27,13 @@ namespace IHostPro.Contexts.ExternalIntegrations.Tests.Integration;
 /// When configured, this sends exactly ONE real template message to a
 /// locally-configured, already-authorized test recipient — never a real
 /// guest/reservation, never Production, never more than one message per run.
+///
+/// Deliberately proves real Meta transport only (authentication, PhoneNumberId,
+/// recipient, a zero-parameter template accepted, a real ProviderMessageId
+/// returned) — NOT the definitive Utility Template that will back the
+/// production <c>RESERVATION_CONFIRMATION</c> flow, which still needs its own
+/// Meta-approved template with the right parameters and remains a separate,
+/// not-yet-started piece of work.
 /// </summary>
 public class MetaWhatsAppSandboxProofTests
 {
@@ -50,7 +57,6 @@ public class MetaWhatsAppSandboxProofTests
         var recipient = configuration[$"{SandboxSectionPath}:RecipientPhoneNumber"];
         var providerTemplateName = configuration[$"{SandboxSectionPath}:ProviderTemplateName"];
         var languageCode = configuration[$"{SandboxSectionPath}:LanguageCode"];
-        var checkInDateValue = configuration[$"{SandboxSectionPath}:CheckInDateValue"] ?? "2026-08-20";
         var accessToken = configuration[$"ExternalIntegrations:WhatsApp:Secrets:{AccessTokenSecretReference}"];
 
         if (string.IsNullOrWhiteSpace(phoneNumberId) || string.IsNullOrWhiteSpace(recipient) ||
@@ -63,7 +69,7 @@ public class MetaWhatsAppSandboxProofTests
                 "values in chat/commits):\n\n" +
                 $"  dotnet user-secrets set \"{SandboxSectionPath}:PhoneNumberId\" \"<meta-test-phone-number-id>\" --project src/Host/IHostPro.Api\n" +
                 $"  dotnet user-secrets set \"{SandboxSectionPath}:RecipientPhoneNumber\" \"<authorized-test-recipient>\" --project src/Host/IHostPro.Api\n" +
-                $"  dotnet user-secrets set \"{SandboxSectionPath}:ProviderTemplateName\" \"<meta-approved-utility-template-name>\" --project src/Host/IHostPro.Api\n" +
+                $"  dotnet user-secrets set \"{SandboxSectionPath}:ProviderTemplateName\" \"<meta-approved-zero-parameter-template-name, e.g. hello_world>\" --project src/Host/IHostPro.Api\n" +
                 $"  dotnet user-secrets set \"{SandboxSectionPath}:LanguageCode\" \"<e.g. pt_BR>\" --project src/Host/IHostPro.Api\n" +
                 $"  dotnet user-secrets set \"ExternalIntegrations:WhatsApp:Secrets:{AccessTokenSecretReference}\" \"<meta-system-user-access-token>\" --project src/Host/IHostPro.Api\n\n" +
                 "(equivalently, the same five keys may be set as environment variables with '__' separators, " +
@@ -75,7 +81,7 @@ public class MetaWhatsAppSandboxProofTests
         var integration = WhatsAppIntegration.Create(Guid.NewGuid(), tenantId, DateTimeOffset.UtcNow);
         integration.UpdateConfiguration(wabaId: null, phoneNumberId, AccessTokenSecretReference, null, null, DateTimeOffset.UtcNow);
         var mapping = WhatsAppTemplateMapping.Create(
-            Guid.NewGuid(), tenantId, "RESERVATION_CONFIRMATION", providerTemplateName, languageCode, ["CheckInDate"], DateTimeOffset.UtcNow);
+            Guid.NewGuid(), tenantId, "RESERVATION_CONFIRMATION", providerTemplateName, languageCode, [], DateTimeOffset.UtcNow);
 
         var services = new ServiceCollection();
         services.AddHttpClient(MetaWhatsAppMessagingProvider.HttpClientName, client =>
@@ -96,7 +102,7 @@ public class MetaWhatsAppSandboxProofTests
         var result = await provider.SendAsync(
             new OutboundMessageRequest(
                 tenantId, Guid.NewGuid(), "WhatsApp", recipient, "RESERVATION_CONFIRMATION",
-                new Dictionary<string, string> { ["CheckInDate"] = checkInDateValue }, Guid.NewGuid().ToString("D")),
+                new Dictionary<string, string>(), Guid.NewGuid().ToString("D")),
             CancellationToken.None);
 
         _output.WriteLine($"Sandbox result: Accepted={result.Accepted}, FailureCode={result.FailureCode}, FailureCategory={result.FailureCategory}");
