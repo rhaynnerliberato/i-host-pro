@@ -1,5 +1,6 @@
 using System.Text.Json;
 using IHostPro.Contexts.ExternalIntegrations.Application;
+using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppTenantRoutes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -8,23 +9,27 @@ using Microsoft.Extensions.Logging;
 namespace IHostPro.Contexts.ExternalIntegrations.Api.Controllers;
 
 /// <summary>
-/// Meta WhatsApp webhook security ingress (Fase 9, Checkpoint 2.3.1 —
-/// ADR-022). Deliberately foundation-only: verifies the caller is really
-/// Meta (GET verify-token handshake; POST <c>X-Hub-Signature-256</c> HMAC
-/// over the exact raw bytes) and does nothing else — no tenant resolution,
-/// no status normalization, no <c>Message</c> lifecycle change, no
-/// Integration Event. Those belong to CP2.3.2/2.3.3 (ADR-022, items 10/11/13).
+/// Meta WhatsApp webhook ingress (Fase 9, Checkpoint 2.3.1/2.3.2 — ADR-022).
+/// Verifies the caller is really Meta (GET verify-token handshake; POST
+/// <c>X-Hub-Signature-256</c> HMAC over the exact raw bytes), then resolves
+/// each status entry's tenant and normalizes its status via
+/// <see cref="IWhatsAppWebhookStatusProcessor"/>. Still foundation-only past
+/// that: no <c>Message</c> lifecycle change, no Integration Event, no
+/// Wolverine — those belong to Checkpoint 2.3.3 (ADR-022, item 13).
 ///
 /// Never uses human JWT auth (<see cref="AllowAnonymousAttribute"/> — Meta is
-/// the caller, not a platform user) and never touches any tenant-owned data:
-/// credentials come exclusively from <see cref="IWhatsAppWebhookCredentialProvider"/>
-/// (app/deployment-level, ADR-022 item 8/9), never
-/// <see cref="IWhatsAppCredentialProvider"/>/<c>WhatsAppIntegration</c>.
+/// the caller, not a platform user) and never touches any tenant-owned data
+/// before a route resolves: credentials come exclusively from
+/// <see cref="IWhatsAppWebhookCredentialProvider"/> (app/deployment-level,
+/// ADR-022 item 8/9), never <see cref="IWhatsAppCredentialProvider"/>/
+/// <c>WhatsAppIntegration</c>.
 ///
 /// Never logs the App Secret, Verify Token, the full signature, the raw
-/// request body, or any recipient/message content — only sanitized,
-/// PII-free structured audit fields (mirrors
-/// <c>AuditConfigureWhatsAppIntegrationBehavior</c>'s established convention).
+/// request body, the PhoneNumberId, or any recipient/message
+/// content/ProviderMessageId value — only sanitized, PII-free structured
+/// audit fields (mirrors <c>AuditConfigureWhatsAppIntegrationBehavior</c>'s
+/// established convention). TenantId enters structured audit only AFTER a
+/// route resolves — never before (mandate §31).
 /// </summary>
 [ApiController]
 [Route("api/v1/integrations/whatsapp/webhook")]
@@ -36,18 +41,24 @@ public sealed class WhatsAppWebhookController : ControllerBase
     private const string SignatureAccepted = "WhatsAppWebhookSignatureAccepted";
     private const string SignatureRejected = "WhatsAppWebhookSignatureRejected";
     private const string MalformedPayload = "WhatsAppWebhookMalformedPayload";
+    private const string RouteUnknown = "WhatsAppWebhookRouteUnknown";
+    private const string StatusNormalized = "WhatsAppWebhookStatusNormalized";
+    private const string StatusIgnored = "WhatsAppWebhookStatusIgnored";
 
     private readonly IWhatsAppWebhookCredentialProvider _credentialProvider;
     private readonly IWebhookSignatureVerifier _signatureVerifier;
+    private readonly IWhatsAppWebhookStatusProcessor _statusProcessor;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
         IWhatsAppWebhookCredentialProvider credentialProvider,
         IWebhookSignatureVerifier signatureVerifier,
+        IWhatsAppWebhookStatusProcessor statusProcessor,
         ILogger<WhatsAppWebhookController> logger)
     {
         _credentialProvider = credentialProvider;
         _signatureVerifier = signatureVerifier;
+        _statusProcessor = statusProcessor;
         _logger = logger;
     }
 
@@ -83,10 +94,9 @@ public sealed class WhatsAppWebhookController : ControllerBase
     /// Reads the exact raw request body bytes (no <c>[FromBody]</c> model
     /// binding — the signature must be computed over precisely what was
     /// received, before any deserialization) and verifies
-    /// <c>X-Hub-Signature-256</c>. CP2.3.1 stops at "signature valid,
-    /// well-formed JSON acknowledgment" — no status parsing, no tenant
-    /// lookup, no persistence (ADR-022, item 11/13 — those are later
-    /// checkpoints).
+    /// <c>X-Hub-Signature-256</c>. Only after a valid signature does this
+    /// touch <see cref="IWhatsAppWebhookStatusProcessor"/> — never before
+    /// (mandate §14/§26: zero tenant-owned lookup before signature).
     /// </summary>
     [HttpPost]
     public async Task<IActionResult> Receive(CancellationToken cancellationToken)
@@ -116,7 +126,34 @@ public sealed class WhatsAppWebhookController : ControllerBase
         }
 
         _logger.LogInformation("{AuditEvent}: bodyLength {BodyLength}", SignatureAccepted, rawBody.Length);
+
+        var outcomes = await _statusProcessor.ProcessAsync(rawBody, cancellationToken);
+        foreach (var outcome in outcomes)
+            LogOutcome(outcome);
+
+        // Every outcome kind returns 2xx here — Accepted/UnknownRoute/Malformed
+        // are all permanent-for-this-payload classifications, never a reason
+        // to make Meta retry (Checkpoint 2.3.0 decision D).
         return Ok();
+    }
+
+    private void LogOutcome(WebhookStatusProcessingOutcome outcome)
+    {
+        switch (outcome.Kind)
+        {
+            case WebhookStatusOutcomeKind.Accepted:
+                _logger.LogInformation(
+                    "{AuditEvent}: tenant {TenantId} status {Status} hasErrorCode {HasErrorCode}",
+                    StatusNormalized, outcome.TenantId, outcome.NormalizedStatus, outcome.ProviderErrorCode is not null);
+                break;
+            case WebhookStatusOutcomeKind.UnknownRoute:
+                _logger.LogWarning("{AuditEvent}", RouteUnknown);
+                break;
+            case WebhookStatusOutcomeKind.Malformed:
+                _logger.LogWarning(
+                    "{AuditEvent}: tenant {TenantId}", StatusIgnored, outcome.TenantId);
+                break;
+        }
     }
 
     private static bool IsWellFormedJson(byte[] rawBody)
