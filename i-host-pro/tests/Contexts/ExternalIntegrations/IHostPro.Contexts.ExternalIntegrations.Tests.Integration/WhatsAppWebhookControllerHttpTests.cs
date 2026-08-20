@@ -4,6 +4,7 @@ using System.Text;
 using FluentAssertions;
 using IHostPro.Contexts.ExternalIntegrations.Api.Controllers;
 using IHostPro.Contexts.ExternalIntegrations.Application;
+using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppTenantRoutes;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Meta;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -57,6 +58,12 @@ public sealed class WhatsAppWebhookControllerHttpTests : IAsyncDisposable
                     services.AddSingleton<IWhatsAppWebhookCredentialProvider>(
                         new FakeWebhookCredentialProvider(AppSecret, VerifyToken));
                     services.AddSingleton<IWebhookSignatureVerifier, MetaWebhookSignatureVerifier>();
+                    // Fase 9, Checkpoint 2.3.2 added this dependency to the
+                    // controller — a no-op fake here since this file's own
+                    // scope is signature verification, not status
+                    // processing (see WhatsAppWebhookStatusRoutingHttpTests
+                    // for that).
+                    services.AddSingleton<IWhatsAppWebhookStatusProcessor>(new NoOpStatusProcessor());
                     services.AddLogging(logging => logging.AddProvider(_loggerProvider));
                 });
                 webHost.Configure(app =>
@@ -266,6 +273,12 @@ public sealed class WhatsAppWebhookControllerHttpTests : IAsyncDisposable
     {
         public Task<string?> GetAppSecretAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(appSecret);
         public Task<string?> GetVerifyTokenAsync(CancellationToken cancellationToken) => Task.FromResult<string?>(verifyToken);
+    }
+
+    private sealed class NoOpStatusProcessor : IWhatsAppWebhookStatusProcessor
+    {
+        public Task<IReadOnlyList<WebhookStatusProcessingOutcome>> ProcessAsync(ReadOnlyMemory<byte> rawBody, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<WebhookStatusProcessingOutcome>>([]);
     }
 
     /// <summary>In-memory log sink — captures every formatted message so tests can assert on secret/PII absence.</summary>

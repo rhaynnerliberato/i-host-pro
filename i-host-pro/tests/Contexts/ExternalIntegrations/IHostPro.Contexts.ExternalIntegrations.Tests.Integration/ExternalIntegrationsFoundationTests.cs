@@ -450,6 +450,199 @@ public class ExternalIntegrationsFoundationTests : IClassFixture<ExternalIntegra
         return (tenantId, mapping.Id);
     }
 
+    // ---- WhatsAppTenantRoute (Fase 9, Checkpoint 2.3.2) — global, non-tenant-owned ----
+
+    [Fact]
+    public async Task Migration_creates_the_whatsapp_tenant_routes_table()
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+
+        var tableNames = new HashSet<string>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'external_integrations'";
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                tableNames.Add(reader.GetString(0));
+        }
+
+        tableNames.Should().Contain("whatsapp_tenant_routes");
+    }
+
+    [Fact]
+    public async Task Row_Level_Security_is_NOT_enabled_on_whatsapp_tenant_routes()
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'whatsapp_tenant_routes' AND relnamespace = 'external_integrations'::regnamespace";
+        await using var reader = await command.ExecuteReaderAsync();
+        (await reader.ReadAsync()).Should().BeTrue();
+
+        reader.GetBoolean(0).Should().BeFalse(
+            "this table exists specifically to answer \"which tenant\" BEFORE a TenantId is known — RLS would defeat its entire purpose (ADR-022)");
+        reader.GetBoolean(1).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_route_created_for_one_tenant_is_visible_from_a_DIFFERENT_tenants_context()
+    {
+        // Deliberately the opposite assertion of WhatsAppIntegration's own
+        // cross-tenant test above — global visibility here is the intended
+        // design, not a leak (ADR-022 items 10-12).
+        var tenantId = Guid.NewGuid();
+        await SeedRouteAsync(tenantId, "global-visible-phone");
+
+        var unrelatedTenantContext = new TenantContext();
+        unrelatedTenantContext.SetTenant(Guid.NewGuid());
+        await using var dbContext = CreateDbContext(_appConnectionString, unrelatedTenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, unrelatedTenantContext.TenantId!.Value);
+
+        var visible = await dbContext.WhatsAppTenantRoutes.SingleOrDefaultAsync(r => r.PhoneNumberId == "global-visible-phone");
+
+        visible.Should().NotBeNull("the routing directory must be readable before any tenant is resolved, by design");
+        visible!.TenantId.Should().Be(tenantId);
+    }
+
+    [Fact]
+    public async Task Two_tenants_cannot_share_the_same_PhoneNumberId()
+    {
+        await using var dbContext = CreateDbContext(_migratorConnectionString, new TenantContext());
+
+        dbContext.WhatsAppTenantRoutes.Add(WhatsAppTenantRoute.Create(Guid.NewGuid(), "shared-phone", Guid.NewGuid(), DateTimeOffset.UtcNow));
+        await dbContext.SaveChangesAsync();
+
+        dbContext.WhatsAppTenantRoutes.Add(WhatsAppTenantRoute.Create(Guid.NewGuid(), "shared-phone", Guid.NewGuid(), DateTimeOffset.UtcNow));
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>("PhoneNumberId must be globally unique across all tenants");
+    }
+
+    [Fact]
+    public async Task A_tenant_cannot_have_two_active_routes()
+    {
+        var tenantId = Guid.NewGuid();
+        await using var dbContext = CreateDbContext(_migratorConnectionString, new TenantContext());
+
+        dbContext.WhatsAppTenantRoutes.Add(WhatsAppTenantRoute.Create(Guid.NewGuid(), "phone-a", tenantId, DateTimeOffset.UtcNow));
+        await dbContext.SaveChangesAsync();
+
+        dbContext.WhatsAppTenantRoutes.Add(WhatsAppTenantRoute.Create(Guid.NewGuid(), "phone-b", tenantId, DateTimeOffset.UtcNow));
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>("exactly one active route is allowed per tenant");
+    }
+
+    [Fact]
+    public async Task App_role_cannot_create_alter_or_drop_the_routing_table()
+    {
+        await using var connection = new NpgsqlConnection(_appConnectionString);
+        await connection.OpenAsync();
+
+        var alterAct = async () => await ExecuteAsync(connection, "ALTER TABLE external_integrations.whatsapp_tenant_routes ADD COLUMN hack text");
+        await alterAct.Should().ThrowAsync<PostgresException>();
+
+        var dropAct = async () => await ExecuteAsync(connection, "DROP TABLE external_integrations.whatsapp_tenant_routes");
+        await dropAct.Should().ThrowAsync<PostgresException>();
+    }
+
+    [Fact]
+    public async Task App_role_can_select_insert_update_and_delete_on_the_routing_table_without_any_tenant_context()
+    {
+        var tenantId = Guid.NewGuid();
+        await SeedRouteAsync(tenantId, "app-role-crud-phone");
+
+        // No SetTenant call anywhere below — proves this table's CRUD access
+        // is intentionally unconditional, unlike every tenant-owned table.
+        await using var dbContext = CreateDbContext(_appConnectionString, new TenantContext());
+
+        var route = await dbContext.WhatsAppTenantRoutes.SingleAsync(r => r.PhoneNumberId == "app-role-crud-phone");
+        route.UpdatePhoneNumberId("app-role-crud-phone-updated", DateTimeOffset.UtcNow);
+        await dbContext.SaveChangesAsync();
+
+        dbContext.WhatsAppTenantRoutes.Remove(route);
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task Updating_a_tenants_PhoneNumberId_invalidates_the_old_route_and_activates_the_new_one()
+    {
+        var tenantId = Guid.NewGuid();
+        var routeId = await SeedRouteAsync(tenantId, "old-route-phone");
+
+        await using (var dbContext = CreateDbContext(_migratorConnectionString, new TenantContext()))
+        {
+            var route = await dbContext.WhatsAppTenantRoutes.SingleAsync(r => r.Id == routeId);
+            route.UpdatePhoneNumberId("new-route-phone", DateTimeOffset.UtcNow);
+            await dbContext.SaveChangesAsync();
+        }
+
+        await using var readDbContext = CreateDbContext(_migratorConnectionString, new TenantContext());
+        var oldStillResolves = await readDbContext.WhatsAppTenantRoutes.AnyAsync(r => r.PhoneNumberId == "old-route-phone");
+        var newResolves = await readDbContext.WhatsAppTenantRoutes.SingleOrDefaultAsync(r => r.PhoneNumberId == "new-route-phone");
+
+        oldStillResolves.Should().BeFalse("the old PhoneNumberId must no longer resolve anything once reconfigured");
+        newResolves.Should().NotBeNull();
+        newResolves!.TenantId.Should().Be(tenantId);
+    }
+
+    /// <summary>
+    /// Fase 9, Checkpoint 2.3.2 mandate §38: proves the atomicity
+    /// ConfigureWhatsAppIntegrationCommandHandler relies on — a
+    /// WhatsAppIntegration write and its WhatsAppTenantRoute write share one
+    /// DbContext/one SaveChangesAsync, so a failure before commit rolls back
+    /// BOTH, never leaving one persisted without the other.
+    /// </summary>
+    [Fact]
+    public async Task Integration_and_route_writes_roll_back_together_on_failure()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        dbContext.WhatsAppIntegrations.Add(WhatsAppIntegration.Create(Guid.NewGuid(), tenantId, DateTimeOffset.UtcNow));
+        dbContext.WhatsAppTenantRoutes.Add(WhatsAppTenantRoute.Create(Guid.NewGuid(), "rollback-phone", tenantId, DateTimeOffset.UtcNow));
+        await dbContext.SaveChangesAsync();
+
+        // Simulates a failure discovered after both writes were flushed to
+        // this transaction but before it commits — TenantAwareUnitOfWork
+        // would roll back here on any exception from the handler.
+        await transaction.RollbackAsync();
+
+        var verifyTenantContext = new TenantContext();
+        verifyTenantContext.SetTenant(tenantId);
+        await using var verifyDbContext = CreateDbContext(_migratorConnectionString, verifyTenantContext);
+        await using var verifyTransaction = await verifyDbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(verifyDbContext, tenantId);
+
+        var integrationExists = await verifyDbContext.WhatsAppIntegrations.AnyAsync(w => w.TenantId == tenantId);
+        var routeExists = await verifyDbContext.WhatsAppTenantRoutes.AnyAsync(r => r.TenantId == tenantId);
+
+        integrationExists.Should().BeFalse("rollback must undo the WhatsAppIntegration write");
+        routeExists.Should().BeFalse("rollback must undo the WhatsAppTenantRoute write in the same transaction");
+    }
+
+    private async Task<Guid> SeedRouteAsync(Guid tenantId, string phoneNumberId)
+    {
+        await using var dbContext = CreateDbContext(_migratorConnectionString, new TenantContext());
+        var route = WhatsAppTenantRoute.Create(Guid.NewGuid(), phoneNumberId, tenantId, DateTimeOffset.UtcNow);
+        dbContext.WhatsAppTenantRoutes.Add(route);
+        await dbContext.SaveChangesAsync();
+        return route.Id;
+    }
+
     // ---- Helpers ----
 
     private async Task<(Guid TenantId, Guid IntegrationId)> SeedIntegrationAsync()

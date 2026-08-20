@@ -15,7 +15,8 @@ public class WhatsAppIntegrationCommandHandlerTests
     public async Task ConfigureWhatsAppIntegrationCommandHandler_creates_a_new_integration_disabled_by_default()
     {
         var repository = FakeWhatsAppIntegrationRepository.WithExisting(null);
-        var handler = new ConfigureWhatsAppIntegrationCommandHandler(repository, FixedTime);
+        var routeRepository = FakeWhatsAppTenantRouteRepository.WithExisting(null);
+        var handler = new ConfigureWhatsAppIntegrationCommandHandler(repository, routeRepository, FixedTime);
 
         var result = await handler.Handle(
             new ConfigureWhatsAppIntegrationCommand(TenantId, ActorUserId, "waba-1", "phone-1", "access-ref", "secret-ref", "verify-ref"),
@@ -39,7 +40,9 @@ public class WhatsAppIntegrationCommandHandlerTests
         var existing = WhatsAppIntegration.Create(Guid.NewGuid(), TenantId, Now);
         existing.UpdateConfiguration("old-waba", "old-phone", "old-access", null, null, Now);
         var repository = FakeWhatsAppIntegrationRepository.WithExisting(existing);
-        var handler = new ConfigureWhatsAppIntegrationCommandHandler(repository, FixedTime);
+        var routeRepository = FakeWhatsAppTenantRouteRepository.WithExisting(
+            WhatsAppTenantRoute.Create(Guid.NewGuid(), "old-phone", TenantId, Now));
+        var handler = new ConfigureWhatsAppIntegrationCommandHandler(repository, routeRepository, FixedTime);
 
         var result = await handler.Handle(
             new ConfigureWhatsAppIntegrationCommand(TenantId, ActorUserId, "new-waba", "new-phone", "new-access", "new-secret", null),
@@ -52,6 +55,93 @@ public class WhatsAppIntegrationCommandHandlerTests
         result.Value.AppSecretConfigured.Should().BeTrue();
         result.Value.VerifyTokenConfigured.Should().BeFalse("only the access/app-secret references were supplied this time");
         repository.AddedIntegrations.Should().BeEmpty("an existing row must be updated in place, never re-added");
+    }
+
+    // ---- Fase 9, Checkpoint 2.3.2: tenant route synchronization ----------------
+
+    [Fact]
+    public async Task ConfigureWhatsAppIntegrationCommandHandler_creates_a_route_for_a_brand_new_integration()
+    {
+        var repository = FakeWhatsAppIntegrationRepository.WithExisting(null);
+        var routeRepository = FakeWhatsAppTenantRouteRepository.WithExisting(null);
+        var handler = new ConfigureWhatsAppIntegrationCommandHandler(repository, routeRepository, FixedTime);
+
+        await handler.Handle(
+            new ConfigureWhatsAppIntegrationCommand(TenantId, ActorUserId, "waba-1", "phone-1", "access-ref", null, null),
+            CancellationToken.None);
+
+        routeRepository.AddedRoutes.Should().ContainSingle();
+        routeRepository.AddedRoutes[0].PhoneNumberId.Should().Be("phone-1");
+        routeRepository.AddedRoutes[0].TenantId.Should().Be(TenantId);
+    }
+
+    [Fact]
+    public async Task ConfigureWhatsAppIntegrationCommandHandler_updates_the_route_when_PhoneNumberId_changes()
+    {
+        var existing = WhatsAppIntegration.Create(Guid.NewGuid(), TenantId, Now);
+        existing.UpdateConfiguration("waba-1", "old-phone", "access-ref", null, null, Now);
+        var repository = FakeWhatsAppIntegrationRepository.WithExisting(existing);
+        var existingRoute = WhatsAppTenantRoute.Create(Guid.NewGuid(), "old-phone", TenantId, Now);
+        var routeRepository = FakeWhatsAppTenantRouteRepository.WithExisting(existingRoute);
+        var handler = new ConfigureWhatsAppIntegrationCommandHandler(repository, routeRepository, FixedTime);
+
+        await handler.Handle(
+            new ConfigureWhatsAppIntegrationCommand(TenantId, ActorUserId, "waba-1", "new-phone", "access-ref", null, null),
+            CancellationToken.None);
+
+        routeRepository.AddedRoutes.Should().BeEmpty("an existing route must be updated in place, never re-added");
+        routeRepository.Current!.PhoneNumberId.Should().Be("new-phone");
+    }
+
+    [Fact]
+    public async Task ConfigureWhatsAppIntegrationCommandHandler_does_not_touch_the_route_when_PhoneNumberId_is_unchanged()
+    {
+        var existing = WhatsAppIntegration.Create(Guid.NewGuid(), TenantId, Now);
+        existing.UpdateConfiguration("waba-1", "same-phone", "access-ref", null, null, Now);
+        var repository = FakeWhatsAppIntegrationRepository.WithExisting(existing);
+        var existingRoute = WhatsAppTenantRoute.Create(Guid.NewGuid(), "same-phone", TenantId, Now);
+        var routeRepository = FakeWhatsAppTenantRouteRepository.WithExisting(existingRoute);
+        var handler = new ConfigureWhatsAppIntegrationCommandHandler(repository, routeRepository, FixedTime);
+
+        await handler.Handle(
+            new ConfigureWhatsAppIntegrationCommand(TenantId, ActorUserId, "waba-1", "same-phone", "access-ref", null, null),
+            CancellationToken.None);
+
+        routeRepository.AddedRoutes.Should().BeEmpty();
+        routeRepository.RemovedRoutes.Should().BeEmpty();
+        routeRepository.Current!.UpdatedAtUtc.Should().BeNull("nothing changed, so the route must not be touched at all");
+    }
+
+    [Fact]
+    public async Task ConfigureWhatsAppIntegrationCommandHandler_removes_the_route_when_PhoneNumberId_is_cleared()
+    {
+        var existing = WhatsAppIntegration.Create(Guid.NewGuid(), TenantId, Now);
+        existing.UpdateConfiguration("waba-1", "old-phone", "access-ref", null, null, Now);
+        var repository = FakeWhatsAppIntegrationRepository.WithExisting(existing);
+        var existingRoute = WhatsAppTenantRoute.Create(Guid.NewGuid(), "old-phone", TenantId, Now);
+        var routeRepository = FakeWhatsAppTenantRouteRepository.WithExisting(existingRoute);
+        var handler = new ConfigureWhatsAppIntegrationCommandHandler(repository, routeRepository, FixedTime);
+
+        await handler.Handle(
+            new ConfigureWhatsAppIntegrationCommand(TenantId, ActorUserId, "waba-1", null, "access-ref", null, null),
+            CancellationToken.None);
+
+        routeRepository.RemovedRoutes.Should().ContainSingle(
+            "a stale route must never linger and resolve a phone number this tenant no longer claims");
+    }
+
+    [Fact]
+    public async Task ConfigureWhatsAppIntegrationCommandHandler_does_not_create_a_route_when_no_PhoneNumberId_is_ever_configured()
+    {
+        var repository = FakeWhatsAppIntegrationRepository.WithExisting(null);
+        var routeRepository = FakeWhatsAppTenantRouteRepository.WithExisting(null);
+        var handler = new ConfigureWhatsAppIntegrationCommandHandler(repository, routeRepository, FixedTime);
+
+        await handler.Handle(
+            new ConfigureWhatsAppIntegrationCommand(TenantId, ActorUserId, "waba-1", null, "access-ref", null, null),
+            CancellationToken.None);
+
+        routeRepository.AddedRoutes.Should().BeEmpty();
     }
 
     [Fact]
