@@ -9,6 +9,12 @@
     (IReservationGuestContactReader — ADR-019; ITemplateReader — the general
     Configuration & Policy exception, ADR-002) — never those contexts'
     Application/Infrastructure/Api layers.
+
+    Fase 9, Checkpoint 2.3.3 (ADR-022 item 14): ExternalIntegrations.Contracts
+    added — WhatsAppMessageStatusChanged is the second Integration Event
+    Communication consumes, same "Contracts only, never Domain/Application/
+    Infrastructure/Api" boundary already enforced by
+    IHostPro.ArchitectureTests' own ExternalIntegrationsDependencyTests.
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Domain\IHostPro.BuildingBlocks.Domain.csproj" />
@@ -16,6 +22,7 @@
     <ProjectReference Include="..\IHostPro.Contexts.Communication.Domain\IHostPro.Contexts.Communication.Domain.csproj" />
     <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
     <ProjectReference Include="..\..\Configuration\IHostPro.Contexts.Configuration.Contracts\IHostPro.Contexts.Configuration.Contracts.csproj" />
+    <ProjectReference Include="..\..\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Contracts\IHostPro.Contexts.ExternalIntegrations.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

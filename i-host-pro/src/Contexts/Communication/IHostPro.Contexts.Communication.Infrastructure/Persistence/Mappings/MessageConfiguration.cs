@@ -30,6 +30,12 @@ public sealed class MessageConfiguration : IEntityTypeConfiguration<Message>
         builder.Property(m => m.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(m => m.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
         builder.Property(m => m.SentAtUtc).HasColumnName("sent_at_utc");
+        // Fase 9, Checkpoint 2.3.3 (ADR-022 item 14): MessageStatus itself
+        // needed no migration (HasConversion<string> already accepts new
+        // values within the existing varchar(20) column) — these two
+        // columns are the only real schema change this checkpoint.
+        builder.Property(m => m.DeliveredAtUtc).HasColumnName("delivered_at_utc");
+        builder.Property(m => m.ReadAtUtc).HasColumnName("read_at_utc");
         builder.Property(m => m.FailedAtUtc).HasColumnName("failed_at_utc");
         builder.Property(m => m.FailureReason).HasColumnName("failure_reason").HasMaxLength(100);
         builder.Property(m => m.ProviderMessageId).HasColumnName("provider_message_id").HasMaxLength(200);

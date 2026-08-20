@@ -16,6 +16,9 @@ public sealed class MessageRepository : IMessageRepository
     public Task<Message?> GetByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken) =>
         _dbContext.Messages.FirstOrDefaultAsync(m => m.IdempotencyKey == idempotencyKey, cancellationToken);
 
+    public Task<Message?> GetByProviderMessageIdAsync(string providerMessageId, CancellationToken cancellationToken) =>
+        _dbContext.Messages.SingleOrDefaultAsync(m => m.ProviderMessageId == providerMessageId, cancellationToken);
+
     public void Add(Message aggregate) => _dbContext.Messages.Add(aggregate);
 
     public void Update(Message aggregate) => _dbContext.Messages.Update(aggregate);

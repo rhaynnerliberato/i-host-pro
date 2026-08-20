@@ -2,6 +2,7 @@ using IHostPro.BuildingBlocks.Application;
 using IHostPro.Contexts.Communication.Application;
 using IHostPro.Contexts.Communication.Infrastructure.Messaging;
 using IHostPro.Contexts.Communication.Infrastructure.Persistence;
+using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -27,20 +28,33 @@ public static class CommunicationModuleExtensions
 
         services.AddSingleton(TimeProvider.System);
 
+        // Fase 9, Checkpoint 2.3.3: moved here from AddCommunicationReservationConsumer
+        // (still below, Development-gated) — these three are plain
+        // persistence/execution-scope infrastructure with no secret and no
+        // fake/real distinction of their own, and the new WhatsApp status
+        // consumer (AddCommunicationWhatsAppStatusConsumer, unconditional)
+        // needs them in every environment, not just Development. Moving the
+        // registration changes nothing about what gets registered — only
+        // which method registers it — so ReservationCreatedCommunicationProcessor's
+        // own dependency graph is unaffected.
+        services.AddScoped<IMessageRepository, MessageRepository>();
+        services.AddScoped<ICommunicationTransactionExecutor, CommunicationTransactionExecutor>();
+        services.AddScoped<ICommunicationMessageExecutionScope, CommunicationMessageExecutionScope>();
+
         return services;
     }
 
     /// <summary>
     /// Registers everything <see cref="ReservationCreatedCommunicationProcessor"/>'s
-    /// own dependency graph needs, so <see cref="CommunicationMessageExecutionScope"/>
-    /// (ADR-016) can construct it from its own child DI scope — mirrors
+    /// own dependency graph needs beyond <see cref="AddCommunicationModule"/>,
+    /// so <see cref="CommunicationMessageExecutionScope"/> (ADR-016) can
+    /// construct it from its own child DI scope — mirrors
     /// <c>AddDashboardProjectionConsumer</c>'s own two-call split exactly.
+    /// Development-only (CP1 mandate §46-49, Option A): the real Meta
+    /// connector is never wired into this automatic flow.
     /// </summary>
     public static IServiceCollection AddCommunicationReservationConsumer(this IServiceCollection services)
     {
-        services.AddScoped<IMessageRepository, MessageRepository>();
-        services.AddScoped<ICommunicationTransactionExecutor, CommunicationTransactionExecutor>();
-
         // Fase 9, Checkpoint 1 (CP1 mandate §11/§13): the ONLY connector
         // implementation this checkpoint has — a deterministic fake, never a
         // real WhatsApp API client.
@@ -49,7 +63,22 @@ public static class CommunicationModuleExtensions
         services.AddKeyedScoped<IIntegrationEventHandler<ReservationCreated>, ReservationCreatedCommunicationProcessor>(
             CommunicationMessageExecutionScope.HandlerKey);
 
-        services.AddScoped<ICommunicationMessageExecutionScope, CommunicationMessageExecutionScope>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="WhatsAppMessageStatusCommunicationProcessor"/>
+    /// (Fase 9, Checkpoint 2.3.3, ADR-022 item 14) — unconditional in every
+    /// environment, unlike <see cref="AddCommunicationReservationConsumer"/>
+    /// above: the inbound webhook status path has no fake/real connector
+    /// distinction of its own (the signature-verified webhook itself is
+    /// always real), so gating it to Development would silently drop real
+    /// status updates outside that environment.
+    /// </summary>
+    public static IServiceCollection AddCommunicationWhatsAppStatusConsumer(this IServiceCollection services)
+    {
+        services.AddKeyedScoped<IIntegrationEventHandler<WhatsAppMessageStatusChanged>, WhatsAppMessageStatusCommunicationProcessor>(
+            CommunicationMessageExecutionScope.HandlerKey);
 
         return services;
     }
