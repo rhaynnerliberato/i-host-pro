@@ -24,7 +24,9 @@ using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using IHostPro.Contexts.Dashboard.Infrastructure;
+using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure;
+using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
 using JasperFx;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -323,6 +325,16 @@ try
             "housekeeping_messaging",
             typeof(HousekeepingDbContext));
 
+        // External Integrations' own durable outbox (Fase 9, Checkpoint
+        // 2.3.3, ADR-022 item 13) — a sixth "ancillary" store, in its own
+        // external_integrations_messaging schema, never shared with any
+        // other context's. WhatsAppMessageStatusChanged (routed below) is
+        // its first published Integration Event.
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("ExternalIntegrations")!,
+            "external_integrations_messaging",
+            typeof(ExternalIntegrationsDbContext));
+
         // Identity & Access's first six Integration Events (Incremento 2 plan,
         // Etapa 15; Documento 07 §13.2; ADR-013): one topic exchange per
         // Bounded Context, routing key = event name in snake_case.
@@ -489,6 +501,23 @@ try
         // new event, Dashboard's initial (and, this increment, only)
         // consumer.
         RouteHousekeepingEvent<CleaningOccurrenceRegistered>("cleaning_occurrence_registered");
+
+        // External Integrations' first Integration Event (Fase 9, Checkpoint
+        // 2.3.3, ADR-022 item 13/14) — its own topic exchange, published by
+        // WhatsAppWebhookStatusEventPublisher after signature verification,
+        // tenant routing, and status normalization. Unconditional in every
+        // environment — unlike the outbound send path's Development-only
+        // credential/connector gates, the webhook's inbound status ingestion
+        // has no fake/real distinction of its own.
+        const string externalIntegrationsEventsExchange = "external-integrations-events";
+
+        void RouteExternalIntegrationsEvent<TEvent>(string routingKey) where TEvent : IntegrationEvent =>
+            opts.PublishMessage(typeof(TEvent))
+                .ToRabbitRoutingKey(externalIntegrationsEventsExchange, routingKey, exchange => exchange.ExchangeType = ExchangeType.Topic)
+                .UseDurableOutbox()
+                .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        RouteExternalIntegrationsEvent<WhatsAppMessageStatusChanged>("whatsapp_message_status_changed");
     });
 
     builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();

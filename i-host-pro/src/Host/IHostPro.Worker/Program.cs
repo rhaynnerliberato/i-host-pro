@@ -111,14 +111,24 @@ try
     builder.Services.AddDashboardProjectionConsumer();
 
     // Communication module (Fase 9, Checkpoint 1): CommunicationDbContext +
-    // the ReservationCreated-triggered messaging consumer's full DI graph,
-    // so the tenant-safe execution boundary (ICommunicationMessageExecutionScope,
-    // ADR-016) can construct it from its own child DI scope — mirrors
-    // AddDashboardModule + AddDashboardProjectionConsumer's own two-call
-    // split exactly. Communication publishes no Integration Event this
-    // checkpoint and has no HTTP surface, so IHostPro.Api never references
-    // this module (CommunicationModuleExtensions' own doc comment).
-    //
+    // its shared execution-scope/repository/transaction-executor DI graph
+    // (ADR-016) — mirrors AddDashboardModule's own precedent. Fase 9,
+    // Checkpoint 2.3.3 made this call UNCONDITIONAL (previously gated to
+    // Development alongside the reservation consumer below): the new
+    // WhatsApp status consumer registered right after it needs
+    // CommunicationDbContext/IMessageRepository/ICommunicationTransactionExecutor
+    // in every environment, not just Development — Communication now has
+    // real, always-on work to do, not just the CP1 fake-connector demo.
+    builder.Services.AddCommunicationModule(builder.Configuration);
+
+    // Fase 9, Checkpoint 2.3.3 (ADR-022 item 14): WhatsAppMessageStatusChanged
+    // consumer — unconditional, unlike AddCommunicationReservationConsumer
+    // below. The inbound webhook status path has no fake/real connector
+    // distinction of its own (External Integrations' webhook signature
+    // verification is always real); gating this to Development would
+    // silently drop real status updates in every other environment.
+    builder.Services.AddCommunicationWhatsAppStatusConsumer();
+
     // Gated to Development ONLY (CP1 closure — corrective homologation):
     // AddCommunicationReservationConsumer registers the ONLY
     // IOutboundMessageConnector this checkpoint has — FakeWhatsAppConnector,
@@ -142,7 +152,6 @@ try
     // does not disable Communication in any of them.
     if (builder.Environment.IsDevelopment())
     {
-        builder.Services.AddCommunicationModule(builder.Configuration);
         builder.Services.AddCommunicationReservationConsumer();
     }
 
@@ -518,6 +527,32 @@ try
             opts.ListenToRabbitQueue("communication.reservation-created-trigger")
                 .AddStickyHandler(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.ReservationCreatedHandler));
         }
+
+        // Communication's WhatsApp status consumer (Fase 9, Checkpoint 2.3.3,
+        // ADR-022 item 14) — a new, independent subscriber queue on the NEW
+        // external-integrations-events exchange (External Integrations never
+        // needs to know Communication is listening — same decoupled pub/sub
+        // pattern as every queue above). The queue itself, and its binding,
+        // is provisioned exclusively by IHostPro.MigrationRunner,
+        // unconditionally (see its own Program.cs). Unconditional here too —
+        // unlike the Development-gated ReservationCreated queue just above,
+        // this consumer has no fake/real connector distinction of its own
+        // (the signature-verified webhook that ultimately triggers this
+        // event is always real), so gating it would silently drop real
+        // status updates outside Development. WhatsAppMessageStatusChangedHandler
+        // lives in the SAME Communication.Infrastructure assembly as
+        // ReservationCreatedHandler above — IncludeAssembly is idempotent,
+        // called here unconditionally so this handler is discovered even
+        // when the Development-gated block above does not run.
+        //
+        // ADR-020: exactly one Wolverine-discovered handler class exists for
+        // WhatsAppMessageStatusChanged in this process (Communication's own)
+        // — confirmed by IHostPro.ArchitectureTests'
+        // Exactly_One_Handler_Exists_For_WhatsAppMessageStatusChanged — so
+        // no AddStickyHandler is needed (ADR-020's own "single discovered
+        // handler" default).
+        opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.WhatsAppMessageStatusChangedHandler).Assembly);
+        opts.ListenToRabbitQueue("communication.whatsapp-status-projection");
 
         // Real defect found and fixed (Checkpoint 6 homologação, ADR-015
         // spike): IHostPro.Api/Program.cs already routes every real Cleaning

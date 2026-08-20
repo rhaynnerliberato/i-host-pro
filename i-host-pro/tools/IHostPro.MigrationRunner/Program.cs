@@ -499,6 +499,49 @@ try
 
     log.LogInformation("Dashboard & Reporting's durable outbox provisioned");
 
+    // External Integrations' own durable outbox (Fase 9, Checkpoint 2.3.3,
+    // ADR-022 item 13) — mirrors every other context's provisioning above
+    // exactly, in its own schema (external_integrations_messaging), never
+    // shared with any of the other six. WhatsAppMessageStatusChanged
+    // (routed by IHostPro.Api's own Program.cs) is its first published
+    // Integration Event.
+    var externalIntegrationsMigratorConnectionString = builder.Configuration.GetConnectionString("ExternalIntegrations")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:ExternalIntegrations'.");
+
+    log.LogInformation("Provisioning External Integrations' durable outbox (schema external_integrations_messaging)");
+
+    var externalIntegrationsOutboxHostBuilder = Host.CreateApplicationBuilder();
+    externalIntegrationsOutboxHostBuilder.UseWolverine(opts =>
+    {
+        opts.EnrollAncillaryPostgresqlOutbox(
+            externalIntegrationsMigratorConnectionString, "external_integrations_messaging", typeof(ExternalIntegrationsDbContext));
+        opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+        opts.UseEntityFrameworkCoreTransactions();
+    });
+
+    using (var externalIntegrationsOutboxHost = externalIntegrationsOutboxHostBuilder.Build())
+    {
+        await externalIntegrationsOutboxHost.SetupResources();
+    }
+
+    await using (var connection = new NpgsqlConnection(externalIntegrationsMigratorConnectionString))
+    {
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            GRANT USAGE ON SCHEMA external_integrations_messaging TO ihostpro_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA external_integrations_messaging TO ihostpro_app;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA external_integrations_messaging TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA external_integrations_messaging
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA external_integrations_messaging
+              GRANT USAGE, SELECT ON SEQUENCES TO ihostpro_app;
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    log.LogInformation("External Integrations' durable outbox provisioned");
+
     // RabbitMQ messaging topology (Checkpoint 6 homologação, third production
     // defect: neither IHostPro.Api nor IHostPro.Worker ever declared the
     // topic exchanges they publish/route to — AutoProvision defaults to
@@ -520,7 +563,7 @@ try
     // IHostPro.Api/IHostPro.Worker use — so host/vhost/user/password/
     // timeouts can never drift between this provisioning step and the real
     // runtime connection.
-    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events, configuration-events, housekeeping-events exchanges)");
+    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events, configuration-events, housekeeping-events, external-integrations-events exchanges)");
 
     var messagingTopologyHostBuilder = Host.CreateApplicationBuilder();
     messagingTopologyHostBuilder.UseWolverine(opts =>
@@ -703,6 +746,25 @@ try
             {
                 exchange.ExchangeType = ExchangeType.Direct;
                 exchange.BindQueue("housekeeping.workflow-commands", "create_cleaning_for_reservation");
+            })
+            // Fase 9, Checkpoint 2.3.3 (ADR-022 item 13/14): External
+            // Integrations' OWN published event, bound to Communication's
+            // "communication.whatsapp-status-projection" queue — same
+            // decoupled pub/sub pattern as every exchange above (External
+            // Integrations never needs to know Communication is listening).
+            // Unconditional in every environment: unlike
+            // "communication.reservation-created-trigger" above (gated to
+            // Development because CP1's only connector is
+            // FakeWhatsAppConnector), the webhook's inbound status ingestion
+            // has no fake/real distinction — the signature-verified webhook
+            // itself is always real. Exactly one consumer in-process
+            // (Communication) — no AddStickyHandler needed (ADR-020's own
+            // "single discovered handler" default), confirmed before wiring
+            // IHostPro.Worker's own listener.
+            .DeclareExchange("external-integrations-events", exchange =>
+            {
+                exchange.ExchangeType = ExchangeType.Topic;
+                exchange.BindQueue("communication.whatsapp-status-projection", "whatsapp_message_status_changed");
             });
     });
 
