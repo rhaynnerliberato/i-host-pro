@@ -50,11 +50,12 @@ public class CommunicationMessageExecutionScopeArchitectureTests
     [Fact]
     public void Wolverine_Adapter_Never_Depends_On_CommunicationDbContext_Or_TransactionExecutor_Or_Processor_Or_ServiceScopeFactory()
     {
-        // The single thin Wolverine entrypoint (ReservationCreatedHandler)
-        // may depend only on the message type, MessageContext,
-        // ICommunicationMessageExecutionScope and CancellationToken — never
-        // directly on persistence/transaction/scope-factory/processor types
-        // Wolverine's own codegen would otherwise try to inline.
+        // The thin Wolverine entrypoints (ReservationCreatedHandler,
+        // WhatsAppMessageStatusChangedHandler) may depend only on their own
+        // message type, MessageContext, ICommunicationMessageExecutionScope
+        // and CancellationToken — never directly on persistence/transaction/
+        // scope-factory/processor types Wolverine's own codegen would
+        // otherwise try to inline.
         var adapterTypes = Types.InAssembly(typeof(CommunicationMessageExecutionScope).Assembly)
             .That()
             .ResideInNamespace("IHostPro.Contexts.Communication.Infrastructure.Messaging")
@@ -62,9 +63,10 @@ public class CommunicationMessageExecutionScopeArchitectureTests
             .DoNotHaveName(nameof(CommunicationMessageExecutionScope))
             .GetTypes();
 
-        adapterTypes.Should().HaveCount(3,
-            "three types are expected in this namespace this checkpoint: ReservationCreatedHandler (the thin " +
-            "Wolverine adapter), FakeWhatsAppConnector (the CP1 deterministic connector double), and " +
+        adapterTypes.Should().HaveCount(4,
+            "four types are expected in this namespace this checkpoint: ReservationCreatedHandler and " +
+            "WhatsAppMessageStatusChangedHandler (the thin Wolverine adapters, Fase 9, Checkpoint 2.3.3), " +
+            "FakeWhatsAppConnector (the CP1 deterministic connector double), and " +
             "ExternalIntegrationsWhatsAppConnector (Checkpoint 2.2's real IOutboundMessageConnector, not wired " +
             "into this Wolverine-triggered flow — see its own doc comment)");
 
@@ -73,19 +75,23 @@ public class CommunicationMessageExecutionScopeArchitectureTests
             "IHostPro.Contexts.Communication.Infrastructure.Persistence.CommunicationDbContext",
             "IHostPro.Contexts.Communication.Application.ICommunicationTransactionExecutor",
             "IHostPro.Contexts.Communication.Application.ReservationCreatedCommunicationProcessor",
+            "IHostPro.Contexts.Communication.Application.WhatsAppMessageStatusCommunicationProcessor",
             "Microsoft.Extensions.DependencyInjection.IServiceScopeFactory",
             "Wolverine.EntityFrameworkCore.IDbContextOutbox",
         };
 
-        var result = Types.InAssembly(typeof(CommunicationMessageExecutionScope).Assembly)
-            .That()
-            .HaveName(nameof(ReservationCreatedHandler))
-            .Should()
-            .NotHaveDependencyOnAny(forbiddenDependencies)
-            .GetResult();
+        foreach (var adapterName in new[] { nameof(ReservationCreatedHandler), nameof(WhatsAppMessageStatusChangedHandler) })
+        {
+            var result = Types.InAssembly(typeof(CommunicationMessageExecutionScope).Assembly)
+                .That()
+                .HaveName(adapterName)
+                .Should()
+                .NotHaveDependencyOnAny(forbiddenDependencies)
+                .GetResult();
 
-        result.IsSuccessful.Should().BeTrue(
-            "ReservationCreatedHandler must depend only on ICommunicationMessageExecutionScope for anything " +
-            "Communication-persistence-related (ADR-016)");
+            result.IsSuccessful.Should().BeTrue(
+                $"{adapterName} must depend only on ICommunicationMessageExecutionScope for anything " +
+                "Communication-persistence-related (ADR-016)");
+        }
     }
 }

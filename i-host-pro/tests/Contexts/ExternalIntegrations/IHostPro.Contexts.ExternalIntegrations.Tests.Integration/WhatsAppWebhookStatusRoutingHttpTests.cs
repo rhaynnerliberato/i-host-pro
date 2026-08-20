@@ -40,6 +40,7 @@ public sealed class WhatsAppWebhookStatusRoutingHttpTests : IAsyncDisposable
     private readonly HttpClient _client;
     private readonly ListLoggerProvider _loggerProvider = new();
     private readonly SpyTenantRouteResolver _routeResolver = new();
+    private readonly SpyStatusEventPublisher _eventPublisher = new();
 
     public WhatsAppWebhookStatusRoutingHttpTests()
     {
@@ -57,6 +58,11 @@ public sealed class WhatsAppWebhookStatusRoutingHttpTests : IAsyncDisposable
                     services.AddSingleton<IWebhookSignatureVerifier, MetaWebhookSignatureVerifier>();
                     services.AddSingleton<IWhatsAppTenantRouteResolver>(_routeResolver);
                     services.AddScoped<IWhatsAppWebhookStatusProcessor, MetaWebhookStatusProcessor>();
+                    // Fase 9, Checkpoint 2.3.3 added this dependency — a spy
+                    // here since this file's own scope is route resolution/
+                    // status normalization, not durable event publishing
+                    // (see WhatsAppWebhookStatusDurabilityHttpTests for that).
+                    services.AddSingleton<IWhatsAppWebhookStatusEventPublisher>(_eventPublisher);
                     services.AddLogging(logging => logging.AddProvider(_loggerProvider));
                 });
                 webHost.Configure(app =>
@@ -88,6 +94,8 @@ public sealed class WhatsAppWebhookStatusRoutingHttpTests : IAsyncDisposable
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         _loggerProvider.Messages.Should().Contain(m => m.Contains("WhatsAppWebhookStatusNormalized", StringComparison.Ordinal));
+        _eventPublisher.PublishedOutcomes.Should().ContainSingle(
+            "an Accepted outcome must be durably published before the controller returns 2xx (mandate §10/§11)");
     }
 
     [Fact]
@@ -100,6 +108,7 @@ public sealed class WhatsAppWebhookStatusRoutingHttpTests : IAsyncDisposable
 
         response.StatusCode.Should().Be(HttpStatusCode.OK, "an unknown route is a permanent classification, never a reason to make Meta retry");
         _loggerProvider.Messages.Should().Contain(m => m.Contains("WhatsAppWebhookRouteUnknown", StringComparison.Ordinal));
+        _eventPublisher.PublishedOutcomes.Should().BeEmpty("only Accepted outcomes are ever published");
     }
 
     [Fact]
@@ -115,6 +124,7 @@ public sealed class WhatsAppWebhookStatusRoutingHttpTests : IAsyncDisposable
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         _loggerProvider.Messages.Should().Contain(m => m.Contains("WhatsAppWebhookStatusIgnored", StringComparison.Ordinal));
+        _eventPublisher.PublishedOutcomes.Should().BeEmpty("only Accepted outcomes are ever published");
     }
 
     [Fact]
@@ -128,6 +138,7 @@ public sealed class WhatsAppWebhookStatusRoutingHttpTests : IAsyncDisposable
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         _routeResolver.WasCalled.Should().BeFalse(
             "route resolution — and therefore any tenant-adjacent lookup — must never happen before the signature is verified");
+        _eventPublisher.PublishedOutcomes.Should().BeEmpty();
     }
 
     private static string BuildStatusPayload(string phoneNumberId, string id, string status, string timestamp) =>
@@ -167,6 +178,18 @@ public sealed class WhatsAppWebhookStatusRoutingHttpTests : IAsyncDisposable
         {
             WasCalled = true;
             return Task.FromResult(phoneNumberId == KnownPhoneNumberId ? (Guid?)KnownTenantId : null);
+        }
+    }
+
+    private sealed class SpyStatusEventPublisher : IWhatsAppWebhookStatusEventPublisher
+    {
+        public List<WebhookStatusProcessingOutcome> PublishedOutcomes { get; } = [];
+
+        public Task PublishAsync(WebhookStatusProcessingOutcome outcome, CancellationToken cancellationToken)
+        {
+            lock (PublishedOutcomes)
+                PublishedOutcomes.Add(outcome);
+            return Task.CompletedTask;
         }
     }
 

@@ -64,6 +64,11 @@ public sealed class WhatsAppWebhookControllerHttpTests : IAsyncDisposable
                     // processing (see WhatsAppWebhookStatusRoutingHttpTests
                     // for that).
                     services.AddSingleton<IWhatsAppWebhookStatusProcessor>(new NoOpStatusProcessor());
+                    // Fase 9, Checkpoint 2.3.3 added this dependency to the
+                    // controller — never actually invoked in this file
+                    // (NoOpStatusProcessor above never returns an Accepted
+                    // outcome), but still a required constructor dependency.
+                    services.AddSingleton<IWhatsAppWebhookStatusEventPublisher>(new NoOpStatusEventPublisher());
                     services.AddLogging(logging => logging.AddProvider(_loggerProvider));
                 });
                 webHost.Configure(app =>
@@ -279,6 +284,12 @@ public sealed class WhatsAppWebhookControllerHttpTests : IAsyncDisposable
     {
         public Task<IReadOnlyList<WebhookStatusProcessingOutcome>> ProcessAsync(ReadOnlyMemory<byte> rawBody, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<WebhookStatusProcessingOutcome>>([]);
+    }
+
+    private sealed class NoOpStatusEventPublisher : IWhatsAppWebhookStatusEventPublisher
+    {
+        public Task PublishAsync(WebhookStatusProcessingOutcome outcome, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 
     /// <summary>In-memory log sink — captures every formatted message so tests can assert on secret/PII absence.</summary>

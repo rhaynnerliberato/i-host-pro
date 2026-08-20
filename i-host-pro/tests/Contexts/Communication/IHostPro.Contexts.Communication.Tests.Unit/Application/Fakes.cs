@@ -54,6 +54,10 @@ internal sealed class FakeMessageRepository : IMessageRepository
     public Task<Message?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         Task.FromResult(_byId.GetValueOrDefault(id));
 
+    /// <summary>Mirrors the real repository's <c>SingleOrDefaultAsync</c> semantics (Fase 9, Checkpoint 2.3.3) — throws on more than one match, never silently picks one.</summary>
+    public Task<Message?> GetByProviderMessageIdAsync(string providerMessageId, CancellationToken cancellationToken) =>
+        Task.FromResult(_byId.Values.SingleOrDefault(m => m.ProviderMessageId == providerMessageId));
+
     public void Add(Message aggregate)
     {
         _byIdempotencyKey[aggregate.IdempotencyKey] = aggregate;

@@ -5,6 +5,7 @@ using IHostPro.Contexts.Communication.Domain;
 using IHostPro.Contexts.ExternalIntegrations.Application;
 using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.ExternalIntegrations.Domain;
+using IHostPro.Contexts.ExternalIntegrations.Infrastructure;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
 using NetArchTest.Rules;
 
@@ -222,24 +223,106 @@ public class ExternalIntegrationsDependencyTests
     }
 
     /// <summary>
-    /// CP2.1 mandate §8: no outbound Integration Event exists yet — the real
-    /// send/status events (<c>WhatsAppMessageSent</c>/<c>WhatsAppMessageReceived</c>/
-    /// <c>WhatsAppWebhookFailed</c>, Documento 07 §16) belong to a later
-    /// checkpoint. Nothing in <c>ExternalIntegrations.Contracts</c> may
-    /// inherit <see cref="IHostPro.BuildingBlocks.Messaging.Abstractions.IntegrationEvent"/>
-    /// yet — that would mean PII (phone/body) risked reaching the broker via
-    /// an event this checkpoint never authorized.
+    /// Fase 9, Checkpoint 2.3.3 (ADR-022 item 13): <c>WhatsAppWebhookStatusEventPublisher</c>
+    /// is the single, deliberately-authorized holder of <c>IServiceScopeFactory</c>
+    /// in External Integrations — a fresh child DI scope per outcome is
+    /// required because one Meta webhook delivery can batch status entries
+    /// for multiple tenants, and the shared request-scoped <c>ITenantContext</c>
+    /// refuses to be re-set to a different tenant. Mirrors Communication's
+    /// own <c>Only_CommunicationMessageExecutionScope_May_Depend_On_IServiceScopeFactory</c>.
     /// </summary>
     [Fact]
-    public void Contracts_Declares_No_IntegrationEvent_Yet()
+    public void Only_WhatsAppWebhookStatusEventPublisher_May_Depend_On_IServiceScopeFactory()
+    {
+        var typesDependingOnScopeFactory = Types.InAssembly(typeof(WhatsAppWebhookStatusEventPublisher).Assembly)
+            .That()
+            .HaveDependencyOn("Microsoft.Extensions.DependencyInjection.IServiceScopeFactory")
+            .GetTypes()
+            .ToList();
+
+        typesDependingOnScopeFactory.Should().ContainSingle()
+            .Which.Should().Be(typeof(WhatsAppWebhookStatusEventPublisher),
+                "WhatsAppWebhookStatusEventPublisher is the single, deliberately-authorized holder of " +
+                "IServiceScopeFactory in External Integrations — any other match means a new class started " +
+                "resolving its own child scope outside the approved boundary");
+    }
+
+    /// <summary>
+    /// Fase 9, Checkpoint 2.3.3 mandate §5/§32: <c>WhatsAppMessageStatusChanged</c>
+    /// must never carry the recipient, phone number, message body, raw
+    /// webhook payload, or any credential — only identifiers/classification.
+    /// </summary>
+    [Fact]
+    public void WhatsAppMessageStatusChanged_Never_Declares_A_Forbidden_PII_Property()
+    {
+        var forbiddenSubstrings = new[] { "Phone", "Recipient", "Body", "Content", "Message", "Payload", "Secret", "Token" };
+
+        var propertyNames = typeof(WhatsAppMessageStatusChanged)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(p => p.Name)
+            .ToList();
+
+        foreach (var forbidden in forbiddenSubstrings)
+        {
+            propertyNames.Should().NotContain(
+                name => name.Contains(forbidden, StringComparison.OrdinalIgnoreCase) && name != "ProviderMessageId",
+                $"WhatsAppMessageStatusChanged must stay PII-safe (mandate §5) — no property name may reference '{forbidden}'");
+        }
+    }
+
+    /// <summary>
+    /// ADR-020's own default: a message type with exactly one discovered
+    /// handler class was never at risk of Wolverine's handler-chain-combining
+    /// behavior, so it needs no <c>AddStickyHandler</c> mapping. Confirmed
+    /// here structurally (Fase 9, Checkpoint 2.3.3 mandate §13/§38) rather
+    /// than only by manual review — if a second Bounded Context ever adds
+    /// its own handler for this event in the same process, this test fails
+    /// loudly instead of silently reintroducing ADR-020's original defect.
+    /// </summary>
+    [Fact]
+    public void Exactly_One_Handler_Exists_For_WhatsAppMessageStatusChanged()
+    {
+        var handlerInterface = typeof(IHostPro.BuildingBlocks.Application.IIntegrationEventHandler<WhatsAppMessageStatusChanged>);
+
+        var handlerAssemblies = new[]
+        {
+            typeof(WhatsAppMessageStatusChanged).Assembly,
+            typeof(IHostPro.Contexts.Communication.Application.ICommunicationMessageExecutionScope).Assembly,
+            typeof(Message).Assembly,
+        }.Distinct();
+
+        var handlerTypes = handlerAssemblies
+            .SelectMany(assembly => assembly.GetTypes())
+            .Where(type => !type.IsAbstract && !type.IsInterface && handlerInterface.IsAssignableFrom(type))
+            .ToList();
+
+        handlerTypes.Should().ContainSingle(
+            "exactly one Bounded Context (Communication) must consume WhatsAppMessageStatusChanged in-process — " +
+            "a second handler would need ADR-020's AddStickyHandler treatment, not silent combining");
+    }
+
+    /// <summary>
+    /// CP2.1 mandate §8 originally forbade any Integration Event in this
+    /// assembly (no outbound event existed yet). Fase 9, Checkpoint 2.3.3
+    /// (ADR-022 item 13/14) explicitly authorized exactly one:
+    /// <c>WhatsAppMessageStatusChanged</c>. This test now guards the
+    /// inverse of its original intent — exactly this one type, never a
+    /// second one added silently (mandate §3: a dedicated, deliberately
+    /// named event, never a reused/overloaded one).
+    /// </summary>
+    [Fact]
+    public void Contracts_Declares_Exactly_One_IntegrationEvent()
     {
         var result = Types.InAssembly(typeof(IMessagingProvider).Assembly)
             .That()
             .Inherit(typeof(IHostPro.BuildingBlocks.Messaging.Abstractions.IntegrationEvent))
-            .GetTypes();
+            .GetTypes()
+            .ToList();
 
-        result.Should().BeEmpty(
-            "CP2.1 is foundation-only — no outbound Integration Event was authorized this checkpoint (mandate §8)");
+        result.Select(t => t.Name).Should().BeEquivalentTo(
+            ["WhatsAppMessageStatusChanged"],
+            "Checkpoint 2.3.3 (ADR-022 item 13/14) authorized exactly this one Integration Event — " +
+            "any other type here would mean a new event was added without an explicit checkpoint authorization");
     }
 
     /// <summary>

@@ -91,6 +91,10 @@ public sealed class WhatsAppWebhookHostLoggingTests : IAsyncDisposable
                     // no-op fake here since this file's own scope is host
                     // logging configuration, not status processing.
                     services.AddSingleton<IWhatsAppWebhookStatusProcessor>(new NoOpStatusProcessor());
+                    // Fase 9, Checkpoint 2.3.3 added this dependency — same
+                    // no-op rationale; NoOpStatusProcessor above never
+                    // returns an Accepted outcome, so this is never invoked.
+                    services.AddSingleton<IWhatsAppWebhookStatusEventPublisher>(new NoOpStatusEventPublisher());
                 });
                 webHost.Configure(app =>
                 {
@@ -206,6 +210,12 @@ public sealed class WhatsAppWebhookHostLoggingTests : IAsyncDisposable
     {
         public Task<IReadOnlyList<WebhookStatusProcessingOutcome>> ProcessAsync(ReadOnlyMemory<byte> rawBody, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<WebhookStatusProcessingOutcome>>([]);
+    }
+
+    private sealed class NoOpStatusEventPublisher : IWhatsAppWebhookStatusEventPublisher
+    {
+        public Task PublishAsync(WebhookStatusProcessingOutcome outcome, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 
     /// <summary>Captures every Serilog event that survives MinimumLevel/Override filtering — i.e., what would actually reach a real sink.</summary>
