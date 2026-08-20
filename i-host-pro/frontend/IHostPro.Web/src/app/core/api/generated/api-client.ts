@@ -5571,6 +5571,115 @@ export class Client {
         }
         return _observableOf(null as any);
     }
+
+    /**
+     * @param hub_mode (optional) 
+     * @param hub_verify_token (optional) 
+     * @param hub_challenge (optional) 
+     * @return OK
+     */
+    webhookGET(hub_mode?: string | undefined, hub_verify_token?: string | undefined, hub_challenge?: string | undefined): Observable<void> {
+        let url_ = this.baseUrl + "/api/v1/integrations/whatsapp/webhook?";
+        if (hub_mode === null)
+            throw new globalThis.Error("The parameter 'hub_mode' cannot be null.");
+        else if (hub_mode !== undefined)
+            url_ += "hub.mode=" + encodeURIComponent("" + hub_mode) + "&";
+        if (hub_verify_token === null)
+            throw new globalThis.Error("The parameter 'hub_verify_token' cannot be null.");
+        else if (hub_verify_token !== undefined)
+            url_ += "hub.verify_token=" + encodeURIComponent("" + hub_verify_token) + "&";
+        if (hub_challenge === null)
+            throw new globalThis.Error("The parameter 'hub_challenge' cannot be null.");
+        else if (hub_challenge !== undefined)
+            url_ += "hub.challenge=" + encodeURIComponent("" + hub_challenge) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processWebhookGET(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processWebhookGET(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<void>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<void>;
+        }));
+    }
+
+    protected processWebhookGET(response: HttpResponseBase): Observable<void> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return _observableOf(null as any);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @return OK
+     */
+    webhookPOST(): Observable<void> {
+        let url_ = this.baseUrl + "/api/v1/integrations/whatsapp/webhook";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+            })
+        };
+
+        return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processWebhookPOST(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processWebhookPOST(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<void>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<void>;
+        }));
+    }
+
+    protected processWebhookPOST(response: HttpResponseBase): Observable<void> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return _observableOf(null as any);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
 }
 
 export interface AddressRequest {
