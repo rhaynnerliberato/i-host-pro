@@ -57,19 +57,26 @@ public sealed class WhatsAppMessageStatusCommunicationProcessor : IIntegrationEv
             // HTTP round trip completes — Meta could already fire this exact
             // webhook before that commit lands, a genuine transient race,
             // not just a hypothetical one. Throwing (never swallowing) lets
-            // Wolverine's normal retry/DLQ policy handle both cases: the
-            // race self-heals on redelivery once our own commit has landed;
-            // a genuinely orphaned ProviderMessageId lands in the DLQ for
-            // inspection instead of silently vanishing — same bounded
-            // policy every other consumer in this codebase already relies
-            // on (mandate §29).
+            // Wolverine's bounded retry policy (WhatsAppMessageStatusChangedHandler.Configure,
+            // Checkpoint 2.3.3.1) handle both cases: the race self-heals on
+            // a later retry once our own commit has landed; a genuinely
+            // orphaned ProviderMessageId exhausts the bounded retries and
+            // reaches Wolverine's own terminal error handling instead of
+            // silently vanishing.
+            //
+            // Deliberately WhatsAppMessageNotYetAvailableException, never a
+            // generic InvalidOperationException (Checkpoint 2.3.3.1 second
+            // correction): that policy is scoped to exactly this exception
+            // type — an unrelated bug elsewhere in this method throwing a
+            // generic InvalidOperationException must never accidentally
+            // receive the same retry treatment.
             _logger.LogWarning(
                 "{AuditEvent}: tenant {TenantId} providerMessageId {ProviderMessageId} incomingStatus {IncomingStatus} " +
                 "occurredAtUtc {OccurredAtUtc} correlation {CorrelationId} durationMs {DurationMs}",
                 UnknownMessage, @event.TenantId, @event.ProviderMessageId, @event.Status,
                 @event.OccurredAtUtc, @event.CorrelationId, stopwatch.ElapsedMilliseconds);
 
-            throw new InvalidOperationException(
+            throw new WhatsAppMessageNotYetAvailableException(
                 $"No Message found for ProviderMessageId in tenant {@event.TenantId} (event {@event.EventId}) — retrying.");
         }
 
