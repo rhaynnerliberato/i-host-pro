@@ -65,6 +65,16 @@ namespace IHostPro.Contexts.Identity.Api.Authorization;
 /// were already seeded into the persisted catalog since the platform's own
 /// initial migration, but had no policy registered here until Fase 9,
 /// Checkpoint 1 — <c>TemplatesController</c> is their first consumer.
+///
+/// <see cref="IdentityPermissionCodes.IntegrationsManage"/> was already
+/// seeded into the persisted catalog and referenced by
+/// <c>WhatsAppIntegrationController</c> since Fase 9, Checkpoint 2.1, but had
+/// no policy registered here until Checkpoint 2.3.2.2's real-flow
+/// homologation surfaced the gap: every call to that controller's endpoints
+/// failed with <c>InvalidOperationException: The AuthorizationPolicy named:
+/// 'INTEGRATIONS:MANAGE' was not found</c>, for any caller including an
+/// Administrator — the constant/seed/controller reference all existed, only
+/// this registration was missing.
 /// </summary>
 public static class IdentityAuthorizationExtensions
 {
@@ -102,7 +112,9 @@ public static class IdentityAuthorizationExtensions
             .AddPolicy(IdentityPermissionCodes.TemplatesManage, policy =>
                 policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.TemplatesManage)))
             .AddPolicy(IdentityPermissionCodes.TemplatesRead, policy =>
-                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.TemplatesRead)));
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.TemplatesRead)))
+            .AddPolicy(IdentityPermissionCodes.IntegrationsManage, policy =>
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.IntegrationsManage)));
 
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
