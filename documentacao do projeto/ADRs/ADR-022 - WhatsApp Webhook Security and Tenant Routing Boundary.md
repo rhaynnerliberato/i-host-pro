@@ -74,6 +74,20 @@ Decisão de governança adicional, tomada explicitamente antes de codificar (man
 
 Ver `Fase 9 - Comunicacao e Integracoes do MVP - Validacao e Homologacao.md`, Checkpoint 2.3.3 (§12.6), para o registro completo.
 
+## Nota pós-publicação (Checkpoint 2.3.3.1) — Correção da política de retry do missing-Message
+
+Não é uma nova decisão de negócio — a política em si (falha retriável, nunca no-op permanente) permanece a mesma, decidida explicitamente antes da implementação. O que foi corrigido foi o COMPORTAMENTO REAL por trás dela: o relatório final do CP2.3.3 afirmou que "a política padrão de retry/DLQ do Wolverine trata a race transitória... sem loop infinito" — essa afirmação nunca foi verificada empiricamente e estava incorreta.
+
+Auditoria corretiva, via duas reproduções diretas e isoladas (nunca simuladas/mockadas — um host Wolverine mínimo real, primeiro com transporte local, depois repetido com a mesma configuração `PersistMessagesWithPostgresql` que a produção usa): o default real do Wolverine 6.22.0 para uma exceção não tratada em um handler, sem nenhuma política customizada (confirmado por busca em todo o código-fonte), é **exatamente UMA tentativa, seguida de movimentação IMEDIATA e permanente para a tabela de dead letters** — nunca um retry com backoff. A cifra "MaximumAttempts=3, delays 5s/30s/5min" citada anteriormente (de uma busca na web) não se aplica a este cenário — não foi possível determinar a que ela realmente se refere, mas duas reproduções diretas concordam entre si e contradizem essa cifra.
+
+Isso significa que a política pretendida (auto-recuperação via retry) nunca foi de fato realizada: uma race genuína caía na tabela de dead letters já na primeira tentativa, exigindo replay manual em vez de auto-cura.
+
+Decisão corretiva (Wolverine's own native handler-chain policy API, mandato §3 — "usar a política Wolverine normal/existente", nunca inventar uma arquitetura de retry customizada): `WhatsAppMessageStatusChangedHandler` (Communication.Infrastructure.Messaging) ganhou um método estático `Configure(HandlerChain chain)` chamando `chain.OnException<InvalidOperationException>().RetryWithCooldown(250.Milliseconds(), 1.Seconds(), 3.Seconds())` — três retries com backoff curto (~4,25s no total, quatro tentativas), escopado a este ÚNICO handler chain e à exceção que o processor já lança para este caso específico (nenhum tipo de exceção novo, nenhuma política global). Proporcional à janela real da race (um round-trip HTTP + um commit de uma única linha — segundos, não minutos): curto o suficiente para que um `ProviderMessageId` permanentemente órfão ainda chegue à tabela de dead letters em segundos, longo o suficiente para dar à race uma chance real de se resolver sozinha.
+
+Reconfirmado empiricamente (mesma técnica de reprodução direta, agora usando o handler real): quatro tentativas registradas, depois movido para a fila de erro — exatamente o comportamento pretendido.
+
+Ver `Fase 9 - Comunicacao e Integracoes do MVP - Validacao e Homologacao.md`, Checkpoint 2.3.3.1, para o registro completo, incluindo a cronologia honesta.
+
 ## Referências
 - ADR-012 (precedente de abstração de credencial Development-only, sem fallback de Production)
 - ADR-015, ADR-016 (limite tenant-safe para consumers que tocam `BaseDbContext`)
