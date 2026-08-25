@@ -102,7 +102,7 @@ public class WhatsAppMessageStatusCommunicationProcessorTests
 
         var act = () => processor.HandleAsync(BuildEvent(WhatsAppMessageProviderStatus.Delivered, Now.AddSeconds(1)), CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        await act.Should().ThrowAsync<WhatsAppMessageNotYetAvailableException>();
         repository.UpdatedMessages.Should().BeEmpty();
     }
 
