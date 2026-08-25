@@ -1,6 +1,11 @@
+using System.Reflection;
 using FluentAssertions;
+using IHostPro.Contexts.Identity.Api.Authorization;
 using IHostPro.Contexts.Identity.Contracts.Authorization;
 using IHostPro.Contexts.Identity.Infrastructure.Seed;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace IHostPro.ArchitectureTests;
@@ -16,9 +21,84 @@ namespace IHostPro.ArchitectureTests;
 /// consistency fix). A policy requiring a permission code absent from the
 /// catalog would deny every caller unconditionally, including an
 /// Administrator — a silent, easy-to-miss defect this test guards against.
+///
+/// Checkpoint 2.3.2.2 correction: <see cref="RequiredAuthorizationPolicyNames"/>
+/// replaces a hardcoded 5-entry list that was never extended as later
+/// checkpoints added policies (Reservations, Policies, Cleanings, Schedule,
+/// Dashboard, Templates, Integrations) — it never actually caught a missing
+/// registration, including <c>INTEGRATIONS:MANAGE</c>, which shipped with a
+/// real controller reference and a real catalog seed but no
+/// <c>AddPolicy(...)</c> call, so every call to <c>WhatsAppIntegrationController</c>
+/// 500'd for every caller. <see cref="Every_controller_required_policy_is_registered"/>
+/// discovers every policy name any <c>[Authorize(Policy = ...)]</c> attribute
+/// on a real controller requires, by reflecting over the same Api assemblies
+/// already referenced here, and asserts each one resolves against the real
+/// <see cref="IdentityAuthorizationExtensions.AddIdentityAuthorization"/>
+/// registration — so a future controller referencing an unregistered policy
+/// fails this test immediately, without needing its name added anywhere by
+/// hand.
+///
+/// Known, deliberate gap: this only sees declarative
+/// <c>[Authorize(Policy = ...)]</c> attributes. <c>ScheduleController</c>/
+/// <c>DashboardController</c> instead call
+/// <c>IAuthorizationService.AuthorizeAsync(User, policyCode)</c> imperatively
+/// (an OR of two policies — a bare class-level <c>[Authorize]</c> plus two
+/// stacked attributes would AND them instead), which reflection over
+/// attributes cannot see. Both codes involved
+/// (<see cref="IdentityPermissionCodes.ScheduleManage"/>/<see cref="IdentityPermissionCodes.ScheduleRead"/>/
+/// <see cref="IdentityPermissionCodes.DashboardManage"/>/<see cref="IdentityPermissionCodes.DashboardRead"/>)
+/// are already registered and already covered by real HTTP endpoint tests
+/// elsewhere (<c>ScheduleEndpointsTests</c>/<c>DashboardOverviewEndpointsTests</c>),
+/// so this is a coverage gap in this one architecture test specifically, not
+/// an unguarded registration gap in the product.
 /// </summary>
 public class IdentityAuthorizationCatalogConsistencyTests
 {
+    // One representative type per Api assembly that declares controllers —
+    // deliberately not a generic "scan every loaded assembly" sweep (that
+    // would silently start reflecting over test assemblies, third-party
+    // packages, etc.), and deliberately not a new shared "list of Api
+    // assemblies" helper (no second consumer exists yet — Engineering
+    // Constitution §7/§17).
+    private static readonly Assembly[] ControllerAssemblies =
+    [
+        typeof(IdentityAuthorizationExtensions).Assembly,
+        typeof(IHostPro.Contexts.PropertyManagement.Api.Controllers.PropertiesController).Assembly,
+        typeof(IHostPro.Contexts.Reservations.Api.Controllers.ReservationsController).Assembly,
+        typeof(IHostPro.Contexts.Configuration.Api.Controllers.PoliciesController).Assembly,
+        typeof(IHostPro.Contexts.Housekeeping.Api.Controllers.CleaningsController).Assembly,
+        typeof(IHostPro.Contexts.Dashboard.Api.Controllers.DashboardController).Assembly,
+        typeof(IHostPro.Contexts.ExternalIntegrations.Api.Controllers.WhatsAppIntegrationController).Assembly,
+    ];
+
+    public static IEnumerable<object[]> RequiredAuthorizationPolicyNames() => ControllerAssemblies
+        .SelectMany(assembly => assembly.GetTypes())
+        .Where(type => typeof(ControllerBase).IsAssignableFrom(type))
+        .SelectMany(controller => controller.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .Concat(controller.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .SelectMany(method => method.GetCustomAttributes<AuthorizeAttribute>(inherit: true))))
+        .Select(attribute => attribute.Policy)
+        .Where(policy => !string.IsNullOrEmpty(policy))
+        .Distinct()
+        .OrderBy(policy => policy, StringComparer.Ordinal)
+        .Select(policy => new object[] { policy! });
+
+    [Theory]
+    [MemberData(nameof(RequiredAuthorizationPolicyNames))]
+    public async Task Every_controller_required_policy_is_registered(string policyName)
+    {
+        var services = new ServiceCollection();
+        services.AddIdentityAuthorization();
+        await using var provider = services.BuildServiceProvider();
+
+        var policyProvider = provider.GetRequiredService<IAuthorizationPolicyProvider>();
+        var policy = await policyProvider.GetPolicyAsync(policyName);
+
+        policy.Should().NotBeNull(
+            $"a controller requires policy \"{policyName}\" via [Authorize(Policy = ...)], " +
+            $"so {nameof(IdentityAuthorizationExtensions)}.{nameof(IdentityAuthorizationExtensions.AddIdentityAuthorization)}() must register it");
+    }
+
     public static IEnumerable<object[]> PolicyPermissionCodes() =>
         [
             [IdentityPermissionCodes.UsersManage],

@@ -41,6 +41,14 @@ public class IdentityAuthorizationExtensionsTests
     [InlineData(IdentityPermissionCodes.PermissionsRead)]
     [InlineData(IdentityPermissionCodes.PropertiesManage)]
     [InlineData(IdentityPermissionCodes.PropertiesReadOwnOwner)]
+    // Checkpoint 2.3.2.2: added after this exact list — never extended past
+    // Incremento 3's original 5 codes — failed to catch INTEGRATIONS:MANAGE
+    // shipping with no policy registered, 500ing every caller for months.
+    // Only the code involved in that bug is added here (not every other code
+    // this list was also missing) — see IdentityAuthorizationCatalogConsistencyTests
+    // in IHostPro.ArchitectureTests for the reflection-based test that now
+    // covers every controller-declared policy automatically.
+    [InlineData(IdentityPermissionCodes.IntegrationsManage)]
     public async Task AddIdentityAuthorization_registers_a_policy_requiring_the_matching_permission_code(
         string permissionCode)
     {

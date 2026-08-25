@@ -53,6 +53,12 @@
     <ProjectReference Include="..\..\..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Domain\IHostPro.Contexts.ExternalIntegrations.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Infrastructure\IHostPro.Contexts.ExternalIntegrations.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Api\IHostPro.Contexts.ExternalIntegrations.Api.csproj" />
+    <!-- Checkpoint 2.3.2.2 — WhatsAppIntegrationEndpointsAuthorizationTests:
+         real JWT issuance/validation + the real INTEGRATIONS:MANAGE policy,
+         mirroring IHostPro.Contexts.Configuration.Tests.Integration's own
+         Identity reference set exactly. -->
+    <ProjectReference Include="..\..\..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Infrastructure\IHostPro.Contexts.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Contexts\Identity\IHostPro.Contexts.Identity.Api\IHostPro.Contexts.Identity.Api.csproj" />
   </ItemGroup>
 
 </Project>
