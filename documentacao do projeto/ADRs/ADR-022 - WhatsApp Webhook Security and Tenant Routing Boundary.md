@@ -82,11 +82,19 @@ Auditoria corretiva, via duas reproduções diretas e isoladas (nunca simuladas/
 
 Isso significa que a política pretendida (auto-recuperação via retry) nunca foi de fato realizada: uma race genuína caía na tabela de dead letters já na primeira tentativa, exigindo replay manual em vez de auto-cura.
 
-Decisão corretiva (Wolverine's own native handler-chain policy API, mandato §3 — "usar a política Wolverine normal/existente", nunca inventar uma arquitetura de retry customizada): `WhatsAppMessageStatusChangedHandler` (Communication.Infrastructure.Messaging) ganhou um método estático `Configure(HandlerChain chain)` chamando `chain.OnException<InvalidOperationException>().RetryWithCooldown(250.Milliseconds(), 1.Seconds(), 3.Seconds())` — três retries com backoff curto (~4,25s no total, quatro tentativas), escopado a este ÚNICO handler chain e à exceção que o processor já lança para este caso específico (nenhum tipo de exceção novo, nenhuma política global). Proporcional à janela real da race (um round-trip HTTP + um commit de uma única linha — segundos, não minutos): curto o suficiente para que um `ProviderMessageId` permanentemente órfão ainda chegue à tabela de dead letters em segundos, longo o suficiente para dar à race uma chance real de se resolver sozinha.
+Decisão corretiva (Wolverine's own native handler-chain policy API, mandato §3 — "usar a política Wolverine normal/existente", nunca inventar uma arquitetura de retry customizada): `WhatsAppMessageStatusChangedHandler` (Communication.Infrastructure.Messaging) ganhou um método estático `Configure(HandlerChain chain)` — três retries com backoff curto (250ms/1s/3s, ~4,25s no total, quatro tentativas), escopado a este ÚNICO handler chain (nenhuma política global). Proporcional à janela real da race (um round-trip HTTP + um commit de uma única linha — segundos, não minutos): curto o suficiente para que um `ProviderMessageId` permanentemente órfão ainda chegue ao handling terminal do Wolverine em segundos, longo o suficiente para dar à race uma chance real de se resolver sozinha.
 
 Reconfirmado empiricamente (mesma técnica de reprodução direta, agora usando o handler real): quatro tentativas registradas, depois movido para a fila de erro — exatamente o comportamento pretendido.
 
 Ver `Fase 9 - Comunicacao e Integracoes do MVP - Validacao e Homologacao.md`, Checkpoint 2.3.3.1, para o registro completo, incluindo a cronologia honesta.
+
+## Nota pós-publicação (Checkpoint 2.3.3.1, segunda correção) — Escopo da exceção específica demais amplo
+
+A primeira correção acima escopou a política a `chain.OnException<InvalidOperationException>()` — amplo demais: qualquer `InvalidOperationException` que este método viesse a lançar por qualquer outro motivo, presente ou futuro, receberia silenciosamente o mesmo tratamento de retry, mesmo sem relação com a race missing-Message.
+
+Corrigido fix-forward: `WhatsAppMessageNotYetAvailableException` (`Communication.Application`) — tipo próprio, dedicado exclusivamente a "ProviderMessageId válido recebido, porém Message ainda não está visível". `WhatsAppMessageStatusCommunicationProcessor` agora lança exclusivamente esse tipo para o caso missing-Message; `WhatsAppMessageStatusChangedHandler.Configure` foi reescopado para `chain.OnException<WhatsAppMessageNotYetAvailableException>()`. Números de retry inalterados (250ms/1s/3s, quatro tentativas). Nenhuma outra mudança.
+
+Provado por teste real (Wolverine host real, sem mock, sem inspeção de internals): a exceção específica recebe as quatro tentativas configuradas; uma `InvalidOperationException` genérica e não relacionada, de uma handler chain completamente diferente, recebe apenas uma tentativa — o comportamento default do Wolverine, confirmando que a política não vaza para fora do escopo pretendido.
 
 ## Referências
 - ADR-012 (precedente de abstração de credencial Development-only, sem fallback de Production)
