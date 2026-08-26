@@ -530,6 +530,45 @@ AirbnbReservationCancelled
 WhatsAppMessageReceived
 WhatsAppMessageSent
 WhatsAppWebhookFailed
+
+16.1 Payloads dos Eventos do Checkpoint 3.2 (Fase 9 — Airbnb Deterministic Foundation)
+
+Formalizados em ExternalIntegrations.Contracts (ADR-023). AirbnbSyncStarted é declarado mas deliberadamente não publicado/consumido ainda — sem orquestração de sync real neste checkpoint. Os outros três são publicados por External Integrations e consumidos por Reservations, de forma inteiramente assíncrona (nenhuma nova exceção síncrona, ADR-023). Nenhum dos quatro carrega e-mail, telefone, reviews, conteúdo de mensagens, preço/moeda/taxas ou payload bruto do provider.
+
+AirbnbSyncStarted
+| Campo | Tipo | Descrição |
+|---|---|---|
+| SyncExecutionId | Guid | Identificador da execução de sincronização — sem modelo de orquestração real ainda |
+| StartedAtUtc | DateTimeOffset | Momento em que a sincronização começou |
+
+AirbnbReservationImported
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ExternalReservationId | string | Identificador da reserva no Airbnb — chave de idempotência junto com TenantId/Source |
+| PropertyId | Guid | Identificador interno já resolvido (ExternalListingId → PropertyId via AirbnbListingMapping) — nunca o listing id externo |
+| GuestName | string | Nome do hóspede — único dado pessoal transportado, exigido pelo próprio Reservation.CreateImported |
+| CheckInAt | DateTimeOffset | Data/hora de check-in |
+| CheckOutAt | DateTimeOffset | Data/hora de check-out |
+| GuestCount | int | Quantidade de hóspedes |
+| OccurredAtUtc | DateTimeOffset | Momento do fato reportado pela sincronização |
+
+AirbnbReservationUpdated
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ExternalReservationId | string | Identidade externa usada para localizar a Reservation já importada |
+| PropertyId | Guid | Snapshot atual (já resolvido), nunca um diff bruto do provider |
+| GuestName | string | Snapshot atual |
+| CheckInAt | DateTimeOffset | Snapshot atual |
+| CheckOutAt | DateTimeOffset | Snapshot atual |
+| GuestCount | int | Snapshot atual |
+| OccurredAtUtc | DateTimeOffset | Momento do fato reportado pela sincronização |
+
+AirbnbReservationCancelled
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ExternalReservationId | string | Identidade externa usada para localizar a Reservation já importada — nenhum outro dado |
+| OccurredAtUtc | DateTimeOffset | Momento do fato reportado pela sincronização |
+
 17. Eventos do Sistema
 SystemStarted
 JobStarted
