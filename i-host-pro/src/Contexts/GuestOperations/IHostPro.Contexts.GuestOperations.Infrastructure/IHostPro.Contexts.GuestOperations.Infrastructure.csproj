@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\IHostPro.Contexts.GuestOperations.Domain\IHostPro.Contexts.GuestOperations.Domain.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.GuestOperations.Application\IHostPro.Contexts.GuestOperations.Application.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Domain\IHostPro.BuildingBlocks.Domain.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <!--
+    Mirrors every other Bounded Context's own Infrastructure.csproj exactly
+    (e.g. Reservations, version pinned identically) — WolverineFx.EntityFrameworkCore
+    for the durable outbox (guest_operations_messaging schema), backing
+    GuestCheckedOut, this context's first Integration Event.
+  -->
+  <ItemGroup>
+    <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.22.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

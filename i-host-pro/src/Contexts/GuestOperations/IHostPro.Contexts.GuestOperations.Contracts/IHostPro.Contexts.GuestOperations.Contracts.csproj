@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fase 10, Checkpoint 1 — Guest Operations Foundation. This is the ONLY
+    project of Guest Operations any other Bounded Context may reference
+    (mirrors every other context's own Contracts project). GuestCheckedOut is
+    this context's first (and, this checkpoint, only) Integration Event, so
+    BuildingBlocks.Messaging.Abstractions is referenced from day one, mirroring
+    every other Contracts project's own precedent.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Messaging.Abstractions\IHostPro.BuildingBlocks.Messaging.Abstractions.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

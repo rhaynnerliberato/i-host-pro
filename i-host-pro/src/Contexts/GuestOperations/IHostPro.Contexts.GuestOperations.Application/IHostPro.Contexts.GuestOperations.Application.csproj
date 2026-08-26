@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    No reference to BuildingBlocks.Application: this checkpoint has no
+    Mediator/HTTP command dispatch (zero public API endpoints), so none of
+    ICommand/IQuery/PagedResult/ValidationBehavior/IIntegrationEventHandler
+    is needed — RecordGuestCheckedOutCommandHandler is a plain handler
+    interface, resolved directly, mirroring
+    Housekeeping.Application.ICreateCleaningForReservationHandler's own
+    shape. IntegrationEvent (for this project's own IIntegrationEventCollector)
+    comes transitively via the Contracts reference below.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\IHostPro.Contexts.GuestOperations.Domain\IHostPro.Contexts.GuestOperations.Domain.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Structured logging in the command handler (no-op/success/failure) —
+         same abstractions-only package every other context's Application
+         project uses, never the concrete logging implementation. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
