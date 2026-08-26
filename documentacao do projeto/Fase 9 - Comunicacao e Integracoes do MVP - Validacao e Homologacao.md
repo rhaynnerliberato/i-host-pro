@@ -1,8 +1,8 @@
 # Fase 9 — Comunicação e Integrações do MVP — Validação e Homologação
 
-Versão: 1.5 (Checkpoint 0 — Auditoria Read-Only — registrado em §2; Checkpoint 1 — Communication Foundation + Templates + Fake WhatsApp Connector — registrado em §3; Checkpoint 2 — WhatsApp real, CP2.0-CP2.3.4 — registrado em §8-§12.11, fechamento formal do nível MVP em §12.11; Checkpoint 3 — Airbnb Integration, CP3.0-CP3.2.1 — registrado em §13, fechamento definitivo em §13.4)
+Versão: 1.6 (Checkpoint 0 — Auditoria Read-Only — registrado em §2; Checkpoint 1 — Communication Foundation + Templates + Fake WhatsApp Connector — registrado em §3; Checkpoint 2 — WhatsApp real, CP2.0-CP2.3.4 — registrado em §8-§12.11, fechamento formal do nível MVP em §12.11; Checkpoint 3 — Airbnb Integration, CP3.0-CP3.2.1 — registrado em §13, fechamento definitivo em §13.4; Checkpoint 4 — Final Homologation Read-Only Gate — registrado em §14, fechamento definitivo da Fase em §15)
 
-Status: **Checkpoint 1 — DEFINITIVAMENTE HOMOLOGADO E PUBLICADO**. **Checkpoint 2 (WhatsApp real) — TECNICAMENTE CONCLUÍDO E HOMOLOGADO NO NÍVEL MVP, COM BLOCKERS OPERACIONAIS DE PRODUCTION DOCUMENTADOS** (ver §12.11 para o fechamento formal e §12.10 para a homologação sandbox real que sustenta esta decisão). **Checkpoint 3 (Airbnb) — CP3.0/CP3.1 concluídos; CP3.2 (Airbnb Deterministic Foundation), incluindo a correção de governança do CP3.2.1 — DEFINITIVAMENTE HOMOLOGADO E PUBLICADO, fundação determinística real sem integração HTTP/OAuth/sync com a Airbnb** (ver §13.3/§13.4; bloqueado para integração real exclusivamente por `AirbnbPartnerAccessAvailable=false`, decisão de parceria externa). **Fase 9 — Comunicação e Integrações do MVP — EM ANDAMENTO.** Checkpoint 4 (homologação final da Fase) permanece pendente — não iniciado. Ver §6 para o escopo original, §12.11 para o estado atual dos blockers de Production do Checkpoint 2, e §13 para o Checkpoint 3.
+Status: **FASE 9 — COMUNICAÇÃO E INTEGRAÇÕES DO MVP = DEFINITIVAMENTE CONCLUÍDA E HOMOLOGADA NO NÍVEL MVP, COM BLOCKERS DE PRODUCTION DOCUMENTADOS** (decisão formalizada em §14/§15). Checkpoint 1 = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO**. Checkpoint 2 (WhatsApp real) = **TECNICAMENTE CONCLUÍDO E HOMOLOGADO NO NÍVEL MVP, COM BLOCKERS OPERACIONAIS DE PRODUCTION DOCUMENTADOS** (ver §12.11 e §12.10). Checkpoint 3 (Airbnb) = **CONCLUÍDO NO NÍVEL MVP** — CP3.2 (Airbnb Deterministic Foundation), incluindo a correção de governança do CP3.2.1, **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO**, fundação determinística real sem integração HTTP/OAuth/sync com a Airbnb (ver §13.3/§13.4; bloqueado para integração real exclusivamente por `AirbnbPartnerAccessAvailable=false`, decisão de parceria externa). Checkpoint 4 (Final Homologation Read-Only Gate) = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO** (ver §14). `ProductionReady=false` — lista consolidada de blockers de Production em §14.1. Ver §6 para o escopo original.
 
 ---
 
@@ -666,10 +666,84 @@ Revisão do relatório do CP3.2 identificou duas pendências de governança que 
 
 **Documentação:** ADR-023 atualizada com a seção formal de semântica de evento desconhecido (PERMANENT NO-OP); esta seção registra o fechamento do gate.
 
-## 14. Status final
+## 14. Checkpoint 4 — Final Homologation Read-Only Gate
+
+Auditoria read-only (zero código, zero migration, zero commit até a conclusão) cruzando integralmente Plano Executivo, este documento, Documento 06/07/13/19, Architecture Principles e ADR-019 a 023, para determinar se todos os critérios documentados da Fase 9 estavam satisfeitos no nível MVP.
+
+**Critério de fechamento**: o único critério literal documentado para o Checkpoint 4 é o já registrado em §6 desde o fechamento do Checkpoint 1 — *"Checkpoint 4 — Homologação final da Fase: não iniciado, condicionado à conclusão dos Checkpoints 2 e 3."* Nenhum outro documento fonte define uma checklist adicional para o Checkpoint 4; nenhuma foi inventada retroativamente. Esse critério está satisfeito: Checkpoint 2 = TECNICAMENTE CONCLUÍDO E HOMOLOGADO NO NÍVEL MVP (§12.11); Checkpoint 3 = CONCLUÍDO NO NÍVEL MVP, com CP3.2 (fundação determinística) DEFINITIVAMENTE HOMOLOGADO E PUBLICADO (§13.4) e a integração real Airbnb bloqueada exclusivamente por Partner Access.
+
+**Achados da auditoria**: nenhum blocker que afete o nível MVP foi encontrado. Toda pendência identificada é Production-only ou dependência externa já classificada nos próprios documentos fonte como não-impeditiva do MVP (§12.11 para CP2; ADR-023/CP3.0-3.1 para CP3). Uma única observação de consistência documental, sem impacto funcional: Documento 06 §9 (diagrama conceitual da máquina de estados de Comunicação) mostra apenas a alternativa "Enviando→Falhou"; a própria ADR-022 já cita Documento 06 §9 como "conceitual" e registra, em detalhe, as transições reais implementadas (`Sent→Failed`/`Delivered→Failed` = Forward, `Read→Failed` = Regressão) — não é uma contradição, apenas o nível de detalhe esperado de um diagrama conceitual versus uma ADR técnica.
+
+### 14.1 Production Blockers Consolidados
+
+Nunca impedem o fechamento MVP — registrados aqui como referência única e consolidada, nunca misturados com pendência de MVP.
+
+**WhatsApp / Meta:**
+- `MetaAppPublished=false`
+- `RealDeliveredWebhookProof=false`
+- Production secret backend pendente de definição
+- Consent/opt-in real (opt-in explícito do hóspede) pendente de definição
+- Utility Template definitivo de `RESERVATION_CONFIRMATION` para Production pendente
+- `IsEnabled`/rollout de `WhatsAppIntegration` pendente (nunca setável via API neste MVP)
+- Hosting público estável do webhook pendente (Cloudflare Tunnel foi prova pontual, não infraestrutura permanente)
+- Monitoring/operations pendente
+
+**Airbnb:**
+- `AirbnbPartnerAccessRequired=true`
+- `AirbnbPartnerAccessAvailable=false`
+- Contrato de API real indisponível
+- OAuth real indisponível
+- Sync real indisponível
+- Teste de integração real bloqueado
+
+**Classificação: Production / External Operational Blockers.** Fase 9 não é reaberta por nenhum destes itens.
+
+### 14.2 Deferred Items (não são blocker de MVP)
+
+- Histórico/versionamento/rollback de Template
+- Multi-idioma de Template
+- Conversas WhatsApp inbound do hóspede
+- Mídia WhatsApp
+- Reprocessamento do provider
+- `Reprocessando` (Documento 06 §9 — estado de Message nunca implementado)
+- iCal (Airbnb)
+- Pricing/fees/currency (Airbnb)
+- Janela histórica de sincronização (Airbnb)
+- Resumability de sync (Airbnb)
+- Contrato real de webhook/polling (Airbnb)
+- Execução/orquestração real de `AirbnbSyncStarted`
+- Connector Airbnb real
+
+### 14.3 Technical Debt
+
+- `WolverineClusterAgentAssignmentDebt=true` — classificação: **cross-cutting technical debt**. `BlocksPhase9Mvp=false`. Destino recomendado: Fase 12 (Hardening) ou backlog técnico transversal. Não corrigido nesta Fase.
+- `PolicyUpdated` intermittent debt — classificação: **pre-existing / non-causal a Fase 9**, sem nova regressão comprovada durante esta Fase. Não corrigido nesta Fase.
+
+### 14.4 Security Follow-ups (operacional, fora do escopo de implementação da Fase 9)
+
+- Dev JWT exposto (screenshot) — `RotationRecommended=true`
+- Fragmento de Meta Access Token exposto (screenshot) — `RotationRecommended=true`
+- Ngrok authtoken exposto — `Revoked=true` (confirmado pelo usuário)
+- Binário ngrok colocado em quarentena pelo Windows Defender — `NotRestored=true` (decisão do usuário)
+
+Nenhuma credencial foi rotacionada automaticamente por este agente.
+
+### 14.5 Evidência Final Consolidada
+
+**Communication:** fan-out de `ReservationCreated` (Housekeeping/Dashboard/Workflow/Communication, ADR-020); Templates provider-neutral dentro de Configuration & Policy; `FakeWhatsAppConnector` (dev/test-only, documentado); consent guard source-aware para reservas Airbnb-importadas (CP3.2).
+
+**WhatsApp:** envio outbound real aceito pela Meta; `ProviderMessageId` real persistido; entrega física real observada pelo usuário; verificação GET real do webhook; ingress POST oficial do Meta App Dashboard confirmado; validação real de `X-Hub-Signature-256`; ciclo de vida de evento durável (outbox real); tenant routing global (`whatsapp_tenant_routes`, exceção RLS aprovada); RLS fail-closed em toda tabela tenant-owned.
+
+**Airbnb:** `AirbnbIntegration`/`AirbnbListingMapping` (tenant-owned, RLS); `ReservationSource`/`ExternalReservationId` (idempotência via índice único parcial); consumers reais de import/update/cancel; E2E determinístico real via RabbitMQ (Worker + MigrationRunner reais); nenhum contrato HTTP/OAuth especulativo; ADR-023.
+
+## 15. Status final
 
 Checkpoint 1 = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO**. Checkpoint 2.0 = **CONCLUÍDO** (auditoria read-only, decisões A–L aprovadas). Checkpoint 2.1 = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO** (foundation + correção de auditoria CP2.1.1). Checkpoint 2.2 = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO** (conector real Meta, mapeamento de template, `ProviderMessageId`, zero retry automático, todos os gates técnicos verdes, homologação sandbox Meta real concluída com `Accepted`/`ProviderMessageId` reais — ver §11.9/§11.10). Utility Template definitivo de `RESERVATION_CONFIRMATION` para Production permanece pendência operacional futura, não bloqueante deste fechamento. Checkpoint 2.3.0 (auditoria) = **CONCLUÍDA**; Checkpoint 2.3.1 (webhook security ingress, ADR-022) = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO**, incluindo a correção de log-safety do Checkpoint 2.3.1.1; Checkpoint 2.3.2 (tenant routing global + normalização de status + foundation de idempotência) = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO**, incluindo a correção de governança de semântica de transição do Checkpoint 2.3.2.1 e a correção de authorization policy ausente do Checkpoint 2.3.2.2 — ver §12/§12.5/§12.9. Checkpoint 2.3.3 (durable status event + Communication lifecycle, ADR-022 item 13/14) = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO**, incluindo as duas correções da política de retry do missing-Message do Checkpoint 2.3.3.1 (bounded retry + escopo de exceção específico) — ver §12.6/§12.7/§12.8. Checkpoint 2.3.4 (sandbox real) = **HOMOLOGADO ATÉ O LIMITE DISPONÍVEL DO SANDBOX META, BLOQUEADO PARA PROVA DE `Delivered` REAL POR APP NÃO PUBLICADO** — envio real aceito pela Meta, entrega física confirmada, ingress/assinatura real provados via webhook de teste do painel; callback de status de produção não é entregue pela própria política da Meta para apps não publicados (ver §12.10). Não classificado como definitivamente homologado; bloqueador é uma decisão operacional futura (publicar o app), não um defeito técnico.
 
 **Checkpoint 2 (WhatsApp real) = TECNICAMENTE CONCLUÍDO E HOMOLOGADO NO NÍVEL MVP, COM BLOCKERS OPERACIONAIS DE PRODUCTION DOCUMENTADOS** (decisão formalizada em §12.11 — abrange CP2.0 a CP2.3.4 integralmente; a ausência de `Delivered` real é blocker de Production, não critério de saída MVP não cumprido).
 
-Checkpoint 3.0 (auditoria Airbnb) = **CONCLUÍDA**. Checkpoint 3.1 (Decision Gate, design-only) = **CONCLUÍDO E APROVADO**. Checkpoint 3.2 (Airbnb Deterministic Foundation), incluindo a correção de governança do Checkpoint 3.2.1, = **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO — FUNDAÇÃO DETERMINÍSTICA, SEM INTEGRAÇÃO REAL** (ver §13.3/§13.4): import/update/cancel real via RabbitMQ/Worker reais comprovados, fan-out idêntico ao de reserva manual comprovado, consent boundary do Communication comprovado, idempotência real comprovada, semântica de evento desconhecido formalizada como no-op permanente e coberta por testes determinísticos, MigrationRunner Run #1 e Run #2 ambos comprovados reais (zero drift) — bloqueado para qualquer integração HTTP/OAuth/sync real exclusivamente por `AirbnbPartnerAccessAvailable=false` (decisão de negócio/parceria externa, não um defeito técnico ou critério de saída não cumprido). Checkpoint 4 (homologação final da Fase) = **NÃO INICIADO**, condicionado à conclusão dos Checkpoints 2 (concluído no nível MVP) e 3 (definitivamente concluído no nível de fundação determinística). **Fase 9 — Comunicação e Integrações do MVP = EM ANDAMENTO** — não tratar como concluída até o fechamento do Checkpoint 4.
+Checkpoint 3.0 (auditoria Airbnb) = **CONCLUÍDA**. Checkpoint 3.1 (Decision Gate, design-only) = **CONCLUÍDO E APROVADO**. Checkpoint 3 = **CONCLUÍDO NO NÍVEL MVP**, com Checkpoint 3.2 (Airbnb Deterministic Foundation), incluindo a correção de governança do Checkpoint 3.2.1, **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO — FUNDAÇÃO DETERMINÍSTICA, SEM INTEGRAÇÃO REAL** (ver §13.3/§13.4): import/update/cancel real via RabbitMQ/Worker reais comprovados, fan-out idêntico ao de reserva manual comprovado, consent boundary do Communication comprovado, idempotência real comprovada, semântica de evento desconhecido formalizada como no-op permanente e coberta por testes determinísticos, MigrationRunner Run #1 e Run #2 ambos comprovados reais (zero drift) — e a integração real Airbnb bloqueada exclusivamente por `AirbnbPartnerAccessAvailable=false` (decisão de negócio/parceria externa, não um defeito técnico ou critério de saída não cumprido).
+
+**Checkpoint 4 (Final Homologation Read-Only Gate) = DEFINITIVAMENTE HOMOLOGADO E PUBLICADO** (decisão formalizada em §14 — o único critério literal documentado, conclusão dos Checkpoints 2 e 3, está satisfeito; nenhum blocker de nível MVP foi encontrado na auditoria; toda pendência remanescente é Production-only ou externa, consolidada em §14.1-§14.4).
+
+**Fase 9 — Comunicação e Integrações do MVP = DEFINITIVAMENTE CONCLUÍDA E HOMOLOGADA NO NÍVEL MVP, COM BLOCKERS DE PRODUCTION DOCUMENTADOS** (ver §14.1 para a lista consolidada). `ProductionReady=false` — MVP homologado não é o mesmo que Production Ready; isso não é uma contradição, é a classificação exata que os próprios documentos desta Fase sempre definiram.

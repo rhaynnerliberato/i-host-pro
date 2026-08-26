@@ -88,7 +88,7 @@ Coordenação de eventos e automações entre os contextos. Escopo detalhado a r
 
 Templates, notificações, WhatsApp e sincronização inicial com Airbnb. Escopo detalhado a refinar e aprovar antes da implementação.
 
-**Status:** Em andamento. Checkpoint 1 (Communication Foundation) e Checkpoint 2 (WhatsApp real) concluídos — Checkpoint 2 homologado no nível MVP, com blockers operacionais de Production documentados (app Meta não publicado, entre outros). Checkpoint 3 (Airbnb) concluído no nível de fundação determinística — CP3.2 homologado sem integração HTTP/OAuth/sync real com a Airbnb (bloqueado exclusivamente por `AirbnbPartnerAccessAvailable=false`, decisão de parceria externa). Checkpoint 4 (homologação final da fase) ainda não iniciado.
+**Status:** **Concluída — DEFINITIVAMENTE HOMOLOGADA NO NÍVEL MVP, COM BLOCKERS DE PRODUCTION DOCUMENTADOS.** Checkpoint 1 (Communication Foundation), Checkpoint 2 (WhatsApp real, com blockers operacionais de Production documentados — app Meta não publicado, entre outros), Checkpoint 3 (Airbnb, concluído no nível de fundação determinística — CP3.2 homologado sem integração HTTP/OAuth/sync real com a Airbnb, bloqueado exclusivamente por `AirbnbPartnerAccessAvailable=false`) e Checkpoint 4 (homologação final da fase) todos concluídos. `ProductionReady=false` — ver o documento de homologação para a lista consolidada de blockers de Production.
 **Homologação:** `Fase 9 - Comunicacao e Integracoes do MVP - Validacao e Homologacao.md`.
 
 ### Fase 10 — Check-in, Checkout e Operações do Hóspede
