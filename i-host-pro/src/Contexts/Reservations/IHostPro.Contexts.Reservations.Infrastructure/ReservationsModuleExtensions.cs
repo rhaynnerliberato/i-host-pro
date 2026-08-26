@@ -159,4 +159,27 @@ public static class ReservationsModuleExtensions
 
         return services;
     }
+
+    /// <summary>
+    /// The minimal composition root for consuming Workflow Orchestration's
+    /// own <see cref="CloseReservation"/> cross-context command inside
+    /// <c>IHostPro.Worker</c> (Fase 10, Checkpoint 1 — Guest Operations
+    /// Foundation) — mirrors <see cref="AddReservationsAirbnbImportConsumer"/>'s
+    /// own structure exactly, a deliberately separate method from
+    /// <see cref="ReservationsCommandDispatchExtensions.AddReservationsCommandDispatch"/>
+    /// (Api-only, HTTP command/query dispatch). Resolved exclusively from
+    /// <see cref="ReservationsMessageExecutionScope"/>'s own child DI scope
+    /// (ADR-016), never from Wolverine's per-message resolution.
+    /// </summary>
+    public static IServiceCollection AddReservationsCloseReservationCommand(this IServiceCollection services)
+    {
+        services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
+        services.AddScoped<IReservationsTransactionExecutor, ReservationsOutboxTransactionExecutor>();
+        services.AddScoped<IRepository<Reservation, Guid>, ReservationRepository>();
+        services.AddScoped<ICloseReservationHandler, CloseReservationCommandHandler>();
+
+        services.AddScoped<IReservationsMessageExecutionScope, ReservationsMessageExecutionScope>();
+
+        return services;
+    }
 }

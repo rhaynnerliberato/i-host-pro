@@ -191,7 +191,7 @@ public class ReservationsSourceConventionTests
     }
 
     [Fact]
-    public void Only_Confirmed_and_Cancelled_statuses_are_declared()
+    public void Only_Confirmed_Cancelled_and_Closed_statuses_are_declared()
     {
         // Fase 3, Incremento 1 plan, item 6: "não implementar Completed,
         // NoShow ou outros estados agora." — about Reservation.Status only;
@@ -199,7 +199,10 @@ public class ReservationsSourceConventionTests
         // Cleaning-projection files legitimately use the word "Completed"
         // for an unrelated concept (Cleaning.Status, mirroring
         // Housekeeping's own CleaningStatusCodeMapper) and are excluded here
-        // too.
+        // too. Fase 10, Checkpoint 1 (Guest Operations Foundation) adds the
+        // third legitimate status, Closed (the guest's real checkout) — this
+        // test's name/scope updated accordingly; "Completed"/"NoShow" remain
+        // forbidden.
         string[] forbiddenFragments = ["Completed", "NoShow", "\"completed\"", "\"no_show\""];
 
         var offendingFiles = ReservationsSourceFiles()
@@ -212,7 +215,26 @@ public class ReservationsSourceConventionTests
             .ToArray();
 
         offendingFiles.Should().BeEmpty(
-            "only Confirmed/Cancelled may exist this increment — found in: " + string.Join(", ", offendingFiles));
+            "only Confirmed/Cancelled/Closed may exist — found in: " + string.Join(", ", offendingFiles));
+    }
+
+    [Fact]
+    public void CloseReservationHandler_configures_no_custom_retry_policy()
+    {
+        // Fase 10, Checkpoint 1 mandate's explicit requirement: Cancelled
+        // receiving CloseReservation must rely exclusively on Wolverine's
+        // own default single-attempt/dead-letter handling — no
+        // RetryWithCooldown/custom Configure(...) policy may ever be
+        // attached to this handler.
+        var handlerFilePath = Path.Combine(
+            RepositoryRoot(), "src", "Contexts", "Reservations", "IHostPro.Contexts.Reservations.Infrastructure",
+            "Messaging", "CloseReservationHandler.cs");
+
+        File.Exists(handlerFilePath).Should().BeTrue($"expected {handlerFilePath} to exist");
+
+        var content = File.ReadAllText(handlerFilePath);
+        content.Should().NotContain("RetryWithCooldown")
+            .And.NotContain(".Configure(", "no custom Wolverine retry/error-handling policy may be attached to CloseReservationHandler");
     }
 
     [Fact]

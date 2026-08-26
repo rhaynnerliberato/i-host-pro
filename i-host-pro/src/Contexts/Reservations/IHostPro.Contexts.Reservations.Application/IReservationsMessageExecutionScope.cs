@@ -1,4 +1,5 @@
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
+using IHostPro.Contexts.Reservations.Contracts;
 
 namespace IHostPro.Contexts.Reservations.Application;
 
@@ -46,4 +47,16 @@ public interface IReservationsMessageExecutionScope
     Task ExecuteAsync<TMessage>(
         TMessage message, Guid tenantId, Guid messageId, CancellationToken cancellationToken)
         where TMessage : IntegrationEvent;
+
+    /// <summary>
+    /// Same tenant-safe scope-opening mechanism as <see cref="ExecuteAsync{TMessage}"/>,
+    /// for the cross-context command <see cref="CloseReservation"/> (Fase 10,
+    /// Checkpoint 1 — Guest Operations Foundation) instead of an
+    /// <see cref="IntegrationEvent"/> — mirrors Housekeeping's own
+    /// <c>IHousekeepingMessageExecutionScope.ExecuteCreateCleaningForReservationAsync</c>
+    /// exactly, including its own reasoning for staying narrowly typed rather
+    /// than a generic command-bus method.
+    /// </summary>
+    Task ExecuteCloseReservationAsync(
+        CloseReservation command, Guid messageId, CancellationToken cancellationToken);
 }

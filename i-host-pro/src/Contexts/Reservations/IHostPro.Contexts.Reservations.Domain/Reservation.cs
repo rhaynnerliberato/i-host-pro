@@ -221,6 +221,29 @@ public sealed class Reservation : AggregateRoot<Guid>, ITenantOwned
         Touch(now);
     }
 
+    /// <summary>
+    /// <see cref="ReservationStatus.Confirmed"/> → <see cref="ReservationStatus.Closed"/>
+    /// (Fase 10, Checkpoint 1 — Guest Operations Foundation): the guest's
+    /// real checkout, reached exclusively via the internal Guest Operations
+    /// → Workflow → Reservations <c>CloseReservation</c> command chain, never
+    /// a human actor directly. Terminal — no restoration exists. The caller
+    /// (<c>CloseReservationCommandHandler</c>) is responsible for having
+    /// already translated an already-<see cref="ReservationStatus.Closed"/>
+    /// reservation into a silent idempotent no-op, and a
+    /// <see cref="ReservationStatus.Cancelled"/> one into a specific,
+    /// non-generic invariant-violation exception, BEFORE calling this — this
+    /// guard is defense-in-depth, mirrors <see cref="Cancel"/>'s own division
+    /// of responsibility.
+    /// </summary>
+    public void Close(DateTimeOffset now)
+    {
+        if (Status != ReservationStatus.Confirmed)
+            throw new InvalidOperationException($"Cannot close a reservation in status '{Status}'.");
+
+        Status = ReservationStatus.Closed;
+        Touch(now);
+    }
+
     private static string? NormalizePhone(string? guestPhone) =>
         string.IsNullOrWhiteSpace(guestPhone) ? null : guestPhone.Trim();
 

@@ -2,6 +2,8 @@ using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
 using IHostPro.Contexts.Reservations.Application;
+using IHostPro.Contexts.Reservations.Application.Reservations;
+using IHostPro.Contexts.Reservations.Contracts;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace IHostPro.Contexts.Reservations.Infrastructure.Messaging;
@@ -52,5 +54,25 @@ public sealed class ReservationsMessageExecutionScope : IReservationsMessageExec
 
         var processor = scope.ServiceProvider.GetRequiredKeyedService<IIntegrationEventHandler<TMessage>>(HandlerKey);
         await processor.HandleAsync(message, cancellationToken);
+    }
+
+    /// <inheritdoc cref="IReservationsMessageExecutionScope.ExecuteCloseReservationAsync"/>
+    /// <remarks>
+    /// Resolves <see cref="ICloseReservationHandler"/> unkeyed — unlike
+    /// <see cref="IIntegrationEventHandler{TMessage}"/>, it is exclusive to
+    /// Reservations, registered once, with no other context competing for
+    /// the same generic slot (mirrors
+    /// <c>HousekeepingMessageExecutionScope.ExecuteCreateCleaningForReservationAsync</c>).
+    /// </remarks>
+    public async Task ExecuteCloseReservationAsync(
+        CloseReservation command, Guid messageId, CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+        tenantContext.SetTenant(command.TenantId);
+
+        var handler = scope.ServiceProvider.GetRequiredService<ICloseReservationHandler>();
+        await handler.HandleAsync(command, cancellationToken);
     }
 }

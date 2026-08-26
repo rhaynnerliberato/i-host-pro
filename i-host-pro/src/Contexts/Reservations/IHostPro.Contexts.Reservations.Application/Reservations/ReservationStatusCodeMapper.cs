@@ -17,6 +17,12 @@ public static class ReservationStatusCodeMapper
     {
         ReservationStatus.Confirmed => "confirmed",
         ReservationStatus.Cancelled => "cancelled",
+        // Fase 10, Checkpoint 1 — Guest Operations Foundation. Not yet a
+        // valid ListReservationsQuery filter value (FromCode below
+        // deliberately has no "closed" case — no endpoint exposes it this
+        // checkpoint) but ToCode must cover it: an existing GET/LIST call
+        // reaching a real Closed reservation must not crash.
+        ReservationStatus.Closed => "closed",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unmapped ReservationStatus."),
     };
 
