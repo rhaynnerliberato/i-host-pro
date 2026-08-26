@@ -1,7 +1,12 @@
 using IHostPro.BuildingBlocks.Application;
+using IHostPro.BuildingBlocks.Domain;
+using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Reservations.Application;
+using IHostPro.Contexts.Reservations.Application.AirbnbImports;
+using IHostPro.Contexts.Reservations.Application.Reservations;
 using IHostPro.Contexts.Reservations.Contracts;
+using IHostPro.Contexts.Reservations.Domain;
 using IHostPro.Contexts.Reservations.Infrastructure.Communication;
 using IHostPro.Contexts.Reservations.Infrastructure.Messaging;
 using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
@@ -111,6 +116,43 @@ public static class ReservationsModuleExtensions
         services.AddKeyedScoped<IIntegrationEventHandler<CleaningNeedsMaterial>, CleaningScheduleProjectionSynchronizer>(
             ReservationsMessageExecutionScope.HandlerKey);
         services.AddKeyedScoped<IIntegrationEventHandler<CleaningCancelled>, CleaningScheduleProjectionSynchronizer>(
+            ReservationsMessageExecutionScope.HandlerKey);
+
+        services.AddScoped<IReservationsMessageExecutionScope, ReservationsMessageExecutionScope>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// The minimal composition root for consuming External Integrations' own
+    /// Airbnb reservation events inside <c>IHostPro.Worker</c> (Fase 9,
+    /// Checkpoint 3.2 — "Airbnb Deterministic Foundation") — mirrors
+    /// <see cref="AddReservationsScheduleProjectionConsumer"/>'s own
+    /// structure exactly, a deliberately separate method from
+    /// <see cref="ReservationsCommandDispatchExtensions.AddReservationsCommandDispatch"/>
+    /// (Api-only, HTTP command/query dispatch). Each processor is resolved
+    /// exclusively from <see cref="ReservationsMessageExecutionScope"/>'s own
+    /// child DI scope (ADR-016), never from Wolverine's per-message
+    /// resolution — same keyed-DI convention as the Cleaning lifecycle
+    /// handlers above, even though none of these three event types is shared
+    /// with another Bounded Context in this process (no
+    /// <c>AddStickyHandler</c> risk, ADR-020's own "single discovered
+    /// handler" default) — keyed registration here is required regardless,
+    /// because <see cref="ReservationsMessageExecutionScope"/>'s own
+    /// implementation always resolves via <c>GetRequiredKeyedService</c>.
+    /// </summary>
+    public static IServiceCollection AddReservationsAirbnbImportConsumer(this IServiceCollection services)
+    {
+        services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
+        services.AddScoped<IReservationsTransactionExecutor, ReservationsOutboxTransactionExecutor>();
+        services.AddScoped<IReservationReader, ReservationReader>();
+        services.AddScoped<IRepository<Reservation, Guid>, ReservationRepository>();
+
+        services.AddKeyedScoped<IIntegrationEventHandler<AirbnbReservationImported>, AirbnbReservationImportedProcessor>(
+            ReservationsMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<AirbnbReservationUpdated>, AirbnbReservationUpdatedProcessor>(
+            ReservationsMessageExecutionScope.HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<AirbnbReservationCancelled>, AirbnbReservationCancelledProcessor>(
             ReservationsMessageExecutionScope.HandlerKey);
 
         services.AddScoped<IReservationsMessageExecutionScope, ReservationsMessageExecutionScope>();

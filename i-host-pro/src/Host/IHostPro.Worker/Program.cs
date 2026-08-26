@@ -99,6 +99,15 @@ try
     builder.Services.AddReservationsModule(builder.Configuration);
     builder.Services.AddReservationsScheduleProjectionConsumer();
 
+    // Fase 9, Checkpoint 3.2 ("Airbnb Deterministic Foundation"): the
+    // Airbnb reservation import/update/cancel consumer — mirrors the
+    // schedule-projection-consumer registration immediately above.
+    // Unconditional (not gated to Development): unlike Communication's own
+    // ReservationCreated consumer (which depends on a fake/real connector
+    // distinction), this consumer's only external dependency is
+    // ReservationsDbContext itself — there is no fake/real split to gate.
+    builder.Services.AddReservationsAirbnbImportConsumer();
+
     // Dashboard & Reporting module (Fase 7, Incremento 2): DashboardDbContext
     // + the four projection synchronizers' full DI graph, so the tenant-safe
     // execution boundary (IDashboardMessageExecutionScope, ADR-016) can
@@ -397,6 +406,25 @@ try
             .AddStickyHandler(typeof(CleaningNeedsHelpHandler))
             .AddStickyHandler(typeof(CleaningNeedsMaterialHandler))
             .AddStickyHandler(typeof(CleaningCancelledHandler));
+
+        // Fase 9, Checkpoint 3.2 ("Airbnb Deterministic Foundation"):
+        // External Integrations' own Airbnb reservation events — a new,
+        // independent subscriber queue on the EXISTING external-integrations-events
+        // topic exchange (External Integrations never needs to know
+        // Reservations is listening, same decoupled pub/sub pattern as every
+        // queue above). The queue itself, and its bindings, are provisioned
+        // exclusively by IHostPro.MigrationRunner.
+        // AirbnbReservationImportedHandler/UpdatedHandler/CancelledHandler
+        // live in the SAME Reservations.Infrastructure assembly as
+        // CleaningCreatedHandler above — already included by the
+        // opts.Discovery.IncludeAssembly(typeof(CleaningCreatedHandler).Assembly)
+        // call above, no second IncludeAssembly needed.
+        //
+        // ADR-020: none of these three event types has a second in-process
+        // consumer (confirmed: only Reservations consumes them) — no
+        // AddStickyHandler needed, ADR-020's own "single discovered handler"
+        // default applies.
+        opts.ListenToRabbitQueue("reservations.airbnb-import");
 
         // Dashboard & Reporting's consumed Integration Events (Fase 7,
         // Incremento 2, Checkpoint 1) — four queues, each bound to MULTIPLE

@@ -19,6 +19,15 @@
     <ProjectReference Include="..\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
     <ProjectReference Include="..\..\PropertyManagement\IHostPro.Contexts.PropertyManagement.Contracts\IHostPro.Contexts.PropertyManagement.Contracts.csproj" />
+    <!--
+      Fase 9, Checkpoint 3.2 ("Airbnb Deterministic Foundation") — referenced
+      solely for AirbnbReservationImported/Updated/Cancelled (CP3.2 mandate
+      §37: "Cross-context dependency somente Contracts/event"). Ordinary
+      async Integration Event consumption, the same shape as Reservations.
+      Infrastructure's own existing reference to Housekeeping.Contracts for
+      CleaningCreated/etc. — never Application/Infrastructure/Api.
+    -->
+    <ProjectReference Include="..\..\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Contracts\IHostPro.Contexts.ExternalIntegrations.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,6 +35,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!--
+      Fase 9, Checkpoint 3.2 — structured logging for the Airbnb import/
+      update/cancel processors. Same abstractions-only package
+      Communication.Application already uses for ReservationCreatedCommunicationProcessor
+      — never the concrete logging implementation.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
   </ItemGroup>
 
   <PropertyGroup>

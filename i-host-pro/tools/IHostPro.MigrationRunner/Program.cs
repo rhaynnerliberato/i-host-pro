@@ -765,6 +765,17 @@ try
             {
                 exchange.ExchangeType = ExchangeType.Topic;
                 exchange.BindQueue("communication.whatsapp-status-projection", "whatsapp_message_status_changed");
+                // Fase 9, Checkpoint 3.2 ("Airbnb Deterministic Foundation"):
+                // a second, independent subscriber queue on this same
+                // exchange — Reservations' own Airbnb reservation import/
+                // update/cancel consumer. External Integrations never needs
+                // to know Reservations is listening, same decoupled pub/sub
+                // pattern as every other queue in this platform.
+                // airbnb_sync_started is deliberately not bound to anything
+                // — AirbnbSyncStarted has no consumer this checkpoint.
+                exchange.BindQueue("reservations.airbnb-import", "airbnb_reservation_imported");
+                exchange.BindQueue("reservations.airbnb-import", "airbnb_reservation_updated");
+                exchange.BindQueue("reservations.airbnb-import", "airbnb_reservation_cancelled");
             });
     });
 
