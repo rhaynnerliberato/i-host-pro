@@ -39,6 +39,24 @@ Uma reserva importada da Airbnb publica exatamente o mesmo `ReservationCreated` 
 
 `ReservationCreatedCommunicationProcessor` verifica `Source` antes de qualquer outra ação: `Source="airbnb"` é um skip deliberado (log estruturado `ReservationCommunicationSkipped`/`ConsentNotEstablishedForImportedReservation`), nunca cria `Message`, nunca marca `Failed`. `Source="manual"` mantém o comportamento existente inalterado. Este é o único ponto do sistema onde o Bounded Context de destino precisa saber a origem da reserva — nenhum outro consumidor de `ReservationCreated` foi alterado.
 
+### Semântica de evento desconhecido (`AirbnbReservationUpdated`/`AirbnbReservationCancelled`) — PERMANENT NO-OP (Checkpoint 3.2.1)
+
+Decisão formalizada no Checkpoint 3.2.1 (Corrective Governance & Migration Gate), fechando explicitamente o que o CP3.2 original apenas implementou sem autorização prévia registrada:
+
+Um `AirbnbReservationUpdated`/`AirbnbReservationCancelled` cujo `ExternalReservationId` não corresponde a nenhuma `Reservation` já importada (nenhum `AirbnbReservationImported` anterior chegou a este consumidor) é um **NO-OP PERMANENTE**:
+
+- nenhuma `Reservation` é criada implicitamente;
+- nenhuma exception é lançada (o handler completa com sucesso — Wolverine nunca tenta redelivery/DLQ para este caso);
+- nenhum retry é acionado — não existe hoje nenhuma política de retry específica para este cenário, e nenhuma é introduzida por esta decisão;
+- um log estruturado e sanitizado é emitido (classificação `UnknownReservation`, `TenantId`+`ExternalReservationId`+`AirbnbReservation` — nunca `GuestName`, nunca payload bruto do provider, nunca qualquer campo PII);
+- nenhum `ReservationUpdated`/`ReservationCancelled` é publicado.
+
+**Motivo**: sem um contrato de parceria Airbnb real, não existe evidência de ordering (garantia de que um `AirbnbReservationImported` sempre precede seu `Updated`/`Cancelled` correspondente, ou de que uma race genuína entre entregas concorrentes é um cenário real) que justifique investir em uma política de retry transiente. Inventar essa política agora seria decidir uma regra de negócio sem base documental — exatamente o que a Constitution deste projeto proíbe.
+
+Esta é a MESMA semântica que o Checkpoint 3.2 já implementava de fato (os processadores já retornavam sucesso sem side effect para este caso) — o Checkpoint 3.2.1 apenas: (1) fecha formalmente a decisão que antes estava apenas implementada, sem autorização prévia explícita registrada; (2) adiciona testes determinísticos que provam essa semântica (`AirbnbReservationUpdatedProcessorTests`/`AirbnbReservationCancelledProcessorTests` — cenários unknown, no-throw, no-publish, duplicate/no-op).
+
+**Revisão futura**: quando um contrato de parceiro Airbnb existir, esta decisão pode ser revista SE a documentação/garantia do parceiro demonstrar ordering não garantido ou uma race legítima que justifique retry — nunca assumida preventivamente sem essa evidência.
+
 ### Bloqueado por parceria Airbnb — registrado, não implementado
 
 `AirbnbPartnerAccessRequired=true`, `AirbnbPartnerAccessAvailable=false`, `RealIntegrationTestingBlocked=true` permanecem registrados (CP3.0/CP3.1). Este checkpoint não implementa: cliente HTTP real, OAuth, sync orchestration/polling/scheduler, endpoints administrativos públicos (`AirbnbIntegrationController`/etc. — deliberadamente não criados; sem uso real ainda, evitando NSwag/Angular especulativos), iCal (capacidade futura separada, calendário-only, sem dados de reserva/hóspede). `AirbnbSyncStarted` foi formalizado em `ExternalIntegrations.Contracts` mas deliberadamente não publicado/consumido — sem orquestração de sync real para o disparar.
@@ -61,7 +79,7 @@ Uma reserva importada da Airbnb publica exatamente o mesmo `ReservationCreated` 
 
 ### Riscos Aceitos
 - `ExternalIntegrations.Contracts` agora tem dois padrões de referenciamento externo distintos: a quinta exceção síncrona da ADR-021 (Communication → `IMessagingProvider`) e este novo padrão assíncrono nomeado (Reservations → eventos Airbnb) — registrado aqui explicitamente, nunca generalizado para qualquer outro par.
-- `AirbnbReservationUpdated`/`AirbnbReservationCancelled` para um `ExternalReservationId` desconhecido são deliberadamente ignorados (log + no-op) — se uma condição de corrida real (update chegando antes do import, numa janela de rede real) se mostrar comum quando a parceria existir, essa política precisará de revisão então, não assumida agora.
+- `AirbnbReservationUpdated`/`AirbnbReservationCancelled` para um `ExternalReservationId` desconhecido são um NO-OP PERMANENTE, formalizado no Checkpoint 3.2.1 (ver seção própria acima) — nenhuma política de retry existe até um contrato de parceiro real justificá-la.
 - Nenhuma validação de elegibilidade/conflito de agenda é feita no import Airbnb (diferente da criação manual, que valida capacidade e conflito de datas) — o mandato do CP3.2 não pediu essa validação, e inventá-la seria escopo não solicitado; uma reserva Airbnb duplicada/conflitante com uma manual é um risco operacional real, não coberto por este checkpoint, a ser resolvido quando a sincronização real existir.
 - `ReservationCreatedCommunicationProcessor`'s source-aware skip é a única forma de consentimento hoje — não existe ainda nenhuma política de opt-in Airbnb real; enquanto isso não for resolvido, todo hóspede Airbnb-importado permanece sem qualquer comunicação automática (aceito deliberadamente, nunca contornado).
 
@@ -72,4 +90,4 @@ Uma reserva importada da Airbnb publica exatamente o mesmo `ReservationCreated` 
 - ADR-021 (External Integrations ACL and Synchronous Provider Boundary) — a quinta exceção síncrona, distinta do padrão assíncrono desta ADR
 - ADR-022 (WhatsApp Webhook Security and Tenant Routing Boundary) — precedente de diretório global de rotas, deliberadamente não reutilizado aqui
 - `Documento 07 — Catálogo de Eventos de Domínio`, §16 (payloads de `AirbnbSyncStarted`/`AirbnbReservationImported`/`AirbnbReservationUpdated`/`AirbnbReservationCancelled` formalizados por esta ADR)
-- `Fase 9 - Comunicacao e Integracoes do MVP - Validacao e Homologacao.md`, Checkpoint 3.1 (Decision Gate) e Checkpoint 3.2 (esta implementação)
+- `Fase 9 - Comunicacao e Integracoes do MVP - Validacao e Homologacao.md`, Checkpoint 3.1 (Decision Gate), Checkpoint 3.2 (esta implementação) e Checkpoint 3.2.1 (Corrective Governance & Migration Gate — fecha formalmente a semântica de evento desconhecido)
