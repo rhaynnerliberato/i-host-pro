@@ -264,6 +264,7 @@ public class DashboardReservationProjectionSynchronizerTests : IClassFixture<Das
         Status = "confirmed",
         CheckInAt = checkInAt,
         CheckOutAt = checkOutAt,
+        Source = "manual",
     };
 
     private static ReservationUpdated NewUpdated(

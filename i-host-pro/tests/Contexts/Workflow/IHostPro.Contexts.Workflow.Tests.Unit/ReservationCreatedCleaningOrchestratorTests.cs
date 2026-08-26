@@ -82,6 +82,7 @@ public class ReservationCreatedCleaningOrchestratorTests
         ReservationId = reservationId,
         PropertyId = propertyId,
         Status = "confirmed",
+        Source = "manual",
     };
 
     private static ReservationCreatedCleaningOrchestrator Orchestrator(

@@ -93,6 +93,7 @@ public sealed class HousekeepingWolverineAdapterTests
                 TenantId = tenantId, AggregateId = Guid.NewGuid(), AggregateType = "Reservation",
                 CorrelationId = Guid.NewGuid(), ActorType = "User", ActorId = Guid.NewGuid().ToString(),
                 ReservationId = Guid.NewGuid(), PropertyId = Guid.NewGuid(), Status = "confirmed",
+                Source = "manual",
             };
 
             var bus = host.Services.GetRequiredService<IMessageBus>();

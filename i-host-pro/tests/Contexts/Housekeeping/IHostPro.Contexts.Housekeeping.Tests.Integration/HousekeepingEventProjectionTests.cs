@@ -242,6 +242,7 @@ public class HousekeepingEventProjectionTests : IClassFixture<HousekeepingEventP
             TenantId = tenantId, AggregateId = reservationId, AggregateType = "Reservation",
             CorrelationId = Guid.NewGuid(), ActorType = "User", ActorId = Guid.NewGuid().ToString(),
             ReservationId = reservationId, PropertyId = Guid.NewGuid(), Status = "confirmed",
+            Source = "manual",
         });
 
         var exists = await ReservationProjectionExistsAsync(host, tenantId, reservationId);
@@ -259,6 +260,7 @@ public class HousekeepingEventProjectionTests : IClassFixture<HousekeepingEventP
             TenantId = tenantId, AggregateId = reservationId, AggregateType = "Reservation",
             CorrelationId = Guid.NewGuid(), ActorType = "User", ActorId = Guid.NewGuid().ToString(),
             ReservationId = reservationId, PropertyId = Guid.NewGuid(), Status = "confirmed",
+            Source = "manual",
         };
 
         await Dispatch(host, tenantId, @event);

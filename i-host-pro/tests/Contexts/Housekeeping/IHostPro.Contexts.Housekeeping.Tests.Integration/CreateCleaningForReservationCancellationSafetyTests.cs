@@ -266,6 +266,7 @@ public sealed class CreateCleaningForReservationCancellationSafetyTests : IClass
             TenantId = tenantId, AggregateId = reservationId, AggregateType = "Reservation",
             CorrelationId = Guid.NewGuid(), ActorType = "User", ActorId = Guid.NewGuid().ToString(),
             ReservationId = reservationId, PropertyId = Guid.NewGuid(), Status = "confirmed",
+            Source = "manual",
         });
 
         (await ReadReservationProjectionAsync(tenantId, reservationId)).IsCancelled.Should().BeTrue(

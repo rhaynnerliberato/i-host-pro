@@ -21,6 +21,7 @@ using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 using IHostPro.Contexts.Reservations.Api.Contracts;
 using IHostPro.Contexts.Reservations.Api.Controllers;
 using IHostPro.Contexts.Reservations.Application.Reservations;
+using IHostPro.Contexts.Reservations.Domain.Enums;
 using IHostPro.Contexts.Reservations.Infrastructure;
 using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 using JasperFx;
@@ -784,6 +785,10 @@ public class ReservationsEndpointsTests : IClassFixture<ReservationsEndpointsTes
 
         public Task<uint?> GetCurrentXminAsync(Guid reservationId, CancellationToken cancellationToken) =>
             _inner.GetCurrentXminAsync(reservationId, cancellationToken);
+
+        public Task<Guid?> GetIdByExternalIdentityAsync(
+            ReservationSource source, string externalReservationId, CancellationToken cancellationToken) =>
+            _inner.GetIdByExternalIdentityAsync(source, externalReservationId, cancellationToken);
 
         public async Task<ReservationUpdateSnapshot?> GetUpdateSnapshotAsync(Guid reservationId, CancellationToken cancellationToken)
         {

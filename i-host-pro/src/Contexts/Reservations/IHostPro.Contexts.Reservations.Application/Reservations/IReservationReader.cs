@@ -1,4 +1,5 @@
 using IHostPro.BuildingBlocks.Application;
+using IHostPro.Contexts.Reservations.Domain.Enums;
 
 namespace IHostPro.Contexts.Reservations.Application.Reservations;
 
@@ -43,4 +44,15 @@ public interface IReservationReader
     /// row changed since that snapshot was taken (Fase 3 §3).
     /// </summary>
     Task<uint?> GetCurrentXminAsync(Guid reservationId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The id of the reservation already imported for this tenant/<paramref name="source"/>/
+    /// <paramref name="externalReservationId"/> triple, or <c>null</c> if none
+    /// exists yet (Fase 9, Checkpoint 3.2 — import/update/cancel consumer
+    /// idempotency lookup). Called from inside an already-open write
+    /// transaction — a plain query, no scope of its own, same convention as
+    /// <see cref="GetCurrentXminAsync"/>.
+    /// </summary>
+    Task<Guid?> GetIdByExternalIdentityAsync(
+        ReservationSource source, string externalReservationId, CancellationToken cancellationToken);
 }

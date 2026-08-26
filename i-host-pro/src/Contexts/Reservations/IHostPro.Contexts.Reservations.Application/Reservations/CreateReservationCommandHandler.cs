@@ -130,6 +130,7 @@ public sealed class CreateReservationCommandHandler : ICommandHandler<CreateRese
                 Status = ReservationStatusCodeMapper.ToCode(reservation.Status),
                 CheckInAt = reservation.CheckInAt,
                 CheckOutAt = reservation.CheckOutAt,
+                Source = ReservationSourceCodeMapper.ToCode(reservation.Source),
             });
 
             return Result.Success(ToResult(reservation));

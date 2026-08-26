@@ -36,6 +36,10 @@ public sealed class ReservationConfiguration : IEntityTypeConfiguration<Reservat
 
         builder.Property(r => r.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20).IsRequired();
 
+        // Fase 9, Checkpoint 3.2 — "Airbnb Deterministic Foundation".
+        builder.Property(r => r.Source).HasColumnName("source").HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(r => r.ExternalReservationId).HasColumnName("external_reservation_id").HasMaxLength(200);
+
         builder.Property(r => r.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(r => r.UpdatedAt).HasColumnName("updated_at").IsRequired();
 
@@ -47,5 +51,14 @@ public sealed class ReservationConfiguration : IEntityTypeConfiguration<Reservat
         builder.HasIndex(r => new { r.TenantId, r.CheckInAt, r.Id });
         builder.HasIndex(r => new { r.TenantId, r.PropertyId, r.CheckInAt });
         builder.HasIndex(r => new { r.TenantId, r.Status, r.CheckInAt });
+
+        // Fase 9, Checkpoint 3.2 — import idempotency: the same external
+        // reservation, for the same tenant/source, must never be imported
+        // twice. Partial (WHERE external_reservation_id IS NOT NULL) so
+        // every Manual reservation (external_reservation_id always null)
+        // never participates in this constraint at all.
+        builder.HasIndex(r => new { r.TenantId, r.Source, r.ExternalReservationId })
+            .IsUnique()
+            .HasFilter("external_reservation_id IS NOT NULL");
     }
 }

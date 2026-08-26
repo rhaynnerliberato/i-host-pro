@@ -126,6 +126,7 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         PropertyId = Guid.NewGuid(),
         Status = "confirmed",
         CheckInAt = new DateTimeOffset(2026, 8, 20, 15, 0, 0, TimeSpan.Zero),
+        Source = "manual",
     };
 
     private static async Task ExecuteAsync(ServiceProvider serviceProvider, ReservationCreated @event)

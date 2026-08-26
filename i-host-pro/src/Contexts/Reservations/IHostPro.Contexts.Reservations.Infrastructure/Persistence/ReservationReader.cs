@@ -2,6 +2,7 @@ using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Reservations.Application.Reservations;
+using IHostPro.Contexts.Reservations.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace IHostPro.Contexts.Reservations.Infrastructure.Persistence;
@@ -131,5 +132,13 @@ public sealed class ReservationReader : IReservationReader
             .AsNoTracking()
             .Where(r => r.Id == reservationId)
             .Select(r => (uint?)EF.Property<uint>(r, "xmin"))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<Guid?> GetIdByExternalIdentityAsync(
+        ReservationSource source, string externalReservationId, CancellationToken cancellationToken) =>
+        await _dbContext.Reservations
+            .AsNoTracking()
+            .Where(r => r.Source == source && r.ExternalReservationId == externalReservationId)
+            .Select(r => (Guid?)r.Id)
             .FirstOrDefaultAsync(cancellationToken);
 }

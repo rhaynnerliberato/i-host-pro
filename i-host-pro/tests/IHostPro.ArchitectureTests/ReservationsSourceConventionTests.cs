@@ -161,9 +161,18 @@ public class ReservationsSourceConventionTests
         // Cleaning" guards against Reservations declaring its own DUPLICATE
         // Cleaning aggregate — see Fase7IncrementoUmAllowedFiles' own doc
         // comment for the legitimate, excluded exception.
+        //
+        // "Airbnb" removed from this list in Fase 9, Checkpoint 3.2
+        // ("Airbnb Deterministic Foundation") — CP3.1's Decision Gate
+        // approved ReservationSource.Airbnb/ExternalReservationId/the
+        // Airbnb import-update-cancel consumers as genuinely in-scope
+        // Reservations concepts now, never a temporary exception the way
+        // Fase7IncrementoUmAllowedFiles' Cleaning-projection files are.
+        // Pricing/Commission/iCal/EarlyCheckIn/LateCheckout/WhatsApp/Payment/
+        // PropertyGroup remain out of scope and still forbidden.
         string[] forbiddenFragments =
         [
-            "Airbnb", "Booking.com", "iCal", "ICalendar", "class Payment", "record Payment",
+            "Booking.com", "iCal", "ICalendar", "class Payment", "record Payment",
             "class Pricing", "record Pricing", "Commission", "WhatsApp", "class Cleaning", "record Cleaning",
             "EarlyCheckIn", "LateCheckout", "class PropertyGroup", "record PropertyGroup",
         ];
@@ -210,11 +219,14 @@ public class ReservationsSourceConventionTests
     public void Only_the_known_approved_migrations_exist()
     {
         // Fase 3, Incremento 1's InitialCreate, plus Fase 7, Incremento 1's
-        // (Agenda Foundation, Checkpoint 1) AddCleaningScheduleProjection —
-        // updated explicitly, by exact expected name, rather than merely
-        // relaxed to "any count," so an unapproved future migration still
-        // fails this test the same way an unapproved capability would.
-        string[] approvedMigrationSuffixes = ["_InitialCreate", "_AddCleaningScheduleProjection"];
+        // (Agenda Foundation, Checkpoint 1) AddCleaningScheduleProjection,
+        // plus Fase 9, Checkpoint 3.2's AddExternalReservationIdentity
+        // (ReservationSource/ExternalReservationId + the partial unique
+        // idempotency index) — updated explicitly, by exact expected name,
+        // rather than merely relaxed to "any count," so an unapproved future
+        // migration still fails this test the same way an unapproved
+        // capability would.
+        string[] approvedMigrationSuffixes = ["_InitialCreate", "_AddCleaningScheduleProjection", "_AddExternalReservationIdentity"];
 
         var migrationsDirectory = Path.Combine(
             RepositoryRoot(), "src", "Contexts", "Reservations",

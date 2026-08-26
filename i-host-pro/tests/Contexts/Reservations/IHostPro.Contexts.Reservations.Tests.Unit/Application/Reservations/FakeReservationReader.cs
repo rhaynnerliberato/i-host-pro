@@ -1,6 +1,7 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.Contexts.Reservations.Application.Reservations;
 using IHostPro.Contexts.Reservations.Domain;
+using IHostPro.Contexts.Reservations.Domain.Enums;
 
 namespace IHostPro.Contexts.Reservations.Tests.Unit.Application.Reservations;
 
@@ -59,4 +60,8 @@ internal sealed class FakeReservationReader : IReservationReader
 
     public Task<uint?> GetCurrentXminAsync(Guid reservationId, CancellationToken cancellationToken) =>
         Task.FromResult(_currentXmin);
+
+    public Task<Guid?> GetIdByExternalIdentityAsync(
+        ReservationSource source, string externalReservationId, CancellationToken cancellationToken) =>
+        Task.FromResult<Guid?>(null);
 }

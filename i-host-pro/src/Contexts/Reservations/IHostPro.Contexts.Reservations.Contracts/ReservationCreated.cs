@@ -22,6 +22,15 @@ namespace IHostPro.Contexts.Reservations.Contracts;
 /// populates both, since every real <c>Reservation</c> always has both dates.
 /// A consumer must treat <c>null</c> as "unknown", never as
 /// <see cref="DateTimeOffset.MinValue"/>.
+///
+/// <see cref="Source"/> (Fase 9, Checkpoint 3.2 — "Airbnb Deterministic
+/// Foundation") is the stable lowercase code for the reservation's
+/// <c>ReservationSource</c> — <c>"manual"</c> or <c>"airbnb"</c>, mirroring
+/// <see cref="Status"/>'s own string-code convention rather than exposing the
+/// Domain enum directly. Every producer of this event must populate it —
+/// there is no legacy envelope from before this field existed (unlike
+/// <see cref="CheckInAt"/>/<see cref="CheckOutAt"/> above), so it is
+/// <c>required</c>, not nullable.
 /// </summary>
 public sealed record ReservationCreated : IntegrationEvent
 {
@@ -34,4 +43,6 @@ public sealed record ReservationCreated : IntegrationEvent
     public DateTimeOffset? CheckInAt { get; init; }
 
     public DateTimeOffset? CheckOutAt { get; init; }
+
+    public required string Source { get; init; }
 }

@@ -31,6 +31,25 @@ public sealed class Reservation : AggregateRoot<Guid>, ITenantOwned
     public DateTimeOffset CheckOutAt { get; private set; }
     public int GuestCount { get; private set; }
     public ReservationStatus Status { get; private set; }
+
+    /// <summary>
+    /// Where this reservation originated (Fase 9, Checkpoint 3.2). Always
+    /// <see cref="ReservationSource.Manual"/> for every reservation created
+    /// via <see cref="Create"/> — <see cref="ReservationSource.Airbnb"/> is
+    /// only ever set by <see cref="CreateImported"/>.
+    /// </summary>
+    public ReservationSource Source { get; private set; }
+
+    /// <summary>
+    /// The provider's own identifier for this reservation (e.g. an Airbnb
+    /// reservation code) — <c>null</c> for <see cref="ReservationSource.Manual"/>,
+    /// always populated for <see cref="ReservationSource.Airbnb"/> (Fase 9,
+    /// Checkpoint 3.2). Combined with <see cref="Source"/> and
+    /// <see cref="TenantId"/>, this is the idempotency key an import consumer
+    /// uses to detect a reservation it already created.
+    /// </summary>
+    public string? ExternalReservationId { get; private set; }
+
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -41,7 +60,8 @@ public sealed class Reservation : AggregateRoot<Guid>, ITenantOwned
 
     private Reservation(
         Guid id, Guid tenantId, Guid propertyId, string guestName, string? guestPhone,
-        DateTimeOffset checkInAt, DateTimeOffset checkOutAt, int guestCount, DateTimeOffset now)
+        DateTimeOffset checkInAt, DateTimeOffset checkOutAt, int guestCount,
+        ReservationSource source, string? externalReservationId, DateTimeOffset now)
         : base(id)
     {
         TenantId = tenantId;
@@ -51,6 +71,8 @@ public sealed class Reservation : AggregateRoot<Guid>, ITenantOwned
         CheckInAt = checkInAt;
         CheckOutAt = checkOutAt;
         GuestCount = guestCount;
+        Source = source;
+        ExternalReservationId = externalReservationId;
         Status = ReservationStatus.Confirmed;
         CreatedAt = now;
         UpdatedAt = now;
@@ -74,7 +96,46 @@ public sealed class Reservation : AggregateRoot<Guid>, ITenantOwned
 
         return new Reservation(
             id, tenantId, propertyId, guestName.Trim(), NormalizePhone(guestPhone),
-            normalizedCheckInAt, normalizedCheckOutAt, guestCount, now);
+            normalizedCheckInAt, normalizedCheckOutAt, guestCount,
+            ReservationSource.Manual, externalReservationId: null, now);
+    }
+
+    /// <summary>
+    /// Creates a reservation imported from an external channel (Fase 9,
+    /// Checkpoint 3.2 — CP3.1 Decision Gate item 12, Option A: the import
+    /// event carries exactly the fields this factory already requires, never
+    /// more). Born <see cref="ReservationStatus.Confirmed"/>, same as
+    /// <see cref="Create"/> — no separate imported-specific status exists.
+    /// The caller (an import consumer) is responsible for having already
+    /// resolved <paramref name="externalReservationId"/> to be unique for
+    /// this tenant/<see cref="ReservationSource.Airbnb"/> pair before calling
+    /// this — the database's own partial unique index is the authoritative
+    /// guard, this factory only enforces the non-empty structural invariant.
+    /// </summary>
+    public static Reservation CreateImported(
+        Guid id, Guid tenantId, Guid propertyId, string guestName, string? guestPhone,
+        DateTimeOffset checkInAt, DateTimeOffset checkOutAt, int guestCount,
+        string externalReservationId, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(guestName))
+            throw new ArgumentException("Guest name cannot be empty.", nameof(guestName));
+
+        if (guestCount <= 0)
+            throw new ArgumentException("Guest count must be greater than zero.", nameof(guestCount));
+
+        if (string.IsNullOrWhiteSpace(externalReservationId))
+            throw new ArgumentException("External reservation id cannot be empty.", nameof(externalReservationId));
+
+        var normalizedCheckInAt = checkInAt.ToUniversalTime();
+        var normalizedCheckOutAt = checkOutAt.ToUniversalTime();
+
+        if (normalizedCheckOutAt <= normalizedCheckInAt)
+            throw new ArgumentException("Check-out must be after check-in.", nameof(checkOutAt));
+
+        return new Reservation(
+            id, tenantId, propertyId, guestName.Trim(), NormalizePhone(guestPhone),
+            normalizedCheckInAt, normalizedCheckOutAt, guestCount,
+            ReservationSource.Airbnb, externalReservationId.Trim(), now);
     }
 
     /// <summary>

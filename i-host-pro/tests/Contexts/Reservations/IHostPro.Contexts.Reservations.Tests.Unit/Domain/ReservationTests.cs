@@ -166,4 +166,73 @@ public class ReservationTests
 
         act.Should().Throw<InvalidOperationException>();
     }
+
+    // ---- Fase 9, Checkpoint 3.2 ("Airbnb Deterministic Foundation") --------
+
+    [Fact]
+    public void Create_defaults_Source_to_Manual_with_no_ExternalReservationId()
+    {
+        var reservation = CreateValid();
+
+        reservation.Source.Should().Be(ReservationSource.Manual);
+        reservation.ExternalReservationId.Should().BeNull();
+    }
+
+    [Fact]
+    public void CreateImported_sets_Source_to_Airbnb_and_persists_the_external_id()
+    {
+        var reservation = Reservation.CreateImported(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Guest", null, CheckIn, CheckOut, 2, "AIRBNB-EXT-1", Now);
+
+        reservation.Source.Should().Be(ReservationSource.Airbnb);
+        reservation.ExternalReservationId.Should().Be("AIRBNB-EXT-1");
+        reservation.Status.Should().Be(ReservationStatus.Confirmed);
+    }
+
+    [Fact]
+    public void CreateImported_trims_the_external_reservation_id()
+    {
+        var reservation = Reservation.CreateImported(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Guest", null, CheckIn, CheckOut, 2, "  AIRBNB-EXT-2  ", Now);
+
+        reservation.ExternalReservationId.Should().Be("AIRBNB-EXT-2");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void CreateImported_rejects_empty_external_reservation_id(string externalReservationId)
+    {
+        var act = () => Reservation.CreateImported(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Guest", null, CheckIn, CheckOut, 2, externalReservationId, Now);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void CreateImported_rejects_empty_guest_name()
+    {
+        var act = () => Reservation.CreateImported(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "", null, CheckIn, CheckOut, 2, "AIRBNB-EXT-3", Now);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void CreateImported_rejects_check_out_not_after_check_in()
+    {
+        var act = () => Reservation.CreateImported(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Guest", null, CheckOut, CheckIn, 2, "AIRBNB-EXT-4", Now);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void CreateImported_rejects_non_positive_guest_count()
+    {
+        var act = () => Reservation.CreateImported(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Guest", null, CheckIn, CheckOut, 0, "AIRBNB-EXT-5", Now);
+
+        act.Should().Throw<ArgumentException>();
+    }
 }
