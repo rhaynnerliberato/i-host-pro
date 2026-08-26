@@ -88,6 +88,9 @@ Coordenação de eventos e automações entre os contextos. Escopo detalhado a r
 
 Templates, notificações, WhatsApp e sincronização inicial com Airbnb. Escopo detalhado a refinar e aprovar antes da implementação.
 
+**Status:** Em andamento. Checkpoint 1 (Communication Foundation) e Checkpoint 2 (WhatsApp real) concluídos — Checkpoint 2 homologado no nível MVP, com blockers operacionais de Production documentados (app Meta não publicado, entre outros). Checkpoint 3 (Airbnb) e Checkpoint 4 (homologação final da fase) ainda não iniciados.
+**Homologação:** `Fase 9 - Comunicacao e Integracoes do MVP - Validacao e Homologacao.md`.
+
 ### Fase 10 — Check-in, Checkout e Operações do Hóspede
 
 Check-in, checkout, early check-in, late checkout e comunicação com portaria. Escopo detalhado a refinar e aprovar antes da implementação.
