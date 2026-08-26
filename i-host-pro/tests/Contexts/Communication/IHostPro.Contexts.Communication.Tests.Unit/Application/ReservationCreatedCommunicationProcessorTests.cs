@@ -26,6 +26,7 @@ public class ReservationCreatedCommunicationProcessorTests
         PropertyId = Guid.NewGuid(),
         Status = "confirmed",
         CheckInAt = new DateTimeOffset(2026, 8, 20, 15, 0, 0, TimeSpan.Zero),
+        Source = "manual",
     };
 
     private static ReservationCreatedCommunicationProcessor CreateProcessor(
@@ -213,6 +214,41 @@ public class ReservationCreatedCommunicationProcessorTests
 
         var message = repository.AddedMessages.Should().ContainSingle().Which;
         message.IdempotencyKey.Should().Be($"{TenantId:D}:{ReservationId:D}:RESERVATION_CONFIRMATION:WhatsApp");
+    }
+
+    // ---- Fase 9, Checkpoint 3.2 ("Airbnb Deterministic Foundation") --------
+
+    [Fact]
+    public async Task HandleAsync_skips_and_creates_no_Message_when_Source_is_airbnb()
+    {
+        var repository = FakeMessageRepository.WithExisting(null);
+        var connector = FakeOutboundMessageConnector.Succeeding();
+        var processor = CreateProcessor(
+            FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            repository, connector);
+
+        await processor.HandleAsync(BuildEvent() with { Source = "airbnb" }, CancellationToken.None);
+
+        repository.AddedMessages.Should().BeEmpty("no established WhatsApp consent exists for an Airbnb-imported reservation (CP3.1 Decision Gate item 20)");
+        repository.UpdatedMessages.Should().BeEmpty();
+        connector.ReceivedDispatches.Should().BeEmpty("the connector must never be called for an Airbnb-imported reservation this checkpoint");
+    }
+
+    [Fact]
+    public async Task HandleAsync_still_sends_for_Source_manual_alongside_an_Airbnb_skip()
+    {
+        var repository = FakeMessageRepository.WithExisting(null);
+        var connector = FakeOutboundMessageConnector.Succeeding();
+        var processor = CreateProcessor(
+            FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            repository, connector);
+
+        await processor.HandleAsync(BuildEvent() with { Source = "manual" }, CancellationToken.None);
+
+        var message = repository.UpdatedMessages.Should().ContainSingle().Which;
+        message.Status.Should().Be(MessageStatus.Sent, "Source=manual must keep the existing behavior unchanged");
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

@@ -31,6 +31,18 @@ public sealed class ReservationCreatedCommunicationProcessor : IIntegrationEvent
     private const string ConnectorExceptionFailureReason = "connector_exception";
     private const string ConnectorRejectedFailureReasonDefault = "connector_rejected";
 
+    /// <summary>
+    /// <see cref="ReservationCreated.Source"/>'s stable code for an
+    /// Airbnb-imported reservation (Fase 9, Checkpoint 3.2 — "Airbnb
+    /// Deterministic Foundation"; CP3.1 Decision Gate item 20). Never
+    /// references Reservations.Domain's <c>ReservationSource</c> enum
+    /// directly — Communication may only depend on Reservations.Contracts
+    /// (ADR-019), and the event already exposes this as a plain string, same
+    /// convention as <see cref="Channel"/>/<see cref="TemplateKey"/> above.
+    /// </summary>
+    private const string AirbnbSource = "airbnb";
+    private const string ConsentSkippedReasonCode = "ConsentNotEstablishedForImportedReservation";
+
     private readonly ITemplateReader _templateReader;
     private readonly IReservationGuestContactReader _guestContactReader;
     private readonly IMessageRepository _repository;
@@ -59,6 +71,20 @@ public sealed class ReservationCreatedCommunicationProcessor : IIntegrationEvent
 
     public async Task HandleAsync(ReservationCreated @event, CancellationToken cancellationToken)
     {
+        // Fase 9, Checkpoint 3.2 — CP3.1 Decision Gate item 20: an
+        // Airbnb-imported reservation carries no established WhatsApp
+        // consent/opt-in (unresolved product decision, deliberately not
+        // assumed safe). Checked first, before any idempotency lookup or
+        // Message creation — no Message row is ever created for this case,
+        // never marked Failed (this is a deliberate skip, not a failure).
+        if (@event.Source == AirbnbSource)
+        {
+            _logger.LogInformation(
+                "Communication {Trigger} skipped for tenant {TenantId} reservation {ReservationId}: {Result} (reasonCode {ReasonCode})",
+                nameof(ReservationCreated), @event.TenantId, @event.ReservationId, "ReservationCommunicationSkipped", ConsentSkippedReasonCode);
+            return;
+        }
+
         var idempotencyKey = BuildIdempotencyKey(@event.TenantId, @event.ReservationId, TemplateKey, Channel);
 
         var existing = await _transactionExecutor.ExecuteAsync(
