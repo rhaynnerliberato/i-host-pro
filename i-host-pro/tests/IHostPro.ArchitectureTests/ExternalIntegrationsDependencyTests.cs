@@ -123,18 +123,61 @@ public class ExternalIntegrationsDependencyTests
 
     /// <summary>
     /// ADR-021, item 11: the sixth synchronous exception authorizes
-    /// Communication → External Integrations exclusively — no other Bounded
-    /// Context gains the right to reference <c>ExternalIntegrations.Contracts</c>
-    /// or call <see cref="IMessagingProvider"/> by this ADR.
+    /// Communication → External Integrations exclusively for a SYNCHRONOUS
+    /// call (<see cref="IMessagingProvider"/>) — no other Bounded Context
+    /// gains the right to call it, or to reference
+    /// <c>ExternalIntegrations.Domain</c>/<c>Application</c>/
+    /// <c>Infrastructure</c>/<c>Api</c>, by this ADR.
+    ///
+    /// Fase 9, Checkpoint 3.2 ("Airbnb Deterministic Foundation") adds a
+    /// SECOND, narrower exception, checked explicitly by name below rather
+    /// than by namespace (the Wolverine transport-adapter classes and the
+    /// composition-root registration both legitimately need to reference the
+    /// Airbnb event types directly — the exact same shape Reservations
+    /// already has with Housekeeping.Contracts/<c>CleaningCreatedHandler</c>):
+    /// exactly the three Application-layer processors, the three
+    /// Infrastructure-layer Wolverine adapters, and
+    /// <c>ReservationsModuleExtensions</c> (which wires the keyed DI
+    /// registrations) — ordinary ASYNC Integration Event consumption, never
+    /// a new synchronous cross-context call (CP3.1 Decision Gate item 13,
+    /// CP3.2 mandate §37). Reservations.Domain/Contracts/Api remain fully
+    /// excluded, and every other Bounded Context stays excluded entirely.
     /// </summary>
     [Fact]
-    public void No_Other_Bounded_Context_Assembly_References_ExternalIntegrationsContracts_Except_Communication()
+    public void No_Other_Bounded_Context_Assembly_References_ExternalIntegrationsContracts_Except_Communication_And_ReservationsAirbnbConsumer()
     {
+        string[] allowedTypeNames =
+        [
+            "AirbnbReservationImportedProcessor", "AirbnbReservationUpdatedProcessor", "AirbnbReservationCancelledProcessor",
+            "AirbnbReservationImportedHandler", "AirbnbReservationUpdatedHandler", "AirbnbReservationCancelledHandler",
+            "ReservationsModuleExtensions",
+        ];
+
+        var reservationsAssembliesToCheck = new[]
+        {
+            typeof(IHostPro.Contexts.Reservations.Application.Optional<>).Assembly,
+            typeof(IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext).Assembly,
+        };
+
+        foreach (var assembly in reservationsAssembliesToCheck)
+        {
+            var referencingTypes = Types.InAssembly(assembly)
+                .That()
+                .HaveDependencyOn("IHostPro.Contexts.ExternalIntegrations.Contracts")
+                .GetTypes()
+                .Select(t => t.Name)
+                .ToList();
+
+            referencingTypes.Should().BeEquivalentTo(
+                referencingTypes.Intersect(allowedTypeNames),
+                $"only the Airbnb import/update/cancel processors and adapters may reference ExternalIntegrations.Contracts in {assembly.GetName().Name} (CP3.2 mandate §37)");
+        }
+
         var otherContextAssemblies = new[]
         {
             typeof(IHostPro.Contexts.Reservations.Domain.Reservation).Assembly,
             typeof(IHostPro.Contexts.Reservations.Contracts.AssemblyReference).Assembly,
-            typeof(IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext).Assembly,
+            typeof(IHostPro.Contexts.Reservations.Api.AssemblyReference).Assembly,
             typeof(IHostPro.Contexts.Housekeeping.Domain.Cleaning).Assembly,
             typeof(IHostPro.Contexts.Housekeeping.Infrastructure.Persistence.HousekeepingDbContext).Assembly,
             typeof(IHostPro.Contexts.PropertyManagement.Domain.Property).Assembly,
@@ -305,10 +348,13 @@ public class ExternalIntegrationsDependencyTests
     /// CP2.1 mandate §8 originally forbade any Integration Event in this
     /// assembly (no outbound event existed yet). Fase 9, Checkpoint 2.3.3
     /// (ADR-022 item 13/14) explicitly authorized exactly one:
-    /// <c>WhatsAppMessageStatusChanged</c>. This test now guards the
-    /// inverse of its original intent — exactly this one type, never a
-    /// second one added silently (mandate §3: a dedicated, deliberately
-    /// named event, never a reused/overloaded one).
+    /// <c>WhatsAppMessageStatusChanged</c>. Fase 9, Checkpoint 3.2 ("Airbnb
+    /// Deterministic Foundation", mandate §4) authorized four more:
+    /// <c>AirbnbSyncStarted</c>/<c>AirbnbReservationImported</c>/
+    /// <c>AirbnbReservationUpdated</c>/<c>AirbnbReservationCancelled</c>.
+    /// This test guards the inverse of its original intent — exactly these
+    /// five types, never another one added silently (mandate §3: a
+    /// dedicated, deliberately named event, never a reused/overloaded one).
     /// </summary>
     [Fact]
     public void Contracts_Declares_Exactly_One_IntegrationEvent()
@@ -320,8 +366,11 @@ public class ExternalIntegrationsDependencyTests
             .ToList();
 
         result.Select(t => t.Name).Should().BeEquivalentTo(
-            ["WhatsAppMessageStatusChanged"],
-            "Checkpoint 2.3.3 (ADR-022 item 13/14) authorized exactly this one Integration Event — " +
+            [
+                "WhatsAppMessageStatusChanged",
+                "AirbnbSyncStarted", "AirbnbReservationImported", "AirbnbReservationUpdated", "AirbnbReservationCancelled",
+            ],
+            "Checkpoint 2.3.3 (ADR-022 item 13/14) and Checkpoint 3.2 (mandate §4) authorized exactly these five Integration Events — " +
             "any other type here would mean a new event was added without an explicit checkpoint authorization");
     }
 
@@ -620,6 +669,141 @@ public class ExternalIntegrationsDependencyTests
     // Infrastructure_Never_References_Communication test above (it checks
     // the entire ExternalIntegrations.Infrastructure assembly, including
     // this checkpoint's new types) — not duplicated here.
+
+    // ---- Fase 9, Checkpoint 3.2 ("Airbnb Deterministic Foundation") --------
+
+    [Fact]
+    public void AirbnbIntegration_Is_Tenant_Owned()
+    {
+        typeof(ITenantOwned).IsAssignableFrom(typeof(AirbnbIntegration)).Should().BeTrue(
+            "AirbnbIntegration must implement ITenantOwned for the Global Query Filter + RLS to apply");
+    }
+
+    [Fact]
+    public void AirbnbListingMapping_Is_Tenant_Owned()
+    {
+        typeof(ITenantOwned).IsAssignableFrom(typeof(AirbnbListingMapping)).Should().BeTrue(
+            "AirbnbListingMapping must be tenant-owned (CP3.1 Decision Gate item D) — never a global routing directory like WhatsAppTenantRoute");
+    }
+
+    [Fact]
+    public void AirbnbIntegration_Never_Declares_A_Raw_Secret_Property()
+    {
+        var propertyNames = typeof(AirbnbIntegration)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(p => p.Name)
+            .ToList();
+
+        var suspiciousNames = propertyNames
+            .Where(name =>
+                (name.Contains("Token", StringComparison.OrdinalIgnoreCase) ||
+                 name.Contains("Secret", StringComparison.OrdinalIgnoreCase)) &&
+                !name.EndsWith("SecretReference", StringComparison.Ordinal))
+            .ToList();
+
+        suspiciousNames.Should().BeEmpty(
+            "AirbnbIntegration must only ever persist opaque secret REFERENCES, never a raw secret value — " +
+            $"found suspicious propert{(suspiciousNames.Count == 1 ? "y" : "ies")}: {string.Join(", ", suspiciousNames)}");
+    }
+
+    /// <summary>
+    /// CP3.2 mandate §5/§7: the Airbnb reservation events must never carry
+    /// email/phone/review/message/raw-payload/pricing content — only the
+    /// identifiers and fields <c>Reservation.CreateImported</c> itself
+    /// requires. Mirrors <c>WhatsAppMessageStatusChanged_Never_Declares_A_Forbidden_PII_Property</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(AirbnbReservationImported))]
+    [InlineData(typeof(AirbnbReservationUpdated))]
+    [InlineData(typeof(AirbnbReservationCancelled))]
+    public void Airbnb_Reservation_Events_Never_Declare_A_Forbidden_PII_Property(Type eventType)
+    {
+        var forbiddenSubstrings = new[] { "Email", "Phone", "Review", "Message", "Payload", "Price", "Currency", "Fee", "Payment", "Secret", "Token" };
+
+        var propertyNames = eventType
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(p => p.Name)
+            .ToList();
+
+        foreach (var forbidden in forbiddenSubstrings)
+        {
+            propertyNames.Should().NotContain(
+                name => name.Contains(forbidden, StringComparison.OrdinalIgnoreCase),
+                $"{eventType.Name} must stay PII-safe/minimal (CP3.2 mandate §5/§7) — no property name may reference '{forbidden}'");
+        }
+    }
+
+    /// <summary>
+    /// CP3.2 mandate §37: Reservations may only ever reach External
+    /// Integrations through <c>Contracts</c> — Domain/Api must carry ZERO
+    /// reference to any External Integrations assembly at all, not even
+    /// Contracts. Infrastructure's own narrow, by-name-checked exception for
+    /// Contracts is covered separately (see
+    /// <see cref="No_Other_Bounded_Context_Assembly_References_ExternalIntegrationsContracts_Except_Communication_And_ReservationsAirbnbConsumer"/>)
+    /// — checked here only for the three OTHER ExternalIntegrations
+    /// assemblies (Domain/Application/Api), which Infrastructure must still
+    /// never reference at all.
+    /// </summary>
+    [Fact]
+    public void Reservations_Domain_And_Api_Never_Reference_Any_ExternalIntegrations_Assembly()
+    {
+        var assembliesToCheck = new[]
+        {
+            typeof(IHostPro.Contexts.Reservations.Domain.Reservation).Assembly,
+            typeof(IHostPro.Contexts.Reservations.Api.AssemblyReference).Assembly,
+        };
+
+        foreach (var assembly in assembliesToCheck.Distinct())
+        {
+            var result = Types.InAssembly(assembly)
+                .Should()
+                .NotHaveDependencyOnAny(
+                    "IHostPro.Contexts.ExternalIntegrations.Domain",
+                    "IHostPro.Contexts.ExternalIntegrations.Application",
+                    "IHostPro.Contexts.ExternalIntegrations.Infrastructure",
+                    "IHostPro.Contexts.ExternalIntegrations.Api",
+                    "IHostPro.Contexts.ExternalIntegrations.Contracts")
+                .GetResult();
+
+            result.IsSuccessful.Should().BeTrue($"{assembly.GetName().Name}: {BuildFailureMessage(result)}");
+        }
+
+        var infrastructureResult = Types.InAssembly(typeof(IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext).Assembly)
+            .Should()
+            .NotHaveDependencyOnAny(
+                "IHostPro.Contexts.ExternalIntegrations.Domain",
+                "IHostPro.Contexts.ExternalIntegrations.Application",
+                "IHostPro.Contexts.ExternalIntegrations.Infrastructure",
+                "IHostPro.Contexts.ExternalIntegrations.Api")
+            .GetResult();
+
+        infrastructureResult.IsSuccessful.Should().BeTrue(
+            "Reservations.Infrastructure may reference ExternalIntegrations.Contracts only (Airbnb event consumption) — " +
+            $"never Domain/Application/Infrastructure/Api: {BuildFailureMessage(infrastructureResult)}");
+    }
+
+    /// <summary>CP3.2 mandate §37: Property Management must never reference or name Airbnb — provider mapping belongs entirely to External Integrations.</summary>
+    [Fact]
+    public void PropertyManagement_Assemblies_Contain_No_Airbnb_Named_Type()
+    {
+        var assembliesToCheck = new[]
+        {
+            typeof(IHostPro.Contexts.PropertyManagement.Domain.Property).Assembly,
+            typeof(IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence.PropertyManagementDbContext).Assembly,
+        };
+
+        foreach (var assembly in assembliesToCheck.Distinct())
+        {
+            var typeNames = Types.InAssembly(assembly).GetTypes()
+                .Select(t => t.FullName ?? t.Name)
+                .Where(name => name.StartsWith("IHostPro.", StringComparison.Ordinal))
+                .ToList();
+
+            typeNames.Should().NotContain(
+                name => name.Contains("Airbnb", StringComparison.Ordinal),
+                $"{assembly.GetName().Name} must never contain an Airbnb-named type — provider mapping belongs entirely to External Integrations");
+        }
+    }
 
     private static string BuildFailureMessage(TestResult result) =>
         result.FailingTypes is null
