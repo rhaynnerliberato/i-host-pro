@@ -1,4 +1,7 @@
 using IHostPro.Contexts.ExternalIntegrations.Application;
+using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbImports;
+using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbIntegrations;
+using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbListingMappings;
 using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppIntegrations;
 using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppTemplateMappings;
 using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppTenantRoutes;
@@ -54,6 +57,13 @@ public static class ExternalIntegrationsModuleExtensions
         // no external network call, just a plain table lookup.
         services.AddScoped<IWhatsAppTenantRouteRepository, WhatsAppTenantRouteRepository>();
         services.AddScoped<IWhatsAppTenantRouteResolver, WhatsAppTenantRouteResolver>();
+
+        // Fase 9, Checkpoint 3.2 — "Airbnb Deterministic Foundation".
+        // Unconditional, same rationale as the WhatsApp repositories above:
+        // plain table access, no secret, no external network call.
+        services.AddScoped<IAirbnbIntegrationRepository, AirbnbIntegrationRepository>();
+        services.AddScoped<IAirbnbListingMappingRepository, AirbnbListingMappingRepository>();
+        services.AddScoped<IAirbnbReservationSyncPublisher, AirbnbReservationSyncPublisher>();
 
         // Development-only (CP2.1 mandate §12): no Production backend exists
         // yet — resolving IWhatsAppCredentialProvider outside Development

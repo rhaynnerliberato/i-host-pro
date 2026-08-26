@@ -3,6 +3,7 @@ using System;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ExternalIntegrationsDbContext))]
-    partial class ExternalIntegrationsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260826115401_AddAirbnbIntegrationFoundation")]
+    partial class AddAirbnbIntegrationFoundation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

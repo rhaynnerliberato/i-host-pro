@@ -518,6 +518,19 @@ try
                 .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
 
         RouteExternalIntegrationsEvent<WhatsAppMessageStatusChanged>("whatsapp_message_status_changed");
+
+        // Fase 9, Checkpoint 3.2 ("Airbnb Deterministic Foundation"):
+        // External Integrations' own Airbnb reservation events, published by
+        // IAirbnbReservationSyncPublisher — same exchange as
+        // WhatsAppMessageStatusChanged above (External Integrations' own
+        // published-events exchange, never a new one per event type).
+        // AirbnbSyncStarted is deliberately NOT routed here — it has no
+        // consumer this checkpoint (mandate §8: deferred until a future sync
+        // orchestration checkpoint), so publishing it now would only produce
+        // an unconsumed, unbound message.
+        RouteExternalIntegrationsEvent<AirbnbReservationImported>("airbnb_reservation_imported");
+        RouteExternalIntegrationsEvent<AirbnbReservationUpdated>("airbnb_reservation_updated");
+        RouteExternalIntegrationsEvent<AirbnbReservationCancelled>("airbnb_reservation_cancelled");
     });
 
     builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();

@@ -37,6 +37,10 @@ public sealed class ExternalIntegrationsDbContext : BaseDbContext
     /// <summary>Global, non-tenant-owned — see <see cref="Mappings.WhatsAppTenantRouteConfiguration"/>'s remarks.</summary>
     public DbSet<WhatsAppTenantRoute> WhatsAppTenantRoutes => Set<WhatsAppTenantRoute>();
 
+    /// <summary>Fase 9, Checkpoint 3.2 — "Airbnb Deterministic Foundation".</summary>
+    public DbSet<AirbnbIntegration> AirbnbIntegrations => Set<AirbnbIntegration>();
+    public DbSet<AirbnbListingMapping> AirbnbListingMappings => Set<AirbnbListingMapping>();
+
     public ExternalIntegrationsDbContext(DbContextOptions<ExternalIntegrationsDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)
     {
