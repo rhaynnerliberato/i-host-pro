@@ -1,4 +1,5 @@
 using IHostPro.BuildingBlocks.Domain;
+using IHostPro.Contexts.Reservations.Application;
 using IHostPro.Contexts.Reservations.Application.Reservations;
 
 namespace IHostPro.Contexts.Reservations.Tests.Unit.Application.Reservations;
@@ -25,4 +26,11 @@ internal sealed class PassThroughCancelReservationExecutor : ICancelReservationE
 {
     public Task<Result<ReservationResult>> ExecuteAsync(
         Func<Task<Result<ReservationResult>>> operation, CancellationToken cancellationToken) => operation();
+}
+
+/// <summary>Fase 9, Checkpoint 3.2.1 — same pass-through rationale, for the Airbnb import/update/cancel processors' own <see cref="IReservationsTransactionExecutor"/> dependency.</summary>
+internal sealed class PassThroughReservationsTransactionExecutor : IReservationsTransactionExecutor
+{
+    public Task<TResponse> ExecuteAsync<TResponse>(
+        Func<Task<TResponse>> operation, CancellationToken cancellationToken) => operation();
 }

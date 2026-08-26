@@ -11,20 +11,30 @@ internal sealed class FakeReservationReader : IReservationReader
     private readonly IReadOnlyList<ReservationSummaryResult> _summaries;
     private readonly ReservationUpdateSnapshot? _snapshot;
     private readonly uint? _currentXmin;
+    private readonly Guid? _externalIdentityResult;
 
     private FakeReservationReader(
         ReservationResult? detail, IReadOnlyList<ReservationSummaryResult> summaries,
-        ReservationUpdateSnapshot? snapshot, uint? currentXmin)
+        ReservationUpdateSnapshot? snapshot, uint? currentXmin, Guid? externalIdentityResult = null)
     {
         _detail = detail;
         _summaries = summaries;
         _snapshot = snapshot;
         _currentXmin = currentXmin;
+        _externalIdentityResult = externalIdentityResult;
     }
 
     public static FakeReservationReader WithDetail(ReservationResult? detail) => new(detail, [], null, null);
 
     public static FakeReservationReader WithSummaries(IReadOnlyList<ReservationSummaryResult> summaries) => new(null, summaries, null, null);
+
+    /// <summary>
+    /// Fase 9, Checkpoint 3.2.1 — controls what
+    /// <see cref="GetIdByExternalIdentityAsync"/> returns, for the Airbnb
+    /// import/update/cancel processors' own tests. <c>null</c> (default)
+    /// mirrors every other factory here — an unknown external identity.
+    /// </summary>
+    public static FakeReservationReader WithExternalIdentityResult(Guid? reservationId) => new(null, [], null, null, reservationId);
 
     /// <summary>
     /// Builds the snapshot <see cref="UpdateReservationCommandHandler"/> reads
@@ -63,5 +73,5 @@ internal sealed class FakeReservationReader : IReservationReader
 
     public Task<Guid?> GetIdByExternalIdentityAsync(
         ReservationSource source, string externalReservationId, CancellationToken cancellationToken) =>
-        Task.FromResult<Guid?>(null);
+        Task.FromResult(_externalIdentityResult);
 }
