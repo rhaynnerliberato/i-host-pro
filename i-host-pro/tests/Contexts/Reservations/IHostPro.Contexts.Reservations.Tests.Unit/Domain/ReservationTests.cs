@@ -167,6 +167,42 @@ public class ReservationTests
         act.Should().Throw<InvalidOperationException>();
     }
 
+    // ---- Fase 10, Checkpoint 1 (Guest Operations Foundation) ---------------
+
+    [Fact]
+    public void Close_from_Confirmed_transitions_to_Closed()
+    {
+        var reservation = CreateValid();
+
+        reservation.Close(Now.AddMinutes(1));
+
+        reservation.Status.Should().Be(ReservationStatus.Closed);
+    }
+
+    [Fact]
+    public void Close_when_already_Closed_throws()
+    {
+        var reservation = CreateValid();
+        reservation.Close(Now.AddMinutes(1));
+
+        var act = () => reservation.Close(Now.AddMinutes(2));
+
+        act.Should().Throw<InvalidOperationException>(
+            "this guard is defense-in-depth — the handler is responsible for the real idempotent no-op BEFORE calling Close");
+    }
+
+    [Fact]
+    public void Close_when_Cancelled_throws()
+    {
+        var reservation = CreateValid();
+        reservation.Cancel(Now.AddMinutes(1));
+
+        var act = () => reservation.Close(Now.AddMinutes(2));
+
+        act.Should().Throw<InvalidOperationException>(
+            "this guard is defense-in-depth — the handler is responsible for the specific invariant-violation exception BEFORE calling Close");
+    }
+
     // ---- Fase 9, Checkpoint 3.2 ("Airbnb Deterministic Foundation") --------
 
     [Fact]
