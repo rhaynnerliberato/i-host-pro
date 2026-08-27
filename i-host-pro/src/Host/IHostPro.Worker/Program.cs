@@ -16,6 +16,7 @@ using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Messaging;
 using IHostPro.Contexts.Identity.Infrastructure;
+using IHostPro.Contexts.PropertyManagement.Infrastructure;
 using IHostPro.Contexts.Reservations.Contracts;
 using IHostPro.Contexts.Reservations.Infrastructure;
 using IHostPro.Contexts.Reservations.Infrastructure.Messaging;
@@ -135,6 +136,16 @@ try
     builder.Services.AddDashboardModule(builder.Configuration);
     builder.Services.AddDashboardProjectionConsumer();
 
+    // Property Management module (Fase 10, Checkpoint 4 — Portaria
+    // Notification Foundation, ADR-026): Worker needs PropertyManagementDbContext
+    // + IFrontDeskContactReader so Communication's new Front Desk processors
+    // (registered below) can resolve the current front desk contact for a
+    // Property. Read-only from this process — no command dispatch, no
+    // writes, so (mirrors CommunicationDbContext's own precedent) no
+    // EnrollAncillaryPostgresqlOutbox call is needed for
+    // property_management_messaging here.
+    builder.Services.AddPropertyManagementModule(builder.Configuration);
+
     // Communication module (Fase 9, Checkpoint 1): CommunicationDbContext +
     // its shared execution-scope/repository/transaction-executor DI graph
     // (ADR-016) — mirrors AddDashboardModule's own precedent. Fase 9,
@@ -178,6 +189,12 @@ try
     if (builder.Environment.IsDevelopment())
     {
         builder.Services.AddCommunicationReservationConsumer();
+
+        // Fase 10, Checkpoint 4 (Portaria Notification Foundation): the
+        // three Front Desk processors reuse the SAME FakeWhatsAppConnector
+        // registered immediately above by AddCommunicationReservationConsumer
+        // — same Development-only gate, same "zero real provider" reasoning.
+        builder.Services.AddCommunicationFrontDeskConsumer();
     }
 
     // Fase 10, Checkpoint 2 (Check-in/Checkout Core): the ReservationCreated
@@ -666,6 +683,24 @@ try
             opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
             opts.ListenToRabbitQueue("communication.reservation-created-trigger")
                 .AddStickyHandler(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.ReservationCreatedHandler));
+
+            // Fase 10, Checkpoint 4 (Portaria Notification Foundation): the
+            // three Front Desk notification consumers on the EXISTING
+            // guest-operations-events exchange — same Development-only gate
+            // as the reservation-confirmation consumer immediately above
+            // (same FakeWhatsAppConnector, same "no real provider yet"
+            // reasoning). GuestCheckedIn gains its first-ever real consumer
+            // here (previously published with zero queues bound).
+            // EarlyCheckinApproved becomes a 2-consumer event (Workflow +
+            // Communication); LateCheckoutApproved becomes a 3-consumer
+            // event (Workflow + Housekeeping + Communication) — each in its
+            // own sticky-bound queue (ADR-020), no competing consumers.
+            opts.ListenToRabbitQueue("communication.guest-checked-in-trigger")
+                .AddStickyHandler(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.GuestCheckedInHandler));
+            opts.ListenToRabbitQueue("communication.early-checkin-approved-trigger")
+                .AddStickyHandler(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.EarlyCheckinApprovedHandler));
+            opts.ListenToRabbitQueue("communication.late-checkout-approved-trigger")
+                .AddStickyHandler(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.LateCheckoutApprovedHandler));
         }
 
         // Guest Operations' own single trigger consumer (Fase 10, Checkpoint

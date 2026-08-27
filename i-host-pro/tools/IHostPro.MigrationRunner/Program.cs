@@ -867,14 +867,15 @@ try
             {
                 exchange.ExchangeType = ExchangeType.Topic;
                 exchange.BindQueue("workflow.guest-checked-out-trigger", "guest_checked_out");
-                // guest_checked_in (Fase 10, Checkpoint 2) is deliberately
-                // NOT bound to any queue — no consumer exists yet, mirroring
-                // the same "unbound topic message, simply dropped" precedent
-                // documented on IHostPro.Api's own PublishMessage rule for
-                // it. early_checkin_denied/late_checkout_denied (Checkpoint
-                // 3) follow the identical precedent below — see the two
-                // events' own PublishMessage rules in IHostPro.Api's
-                // Program.cs.
+                // guest_checked_in (Fase 10, Checkpoint 2) had no consumer
+                // through Checkpoint 3 — Checkpoint 4 (Portaria Notification
+                // Foundation) adds Communication's own front desk consumer
+                // below (Development-gated, same precedent as
+                // "communication.reservation-created-trigger" above).
+                // early_checkin_denied/late_checkout_denied remain
+                // deliberately NOT bound to any queue — no consumer exists
+                // for either — see the two events' own PublishMessage rules
+                // in IHostPro.Api's Program.cs.
 
                 // Fase 10, Checkpoint 3 (Early Check-in / Late Checkout):
                 // Workflow Orchestration's third trigger consumer — same
@@ -889,6 +890,24 @@ try
                 // know either is listening.
                 exchange.BindQueue("workflow.late-checkout-approved-trigger", "late_checkout_approved");
                 exchange.BindQueue("housekeeping.late-checkout-approved-trigger", "late_checkout_approved");
+
+                // Fase 10, Checkpoint 4 (Portaria Notification Foundation):
+                // Communication's three Front Desk notification queues —
+                // gated to Development ONLY, same IsDevelopment() allowlist
+                // as "communication.reservation-created-trigger" above (same
+                // FakeWhatsAppConnector, same "no real provider yet"
+                // reasoning; IHostPro.Worker never listens to these queues
+                // outside Development either — see its own Program.cs).
+                // guest_checked_in gains its first-ever bound queue here.
+                // early_checkin_approved/late_checkout_approved each gain
+                // one more independent subscriber queue, on top of the
+                // Workflow/Housekeeping ones already bound above.
+                if (builder.Environment.IsDevelopment())
+                {
+                    exchange.BindQueue("communication.guest-checked-in-trigger", "guest_checked_in");
+                    exchange.BindQueue("communication.early-checkin-approved-trigger", "early_checkin_approved");
+                    exchange.BindQueue("communication.late-checkout-approved-trigger", "late_checkout_approved");
+                }
             });
     });
 
