@@ -1,25 +1,38 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    No reference to BuildingBlocks.Application: this checkpoint has no
-    Mediator/HTTP command dispatch (zero public API endpoints), so none of
-    ICommand/IQuery/PagedResult/ValidationBehavior/IIntegrationEventHandler
-    is needed — RecordGuestCheckedOutCommandHandler is a plain handler
-    interface, resolved directly, mirroring
-    Housekeeping.Application.ICreateCleaningForReservationHandler's own
-    shape. IntegrationEvent (for this project's own IIntegrationEventCollector)
-    comes transitively via the Contracts reference below.
+    Fase 10, Checkpoint 2 — Check-in/Checkout Core: BuildingBlocks.Application
+    added back (removed in CP1's own csproj with the opposite rationale) —
+    ReservationCreatedGuestStayInitializer now implements
+    IIntegrationEventHandler<ReservationCreated>, mirroring
+    Communication.Application/Workflow.Application's own choreography
+    consumers of the same event. Reservations.Contracts referenced solely
+    for the ReservationCreated event type — never Reservations.Domain/
+    Application/Infrastructure/Api (ordinary async Integration Event
+    consumption, no new synchronous exception, Architecture Principles
+    §14).
   -->
   <ItemGroup>
     <ProjectReference Include="..\IHostPro.Contexts.GuestOperations.Domain\IHostPro.Contexts.GuestOperations.Domain.csproj" />
     <ProjectReference Include="..\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Structured logging in the command handler (no-op/success/failure) —
+    <!-- Structured logging in the command handlers (no-op/success/failure) —
          same abstractions-only package every other context's Application
          project uses, never the concrete logging implementation. -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <!-- RecordGuestCheckedInCommand/RecordGuestCheckedOutCommand are now
+         HTTP-exposed (Checkpoint 2) — dispatched through Mediator like every
+         other HTTP-facing command in this codebase (ICommand/ICommandHandler,
+         Mediator.SourceGenerator — see ADR-002). Source-generator discovery
+         must run in this compilation. -->
+    <PackageReference Include="Mediator.SourceGenerator" Version="3.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
   <PropertyGroup>
