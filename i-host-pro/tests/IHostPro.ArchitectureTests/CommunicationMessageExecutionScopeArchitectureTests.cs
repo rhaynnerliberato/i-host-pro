@@ -63,10 +63,11 @@ public class CommunicationMessageExecutionScopeArchitectureTests
             .DoNotHaveName(nameof(CommunicationMessageExecutionScope))
             .GetTypes();
 
-        adapterTypes.Should().HaveCount(4,
-            "four types are expected in this namespace this checkpoint: ReservationCreatedHandler and " +
+        adapterTypes.Should().HaveCount(7,
+            "seven types are expected in this namespace: ReservationCreatedHandler and " +
             "WhatsAppMessageStatusChangedHandler (the thin Wolverine adapters, Fase 9, Checkpoint 2.3.3), " +
-            "FakeWhatsAppConnector (the CP1 deterministic connector double), and " +
+            "GuestCheckedInHandler/EarlyCheckinApprovedHandler/LateCheckoutApprovedHandler (Fase 10, Checkpoint 4 — " +
+            "Portaria Notification Foundation), FakeWhatsAppConnector (the CP1 deterministic connector double), and " +
             "ExternalIntegrationsWhatsAppConnector (Checkpoint 2.2's real IOutboundMessageConnector, not wired " +
             "into this Wolverine-triggered flow — see its own doc comment)");
 
@@ -76,11 +77,18 @@ public class CommunicationMessageExecutionScopeArchitectureTests
             "IHostPro.Contexts.Communication.Application.ICommunicationTransactionExecutor",
             "IHostPro.Contexts.Communication.Application.ReservationCreatedCommunicationProcessor",
             "IHostPro.Contexts.Communication.Application.WhatsAppMessageStatusCommunicationProcessor",
+            "IHostPro.Contexts.Communication.Application.GuestCheckedInFrontDeskNotificationProcessor",
+            "IHostPro.Contexts.Communication.Application.EarlyCheckinApprovedFrontDeskNotificationProcessor",
+            "IHostPro.Contexts.Communication.Application.LateCheckoutApprovedFrontDeskNotificationProcessor",
             "Microsoft.Extensions.DependencyInjection.IServiceScopeFactory",
             "Wolverine.EntityFrameworkCore.IDbContextOutbox",
         };
 
-        foreach (var adapterName in new[] { nameof(ReservationCreatedHandler), nameof(WhatsAppMessageStatusChangedHandler) })
+        foreach (var adapterName in new[]
+                 {
+                     nameof(ReservationCreatedHandler), nameof(WhatsAppMessageStatusChangedHandler),
+                     nameof(GuestCheckedInHandler), nameof(EarlyCheckinApprovedHandler), nameof(LateCheckoutApprovedHandler),
+                 })
         {
             var result = Types.InAssembly(typeof(CommunicationMessageExecutionScope).Assembly)
                 .That()

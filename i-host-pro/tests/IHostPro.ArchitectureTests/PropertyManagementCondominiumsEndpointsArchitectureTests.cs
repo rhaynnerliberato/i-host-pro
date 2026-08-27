@@ -86,13 +86,17 @@ public class PropertyManagementCondominiumsEndpointsArchitectureTests
     }
 
     [Fact]
-    public void No_Group_or_Portaria_endpoint_exists_yet()
+    public void Exactly_the_known_approved_controllers_exist_no_Group_controller()
     {
         // Through Checkpoint 5: CondominiumsController (Checkpoint 2),
         // PropertiesController (Checkpoint 3 CRUD + Checkpoint 4 lifecycle +
         // Checkpoint 5 administrative Ownership), MyPropertiesController
-        // (Checkpoint 5 self-service "mine") — no Group or Portaria
-        // controller exists yet. See
+        // (Checkpoint 5 self-service "mine"). Fase 10, Checkpoint 4 (Portaria
+        // Notification Foundation) legitimately adds FrontDeskContactsController
+        // — the front desk CONTACT (an operational recipient configuration)
+        // is explicitly approved; a generic "Group" controller, or a
+        // controller literally named for "Portaria" itself (as opposed to
+        // its contact), still does not exist. See
         // PropertyManagementPropertiesEndpointsArchitectureTests for the
         // per-action rules.
         var controllerTypes = Types.InAssembly(typeof(CondominiumsController).Assembly)
@@ -101,7 +105,8 @@ public class PropertyManagementCondominiumsEndpointsArchitectureTests
             .GetTypes();
 
         controllerTypes.Select(t => t.Name).Should().BeEquivalentTo(
-            [nameof(CondominiumsController), "PropertiesController", "MyPropertiesController"],
-            "no controller for Group/Portaria may exist yet — only CondominiumsController/PropertiesController/MyPropertiesController through Checkpoint 5");
+            [nameof(CondominiumsController), "PropertiesController", "MyPropertiesController", "FrontDeskContactsController"],
+            "no Group controller may exist yet — only CondominiumsController/PropertiesController/MyPropertiesController (through Checkpoint 5) " +
+            "and FrontDeskContactsController (Fase 10, Checkpoint 4)");
     }
 }

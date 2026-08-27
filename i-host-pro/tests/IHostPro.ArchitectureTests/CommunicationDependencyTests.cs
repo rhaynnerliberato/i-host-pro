@@ -10,12 +10,15 @@ namespace IHostPro.ArchitectureTests;
 /// Enforces the Communication-specific rules from Fase 9, Checkpoint 1
 /// (Comunicação e Integrações do MVP): Communication is a Supporting Bounded
 /// Context that may reference ONLY Reservations.Contracts (the
-/// <c>ReservationCreated</c> trigger and the ADR-019 guest-contact reader)
-/// and Configuration.Contracts (the general Configuration &amp; Policy
-/// synchronous-read exception, ADR-002, for <c>ITemplateReader</c>) — never
-/// any other context's Domain/Application/Infrastructure/Api, and never any
-/// other context's DbContext. Mirrors <c>DashboardDependencyTests</c> exactly
-/// where applicable.
+/// <c>ReservationCreated</c> trigger and the ADR-019 guest-contact reader),
+/// Configuration.Contracts (the general Configuration &amp; Policy
+/// synchronous-read exception, ADR-002, for <c>ITemplateReader</c>),
+/// GuestOperations.Contracts (Fase 10, Checkpoint 4 — the three Front Desk
+/// notification triggers) and PropertyManagement.Contracts (Fase 10,
+/// Checkpoint 4 — the new synchronous exception #9, ADR-026, for
+/// <c>IFrontDeskContactReader</c>) — never any other context's Domain/
+/// Application/Infrastructure/Api, and never any other context's DbContext.
+/// Mirrors <c>DashboardDependencyTests</c> exactly where applicable.
 /// </summary>
 public class CommunicationDependencyTests
 {
@@ -69,12 +72,14 @@ public class CommunicationDependencyTests
 
     /// <summary>
     /// Communication.Application/.Infrastructure may reference other
-    /// Bounded Contexts exclusively through the two approved Contracts
+    /// Bounded Contexts exclusively through the four approved Contracts
     /// assemblies (Reservations.Contracts — ReservationCreated + ADR-019;
-    /// Configuration.Contracts — ADR-002) — never any Domain/Application/
-    /// Infrastructure/Api layer of any context, including Reservations' and
-    /// Configuration's own, and never PropertyManagement/Housekeeping/
-    /// Identity/Dashboard/Workflow at all this checkpoint.
+    /// Configuration.Contracts — ADR-002; GuestOperations.Contracts — Fase
+    /// 10, Checkpoint 4 triggers; PropertyManagement.Contracts — Fase 10,
+    /// Checkpoint 4, ADR-026 synchronous exception #9) — never any Domain/
+    /// Application/Infrastructure/Api layer of any context, including
+    /// Reservations'/Configuration's/GuestOperations'/PropertyManagement's
+    /// own, and never Housekeeping/Identity/Dashboard/Workflow at all.
     /// </summary>
     [Fact]
     public void Application_And_Infrastructure_Never_Reference_Other_Contexts_Domain_Application_Infrastructure_Or_Api()
@@ -95,7 +100,14 @@ public class CommunicationDependencyTests
             "IHostPro.Contexts.Configuration.Application",
             "IHostPro.Contexts.Configuration.Infrastructure",
             "IHostPro.Contexts.Configuration.Api",
-            "IHostPro.Contexts.PropertyManagement",
+            "IHostPro.Contexts.PropertyManagement.Domain",
+            "IHostPro.Contexts.PropertyManagement.Application",
+            "IHostPro.Contexts.PropertyManagement.Infrastructure",
+            "IHostPro.Contexts.PropertyManagement.Api",
+            "IHostPro.Contexts.GuestOperations.Domain",
+            "IHostPro.Contexts.GuestOperations.Application",
+            "IHostPro.Contexts.GuestOperations.Infrastructure",
+            "IHostPro.Contexts.GuestOperations.Api",
             "IHostPro.Contexts.Housekeeping",
             "IHostPro.Contexts.Identity",
             "IHostPro.Contexts.Dashboard",
@@ -205,6 +217,51 @@ public class CommunicationDependencyTests
         }
     }
 
+    /// <summary>
+    /// ADR-026's own testable consequence (Fase 10, Checkpoint 4 —
+    /// synchronous exception #9): Communication is the ONLY Bounded Context
+    /// authorized to consume <c>IFrontDeskContactReader</c> — Property
+    /// Management owns/implements it, everyone else must never reference
+    /// it. Mirrors <see cref="No_Other_Context_Assembly_References_IReservationGuestContactReader_Except_Communication"/>
+    /// exactly.
+    /// </summary>
+    [Fact]
+    public void No_Other_Context_Assembly_References_IFrontDeskContactReader_Except_Communication()
+    {
+        var otherContextAssemblies = new[]
+        {
+            typeof(IHostPro.Contexts.Housekeeping.Domain.Cleaning).Assembly,
+            typeof(IHostPro.Contexts.Housekeeping.Infrastructure.Persistence.HousekeepingDbContext).Assembly,
+            typeof(IHostPro.Contexts.Reservations.Domain.Reservation).Assembly,
+            typeof(IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext).Assembly,
+            typeof(IHostPro.Contexts.GuestOperations.Domain.GuestStayOperation).Assembly,
+            typeof(IHostPro.Contexts.GuestOperations.Infrastructure.Persistence.GuestOperationsDbContext).Assembly,
+            typeof(IHostPro.Contexts.Identity.Domain.Tenant).Assembly,
+            typeof(IHostPro.Contexts.Identity.Infrastructure.Persistence.IdentityDbContext).Assembly,
+            typeof(IHostPro.Contexts.Configuration.Domain.PolicyDefinition).Assembly,
+            typeof(IHostPro.Contexts.Configuration.Infrastructure.Persistence.ConfigurationDbContext).Assembly,
+            typeof(IHostPro.Contexts.Dashboard.Domain.AssemblyReference).Assembly,
+            typeof(IHostPro.Contexts.Dashboard.Infrastructure.Persistence.DashboardDbContext).Assembly,
+            typeof(IHostPro.Contexts.Workflow.Application.IWorkflowCommandDispatcher).Assembly,
+            typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler).Assembly,
+        };
+
+        var readerFullName = typeof(IHostPro.Contexts.PropertyManagement.Contracts.IFrontDeskContactReader).FullName!;
+
+        foreach (var assembly in otherContextAssemblies.Distinct())
+        {
+            var referencingTypes = Types.InAssembly(assembly)
+                .That()
+                .HaveDependencyOn(readerFullName)
+                .GetTypes();
+
+            referencingTypes.Should().BeEmpty(
+                $"only Property Management (owner) and Communication (the sole authorized consumer, ADR-026) may " +
+                $"reference IFrontDeskContactReader — {assembly.GetName().Name} referencing it would mean " +
+                "an unauthorized Bounded Context bypassed the purpose-limited exception");
+        }
+    }
+
     [Fact]
     public void CommunicationDbContext_Owns_The_Approved_Schema_Name()
     {
@@ -268,6 +325,51 @@ public class CommunicationDependencyTests
 
         propertyNames.Should().NotContain(name => name.Contains("Phone", StringComparison.OrdinalIgnoreCase));
         propertyNames.Should().NotContain(name => name.Contains("GuestName", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Same structural PII-absence guarantee, extended to the three new
+    /// Front Desk trigger events (Fase 10, Checkpoint 4). <c>PropertyId</c>
+    /// is explicitly NOT forbidden here — it was added deliberately (mandate
+    /// decision) to let Communication resolve the front desk contact via
+    /// ADR-026, and is provider-neutral/non-PII, unlike a phone/name/access
+    /// credential/document.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(IHostPro.Contexts.GuestOperations.Contracts.GuestCheckedIn))]
+    [InlineData(typeof(IHostPro.Contexts.GuestOperations.Contracts.EarlyCheckinApproved))]
+    [InlineData(typeof(IHostPro.Contexts.GuestOperations.Contracts.LateCheckoutApproved))]
+    public void Front_Desk_Trigger_Events_Never_Declare_A_Forbidden_PII_Property(Type eventType)
+    {
+        var propertyNames = eventType.GetProperties().Select(p => p.Name).ToList();
+
+        foreach (var forbidden in new[] { "Phone", "GuestName", "Credential", "Email", "Document", "Cpf", "Rg", "Passport" })
+        {
+            propertyNames.Should().NotContain(
+                name => name.Contains(forbidden, StringComparison.OrdinalIgnoreCase),
+                $"{eventType.Name} must never carry a property containing '{forbidden}'");
+        }
+    }
+
+    /// <summary>
+    /// <c>FrontDeskContactReadResult</c> (ADR-026's minimal response) must
+    /// never carry guest data or an access credential — only an operational
+    /// contact identity/phone (Fase 10, Checkpoint 4 mandate §9/§38).
+    /// </summary>
+    [Fact]
+    public void FrontDeskContactReadResult_Never_Carries_Guest_Data_Or_Access_Credential()
+    {
+        var propertyNames = typeof(IHostPro.Contexts.PropertyManagement.Contracts.FrontDeskContactReadResult)
+            .GetProperties()
+            .Select(p => p.Name)
+            .ToList();
+
+        foreach (var forbidden in new[] { "GuestName", "GuestPhone", "Credential", "Email", "Document", "Cpf", "Rg", "Passport" })
+        {
+            propertyNames.Should().NotContain(
+                name => name.Contains(forbidden, StringComparison.OrdinalIgnoreCase),
+                $"FrontDeskContactReadResult must never carry a property containing '{forbidden}'");
+        }
     }
 
     private static string BuildFailureMessage(TestResult result) =>

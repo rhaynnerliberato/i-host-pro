@@ -172,6 +172,32 @@ public class PropertyManagementDependencyTests
         result.IsSuccessful.Should().BeTrue(BuildFailureMessage(result));
     }
 
+    /// <summary>
+    /// Fase 10, Checkpoint 4 mandate §4/§9/§38: <c>FrontDeskContact</c> must
+    /// never carry guest data, an access credential, or a provider-specific
+    /// identifier — only the minimal operational contact fields the mandate
+    /// approved (DisplayName/PhoneNumber/IsActive).
+    /// </summary>
+    [Fact]
+    public void FrontDeskContact_Never_Declares_Guest_Data_Access_Credential_Or_Provider_Specific_Fields()
+    {
+        var propertyNames = typeof(IHostPro.Contexts.PropertyManagement.Domain.FrontDeskContact)
+            .GetProperties()
+            .Select(p => p.Name)
+            .ToList();
+
+        foreach (var forbidden in new[]
+                 {
+                     "GuestName", "GuestPhone", "GuestCount", "Credential", "Email", "Document", "Cpf", "Rg", "Passport",
+                     "ProviderMessageId", "WabaId", "WhatsApp",
+                 })
+        {
+            propertyNames.Should().NotContain(
+                name => name.Contains(forbidden, StringComparison.OrdinalIgnoreCase),
+                $"FrontDeskContact must never carry a property containing '{forbidden}'");
+        }
+    }
+
     [Fact]
     public void PropertyManagementDbContext_Owns_The_Approved_Schema_Name()
     {

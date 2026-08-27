@@ -157,11 +157,19 @@ public class PropertyManagementSourceConventionTests
     }
 
     [Fact]
-    public void Exactly_one_migration_exists_and_no_new_migration_was_created_this_checkpoint()
+    public void Exactly_the_known_approved_migrations_exist()
     {
-        // Checkpoint 4 plan, item 14/19: "não alterar migration; nenhuma
-        // migration nova." The Checkpoint 1-approved schema already supports
-        // everything Checkpoints 2-4 needed.
+        // Checkpoint 4 plan, item 14/19 originally required "não alterar
+        // migration; nenhuma migration nova" (Checkpoints 1-4 through the
+        // Property Management-specific checkpoints reused the Checkpoint 1
+        // schema unchanged). Fase 10, Checkpoint 4 (Portaria Notification
+        // Foundation) is the first legitimate addition — a NEW table
+        // (front_desk_contacts), not an alteration of the Checkpoint 1
+        // schema — so this test now asserts the closed, known-approved list
+        // instead of "exactly one", mirroring the same "Exactly_The_Known_
+        // Approved_Types_Exist" update pattern already used elsewhere (e.g.
+        // WorkflowOrchestrationArchitectureTests, Fase 10 CP3) when a new
+        // checkpoint legitimately adds to a previously-closed count.
         var migrationsDirectory = Path.Combine(
             RepositoryRoot(), "src", "Contexts", "PropertyManagement",
             "IHostPro.Contexts.PropertyManagement.Infrastructure", "Persistence", "Migrations");
@@ -172,9 +180,11 @@ public class PropertyManagementSourceConventionTests
             .Where(path => !path.EndsWith("ModelSnapshot.cs", StringComparison.Ordinal))
             .Select(Path.GetFileNameWithoutExtension)
             .Where(name => !name!.EndsWith(".Designer", StringComparison.Ordinal))
+            .Select(name => name!)
             .ToArray();
 
-        migrationFiles.Should().ContainSingle("only the Checkpoint 1 InitialCreate migration may exist");
-        migrationFiles.Single()!.Should().EndWith("_InitialCreate");
+        migrationFiles.Should().BeEquivalentTo(
+            ["20260730024157_InitialCreate", "20260827202539_AddFrontDeskContact"],
+            "only the Checkpoint 1 InitialCreate migration and Checkpoint 4's AddFrontDeskContact migration may exist");
     }
 }
