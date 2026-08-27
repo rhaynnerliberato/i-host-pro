@@ -1,4 +1,5 @@
 using IHostPro.Contexts.PropertyManagement.Contracts;
+using IHostPro.Contexts.PropertyManagement.Infrastructure.Communication;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Reservations;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +38,12 @@ public static class PropertyManagementModuleExtensions
         // IdentityModuleExtensions' own registration of
         // IIdentityUserEligibilityReader exactly.
         services.AddScoped<IPropertyReservationEligibilityReader, PropertyReservationEligibilityReader>();
+
+        // Fase 10, Checkpoint 4 (Portaria Notification Foundation), ADR-026:
+        // the single, minimal synchronous query port Communication may use
+        // to resolve a Property's current front desk contact — mirrors
+        // IPropertyReservationEligibilityReader's own registration exactly.
+        services.AddScoped<IFrontDeskContactReader, FrontDeskContactReader>();
 
         return services;
     }
