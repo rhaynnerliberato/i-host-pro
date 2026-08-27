@@ -8,19 +8,17 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace IHostPro.Contexts.GuestOperations.Tests.Unit.Application;
 
 /// <summary>
-/// Fase 10, Checkpoint 1 (Guest Operations Foundation) — Checkpoint 2
-/// (Check-in/Checkout Core, checkout now requires a prior check-in and
-/// returns <c>Result&lt;GuestStayOperationResult&gt;</c>, never a thrown
-/// exception, since it is now HTTP-exposed) — proves
-/// <see cref="RecordGuestCheckedOutCommandHandler"/> deterministically: a
-/// CheckedIn operation transitions to CheckedOut and publishes
-/// <see cref="GuestCheckedOut"/> exactly once; an already-CheckedOut
-/// operation is a silent idempotent no-op; a checkout attempted while still
-/// Active (never checked in) is a <see cref="GuestOperationsErrorCodes.GuestStayOperationNotCheckedIn"/>
-/// failure; a missing operation is a <see cref="GuestOperationsErrorCodes.GuestStayOperationNotFound"/>
-/// failure. Neither failure publishes anything.
+/// Fase 10, Checkpoint 2 (Check-in/Checkout Core) — proves
+/// <see cref="RecordGuestCheckedInCommandHandler"/> deterministically: an
+/// Active operation transitions to CheckedIn and publishes
+/// <see cref="GuestCheckedIn"/> exactly once; an already-CheckedIn operation
+/// is a silent idempotent no-op; an already-CheckedOut operation is a
+/// terminal-state <see cref="GuestOperationsErrorCodes.GuestStayOperationAlreadyCheckedOut"/>
+/// failure, never restored; a missing operation is a
+/// <see cref="GuestOperationsErrorCodes.GuestStayOperationNotFound"/> failure.
+/// Neither failure publishes anything.
 /// </summary>
-public class RecordGuestCheckedOutCommandHandlerTests
+public class RecordGuestCheckedInCommandHandlerTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly Guid ReservationId = Guid.NewGuid();
@@ -30,28 +28,21 @@ public class RecordGuestCheckedOutCommandHandlerTests
     private static GuestStayOperation CreateActiveOperation() =>
         GuestStayOperation.Create(Guid.NewGuid(), TenantId, ReservationId, PropertyId, Now.AddDays(-1));
 
-    private static GuestStayOperation CreateCheckedInOperation()
-    {
-        var operation = CreateActiveOperation();
-        operation.CheckIn(Now.AddHours(-1));
-        return operation;
-    }
-
-    private static RecordGuestCheckedOutCommand BuildCommand() => new()
+    private static RecordGuestCheckedInCommand BuildCommand() => new()
     {
         TenantId = TenantId,
         ReservationId = ReservationId,
     };
 
-    private static RecordGuestCheckedOutCommandHandler CreateHandler(
+    private static RecordGuestCheckedInCommandHandler CreateHandler(
         FakeGuestStayOperationReader reader, RecordingGuestStayOperationRepository repository, FakeIntegrationEventCollector collector) =>
         new(reader, repository, collector, new PassThroughGuestOperationsTransactionExecutor(), new FixedTimeProvider(Now.AddMinutes(5)),
-            NullLogger<RecordGuestCheckedOutCommandHandler>.Instance);
+            NullLogger<RecordGuestCheckedInCommandHandler>.Instance);
 
     [Fact]
-    public async Task Handle_checks_out_a_CheckedIn_operation_and_publishes_GuestCheckedOut_once()
+    public async Task Handle_checks_in_an_Active_operation_and_publishes_GuestCheckedIn_once()
     {
-        var operation = CreateCheckedInOperation();
+        var operation = CreateActiveOperation();
         var reader = FakeGuestStayOperationReader.WithOperationIdResult(operation.Id);
         var repository = RecordingGuestStayOperationRepository.WithOperation(operation);
         var collector = new FakeIntegrationEventCollector();
@@ -60,18 +51,18 @@ public class RecordGuestCheckedOutCommandHandlerTests
         var result = await handler.Handle(BuildCommand(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        operation.Status.Should().Be(GuestStayOperationStatus.CheckedOut);
+        operation.Status.Should().Be(GuestStayOperationStatus.CheckedIn);
         repository.UpdateCallCount.Should().Be(1);
-        var published = collector.EnqueuedEvents.Should().ContainSingle().Which.Should().BeOfType<GuestCheckedOut>().Which;
+        var published = collector.EnqueuedEvents.Should().ContainSingle().Which.Should().BeOfType<GuestCheckedIn>().Which;
         published.ReservationId.Should().Be(ReservationId);
         published.ActorType.Should().Be("System");
     }
 
     [Fact]
-    public async Task Handle_when_already_CheckedOut_is_a_silent_no_op()
+    public async Task Handle_when_already_CheckedIn_is_a_silent_no_op()
     {
-        var operation = CreateCheckedInOperation();
-        operation.CheckOut(Now.AddMinutes(1));
+        var operation = CreateActiveOperation();
+        operation.CheckIn(Now.AddMinutes(1));
         var reader = FakeGuestStayOperationReader.WithOperationIdResult(operation.Id);
         var repository = RecordingGuestStayOperationRepository.WithOperation(operation);
         var collector = new FakeIntegrationEventCollector();
@@ -80,14 +71,16 @@ public class RecordGuestCheckedOutCommandHandlerTests
         var result = await handler.Handle(BuildCommand(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        repository.UpdateCallCount.Should().Be(0, "an already-CheckedOut operation must never be updated again");
-        collector.EnqueuedEvents.Should().BeEmpty("an already-CheckedOut operation must never publish a duplicate GuestCheckedOut");
+        repository.UpdateCallCount.Should().Be(0, "an already-CheckedIn operation must never be updated again");
+        collector.EnqueuedEvents.Should().BeEmpty("an already-CheckedIn operation must never publish a duplicate GuestCheckedIn");
     }
 
     [Fact]
-    public async Task Handle_when_still_Active_fails_with_NotCheckedIn_and_publishes_nothing()
+    public async Task Handle_when_already_CheckedOut_fails_with_AlreadyCheckedOut_and_publishes_nothing()
     {
         var operation = CreateActiveOperation();
+        operation.CheckIn(Now.AddMinutes(1));
+        operation.CheckOut(Now.AddMinutes(2));
         var reader = FakeGuestStayOperationReader.WithOperationIdResult(operation.Id);
         var repository = RecordingGuestStayOperationRepository.WithOperation(operation);
         var collector = new FakeIntegrationEventCollector();
@@ -96,7 +89,7 @@ public class RecordGuestCheckedOutCommandHandlerTests
         var result = await handler.Handle(BuildCommand(), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be(GuestOperationsErrorCodes.GuestStayOperationNotCheckedIn);
+        result.Error.Code.Should().Be(GuestOperationsErrorCodes.GuestStayOperationAlreadyCheckedOut);
         repository.UpdateCallCount.Should().Be(0);
         collector.EnqueuedEvents.Should().BeEmpty();
     }
