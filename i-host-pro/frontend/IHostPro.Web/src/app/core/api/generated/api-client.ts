@@ -1513,6 +1513,170 @@ export class Client {
     }
 
     /**
+     * @param body (optional) 
+     * @return OK
+     */
+    earlyCheckIn(reservationId: string, body?: RequestEarlyCheckInHttpRequest | undefined): Observable<EarlyCheckInRequestResponse> {
+        let url_ = this.baseUrl + "/api/v1/guest-operations/reservations/{reservationId}/early-check-in";
+        if (reservationId === undefined || reservationId === null)
+            throw new globalThis.Error("The parameter 'reservationId' must be defined.");
+        url_ = url_.replace("{reservationId}", encodeURIComponent("" + reservationId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(body);
+
+        let options_ : any = {
+            body: content_,
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processEarlyCheckIn(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processEarlyCheckIn(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<EarlyCheckInRequestResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<EarlyCheckInRequestResponse>;
+        }));
+    }
+
+    protected processEarlyCheckIn(response: HttpResponseBase): Observable<EarlyCheckInRequestResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as EarlyCheckInRequestResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @param body (optional) 
+     * @return OK
+     */
+    lateCheckout(reservationId: string, body?: RequestLateCheckoutHttpRequest | undefined): Observable<LateCheckoutRequestResponse> {
+        let url_ = this.baseUrl + "/api/v1/guest-operations/reservations/{reservationId}/late-checkout";
+        if (reservationId === undefined || reservationId === null)
+            throw new globalThis.Error("The parameter 'reservationId' must be defined.");
+        url_ = url_.replace("{reservationId}", encodeURIComponent("" + reservationId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(body);
+
+        let options_ : any = {
+            body: content_,
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processLateCheckout(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processLateCheckout(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<LateCheckoutRequestResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<LateCheckoutRequestResponse>;
+        }));
+    }
+
+    protected processLateCheckout(response: HttpResponseBase): Observable<LateCheckoutRequestResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as LateCheckoutRequestResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
      * @param status (optional) 
      * @param page (optional) 
      * @param pageSize (optional) 
@@ -6041,6 +6205,17 @@ export interface DashboardStatusCountResponse {
     count?: number;
 }
 
+export interface EarlyCheckInRequestResponse {
+    id?: string;
+    reservationId?: string;
+    requestedCheckInAt?: Date;
+    status?: string | undefined;
+    denialReasonCode?: string | undefined;
+    createdAtUtc?: Date;
+    decidedAtUtc?: Date | undefined;
+    updatedAtUtc?: Date;
+}
+
 export interface EffectivePolicyResponse {
     policyCode?: string | undefined;
     status?: string | undefined;
@@ -6057,6 +6232,20 @@ export interface GuestStayOperationResponse {
     checkedInAtUtc?: Date | undefined;
     checkedOutAtUtc?: Date | undefined;
     createdAtUtc?: Date;
+    updatedAtUtc?: Date;
+}
+
+export interface LateCheckoutRequestResponse {
+    id?: string;
+    reservationId?: string;
+    requestedCheckOutAt?: Date;
+    chargeType?: string | undefined;
+    chargeValue?: number | undefined;
+    requiresPix?: boolean;
+    status?: string | undefined;
+    denialReasonCode?: string | undefined;
+    createdAtUtc?: Date;
+    decidedAtUtc?: Date | undefined;
     updatedAtUtc?: Date;
 }
 
@@ -6205,6 +6394,14 @@ export interface RefreshRequest {
 export interface RegisterCleaningOccurrenceRequest {
     type?: string | undefined;
     description?: string | undefined;
+}
+
+export interface RequestEarlyCheckInHttpRequest {
+    requestedCheckInAt?: Date;
+}
+
+export interface RequestLateCheckoutHttpRequest {
+    requestedCheckOutAt?: Date;
 }
 
 export interface ReservationDetailResponse {
