@@ -15,6 +15,12 @@
     Communication consumes, same "Contracts only, never Domain/Application/
     Infrastructure/Api" boundary already enforced by
     IHostPro.ArchitectureTests' own ExternalIntegrationsDependencyTests.
+
+    Fase 10, Checkpoint 4 (Portaria Notification Foundation): GuestOperations.Contracts
+    added — GuestCheckedIn/EarlyCheckinApproved/LateCheckoutApproved are the
+    third/fourth/fifth Integration Events Communication consumes.
+    PropertyManagement.Contracts added — IFrontDeskContactReader is the new
+    synchronous exception #9 (ADR-026), same "Contracts only" boundary.
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Domain\IHostPro.BuildingBlocks.Domain.csproj" />
@@ -23,6 +29,8 @@
     <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
     <ProjectReference Include="..\..\Configuration\IHostPro.Contexts.Configuration.Contracts\IHostPro.Contexts.Configuration.Contracts.csproj" />
     <ProjectReference Include="..\..\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Contracts\IHostPro.Contexts.ExternalIntegrations.Contracts.csproj" />
+    <ProjectReference Include="..\..\GuestOperations\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
+    <ProjectReference Include="..\..\PropertyManagement\IHostPro.Contexts.PropertyManagement.Contracts\IHostPro.Contexts.PropertyManagement.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

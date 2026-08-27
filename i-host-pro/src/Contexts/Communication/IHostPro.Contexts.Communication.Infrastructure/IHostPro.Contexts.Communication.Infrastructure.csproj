@@ -13,6 +13,10 @@
          ExternalIntegrationsWhatsAppConnector, the real IOutboundMessageConnector
          implementation that adapts to IMessagingProvider. -->
     <ProjectReference Include="..\..\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Contracts\IHostPro.Contexts.ExternalIntegrations.Contracts.csproj" />
+    <!-- Fase 10, Checkpoint 4 (Portaria Notification Foundation): the
+         Wolverine adapters for GuestCheckedIn/EarlyCheckinApproved/
+         LateCheckoutApproved reference these event types directly. -->
+    <ProjectReference Include="..\..\GuestOperations\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

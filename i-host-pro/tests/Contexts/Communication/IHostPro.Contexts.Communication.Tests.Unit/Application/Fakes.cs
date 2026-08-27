@@ -1,9 +1,23 @@
 using IHostPro.Contexts.Communication.Application;
 using IHostPro.Contexts.Communication.Domain;
 using IHostPro.Contexts.Configuration.Contracts;
+using IHostPro.Contexts.PropertyManagement.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
 
 namespace IHostPro.Contexts.Communication.Tests.Unit.Application;
+
+/// <summary>Fase 10, Checkpoint 4 (Portaria Notification Foundation) — ADR-026's fake, mirrors <see cref="FakeReservationGuestContactReader"/> exactly.</summary>
+internal sealed class FakeFrontDeskContactReader : IFrontDeskContactReader
+{
+    private readonly FrontDeskContactReadResult? _result;
+
+    private FakeFrontDeskContactReader(FrontDeskContactReadResult? result) => _result = result;
+
+    public static FakeFrontDeskContactReader Returning(FrontDeskContactReadResult? result) => new(result);
+
+    public Task<FrontDeskContactReadResult?> GetActiveByPropertyIdAsync(Guid tenantId, Guid propertyId, CancellationToken cancellationToken) =>
+        Task.FromResult(_result);
+}
 
 internal sealed class FakeTemplateReader : ITemplateReader
 {
