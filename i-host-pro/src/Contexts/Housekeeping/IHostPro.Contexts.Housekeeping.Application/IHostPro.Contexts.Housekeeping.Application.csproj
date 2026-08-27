@@ -8,6 +8,11 @@
     referenced solely for the Integration Event types consumed to build this
     context's local read projections (Checkpoint 3) — never their
     Application/Infrastructure/Api layers.
+
+    Fase 10, Checkpoint 3 — Early Check-in / Late Checkout: GuestOperations.Contracts
+    referenced solely for the LateCheckoutApproved Integration Event type
+    this context now also consumes (gated on its own UpdatesCleaning flag) —
+    never GuestOperations.Domain/Application/Infrastructure/Api.
   -->
   <ItemGroup>
     <ProjectReference Include="..\IHostPro.Contexts.Housekeeping.Domain\IHostPro.Contexts.Housekeeping.Domain.csproj" />
@@ -16,6 +21,7 @@
     <ProjectReference Include="..\..\Identity\IHostPro.Contexts.Identity.Contracts\IHostPro.Contexts.Identity.Contracts.csproj" />
     <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
     <ProjectReference Include="..\..\PropertyManagement\IHostPro.Contexts.PropertyManagement.Contracts\IHostPro.Contexts.PropertyManagement.Contracts.csproj" />
+    <ProjectReference Include="..\..\GuestOperations\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +29,11 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!-- Fase 10, Checkpoint 3: LateCheckoutApprovedCleaningReactor's own
+         structured logging (no-op/success outcomes) — same
+         abstractions-only package every other context's Application project
+         uses. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
   </ItemGroup>
 
   <PropertyGroup>

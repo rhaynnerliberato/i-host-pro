@@ -125,6 +125,15 @@ public sealed class CleaningReader : ICleaningReader
                 c => c.TenantId == tenantId && c.ReservationId == reservationId && c.CreatedByUserId == null,
                 cancellationToken);
 
+    /// <inheritdoc cref="ICleaningReader.GetAutomatedCleaningIdByReservationIdAsync"/>
+    public async Task<Guid?> GetAutomatedCleaningIdByReservationIdAsync(
+        Guid tenantId, Guid reservationId, CancellationToken cancellationToken) =>
+        await _dbContext.Cleanings
+            .AsNoTracking()
+            .Where(c => c.TenantId == tenantId && c.ReservationId == reservationId && c.CreatedByUserId == null)
+            .Select(c => (Guid?)c.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
     private static CleaningResult ToResult(Domain.Cleaning cleaning) => new(
         cleaning.Id,
         cleaning.PropertyId,

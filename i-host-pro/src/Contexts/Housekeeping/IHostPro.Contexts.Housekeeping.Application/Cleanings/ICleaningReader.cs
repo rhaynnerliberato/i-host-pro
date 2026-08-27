@@ -75,4 +75,15 @@ public interface ICleaningReader
     /// duplicate after the fact.
     /// </summary>
     Task<bool> ExistsAutomatedForReservationAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Resolves the automated Cleaning's own id for <paramref name="reservationId"/>
+    /// (Fase 10, Checkpoint 3 — the audit-trail target for the
+    /// <c>LateCheckoutApproved</c> reaction) — same "automated, i.e.
+    /// <c>CreatedByUserId == null</c>" scope as <see cref="ExistsAutomatedForReservationAsync"/>,
+    /// returning the id instead of a bool. <c>null</c> when no such Cleaning
+    /// exists yet — the caller treats that as a no-op, never an error (no
+    /// invented Cleaning is created here).
+    /// </summary>
+    Task<Guid?> GetAutomatedCleaningIdByReservationIdAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken);
 }

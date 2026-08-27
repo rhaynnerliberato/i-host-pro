@@ -4,7 +4,9 @@ using IHostPro.Contexts.Housekeeping.Application;
 using IHostPro.Contexts.Housekeeping.Application.Checklist;
 using IHostPro.Contexts.Housekeeping.Application.Cleanings;
 using IHostPro.Contexts.Housekeeping.Application.Occurrences;
+using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Domain;
+using IHostPro.Contexts.GuestOperations.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Messaging;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Projections;
@@ -53,6 +55,13 @@ public static class HousekeepingModuleExtensions
         services.AddScoped<ICleaningChecklistReader, CleaningChecklistReader>();
         services.AddScoped<IPropertyReferenceProjection, PropertyReferenceProjectionReader>();
         services.AddScoped<IReservationReferenceProjection, ReservationReferenceProjectionReader>();
+
+        // Fase 10, Checkpoint 3 — ADR-024 amendment, synchronous exception
+        // #8: the single, purpose-limited synchronous query port Guest
+        // Operations may use to read an Early Check-in request's cleaning
+        // readiness. Same registration placement reasoning as
+        // ICreateCleaningForReservationHandler below.
+        services.AddScoped<ICleaningReadinessReader, IHostPro.Contexts.Housekeeping.Infrastructure.GuestOperations.CleaningReadinessReader>();
 
         // Fase 8, Checkpoint 1.1 — the real serialization point for the
         // ReservationCreated/ReservationCancelled/CreateCleaningForReservation
@@ -107,6 +116,14 @@ public static class HousekeepingModuleExtensions
         services.AddKeyedScoped<IIntegrationEventHandler<ReservationCreated>, ReservationProjectionAndCancellationReaction>(
             HousekeepingMessageExecutionScope.HandlerKey);
         services.AddKeyedScoped<IIntegrationEventHandler<ReservationCancelled>, ReservationProjectionAndCancellationReaction>(
+            HousekeepingMessageExecutionScope.HandlerKey);
+
+        // Fase 10, Checkpoint 3 (Early Check-in / Late Checkout): this
+        // context's own reaction to LateCheckoutApproved (gated on
+        // UpdatesCleaning), keyed for the same reason as every registration
+        // above — Workflow Orchestration ALSO consumes this exact event type
+        // in the same IHostPro.Worker process (ADR-020 second consumer).
+        services.AddKeyedScoped<IIntegrationEventHandler<LateCheckoutApproved>, LateCheckoutApprovedCleaningReactor>(
             HousekeepingMessageExecutionScope.HandlerKey);
 
         // ADR-015 (Fase 6, Checkpoint 6) — isolates Housekeeping's own
