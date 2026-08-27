@@ -27,6 +27,10 @@ using IHostPro.Contexts.Dashboard.Infrastructure;
 using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
+using IHostPro.Contexts.GuestOperations.Application;
+using IHostPro.Contexts.GuestOperations.Contracts;
+using IHostPro.Contexts.GuestOperations.Infrastructure;
+using IHostPro.Contexts.GuestOperations.Infrastructure.Persistence;
 using JasperFx;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -225,6 +229,22 @@ try
     builder.Services.AddExternalIntegrationsModule(builder.Configuration, builder.Environment.IsDevelopment());
     builder.Services.AddExternalIntegrationsCommandDispatch();
 
+    // Guest Operations module (Fase 10, Checkpoint 1 — Guest Operations
+    // Foundation). DbContext + the handler RecordGuestCheckedOutCommandHandler
+    // needs, resolved directly (no Mediator/HTTP dispatch — CP1 has zero
+    // public API endpoints). Registered here because IHostPro.Api is the
+    // only process that invokes it this checkpoint (mirrors how a
+    // deterministic E2E test resolves ICreateCleaningForReservationHandler
+    // directly from this same host in CreateCleaningForReservationWorkflowRoundTripTests).
+    builder.Services.AddGuestOperationsModule(builder.Configuration);
+
+    // Fase 10, Checkpoint 1: ICloseReservationHandler is also resolved
+    // directly from this host by the deterministic E2E test's own
+    // idempotency check (mirrors ICreateCleaningForReservationHandler's own
+    // precedent) — Reservations' outbox is already enrolled in this process
+    // (ReservationCreated), so no new Wolverine wiring is needed here.
+    builder.Services.AddReservationsCloseReservationCommand();
+
     // Wolverine's own Main message store (Fase 2, Incremento 1, Checkpoint 6
     // homologação — found and fixed during real-host startup validation):
     // Identity's and Property Management's outboxes are both registered as
@@ -334,6 +354,19 @@ try
             builder.Configuration.GetConnectionString("ExternalIntegrations")!,
             "external_integrations_messaging",
             typeof(ExternalIntegrationsDbContext));
+
+        // Guest Operations' own durable outbox (Fase 10, Checkpoint 1 —
+        // Guest Operations Foundation) — a seventh "ancillary" store, in its
+        // own guest_operations_messaging schema, never shared with any other
+        // context's. GuestCheckedOut (routed below) is its first published
+        // Integration Event. Enrolled only here, never in IHostPro.Worker's
+        // Program.cs: Worker never touches GuestOperationsDbContext this
+        // checkpoint (Workflow's own new orchestrator is stateless, it only
+        // consumes GuestCheckedOut over the broker).
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("GuestOperations")!,
+            "guest_operations_messaging",
+            typeof(GuestOperationsDbContext));
 
         // Identity & Access's first six Integration Events (Incremento 2 plan,
         // Etapa 15; Documento 07 §13.2; ADR-013): one topic exchange per
@@ -531,6 +564,19 @@ try
         RouteExternalIntegrationsEvent<AirbnbReservationImported>("airbnb_reservation_imported");
         RouteExternalIntegrationsEvent<AirbnbReservationUpdated>("airbnb_reservation_updated");
         RouteExternalIntegrationsEvent<AirbnbReservationCancelled>("airbnb_reservation_cancelled");
+
+        // Guest Operations' first Integration Event (Fase 10, Checkpoint 1 —
+        // Guest Operations Foundation) — its own topic exchange, published by
+        // RecordGuestCheckedOutCommandHandler. Workflow Orchestration's new
+        // orchestrator (running in IHostPro.Worker) is its sole consumer —
+        // see the Worker's own Program.cs for the corresponding
+        // ListenToRabbitQueue.
+        const string guestOperationsEventsExchange = "guest-operations-events";
+
+        opts.PublishMessage(typeof(GuestCheckedOut))
+            .ToRabbitRoutingKey(guestOperationsEventsExchange, "guest_checked_out", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
     });
 
     builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();

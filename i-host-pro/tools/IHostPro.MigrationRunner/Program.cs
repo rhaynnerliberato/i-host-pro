@@ -6,6 +6,7 @@ using IHostPro.Contexts.Communication.Infrastructure.Persistence;
 using IHostPro.Contexts.Configuration.Infrastructure.Persistence;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
+using IHostPro.Contexts.GuestOperations.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
@@ -69,6 +70,7 @@ try
         typeof(DashboardDbContext).Assembly,
         typeof(CommunicationDbContext).Assembly,
         typeof(ExternalIntegrationsDbContext).Assembly,
+        typeof(GuestOperationsDbContext).Assembly,
     };
 
     var moduleDbContextTypes = moduleAssemblies
@@ -542,6 +544,48 @@ try
 
     log.LogInformation("External Integrations' durable outbox provisioned");
 
+    // Guest Operations' own durable outbox (Fase 10, Checkpoint 1 — Guest
+    // Operations Foundation) — mirrors every other context's provisioning
+    // above exactly, in its own schema (guest_operations_messaging), never
+    // shared with any of the other seven. GuestCheckedOut (routed below) is
+    // its first published Integration Event.
+    var guestOperationsMigratorConnectionString = builder.Configuration.GetConnectionString("GuestOperations")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:GuestOperations'.");
+
+    log.LogInformation("Provisioning Guest Operations' durable outbox (schema guest_operations_messaging)");
+
+    var guestOperationsOutboxHostBuilder = Host.CreateApplicationBuilder();
+    guestOperationsOutboxHostBuilder.UseWolverine(opts =>
+    {
+        opts.EnrollAncillaryPostgresqlOutbox(
+            guestOperationsMigratorConnectionString, "guest_operations_messaging", typeof(GuestOperationsDbContext));
+        opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+        opts.UseEntityFrameworkCoreTransactions();
+    });
+
+    using (var guestOperationsOutboxHost = guestOperationsOutboxHostBuilder.Build())
+    {
+        await guestOperationsOutboxHost.SetupResources();
+    }
+
+    await using (var connection = new NpgsqlConnection(guestOperationsMigratorConnectionString))
+    {
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            GRANT USAGE ON SCHEMA guest_operations_messaging TO ihostpro_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA guest_operations_messaging TO ihostpro_app;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA guest_operations_messaging TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA guest_operations_messaging
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA guest_operations_messaging
+              GRANT USAGE, SELECT ON SEQUENCES TO ihostpro_app;
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    log.LogInformation("Guest Operations' durable outbox provisioned");
+
     // RabbitMQ messaging topology (Checkpoint 6 homologação, third production
     // defect: neither IHostPro.Api nor IHostPro.Worker ever declared the
     // topic exchanges they publish/route to — AutoProvision defaults to
@@ -563,7 +607,7 @@ try
     // IHostPro.Api/IHostPro.Worker use — so host/vhost/user/password/
     // timeouts can never drift between this provisioning step and the real
     // runtime connection.
-    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events, configuration-events, housekeeping-events, external-integrations-events exchanges)");
+    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events, configuration-events, housekeeping-events, external-integrations-events, guest-operations-events exchanges)");
 
     var messagingTopologyHostBuilder = Host.CreateApplicationBuilder();
     messagingTopologyHostBuilder.UseWolverine(opts =>
@@ -746,6 +790,12 @@ try
             {
                 exchange.ExchangeType = ExchangeType.Direct;
                 exchange.BindQueue("housekeeping.workflow-commands", "create_cleaning_for_reservation");
+                // Fase 10, Checkpoint 1 (Guest Operations Foundation): a
+                // second cross-context command on this SAME exchange (never
+                // a second exchange) — Reservations owns and consumes
+                // "reservations.workflow-commands", mirroring
+                // Housekeeping's own queue-naming convention exactly.
+                exchange.BindQueue("reservations.workflow-commands", "close_reservation");
             })
             // Fase 9, Checkpoint 2.3.3 (ADR-022 item 13/14): External
             // Integrations' OWN published event, bound to Communication's
@@ -776,6 +826,16 @@ try
                 exchange.BindQueue("reservations.airbnb-import", "airbnb_reservation_imported");
                 exchange.BindQueue("reservations.airbnb-import", "airbnb_reservation_updated");
                 exchange.BindQueue("reservations.airbnb-import", "airbnb_reservation_cancelled");
+            })
+            // Fase 10, Checkpoint 1 (Guest Operations Foundation): Guest
+            // Operations' OWN published event, bound to Workflow
+            // Orchestration's "workflow.guest-checked-out-trigger" queue —
+            // same decoupled pub/sub pattern as every exchange above (Guest
+            // Operations never needs to know Workflow is listening).
+            .DeclareExchange("guest-operations-events", exchange =>
+            {
+                exchange.ExchangeType = ExchangeType.Topic;
+                exchange.BindQueue("workflow.guest-checked-out-trigger", "guest_checked_out");
             });
     });
 

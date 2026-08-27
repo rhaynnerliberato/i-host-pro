@@ -14,6 +14,7 @@ using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Messaging;
 using IHostPro.Contexts.Identity.Infrastructure;
+using IHostPro.Contexts.Reservations.Contracts;
 using IHostPro.Contexts.Reservations.Infrastructure;
 using IHostPro.Contexts.Reservations.Infrastructure.Messaging;
 using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
@@ -107,6 +108,12 @@ try
     // distinction), this consumer's only external dependency is
     // ReservationsDbContext itself — there is no fake/real split to gate.
     builder.Services.AddReservationsAirbnbImportConsumer();
+
+    // Fase 10, Checkpoint 1 (Guest Operations Foundation): the CloseReservation
+    // cross-context command consumer — mirrors the Airbnb import consumer
+    // registration immediately above. Sent exclusively by Workflow
+    // Orchestration (see AddWorkflowModule below).
+    builder.Services.AddReservationsCloseReservationCommand();
 
     // Dashboard & Reporting module (Fase 7, Incremento 2): DashboardDbContext
     // + the four projection synchronizers' full DI graph, so the tenant-safe
@@ -372,6 +379,16 @@ try
         // (ADR-018) — not at risk, no sticky mapping needed.
         opts.ListenToRabbitQueue("housekeeping.workflow-commands");
 
+        // Fase 10, Checkpoint 1 (Guest Operations Foundation): Reservations'
+        // consumed cross-context COMMAND, CloseReservation — same assembly
+        // as CleaningCreatedHandler above, already included. The queue
+        // itself, and its binding to the SAME workflow-orchestration-commands
+        // exchange (new routing key, close_reservation), is provisioned
+        // exclusively by IHostPro.MigrationRunner. Single consumer by design
+        // (mirrors CreateCleaningForReservation) — not at risk, no sticky
+        // mapping needed.
+        opts.ListenToRabbitQueue("reservations.workflow-commands");
+
         // Reservations' first consumed Integration Events (Fase 7, Incremento
         // 1 — Agenda Foundation, Checkpoint 1): the ten Cleaning lifecycle
         // events IHostPro.Api actually routes to housekeeping-events —
@@ -507,6 +524,22 @@ try
         opts.ListenToRabbitQueue("workflow.reservation-created-trigger")
             .AddStickyHandler(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler));
 
+        // Workflow Orchestration's second trigger consumer (Fase 10,
+        // Checkpoint 1 — Guest Operations Foundation): a new, independent
+        // subscriber queue on the NEW guest-operations-events exchange
+        // (Guest Operations never needs to know Workflow is listening — same
+        // decoupled pub/sub pattern as every queue above). The queue itself,
+        // and its binding, is provisioned exclusively by
+        // IHostPro.MigrationRunner. GuestCheckedOutHandler lives in the SAME
+        // Workflow.Infrastructure assembly as ReservationCreatedHandler above
+        // — already included, no second IncludeAssembly needed.
+        // GuestCheckedOut has exactly one consumer in this process
+        // (Workflow) — sticky-bound anyway, mirroring
+        // ReservationCreatedHandler's own registration shape for
+        // consistency (see GuestCheckedOutHandler's own doc comment).
+        opts.ListenToRabbitQueue("workflow.guest-checked-out-trigger")
+            .AddStickyHandler(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.GuestCheckedOutHandler));
+
         // Communication's own single trigger consumer (Fase 9, Checkpoint 1):
         // a fourth, independent subscriber queue on the EXISTING
         // reservation-events exchange (Reservations never needs to know
@@ -621,6 +654,19 @@ try
         opts.PublishMessage(typeof(CreateCleaningForReservation))
             .ToRabbitRoutingKey(
                 workflowOrchestrationCommandsExchange, "create_cleaning_for_reservation",
+                exchange => exchange.ExchangeType = ExchangeType.Direct)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        // Fase 10, Checkpoint 1 (Guest Operations Foundation): Reservations'
+        // own cross-context command, CloseReservation — same
+        // workflow-orchestration-commands exchange (a second routing key,
+        // never a second exchange), same Send-not-Publish semantics as
+        // CreateCleaningForReservation above (see
+        // GuestCheckedOutCloseReservationOrchestrator/WolverineWorkflowCommandDispatcher).
+        opts.PublishMessage(typeof(CloseReservation))
+            .ToRabbitRoutingKey(
+                workflowOrchestrationCommandsExchange, "close_reservation",
                 exchange => exchange.ExchangeType = ExchangeType.Direct)
             .UseDurableOutbox()
             .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
