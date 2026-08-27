@@ -3,6 +3,8 @@ using FluentAssertions;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.Contexts.Dashboard.Infrastructure;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
+using IHostPro.Contexts.GuestOperations.Infrastructure;
+using IHostPro.Contexts.GuestOperations.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
@@ -30,9 +32,24 @@ namespace IHostPro.Api.Tests.Integration;
 /// Cross-phase corrective investigation (ADR-020 spike): structural, runtime-
 /// model proof of Wolverine's default handler-combining behaviour for a
 /// message CLR type with multiple, independently-registered handler classes
-/// across bounded contexts — <c>ReservationCreated</c> on <b>master</b> (three
-/// real, already-published consumers: Housekeeping, Dashboard, Workflow;
-/// Fase 9/Communication's fourth consumer does not exist on this branch).
+/// across bounded contexts — <c>ReservationCreated</c> has five real,
+/// already-published consumers on master: Housekeeping, Dashboard, Workflow,
+/// Communication (Fase 9) and Guest Operations (Fase 10, Checkpoint 2). This
+/// minimal host wires four of the five — Housekeeping, Dashboard, Workflow,
+/// Guest Operations — and deliberately still omits Communication: its own
+/// <c>ReservationCreatedCommunicationProcessor</c> additionally needs
+/// Configuration's <c>ITemplateReader</c> and a real/fake
+/// <c>IOutboundMessageConnector</c>, a materially larger dependency graph
+/// than every other consumer here, and Communication's own sticky-handler
+/// isolation is already proven for real by the full end-to-end Worker
+/// process in this same test assembly (<c>GuestCheckedOutCloseReservationWorkerRoundTripTests</c>
+/// and the Communication-specific WorkerRoundTrip tests both show
+/// Communication's queue receiving and independently processing a real
+/// <c>ReservationCreated</c> alongside all four other consumers, with no
+/// competing-consumer behavior). Guest Operations' own isolation (Fase 10,
+/// Checkpoint 2 — the resolved creation-trigger governance gate) is proven
+/// here structurally, the same rigorous, non-database-side-effect-based way
+/// as the other three.
 ///
 /// Deliberately NOT a duplicate-key-exception-based test: per the corrective
 /// mandate, the regression must not rely solely on database side effects as
@@ -166,6 +183,7 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
             ["ConnectionStrings:Housekeeping"] = _appConnectionString,
             ["ConnectionStrings:Dashboard"] = _appConnectionString,
             ["ConnectionStrings:Reservations"] = _appConnectionString,
+            ["ConnectionStrings:GuestOperations"] = _appConnectionString,
             ["ConnectionStrings:Platform"] = _appConnectionString,
             ["RabbitMq:Host"] = _rabbitMqContainer.Hostname,
             ["RabbitMq:VirtualHost"] = "/",
@@ -179,6 +197,8 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
         hostBuilder.Services.AddWorkflowModule();
         hostBuilder.Services.AddReservationsModule(hostBuilder.Configuration);
         hostBuilder.Services.AddReservationsScheduleProjectionConsumer();
+        hostBuilder.Services.AddGuestOperationsModule(hostBuilder.Configuration);
+        hostBuilder.Services.AddGuestOperationsReservationCreatedConsumer();
 
         var platformMessagingConnectionString = hostBuilder.Configuration.GetConnectionString("Platform")!;
 
@@ -190,18 +210,21 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
             opts.EnrollAncillaryPostgresqlOutbox(hostBuilder.Configuration.GetConnectionString("Housekeeping")!, "housekeeping_messaging", typeof(HousekeepingDbContext));
             opts.EnrollAncillaryPostgresqlOutbox(hostBuilder.Configuration.GetConnectionString("Dashboard")!, "dashboard_messaging", typeof(DashboardDbContext));
             opts.EnrollAncillaryPostgresqlOutbox(hostBuilder.Configuration.GetConnectionString("Reservations")!, "reservations_messaging", typeof(ReservationsDbContext));
+            opts.EnrollAncillaryPostgresqlOutbox(hostBuilder.Configuration.GetConnectionString("GuestOperations")!, "guest_operations_messaging", typeof(GuestOperationsDbContext));
             opts.UseEntityFrameworkCoreTransactions();
             opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
 
             opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Housekeeping.Application.IHousekeepingMessageExecutionScope>();
             opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Dashboard.Application.IDashboardMessageExecutionScope>();
             opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Reservations.Application.IReservationsMessageExecutionScope>();
+            opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.GuestOperations.Application.IGuestOperationsMessageExecutionScope>();
 
-            // Exactly the three real, already-published ReservationCreated
-            // consumers on master — mirrors Program.cs's own three
+            // Four of the five real, already-published ReservationCreated
+            // consumers on master — mirrors Program.cs's own
             // Discovery.IncludeAssembly + ListenToRabbitQueue calls for this
-            // event, deliberately omitting every other module/queue not
-            // relevant to this one message type.
+            // event, deliberately omitting Communication (see this class's
+            // own doc comment) and every other module/queue not relevant to
+            // this one message type.
             opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Housekeeping.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
             var housekeepingListener = opts.ListenToRabbitQueue("housekeeping.reservation-projection");
 
@@ -211,13 +234,16 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
             opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
             var workflowListener = opts.ListenToRabbitQueue("workflow.reservation-created-trigger");
 
+            opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.GuestOperations.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
+            var guestOperationsListener = opts.ListenToRabbitQueue("guestoperations.reservation-created-trigger");
+
             // ADR-020 spike, Candidate A: endpoint-specific sticky handler
             // mapping (Wolverine 6.22.0's own real, confirmed-by-reflection
             // AddStickyHandler(Type) fluent API on IListenerConfiguration<T>,
             // backed by Endpoint.StickyHandlers) — each queue is told
             // explicitly which single handler TYPE it owns, overriding
             // Wolverine's default same-CLR-type combining for exactly these
-            // three endpoints. No topology change: same queues, same
+            // four endpoints. No topology change: same queues, same
             // exchange bindings, same routing keys — MigrationRunner-owned
             // physical topology is untouched.
             if (applyStickyHandlers)
@@ -225,6 +251,7 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
                 housekeepingListener.AddStickyHandler(typeof(IHostPro.Contexts.Housekeeping.Infrastructure.Messaging.ReservationCreatedHandler));
                 dashboardListener.AddStickyHandler(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.ReservationCreatedHandler));
                 workflowListener.AddStickyHandler(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler));
+                guestOperationsListener.AddStickyHandler(typeof(IHostPro.Contexts.GuestOperations.Infrastructure.Messaging.ReservationCreatedHandler));
             }
 
             // PropertyCreated fan-out (Housekeeping + Dashboard) — same
@@ -262,7 +289,7 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Baseline_master_combines_the_three_ReservationCreated_handlers_into_a_single_chain()
+    public async Task Baseline_master_combines_the_four_ReservationCreated_handlers_into_a_single_chain()
     {
         using var host = await BuildMinimalWorkerSubsetHostAsync();
         try
@@ -274,7 +301,7 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
                 .ToList();
 
             // Structural evidence #1: exactly ONE chain exists for
-            // ReservationCreated across the whole process, even though three
+            // ReservationCreated across the whole process, even though four
             // independent bounded contexts each declared their own handler —
             // Wolverine's default MultipleHandlerBehavior combined them
             // instead of keeping them separate per listening endpoint.
@@ -286,18 +313,18 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
             var handlerCalls = combinedChain.HandlerCalls();
 
             // Structural evidence #2: that single chain's own handler-call
-            // list contains all three bounded contexts' Handle methods —
-            // this is Wolverine's own compiled model, not an inference from
-            // a database exception or any message ever having been
-            // processed.
-            handlerCalls.Should().HaveCount(3,
-                "the combined chain must contain Housekeeping's, Dashboard's and Workflow's own ReservationCreatedHandler.Handle " +
-                "calls together — direct proof of the handler-chain-combining defect");
+            // list contains all four bounded contexts' Handle methods — this
+            // is Wolverine's own compiled model, not an inference from a
+            // database exception or any message ever having been processed.
+            handlerCalls.Should().HaveCount(4,
+                "the combined chain must contain Housekeeping's, Dashboard's, Workflow's and Guest Operations' own " +
+                "ReservationCreatedHandler.Handle calls together — direct proof of the handler-chain-combining defect");
 
             var handlerTypeNames = handlerCalls.Select(c => c.HandlerType.FullName).ToList();
             handlerTypeNames.Should().Contain(t => t!.Contains("Housekeeping"));
             handlerTypeNames.Should().Contain(t => t!.Contains("Dashboard"));
             handlerTypeNames.Should().Contain(t => t!.Contains("Workflow"));
+            handlerTypeNames.Should().Contain(t => t!.Contains("GuestOperations"));
 
             // Same structural proof, generalized to the other two fan-out
             // categories in the ADR-020 inventory: Property (Housekeeping +
@@ -370,9 +397,9 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
             // exactly one handler call, total calls == queue count (never
             // fewer — lost handler; never more — N x M fan-out).
             AssertIsolatedChains(
-                runtime, typeof(ReservationCreated), expectedChainCount: 3,
-                queueNameFragments: ["housekeeping.reservation-projection", "dashboard.reservation-projection", "workflow.reservation-created-trigger"],
-                namespaceFragments: ["Housekeeping", "Dashboard", "Workflow"]);
+                runtime, typeof(ReservationCreated), expectedChainCount: 4,
+                queueNameFragments: ["housekeeping.reservation-projection", "dashboard.reservation-projection", "workflow.reservation-created-trigger", "guestoperations.reservation-created-trigger"],
+                namespaceFragments: ["Housekeeping", "Dashboard", "Workflow", "GuestOperations"]);
 
             AssertIsolatedChains(
                 runtime, typeof(PropertyCreated), expectedChainCount: 2,

@@ -3,8 +3,6 @@ using System.Security.Cryptography;
 using FluentAssertions;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.Contexts.GuestOperations.Application;
-using IHostPro.Contexts.GuestOperations.Domain;
-using IHostPro.Contexts.GuestOperations.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Domain;
 using IHostPro.Contexts.PropertyManagement.Domain.ValueObjects;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
@@ -23,19 +21,26 @@ namespace IHostPro.Api.Tests.Integration;
 
 /// <summary>
 /// Real end-to-end proof of Fase 10, Checkpoint 1 (Guest Operations
-/// Foundation) — the primary gate the mandate requires: a real guest
-/// checkout, recorded directly through Guest Operations' own Application
-/// handler (no HTTP endpoint exists this checkpoint), published through its
-/// real durable outbox (<c>guest_operations_messaging</c>), delivered over a
-/// real RabbitMQ broker to a real, unmodified <c>IHostPro.Worker.dll</c>
-/// subprocess, consumed by Workflow's new
-/// <c>GuestCheckedOutCloseReservationOrchestrator</c>, which sends the real
-/// cross-context command <c>CloseReservation</c> — itself delivered over the
-/// SAME real broker, on the existing workflow-orchestration-commands
+/// Foundation) AND Checkpoint 2 (Check-in/Checkout Core) together — the
+/// full real chain, no manual seeding of any Guest Operations state:
+/// <c>CreateReservationCommand</c> publishes a real <c>ReservationCreated</c>,
+/// delivered over a real RabbitMQ broker to a real, unmodified
+/// <c>IHostPro.Worker.dll</c> subprocess, consumed by Guest Operations' own
+/// choreography (<c>ReservationCreatedGuestStayInitializer</c>), which
+/// auto-creates a real <c>GuestStayOperation</c> row (Active) — the resolved
+/// creation-trigger governance gate. Check-in and checkout are then real
+/// HTTP-command dispatches through <see cref="IGuestOperationsRequestDispatcher"/>
+/// (Checkpoint 2's own Mediator-based dispatch, mirroring
+/// <see cref="IReservationsRequestDispatcher"/>'s own shape), published
+/// through Guest Operations' real durable outbox
+/// (<c>guest_operations_messaging</c>), delivered over the SAME broker to
+/// Workflow's <c>GuestCheckedOutCloseReservationOrchestrator</c>, which sends
+/// the real cross-context command <c>CloseReservation</c> — itself delivered
+/// over the SAME real broker, on the existing workflow-orchestration-commands
 /// exchange (a second routing key), to Reservations' own
 /// <c>CloseReservationCommandHandler</c> — which closes a real
-/// <c>Reservation</c> row. Never calls the Reservations handler directly for
-/// the primary chain — mirrors
+/// <c>Reservation</c> row. Never calls a Guest Operations/Reservations
+/// handler directly for the primary chain — mirrors
 /// <see cref="CreateCleaningForReservationWorkflowRoundTripTests"/>'s own
 /// structure exactly.
 /// </summary>
@@ -138,6 +143,15 @@ public sealed class GuestCheckedOutCloseReservationWorkerRoundTripTests : IAsync
             Assert.Fail("Worker never reported listening to reservations.workflow-commands. Worker output:\n" + workerOutputSnapshot);
         }
 
+        var guestOperationsReservationCreatedListening = await WaitForWorkerLogLineAsync(
+            "Started message listening at rabbitmq://queue/guestoperations.reservation-created-trigger", TimeSpan.FromSeconds(30));
+        if (!guestOperationsReservationCreatedListening)
+        {
+            string workerOutputSnapshot;
+            lock (_workerOutputLock) workerOutputSnapshot = _workerOutput.ToString();
+            Assert.Fail("Worker never reported listening to guestoperations.reservation-created-trigger. Worker output:\n" + workerOutputSnapshot);
+        }
+
         using var signingKey = RSA.Create(2048);
         var values = BuildApiEnvironment(signingKey.ExportRSAPrivateKeyPem());
         foreach (var (key, value) in values)
@@ -160,25 +174,55 @@ public sealed class GuestCheckedOutCloseReservationWorkerRoundTripTests : IAsync
                 reservationId = result.Value.Id;
             }
 
-            // ---- GuestStayOperation is seeded directly into GuestOperationsDbContext
-            // (bypassing an HTTP check-in endpoint entirely — none exists this
-            // checkpoint) — mirrors AirbnbReservationImportWorkerRoundTripTests'
-            // own direct-EF seeding of AirbnbListingMapping. ----
-            var guestStayOperationId = await SeedActiveGuestStayOperationAsync(tenantId, reservationId, propertyId, now);
-
-            // ---- The real trigger: invoke RecordGuestCheckedOutCommandHandler
-            // directly (no HTTP endpoint exists this checkpoint) — from here
-            // on, everything flows through real transport. ----
-            using (var scope = factory.Services.CreateScope())
+            // ---- No manual seeding: GuestStayOperation must be auto-created by
+            // the real choreography consumer (ReservationCreatedGuestStayInitializer,
+            // running in the real Worker subprocess) reacting to the real
+            // ReservationCreated published above — the resolved creation-trigger
+            // governance gate (Checkpoint 2). Poll, never assert instantly:
+            // delivery is genuinely asynchronous over a real broker hop. ----
+            var created = await WaitUntilAsync(
+                () => GetGuestStayOperationStatusAsync(tenantId, reservationId), status => status == "Active", TimeSpan.FromSeconds(30));
+            if (!created)
             {
-                scope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(tenantId);
-                var handler = scope.ServiceProvider.GetRequiredService<IRecordGuestCheckedOutHandler>();
+                string workerOutputSnapshot;
+                lock (_workerOutputLock) workerOutputSnapshot = _workerOutput.ToString();
+                Assert.Fail("The real ReservationCreated -> Guest Operations choreography must auto-create an Active GuestStayOperation within 30s. Worker output:\n" + workerOutputSnapshot);
+            }
 
-                await handler.HandleAsync(new RecordGuestCheckedOutCommand
+            // ---- The real trigger: dispatch RecordGuestCheckedInCommand then
+            // RecordGuestCheckedOutCommand through IGuestOperationsRequestDispatcher
+            // (Checkpoint 2's real HTTP-command dispatch shape) — from here on,
+            // everything flows through real transport. Two SEPARATE scopes,
+            // never one shared scope: a real HTTP client would call the two
+            // endpoints as two distinct requests, each getting its own fresh
+            // ASP.NET Core request scope — sharing one scope here would reuse
+            // the same Scoped IDbContextOutbox<GuestOperationsDbContext>
+            // instance across two sequential flushes, an artificial test
+            // shortcut a real client can never produce. ----
+            using (var checkInScope = factory.Services.CreateScope())
+            {
+                checkInScope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+                var dispatcher = checkInScope.ServiceProvider.GetRequiredService<IGuestOperationsRequestDispatcher>();
+
+                var checkInResult = await dispatcher.Send(new RecordGuestCheckedInCommand
                 {
                     TenantId = tenantId,
                     ReservationId = reservationId,
                 }, CancellationToken.None);
+                checkInResult.IsSuccess.Should().BeTrue("the auto-created GuestStayOperation must be Active and therefore eligible for check-in");
+            }
+
+            using (var checkOutScope = factory.Services.CreateScope())
+            {
+                checkOutScope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+                var dispatcher = checkOutScope.ServiceProvider.GetRequiredService<IGuestOperationsRequestDispatcher>();
+
+                var checkOutResult = await dispatcher.Send(new RecordGuestCheckedOutCommand
+                {
+                    TenantId = tenantId,
+                    ReservationId = reservationId,
+                }, CancellationToken.None);
+                checkOutResult.IsSuccess.Should().BeTrue("the just-CheckedIn GuestStayOperation must be eligible for checkout");
             }
 
             // ---- Poll for the real Reservation to become Closed — never
@@ -234,7 +278,7 @@ public sealed class GuestCheckedOutCloseReservationWorkerRoundTripTests : IAsync
             (await GetReservationStatusAsync(tenantId, reservationId)).Should().Be("Closed",
                 "a redelivered CloseReservation must never change an already-Closed Reservation's status");
 
-            guestStayOperationId.Should().NotBeEmpty();
+            (await GetGuestStayOperationStatusAsync(tenantId, reservationId)).Should().Be("CheckedOut");
         }
         finally
         {
@@ -366,25 +410,6 @@ public sealed class GuestCheckedOutCloseReservationWorkerRoundTripTests : IAsync
         return property.Id;
     }
 
-    private async Task<Guid> SeedActiveGuestStayOperationAsync(Guid tenantId, Guid reservationId, Guid propertyId, DateTimeOffset now)
-    {
-        var tenantContext = new TenantContext();
-        tenantContext.SetTenant(tenantId);
-        var options = new DbContextOptionsBuilder<GuestOperationsDbContext>()
-            .UseNpgsql(_migratorConnectionString, npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "guest_operations"))
-            .Options;
-        await using var dbContext = new GuestOperationsDbContext(options, tenantContext);
-        await using var transaction = await dbContext.Database.BeginTransactionAsync();
-        await SetTenantAsync(dbContext.Database, tenantId);
-
-        var operation = GuestStayOperation.Create(Guid.NewGuid(), tenantId, reservationId, propertyId, now.AddDays(-1));
-        dbContext.GuestStayOperations.Add(operation);
-        await dbContext.SaveChangesAsync();
-        await transaction.CommitAsync();
-
-        return operation.Id;
-    }
-
     // ---- DB access --------------------------------------------------------
 
     private static async Task SetTenantAsync(Microsoft.EntityFrameworkCore.Infrastructure.DatabaseFacade database, Guid tenantId) =>
@@ -416,6 +441,27 @@ public sealed class GuestCheckedOutCloseReservationWorkerRoundTripTests : IAsync
         command.CommandText = "SELECT status FROM reservations.reservations WHERE tenant_id = @tenantId AND id = @id";
         command.Parameters.AddWithValue("tenantId", tenantId);
         command.Parameters.AddWithValue("id", reservationId);
+
+        var result = await command.ExecuteScalarAsync();
+        await transaction.CommitAsync();
+        return result as string;
+    }
+
+    private async Task<string?> GetGuestStayOperationStatusAsync(Guid tenantId, Guid reservationId)
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using (var setCommand = connection.CreateCommand())
+        {
+            setCommand.CommandText = $"SET LOCAL app.tenant_id = '{tenantId:D}'";
+            await setCommand.ExecuteNonQueryAsync();
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT status FROM guest_operations.guest_stay_operations WHERE tenant_id = @tenantId AND reservation_id = @reservationId";
+        command.Parameters.AddWithValue("tenantId", tenantId);
+        command.Parameters.AddWithValue("reservationId", reservationId);
 
         var result = await command.ExecuteScalarAsync();
         await transaction.CommitAsync();
