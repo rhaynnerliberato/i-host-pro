@@ -15,7 +15,7 @@ public class GuestStayOperationTests
         GuestStayOperation.Create(Guid.NewGuid(), TenantId, ReservationId, PropertyId, Now);
 
     [Fact]
-    public void Create_with_valid_data_starts_as_Active_with_no_checkout_timestamp()
+    public void Create_with_valid_data_starts_as_Active_with_no_checkin_or_checkout_timestamp()
     {
         var operation = CreateValid();
 
@@ -46,9 +46,48 @@ public class GuestStayOperationTests
     }
 
     [Fact]
-    public void CheckOut_from_Active_transitions_to_CheckedOut_and_stamps_the_timestamp()
+    public void CheckIn_from_Active_transitions_to_CheckedIn_and_stamps_the_timestamp()
     {
         var operation = CreateValid();
+        var checkedInAt = Now.AddDays(1);
+
+        operation.CheckIn(checkedInAt);
+
+        operation.Status.Should().Be(GuestStayOperationStatus.CheckedIn);
+        operation.CheckedInAtUtc.Should().Be(checkedInAt);
+        operation.UpdatedAtUtc.Should().Be(checkedInAt);
+    }
+
+    [Fact]
+    public void CheckIn_when_already_CheckedIn_throws()
+    {
+        var operation = CreateValid();
+        operation.CheckIn(Now.AddDays(1));
+
+        var act = () => operation.CheckIn(Now.AddDays(1).AddMinutes(5));
+
+        act.Should().Throw<InvalidOperationException>(
+            "this guard is defense-in-depth — the handler is responsible for the real idempotent no-op BEFORE calling CheckIn");
+    }
+
+    [Fact]
+    public void CheckIn_when_already_CheckedOut_throws()
+    {
+        var operation = CreateValid();
+        operation.CheckIn(Now.AddDays(1));
+        operation.CheckOut(Now.AddDays(3));
+
+        var act = () => operation.CheckIn(Now.AddDays(4));
+
+        act.Should().Throw<InvalidOperationException>(
+            "a CheckedOut operation is terminal — it can never be restored to CheckedIn");
+    }
+
+    [Fact]
+    public void CheckOut_from_CheckedIn_transitions_to_CheckedOut_and_stamps_the_timestamp()
+    {
+        var operation = CreateValid();
+        operation.CheckIn(Now.AddDays(1));
         var checkedOutAt = Now.AddDays(3);
 
         operation.CheckOut(checkedOutAt);
@@ -59,9 +98,22 @@ public class GuestStayOperationTests
     }
 
     [Fact]
+    public void CheckOut_from_Active_throws()
+    {
+        var operation = CreateValid();
+
+        var act = () => operation.CheckOut(Now.AddDays(3));
+
+        act.Should().Throw<InvalidOperationException>(
+            "checkout requires a prior check-in (Fase 10, Checkpoint 2 decision) — this guard is defense-in-depth, " +
+            "the handler is responsible for translating an Active checkout attempt into a specific invariant-violation result");
+    }
+
+    [Fact]
     public void CheckOut_when_already_CheckedOut_throws()
     {
         var operation = CreateValid();
+        operation.CheckIn(Now.AddDays(1));
         operation.CheckOut(Now.AddDays(3));
 
         var act = () => operation.CheckOut(Now.AddDays(4));

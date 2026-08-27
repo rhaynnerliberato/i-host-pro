@@ -60,17 +60,41 @@ public sealed class GuestStayOperation : AggregateRoot<Guid>, ITenantOwned
     }
 
     /// <summary>
-    /// <see cref="GuestStayOperationStatus.Active"/> → <see cref="GuestStayOperationStatus.CheckedOut"/>
-    /// — terminal, no restoration exists this checkpoint. The caller
-    /// (<c>RecordGuestCheckedOutCommandHandler</c>) is responsible for having
-    /// already translated an already-checked-out operation into a silent
-    /// idempotent no-op BEFORE calling this — this guard is
+    /// <see cref="GuestStayOperationStatus.Active"/> → <see cref="GuestStayOperationStatus.CheckedIn"/>
+    /// (Fase 10, Checkpoint 2 — Check-in/Checkout Core): the guest's real
+    /// arrival. The caller (<c>RecordGuestCheckedInCommandHandler</c>) is
+    /// responsible for having already translated an already-CheckedIn
+    /// operation into a silent idempotent no-op, and a CheckedOut one into a
+    /// specific invariant-violation result, BEFORE calling this — this guard
+    /// is defense-in-depth, mirrors <see cref="CheckOut"/>'s own division of
+    /// responsibility.
+    /// </summary>
+    public void CheckIn(DateTimeOffset now)
+    {
+        if (Status != GuestStayOperationStatus.Active)
+            throw new InvalidOperationException($"Cannot check in a guest stay operation in status '{Status}'.");
+
+        Status = GuestStayOperationStatus.CheckedIn;
+        CheckedInAtUtc = now;
+        UpdatedAtUtc = now;
+    }
+
+    /// <summary>
+    /// <see cref="GuestStayOperationStatus.CheckedIn"/> → <see cref="GuestStayOperationStatus.CheckedOut"/>
+    /// — terminal, no restoration exists. Checkout requires a prior
+    /// check-in (Fase 10, Checkpoint 2 decision): a checkout from
+    /// <see cref="GuestStayOperationStatus.Active"/> represents an
+    /// operational inconsistency, never a silent skip — the caller
+    /// (<c>RecordGuestCheckedOutCommandHandler</c>) is responsible for
+    /// having already translated an already-CheckedOut operation into a
+    /// silent idempotent no-op, and an Active one into a specific
+    /// invariant-violation result, BEFORE calling this — this guard is
     /// defense-in-depth, mirrors <c>Reservation.Cancel</c>'s own division of
     /// responsibility.
     /// </summary>
     public void CheckOut(DateTimeOffset now)
     {
-        if (Status != GuestStayOperationStatus.Active)
+        if (Status != GuestStayOperationStatus.CheckedIn)
             throw new InvalidOperationException($"Cannot check out a guest stay operation in status '{Status}'.");
 
         Status = GuestStayOperationStatus.CheckedOut;
