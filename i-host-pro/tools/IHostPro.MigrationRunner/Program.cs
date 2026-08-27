@@ -149,6 +149,15 @@ try
     var dashboardBootstrapConnectionString = builder.Configuration.GetConnectionString("Dashboard")
         ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Dashboard'.");
 
+    // Fase 10, Checkpoint 2 (Existing Reservation Upgrade Strategy) — Guest
+    // Operations' own bootstrap step reads cross-schema (Reservations) and
+    // writes only to `guest_operations` — same single-physical-database
+    // exception ADR-017 §12 grants MigrationRunner, reusing the
+    // ihostpro_migrator connection already used for Guest Operations' own
+    // schema migrations.
+    var guestOperationsBootstrapConnectionString = builder.Configuration.GetConnectionString("GuestOperations")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:GuestOperations'.");
+
     var projectionBootstrapSteps = new List<IProjectionBootstrapStep>
     {
         new PropertyProjectionBootstrapStep(housekeepingConnectionString),
@@ -156,6 +165,7 @@ try
         new DashboardCleaningProjectionBootstrapStep(dashboardBootstrapConnectionString),
         new DashboardPropertyProjectionBootstrapStep(dashboardBootstrapConnectionString),
         new DashboardOccurrenceProjectionBootstrapStep(dashboardBootstrapConnectionString),
+        new GuestStayOperationBackfillBootstrapStep(guestOperationsBootstrapConnectionString),
     };
 
     foreach (var step in projectionBootstrapSteps)
@@ -667,6 +677,20 @@ try
                 // implements — approved decision, no ReservationUpdated/
                 // ReservationCancelled reaction this checkpoint).
                 exchange.BindQueue("workflow.reservation-created-trigger", "reservation_created");
+                // Fase 10, Checkpoint 2 (Check-in/Checkout Core): a fifth,
+                // independent subscriber queue on this same exchange — Guest
+                // Operations reacts DIRECTLY to ReservationCreated
+                // (choreography, the same registered criterion as
+                // Communication's own reaction below — never through
+                // Workflow Orchestration) to auto-create its own
+                // GuestStayOperation. Reservations never needs to know Guest
+                // Operations is listening, same decoupled pub/sub pattern as
+                // every queue above. Unconditional (not gated to
+                // Development): unlike Communication's own reaction below,
+                // this consumer has no fake/real connector distinction —
+                // auto-creating a local GuestStayOperation is always correct,
+                // in every environment.
+                exchange.BindQueue("guestoperations.reservation-created-trigger", "reservation_created");
                 // Fase 9, Checkpoint 1 ("Comunicação e Integrações do MVP"):
                 // a fourth, independent subscriber queue on this same
                 // exchange — Communication reacts DIRECTLY to

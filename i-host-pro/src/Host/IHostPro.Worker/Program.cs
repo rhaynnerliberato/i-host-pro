@@ -10,6 +10,8 @@ using IHostPro.Contexts.Configuration.Infrastructure.Messaging;
 using IHostPro.Contexts.Communication.Infrastructure;
 using IHostPro.Contexts.Dashboard.Infrastructure;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
+using IHostPro.Contexts.GuestOperations.Infrastructure;
+using IHostPro.Contexts.GuestOperations.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Messaging;
@@ -171,6 +173,14 @@ try
         builder.Services.AddCommunicationReservationConsumer();
     }
 
+    // Fase 10, Checkpoint 2 (Check-in/Checkout Core): the ReservationCreated
+    // choreography consumer that auto-creates GuestStayOperation — mirrors
+    // AddReservationsModule + AddReservationsScheduleProjectionConsumer's own
+    // two-call split immediately above. Unlike CP1 (zero Wolverine
+    // consumers), Worker now touches GuestOperationsDbContext directly.
+    builder.Services.AddGuestOperationsModule(builder.Configuration);
+    builder.Services.AddGuestOperationsReservationCreatedConsumer();
+
     // Workflow Orchestration module (Fase 8, Checkpoint 1 — ADR-018):
     // stateless — no DbContext, no aggregates, no persistence (approved
     // Decision Material 4) — so, unlike every module above, there is no
@@ -244,6 +254,20 @@ try
             "dashboard_messaging",
             typeof(DashboardDbContext));
 
+        // Guest Operations' own durable outbox (Fase 10, Checkpoint 1 —
+        // enrolled only in IHostPro.Api until now; Checkpoint 2 makes this
+        // the FIRST checkpoint Guest Operations consumes any message
+        // in-process — ReservationCreatedGuestStayInitializer, reached via
+        // IGuestOperationsMessageExecutionScope, needs
+        // IDbContextOutbox<GuestOperationsDbContext>/IGuestOperationsTransactionExecutor
+        // to resolve inside a Wolverine handler here too — same
+        // empirically-confirmed requirement as Housekeeping's/Reservations'/
+        // Dashboard's own).
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("GuestOperations")!,
+            "guest_operations_messaging",
+            typeof(GuestOperationsDbContext));
+
         // Required in addition to EnrollAncillaryPostgresqlOutbox above —
         // same empirically-confirmed requirement documented in
         // IHostPro.Api's Program.cs for Identity's own outbox: without this,
@@ -295,6 +319,13 @@ try
         // is the single, deliberately-authorized place in Communication that
         // holds IServiceScopeFactory.
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Communication.Application.ICommunicationMessageExecutionScope>();
+
+        // ADR-016, fifth application (Fase 10, Checkpoint 2) — same
+        // rationale as Housekeeping's/Reservations'/Dashboard's/
+        // Communication's own AlwaysUseServiceLocationFor above:
+        // GuestOperationsMessageExecutionScope is the single, deliberately-
+        // authorized place in Guest Operations that holds IServiceScopeFactory.
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.GuestOperations.Application.IGuestOperationsMessageExecutionScope>();
 
         opts.Policies.AddMiddleware(
             typeof(TenantResolutionMiddleware),
@@ -588,6 +619,38 @@ try
             opts.ListenToRabbitQueue("communication.reservation-created-trigger")
                 .AddStickyHandler(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.ReservationCreatedHandler));
         }
+
+        // Guest Operations' own single trigger consumer (Fase 10, Checkpoint
+        // 2 — Check-in/Checkout Core): a fifth, independent subscriber queue
+        // on the EXISTING reservation-events exchange (Reservations never
+        // needs to know Guest Operations is listening — same decoupled
+        // pub/sub pattern as Housekeeping's/Dashboard's/Workflow's/
+        // Communication's own queues above). Guest Operations reacts
+        // DIRECTLY to ReservationCreated (choreography — the resolved
+        // creation-trigger governance gate, never through Workflow
+        // Orchestration) to auto-create its own GuestStayOperation. The
+        // queue itself, and its binding, is provisioned exclusively by
+        // IHostPro.MigrationRunner. ReservationCreatedGuestStayInitializer
+        // lives in GuestOperations.Infrastructure, a separate assembly from
+        // this entry assembly, so it must be explicitly included in
+        // Wolverine's handler discovery — fully qualified below (never a
+        // blanket `using`) for the same collision reason as Dashboard's/
+        // Workflow's/Communication's own ReservationCreatedHandler above.
+        //
+        // ADR-020: this is the fifth independent ReservationCreated consumer
+        // sharing the message type with Housekeeping/Dashboard/Workflow/
+        // Communication above (all sticky-bound) — without this
+        // AddStickyHandler, Guest Operations' own deliveries would be at the
+        // same risk of Wolverine's default handler-chain-combining defect
+        // ADR-020 corrected for the others.
+        //
+        // Unconditional (not gated to Development): unlike Communication's
+        // own ReservationCreated consumer immediately above, this consumer
+        // has no fake/real connector distinction — auto-creating a local
+        // GuestStayOperation is always correct, in every environment.
+        opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.GuestOperations.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
+        opts.ListenToRabbitQueue("guestoperations.reservation-created-trigger")
+            .AddStickyHandler(typeof(IHostPro.Contexts.GuestOperations.Infrastructure.Messaging.ReservationCreatedHandler));
 
         // Communication's WhatsApp status consumer (Fase 9, Checkpoint 2.3.3,
         // ADR-022 item 14) — a new, independent subscriber queue on the NEW

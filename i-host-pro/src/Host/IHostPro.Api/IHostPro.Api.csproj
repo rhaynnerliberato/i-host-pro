@@ -60,9 +60,9 @@
     <ProjectReference Include="..\..\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Api\IHostPro.Contexts.ExternalIntegrations.Api.csproj" />
     <ProjectReference Include="..\..\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Infrastructure\IHostPro.Contexts.ExternalIntegrations.Infrastructure.csproj" />
     <!-- Guest Operations module (Fase 10, Checkpoint 1 — Guest Operations
-         Foundation). No .Api project this checkpoint (zero public API
-         endpoints — mirrors Workflow.Infrastructure's own precedent of
-         skipping an unused Api project until a real endpoint exists). -->
+         Foundation; Checkpoint 2 — Check-in/Checkout Core added the first
+         two public endpoints, GuestStayOperationsController). -->
+    <ProjectReference Include="..\..\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Api\IHostPro.Contexts.GuestOperations.Api.csproj" />
     <ProjectReference Include="..\..\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Infrastructure\IHostPro.Contexts.GuestOperations.Infrastructure.csproj" />
   </ItemGroup>
 

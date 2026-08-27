@@ -230,13 +230,14 @@ try
     builder.Services.AddExternalIntegrationsCommandDispatch();
 
     // Guest Operations module (Fase 10, Checkpoint 1 — Guest Operations
-    // Foundation). DbContext + the handler RecordGuestCheckedOutCommandHandler
-    // needs, resolved directly (no Mediator/HTTP dispatch — CP1 has zero
-    // public API endpoints). Registered here because IHostPro.Api is the
-    // only process that invokes it this checkpoint (mirrors how a
-    // deterministic E2E test resolves ICreateCleaningForReservationHandler
-    // directly from this same host in CreateCleaningForReservationWorkflowRoundTripTests).
+    // Foundation; Checkpoint 2 — Check-in/Checkout Core). DbContext +
+    // Mediator-dispatched check-in/checkout commands, mirroring
+    // AddReservationsCommandDispatch's own Api-only placement — dispatching
+    // a command is an HTTP-request concern. GuestStayOperationsController's
+    // two endpoints are this module's first real HTTP surface (CP1 shipped
+    // zero endpoints).
     builder.Services.AddGuestOperationsModule(builder.Configuration);
+    builder.Services.AddGuestOperationsCommandDispatch();
 
     // Fase 10, Checkpoint 1: ICloseReservationHandler is also resolved
     // directly from this host by the deterministic E2E test's own
@@ -358,11 +359,13 @@ try
         // Guest Operations' own durable outbox (Fase 10, Checkpoint 1 —
         // Guest Operations Foundation) — a seventh "ancillary" store, in its
         // own guest_operations_messaging schema, never shared with any other
-        // context's. GuestCheckedOut (routed below) is its first published
-        // Integration Event. Enrolled only here, never in IHostPro.Worker's
-        // Program.cs: Worker never touches GuestOperationsDbContext this
-        // checkpoint (Workflow's own new orchestrator is stateless, it only
-        // consumes GuestCheckedOut over the broker).
+        // context's. GuestCheckedOut/GuestCheckedIn (routed below) are its
+        // published Integration Events. Enrolled here for HTTP-triggered
+        // check-in/checkout (Checkpoint 2's two endpoints, this process) —
+        // ALSO enrolled in IHostPro.Worker's own Program.cs since Checkpoint
+        // 2 additionally makes Guest Operations a real in-process Wolverine
+        // consumer (ReservationCreatedGuestStayInitializer, a different
+        // physical process, same database).
         opts.EnrollAncillaryPostgresqlOutbox(
             builder.Configuration.GetConnectionString("GuestOperations")!,
             "guest_operations_messaging",
@@ -575,6 +578,19 @@ try
 
         opts.PublishMessage(typeof(GuestCheckedOut))
             .ToRabbitRoutingKey(guestOperationsEventsExchange, "guest_checked_out", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        // Guest Operations' second Integration Event (Fase 10, Checkpoint 2 —
+        // Check-in/Checkout Core), same exchange as GuestCheckedOut above
+        // (a second routing key, never a second exchange), published by
+        // RecordGuestCheckedInCommandHandler. Deliberately routed with no
+        // current consumer (Front Desk is deferred to Checkpoint 4,
+        // Communication deliberately adds no new consumer this checkpoint —
+        // approved mandate) — an unbound topic message is simply dropped,
+        // never an error, mirroring AirbnbSyncStarted's own precedent above.
+        opts.PublishMessage(typeof(GuestCheckedIn))
+            .ToRabbitRoutingKey(guestOperationsEventsExchange, "guest_checked_in", exchange => exchange.ExchangeType = ExchangeType.Topic)
             .UseDurableOutbox()
             .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
     });
