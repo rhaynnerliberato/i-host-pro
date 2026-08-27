@@ -95,7 +95,7 @@ Templates, notificações, WhatsApp e sincronização inicial com Airbnb. Escopo
 
 Check-in, checkout, early check-in, late checkout e comunicação com portaria.
 
-**Status:** Em andamento. Checkpoint 0 (Architecture & Product Decision Gate, read-only) e Checkpoint 1 (Guest Operations Foundation) concluídos — novo Bounded Context Guest Operations, `ReservationStatus.Closed`, comando cross-context `CloseReservation`, evento `GuestCheckedOut`, segundo orquestrador de Workflow, tudo provado por testes reais (unitários, arquitetura e E2E via RabbitMQ/Worker/Postgres reais). Zero endpoints HTTP, check-in form, credencial de acesso, Early/Late, Portaria, PIX/Payment ainda implementados — todos deferidos a checkpoints futuros.
+**Status:** Em andamento. Checkpoint 0 (Architecture & Product Decision Gate, read-only), Checkpoint 1 (Guest Operations Foundation) e Checkpoint 2 (Check-in/Checkout Core) concluídos — novo Bounded Context Guest Operations, `ReservationStatus.Closed`, comando cross-context `CloseReservation`, eventos `GuestCheckedIn`/`GuestCheckedOut`, segundo orquestrador de Workflow, primeiro endpoint HTTP público (`GuestOperations.Api`, check-in/checkout), gatilho de criação via coreografia (`ReservationCreated`), estratégia de upgrade para Reservations preexistentes — tudo provado por testes reais (unitários, arquitetura, HTTP real com JWT real, e E2E via RabbitMQ/Worker/Postgres reais). Credencial de acesso permanece deferida (sub-gate de segurança pendente antes da homologação final da Fase 10). Check-in form, Early/Late, Portaria, PIX/Payment ainda não implementados — deferidos a checkpoints futuros.
 **Homologação:** `Fase 10 - Check-in, Checkout e Operacoes do Hospede - Validacao e Homologacao.md`.
 
 ### Fase 11 — AI Agent

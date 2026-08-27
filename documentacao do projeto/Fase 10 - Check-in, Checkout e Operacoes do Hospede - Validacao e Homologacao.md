@@ -1,7 +1,7 @@
 # Fase 10 — Check-in, Checkout e Operações do Hóspede — Validação e Homologação
 
-Versão: 1.0
-Status: Em andamento — Checkpoint 1 concluído
+Versão: 1.1
+Status: Em andamento — Checkpoint 1 e Checkpoint 2 concluídos
 
 ## 1. Objetivo
 
@@ -91,6 +91,90 @@ Formulário de check-in, credencial de acesso, Early Check-in, Late Checkout, Po
 
 **Concluído e homologado.** Regressão final (§3.9) sem pendências.
 
-## 4. Próximo Checkpoint Recomendado
+## 4. Checkpoint 2 — Check-in/Checkout Core
 
-Checkpoint 2, conforme a estrutura CP0–CP6 já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado a este Checkpoint.
+### 4.1 Escopo aprovado
+
+Primeiro comportamento de check-in real e os dois primeiros endpoints HTTP públicos deste Bounded Context: `GuestStayOperationStatus.CheckedIn` (novo estado intermediário `Active → CheckedIn → CheckedOut`), `RecordGuestCheckedInCommand`/`RecordGuestCheckedOutCommand` (despachados via Mediator, mesma convenção universal do codebase), o evento `GuestCheckedIn`, o novo projeto `GuestOperations.Api` (`GuestStayOperationsController`, dois endpoints: check-in e checkout), o gatilho de criação resolvido do `GuestStayOperation` (coreografia reagindo a `ReservationCreated`), e a estratégia de upgrade para Reservations preexistentes. Decisões completas registradas no amendment do `ADR-024` (2026-08-27).
+
+### 4.2 Correção de governança — numeração de ADR
+
+Durante a implementação, um ADR foi criado incorretamente com o número `ADR-025` (reservado desde o Checkpoint 0 exclusivamente para o Boundary de PIX Payment, Checkpoint 5). Corrigido antes de qualquer commit: o arquivo incorreto foi removido, e as decisões do Checkpoint 2 foram incorporadas como amendment ao `ADR-024` existente (nunca um novo número). `ADR-025` permanece reservada e vazia para o Checkpoint 5.
+
+### 4.3 Defeitos reais encontrados e corrigidos durante a implementação
+
+**Defeito 1 — despacho HTTP divergente da convenção do codebase.** O desenho inicial resolvia `RecordGuestCheckedInCommand`/`RecordGuestCheckedOutCommand` por interfaces de handler customizadas, herdadas do Checkpoint 1 (correto então, sem HTTP). Uma auditoria de todo Bounded Context com endpoint HTTP real (Reservations/Housekeeping/Dashboard/Configuration/PropertyManagement/Identity/ExternalIntegrations) confirmou que 100% deles despacham via Mediator (`ICommand`/`ICommandHandler`/`I<Contexto>RequestDispatcher`). Corrigido antes de qualquer commit — ver `ADR-024` amendment §A5.
+
+**Defeito 2 — `IHostPro.Worker` sem `IIntegrationEventCollector` registrado para o novo consumidor.** `AddGuestOperationsReservationCreatedConsumer` registrava `IGuestOperationsTransactionExecutor` (que depende de `IIntegrationEventCollector`) mas não o próprio `IIntegrationEventCollector` — a validação de DI do ASP.NET Core falhava ao construir o Worker, derrubando TODO o processo na inicialização (não apenas o consumidor de Guest Operations) e fazendo 25 dos 36 testes da suíte `IHostPro.Api.Tests.Integration` falharem por "Worker never reported listening to X", em Bounded Contexts totalmente não relacionados (Housekeeping, Communication, WhatsApp). Corrigido adicionando o registro faltante.
+
+**Defeito 3 — reuso indevido de escopo de DI no teste E2E reescrito.** O teste `GuestCheckedOutCloseReservationWorkerRoundTripTests` originalmente despachava `RecordGuestCheckedInCommand` e `RecordGuestCheckedOutCommand` no MESMO escopo de DI — um atalho artificial que nenhum cliente HTTP real jamais produziria (cada requisição HTTP real recebe seu próprio escopo novo do ASP.NET Core). Isso reutilizava a mesma instância Scoped de `IDbContextOutbox<GuestOperationsDbContext>` entre dois flushes sequenciais, e `GuestCheckedOut` nunca chegava de fato ao broker (a cadeia parava silenciosamente antes de `Workflow02_GuestCheckedOut`). Corrigido separando check-in e checkout em dois escopos de DI distintos — mesmo padrão que uma segunda chamada HTTP real teria.
+
+Nenhum dos três defeitos está relacionado à lógica de negócio deste Checkpoint (check-in, checkout, coreografia de criação) — todos são efeitos colaterais mecânicos da introdução do despacho via Mediator e do primeiro consumidor real em `IHostPro.Worker` deste Bounded Context.
+
+### 4.4 Gatilho de criação e fan-out de `ReservationCreated`
+
+`ReservationCreatedGuestStayInitializer` (coreografia, nunca Workflow Orchestration) confirmado funcionando de ponta a ponta via transporte real: `ReservationCreated` publicado por `CreateReservationCommand` → RabbitMQ real → fila `guestoperations.reservation-created-trigger` → `GuestStayOperation` `Active` criado — log real observado: `"GuestStayOperation created for tenant ... reservationId ..."`.
+
+`ReservationCreatedConsumerCount=5` (Housekeeping, Dashboard, Workflow, Communication, Guest Operations) — cada um sticky-bound à sua própria fila (ADR-020), sem competing-consumer behavior. Prova estrutural (não apenas efeito colateral em banco) via `WolverineHandlerChainIsolationBaselineTests`, estendido para incluir Guest Operations como quarto consumidor estruturalmente verificado no host mínimo (Housekeeping/Dashboard/Workflow/Guest Operations — Communication permanece fora deste host mínimo por ter grafo de dependências maior, mas seu próprio isolamento já está provado de verdade pela suíte completa de `IHostPro.Api.Tests.Integration`, que mostra as cinco filas recebendo e processando `ReservationCreated` de forma independente, sem nenhum handler de outro Bounded Context executando por engano). Os quatro consumidores pré-existentes continuam recebendo o evento normalmente — nenhuma regressão.
+
+### 4.5 Existing Reservation Upgrade Strategy — auditoria e backfill
+
+Auditoria do banco de desenvolvimento real (`ihostpro-postgres`/`ihostpro`), executada antes de qualquer decisão de backfill (condição explícita de parada do usuário): `ExistingReservationsCount=2` (`ConfirmedReservationsCount=1`, `CancelledReservationsCount=1`, mesmo tenant/property), `ExistingGuestStayOperationsCount=0` (schema `guest_operations` ainda não existia nesse banco — `MigrationRunner` nunca havia sido executado lá), logo `MissingGuestStayOperationsCount=2`.
+
+Decisão do usuário: backfill versionado, nunca um script manual fora do versionamento. `GuestStayOperationBackfillBootstrapStep` (ADR-017, `tools/IHostPro.MigrationRunner`) — mirroring exatamente `DashboardReservationProjectionBootstrapStep`'s própria mecânica (iteração por tenant, `set_config('app.tenant_id', ...)`, nunca `BYPASSRLS`/superuser): para cada Reservation `Confirmed` sem `GuestStayOperation` correspondente, cria uma `Active`; para `Cancelled`, não cria nenhuma (terminal, nunca pode fazer check-in); idempotente via `ON CONFLICT (tenant_id, reservation_id) DO NOTHING`; nenhum replay de `ReservationCreated`, nenhum side effect em outro Bounded Context.
+
+Provado por 5 testes reais e determinísticos (`GuestStayOperationBackfillBootstrapStepTests`, novo projeto `IHostPro.Contexts.GuestOperations.Tests.Integration`): Confirmed sem operação → Active criada; Cancelled sem operação → nenhuma criada; Confirmed com operação já existente (CheckedIn) → no-op, nunca regride; múltiplos tenants → isolamento total via RLS; segunda execução → zero linhas novas.
+
+**Aplicação real ao banco de desenvolvimento — autorizada e executada.** `IHostPro.MigrationRunner` (Release) executado de verdade contra `ihostpro-postgres`/`ihostpro`, usando a configuração oficial já commitada (`appsettings.json` do próprio MigrationRunner — nenhuma credencial de superusuário, nenhum `BYPASSRLS`, nenhuma alteração de RLS).
+
+- **Run #1**: exit code 0. Todos os 9 DbContexts migrados (schema `guest_operations` criado pela primeira vez nesse banco). Backfill: `3 tenant(s) checked, 1 row(s) inserted` — exatamente a Reservation `Confirmed` pré-existente, agora com `GuestStayOperation` `Active` (`CheckedInAtUtc`/`CheckedOutAtUtc` nulos). A Reservation `Cancelled` permanece sem `GuestStayOperation`, como esperado.
+- **Verificação pós-Run#1** (read-only): `ExistingReservationsCount=2`, `ConfirmedReservationsCount=1`, `CancelledReservationsCount=1`, `GuestStayOperationsCount=1`, `BackfilledGuestStayOperationsCount=1`, `ConfirmedReservationCovered=true`, `CancelledReservationSkipped=true`, `MissingEligibleGuestStayOperationsCount=0`.
+- **Run #2** (mesmo banco, imediatamente em seguida): exit code 0. Backfill: `3 tenant(s) checked, 0 row(s) inserted` — zero drift, zero linha nova, idempotência real confirmada.
+- **Saúde pós-Run#2** (read-only): `guest_operations.guest_stay_operations` com RLS `ENABLE`+`FORCE` intactos; os 3 índices esperados presentes (`PK` em `id`, alternate key única `(tenant_id, id)`, índice único `(tenant_id, reservation_id)`); grants de `ihostpro_app` restritos a `SELECT`/`INSERT`/`UPDATE` (sem `DELETE`); schema `guest_operations_messaging` (durable outbox) existente. `GuestStayOperationsCount` permanece `1`.
+
+`DevDatabaseMigrationApplied=true`, `DevDatabaseRun1Exit=0`, `DevDatabaseRun2Exit=0`, `ConfirmedReservationBackfilled=true`, `CancelledReservationSkipped=true`, `MissingEligibleGuestStayOperationsCount=0`, `DevDatabaseGuestStayOperationsCount=1`. Nenhum replay de `ReservationCreated`; nenhum side effect em Housekeeping/Dashboard/Workflow/Communication (seus próprios bootstrap steps rodaram normalmente, `0 row(s) inserted` cada, já totalmente aplicados desde fases anteriores).
+
+### 4.6 Autorização — primeiro consumidor real, bundle completo
+
+`GuestOperationsManageConstantExists=true` (`IdentityPermissionCodes.GuestOperationsManage`), `GuestOperationsManageSeedExists=true` (já seedado desde o Checkpoint 1), `GuestOperationsManageGrantedToAdmin=true` (já concedido desde o Checkpoint 1), `GuestOperationsManagePolicyRegistered=true` (novo — `IdentityAuthorizationExtensions.AddIdentityAuthorization`). `GUEST_OPERATIONS:READ` permanece não promovido/não registrado — nenhum endpoint somente-leitura existe.
+
+Pipeline HTTP real provado por `GuestStayOperationsControllerAuthorizationTests` (host real ASP.NET Core + JWT real emitido pelo stack real da Identity): ADMIN → 200 (check-in e checkout reais, transição de estado real observada); autenticado sem `GUEST_OPERATIONS:MANAGE` → 403 (nunca 500); anônimo → 401. Teste de consistência por reflexão (`IdentityAuthorizationCatalogConsistencyTests.Every_controller_required_policy_is_registered`) estendido para incluir o assembly de `GuestOperations.Api` — descoberta automática, sem necessidade de lista manual.
+
+Também provado: duplicidade (check-in chamado duas vezes via HTTP real → ambas 200, sem duplicar `GuestCheckedIn`) e isolamento de tenant (check-in para uma Reservation de outro tenant → 404 real, nunca vaza existência).
+
+### 4.7 Credencial de Acesso
+
+Reafirmado, sem alteração: **DEFERRED PENDING SECURE DELIVERY BOUNDARY** — nenhuma implementação neste Checkpoint. Um sub-gate específico precisa ser aberto e resolvido antes da homologação final da Fase 10 como um todo. Não é um blocker externo/de produção nem uma lacuna esquecida.
+
+### 4.8 Testes — contagens exatas (regressão final)
+
+| Suíte | Resultado |
+|---|---|
+| `IHostPro.Contexts.GuestOperations.Tests.Unit` | 17 aprovados |
+| `IHostPro.Contexts.GuestOperations.Tests.Integration` (novo) | 10 aprovados |
+| `IHostPro.Contexts.Reservations.Tests.Unit` | 90 aprovados |
+| `IHostPro.Contexts.Workflow.Tests.Unit` | 11 aprovados |
+| `IHostPro.ArchitectureTests` | 234 aprovados |
+| `IHostPro.Contexts.Identity.Tests.Unit` | 470 aprovados |
+| `IHostPro.Contexts.Identity.Tests.Integration` | 420 aprovados |
+| `IHostPro.Contexts.Reservations.Tests.Integration` | 86 aprovados |
+| `IHostPro.Api.Tests.Integration` (suíte completa, uma única execução) | 36 aprovados |
+| MigrationRunner Run #1 (Postgres descartável real) | Exit code 0, todos os 9 DbContexts + 6 bootstrap steps |
+| MigrationRunner Run #2 (mesmo banco) | Exit code 0, zero drift, backfill 0 linhas em ambas |
+| NSwag (geração #1 e #2) | Diff zero entre as duas gerações |
+| Angular build (`ng build`) | Sucesso, nenhuma UI nova |
+| Build Release (solução completa) | 0 erro |
+| Build Debug (solução completa) | 0 erro |
+| `git diff --check` | Sem erros (apenas avisos benignos de normalização LF→CRLF) |
+
+### 4.9 Escopo explicitamente NÃO implementado neste checkpoint
+
+Formulário de check-in, Credencial de Acesso (deferida — ver §4.7), Early Check-in, Late Checkout, Portaria/Front Desk, PIX/Payment, qualquer novo consumidor de `GuestCheckedIn` em Communication, granularidade completa de `CheckInStatus` além de `CheckedIn`.
+
+### 4.10 Status do Checkpoint 2
+
+**Concluído e homologado.** Regressão final (§4.8) e aplicação real do backfill ao banco de desenvolvimento (§4.5) sem pendências.
+
+## 5. Próximo Checkpoint Recomendado
+
+Checkpoint 3, conforme a estrutura CP0–CP6 já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado aos dois Checkpoints anteriores.

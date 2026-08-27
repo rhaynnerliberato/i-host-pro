@@ -762,7 +762,7 @@ Configuration & Policy	PolicyUpdated
 
 27. Eventos do Módulo Reservations — Payloads e Roteamento (Fase 3, Incremento 1)
 
-Complementa a lista prospectiva do §5 ("Eventos do Módulo Reservas") com o payload e roteamento reais dos três eventos já implementados no Incremento 1 da Fase 3 (Reservation Management) — ReservationCreated, ReservationUpdated, ReservationCancelled — mais ReservationClosed, implementado na Fase 10, Checkpoint 1 (ver §27.4). Os demais eventos listados no §5 (ReservationConfirmed, GuestCheckedIn) permanecem prospectivos, sem payload/roteamento definidos. GuestCheckedOut é publicado pelo Bounded Context Guest Operations, não por Reservations — ver §30.
+Complementa a lista prospectiva do §5 ("Eventos do Módulo Reservas") com o payload e roteamento reais dos três eventos já implementados no Incremento 1 da Fase 3 (Reservation Management) — ReservationCreated, ReservationUpdated, ReservationCancelled — mais ReservationClosed, implementado na Fase 10, Checkpoint 1 (ver §27.4). ReservationConfirmed permanece prospectivo, sem payload/roteamento definido. GuestCheckedIn/GuestCheckedOut são publicados pelo Bounded Context Guest Operations, não por Reservations — ver §30/§31 (GuestCheckedIn, real desde a Fase 10, Checkpoint 2, deixou de ser prospectivo).
 
 Anexado como seção nova ao final do documento — deliberadamente não inserido como subseção do §14 (que é específico do módulo Property Management) e sem renumerar nenhuma seção existente, preservando as referências já registradas em outros documentos (ex.: ADR-013 cita §13.2/§19).
 
@@ -986,3 +986,33 @@ GuestCheckedOut
 30.3 Consumidor
 
 Workflow Orchestration, fila `workflow.guest-checked-out-trigger` — segunda fila independente deste Bounded Context (a primeira é `workflow.reservation-created-trigger`, ADR-018). Guest Operations nunca precisa saber que Workflow está ouvindo — mesmo padrão de pub/sub desacoplado já usado por toda fila deste catálogo.
+
+31. Evento GuestCheckedIn — Payload e Roteamento (Fase 10, Checkpoint 2 — Check-in/Checkout Core)
+
+Formalizado em GuestOperations.Contracts (ADR-024, amendment Fase 10 Checkpoint 2). Publicado quando um `GuestStayOperation` transiciona para `CheckedIn`. Produtor: Guest Operations (`RecordGuestCheckedInCommandHandler`). Deliberadamente sem consumidor real ainda — Front Desk (notificação de portaria) é deferido à Fase 10, Checkpoint 4; Communication segue o padrão-default explícito de não adicionar nenhum novo consumidor apenas para provar que um existe (decisão do usuário, Checkpoint 2, §33 do mandato). Mirroring §30 (GuestCheckedOut) exatamente.
+
+31.1 Payload de GuestCheckedIn
+
+ActorType é sempre "System" — nenhum ator HTTP é registrado no payload ainda (o endpoint HTTP que dispara este evento existe desde este Checkpoint, mas a identidade do chamador não é transportada no evento — mesma omissão de GuestCheckedOut). Sem PropertyId — nenhum consumidor real o exige.
+
+GuestCheckedIn
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ReservationId | Guid | A Reservation cujo check-in disparou este evento — não redundante com AggregateId (AggregateId é o id do próprio GuestStayOperation) |
+| CheckedInAtUtc | DateTimeOffset | O instante real do check-in, mesmo valor persistido em `GuestStayOperation.CheckedInAtUtc` |
+
+31.2 Roteamento RabbitMQ de GuestCheckedIn
+
+| Evento | Exchange | Routing Key | Registrado desde |
+|---|---|---|---|
+| GuestCheckedIn | guest-operations-events | guest_checked_in | Fase 10, Checkpoint 2 |
+
+Mesma exchange de GuestCheckedOut (§30.2) — uma segunda routing key, nunca uma segunda exchange.
+
+31.3 Consumidor
+
+Nenhum. A routing key `guest_checked_in` é declarada pela exchange, mas nenhuma fila está vinculada a ela ainda — uma mensagem publicada é simplesmente descartada pelo RabbitMQ, nunca um erro (mesmo comportamento já documentado para `airbnb_sync_started`, §29 — ver também IHostPro.Api/Program.cs).
+
+32. Novo consumidor de ReservationCreated — Guest Operations (Fase 10, Checkpoint 2 — Check-in/Checkout Core)
+
+`ReservationCreated` (§27.2) ganha um quinto consumidor independente em Fase 10, Checkpoint 2: Guest Operations (`ReservationCreatedGuestStayInitializer`), reagindo por coreografia (nunca via Workflow Orchestration) para criar automaticamente o `GuestStayOperation` correspondente — a decisão resolvida do gatilho de criação (ver ADR-024, amendment Fase 10 Checkpoint 2). Fila `guestoperations.reservation-created-trigger`, vinculada à exchange já existente `reservation-events` (mesma routing key `reservation_created`, nenhuma exchange nova). Idempotente por busca-antes-de-criar (nunca duplica um `GuestStayOperation` já existente para a mesma Reservation — a restrição única `(tenant_id, reservation_id)` já documentada em §30 permanece como defesa em profundidade, nunca a única garantia).
