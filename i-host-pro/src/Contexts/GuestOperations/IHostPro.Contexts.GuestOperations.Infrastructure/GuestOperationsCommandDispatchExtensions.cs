@@ -23,6 +23,19 @@ namespace IHostPro.Contexts.GuestOperations.Infrastructure;
 /// Reservation id). No FluentValidation either — both commands carry only a
 /// route-bound Reservation id and the caller's own tenant id, nothing a
 /// validator would meaningfully check.
+///
+/// Fase 10, Checkpoint 3 — Early Check-in / Late Checkout adds
+/// <c>RequestEarlyCheckInCommand</c>/<c>RequestLateCheckoutCommand</c> to the
+/// same Mediator scan (this method's own assembly), so only their NEW
+/// dependencies are registered here: the two request repositories/readers,
+/// plus the cross-context synchronous readers they call
+/// (<c>IReservationScheduleReader</c> — already registered by
+/// <c>AddReservationsModule</c>, which <c>IHostPro.Api</c> calls
+/// unconditionally; <c>ICleaningReadinessReader</c> — already registered by
+/// <c>AddHousekeepingModule</c>, same reasoning; <c>IEarlyCheckInPolicyReader</c>/
+/// <c>ILateCheckoutPolicyReader</c> — already registered by Configuration's
+/// own base module). None of those three modules' registrations are
+/// repeated here — this method only adds what Guest Operations itself owns.
 /// </summary>
 public static class GuestOperationsCommandDispatchExtensions
 {
@@ -34,6 +47,11 @@ public static class GuestOperationsCommandDispatchExtensions
         services.AddScoped<IGuestOperationsTransactionExecutor, GuestOperationsOutboxTransactionExecutor>();
         services.AddScoped<IRepository<GuestStayOperation, Guid>, GuestStayOperationRepository>();
         services.AddScoped<IGuestStayOperationReader, GuestStayOperationReader>();
+
+        services.AddScoped<IRepository<EarlyCheckInRequest, Guid>, EarlyCheckInRequestRepository>();
+        services.AddScoped<IEarlyCheckInRequestReader, EarlyCheckInRequestReader>();
+        services.AddScoped<IRepository<LateCheckoutRequest, Guid>, LateCheckoutRequestRepository>();
+        services.AddScoped<ILateCheckoutRequestReader, LateCheckoutRequestReader>();
 
         return services;
     }

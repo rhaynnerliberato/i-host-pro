@@ -20,6 +20,10 @@ public sealed class GuestOperationsDbContext : BaseDbContext
 
     public DbSet<GuestStayOperation> GuestStayOperations => Set<GuestStayOperation>();
 
+    public DbSet<EarlyCheckInRequest> EarlyCheckInRequests => Set<EarlyCheckInRequest>();
+
+    public DbSet<LateCheckoutRequest> LateCheckoutRequests => Set<LateCheckoutRequest>();
+
     public GuestOperationsDbContext(DbContextOptions<GuestOperationsDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)
     {

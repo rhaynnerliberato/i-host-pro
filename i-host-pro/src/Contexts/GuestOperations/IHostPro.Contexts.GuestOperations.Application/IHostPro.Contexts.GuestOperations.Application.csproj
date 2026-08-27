@@ -11,12 +11,25 @@
     Application/Infrastructure/Api (ordinary async Integration Event
     consumption, no new synchronous exception, Architecture Principles
     §14).
+
+    Fase 10, Checkpoint 3 — Early Check-in / Late Checkout: two more
+    Contracts-only references added, each backing a named synchronous
+    exception (ADR-024 amendment). Reservations.Contracts now ALSO supplies
+    IReservationScheduleReader (exception #7) alongside ReservationCreated.
+    Housekeeping.Contracts supplies ICleaningReadinessReader (exception #8 —
+    Housekeeping's first). Configuration.Contracts supplies
+    IEarlyCheckInPolicyReader/ILateCheckoutPolicyReader — the universal
+    Configuration exception every Bounded Context already holds (Fase 5).
+    Never Housekeeping.Domain/Application/Infrastructure, never
+    Configuration.Application/Infrastructure.
   -->
   <ItemGroup>
     <ProjectReference Include="..\IHostPro.Contexts.GuestOperations.Domain\IHostPro.Contexts.GuestOperations.Domain.csproj" />
     <ProjectReference Include="..\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
     <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
+    <ProjectReference Include="..\..\Housekeeping\IHostPro.Contexts.Housekeeping.Contracts\IHostPro.Contexts.Housekeeping.Contracts.csproj" />
+    <ProjectReference Include="..\..\Configuration\IHostPro.Contexts.Configuration.Contracts\IHostPro.Contexts.Configuration.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

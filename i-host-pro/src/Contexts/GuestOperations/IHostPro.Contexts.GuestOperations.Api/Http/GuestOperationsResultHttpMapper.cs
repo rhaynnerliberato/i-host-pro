@@ -18,12 +18,19 @@ public static class GuestOperationsResultHttpMapper
     private static readonly HashSet<string> NotFoundErrorCodes = new(StringComparer.Ordinal)
     {
         GuestOperationsErrorCodes.GuestStayOperationNotFound,
+        GuestOperationsErrorCodes.ReservationNotFound,
     };
 
     private static readonly HashSet<string> ConflictErrorCodes = new(StringComparer.Ordinal)
     {
         GuestOperationsErrorCodes.GuestStayOperationAlreadyCheckedOut,
         GuestOperationsErrorCodes.GuestStayOperationNotCheckedIn,
+        GuestOperationsErrorCodes.ReservationNotConfirmed,
+        GuestOperationsErrorCodes.GuestStayOperationNotEligibleForEarlyCheckIn,
+        GuestOperationsErrorCodes.GuestStayOperationNotEligibleForLateCheckout,
+        GuestOperationsErrorCodes.EarlyCheckInRequestAlreadyActive,
+        GuestOperationsErrorCodes.LateCheckoutRequestAlreadyActive,
+        GuestOperationsErrorCodes.LateCheckoutChargeTypePercentageUnsupported,
     };
 
     public static IActionResult ToActionResult(Error error)
