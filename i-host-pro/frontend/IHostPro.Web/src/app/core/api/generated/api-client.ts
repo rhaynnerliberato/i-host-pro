@@ -1373,6 +1373,147 @@ export class Client {
     /**
      * @return OK
      */
+    frontDeskContactGET(condominiumId: string): Observable<FrontDeskContactResponse> {
+        let url_ = this.baseUrl + "/api/v1/condominiums/{condominiumId}/front-desk-contact";
+        if (condominiumId === undefined || condominiumId === null)
+            throw new globalThis.Error("The parameter 'condominiumId' must be defined.");
+        url_ = url_.replace("{condominiumId}", encodeURIComponent("" + condominiumId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processFrontDeskContactGET(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processFrontDeskContactGET(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<FrontDeskContactResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<FrontDeskContactResponse>;
+        }));
+    }
+
+    protected processFrontDeskContactGET(response: HttpResponseBase): Observable<FrontDeskContactResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as FrontDeskContactResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @param body (optional) 
+     * @return OK
+     */
+    frontDeskContactPUT(condominiumId: string, body?: SetFrontDeskContactRequest | undefined): Observable<FrontDeskContactResponse> {
+        let url_ = this.baseUrl + "/api/v1/condominiums/{condominiumId}/front-desk-contact";
+        if (condominiumId === undefined || condominiumId === null)
+            throw new globalThis.Error("The parameter 'condominiumId' must be defined.");
+        url_ = url_.replace("{condominiumId}", encodeURIComponent("" + condominiumId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(body);
+
+        let options_ : any = {
+            body: content_,
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("put", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processFrontDeskContactPUT(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processFrontDeskContactPUT(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<FrontDeskContactResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<FrontDeskContactResponse>;
+        }));
+    }
+
+    protected processFrontDeskContactPUT(response: HttpResponseBase): Observable<FrontDeskContactResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as FrontDeskContactResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @return OK
+     */
     checkIn(reservationId: string): Observable<GuestStayOperationResponse> {
         let url_ = this.baseUrl + "/api/v1/guest-operations/reservations/{reservationId}/check-in";
         if (reservationId === undefined || reservationId === null)
@@ -6224,6 +6365,16 @@ export interface EffectivePolicyResponse {
     version?: number | undefined;
 }
 
+export interface FrontDeskContactResponse {
+    id?: string;
+    condominiumId?: string;
+    displayName?: string | undefined;
+    phoneNumber?: string | undefined;
+    isActive?: boolean;
+    createdAtUtc?: Date;
+    updatedAtUtc?: Date;
+}
+
 export interface GuestStayOperationResponse {
     id?: string;
     reservationId?: string;
@@ -6452,6 +6603,12 @@ export interface ScheduleItemResponse {
 
 export interface SetChecklistItemRequest {
     isChecked?: boolean;
+}
+
+export interface SetFrontDeskContactRequest {
+    displayName?: string | undefined;
+    phoneNumber?: string | undefined;
+    isActive?: boolean;
 }
 
 export interface TemplateResponse {
