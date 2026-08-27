@@ -141,7 +141,7 @@ public class PropertyManagementFoundationTests : IClassFixture<PropertyManagemen
                 tableNames.Add(reader.GetString(0));
         }
 
-        tableNames.Should().Contain(["condominiums", "properties", "property_owners", "property_audit_log"]);
+        tableNames.Should().Contain(["condominiums", "properties", "property_owners", "property_audit_log", "front_desk_contacts"]);
     }
 
     [Fact]

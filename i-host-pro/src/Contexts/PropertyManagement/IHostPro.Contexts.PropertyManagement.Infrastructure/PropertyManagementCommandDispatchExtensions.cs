@@ -4,6 +4,7 @@ using IHostPro.BuildingBlocks.Domain;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Application;
 using IHostPro.Contexts.PropertyManagement.Application.Condominiums;
+using IHostPro.Contexts.PropertyManagement.Application.FrontDesk;
 using IHostPro.Contexts.PropertyManagement.Application.Owners;
 using IHostPro.Contexts.PropertyManagement.Application.Properties;
 using IHostPro.Contexts.PropertyManagement.Domain;
@@ -67,6 +68,7 @@ public static class PropertyManagementCommandDispatchExtensions
         services.AddScoped<IValidator<CreateCondominiumCommand>, CreateCondominiumCommandValidator>();
         services.AddScoped<IValidator<UpdateCondominiumCommand>, UpdateCondominiumCommandValidator>();
         services.AddScoped<IValidator<ListCondominiumsQuery>, ListCondominiumsQueryValidator>();
+        services.AddScoped<IValidator<SetFrontDeskContactCommand>, SetFrontDeskContactCommandValidator>();
 
         services.AddScoped<IValidator<CreatePropertyCommand>, CreatePropertyCommandValidator>();
         services.AddScoped<IValidator<UpdatePropertyCommand>, UpdatePropertyCommandValidator>();
@@ -85,6 +87,7 @@ public static class PropertyManagementCommandDispatchExtensions
 
         services.AddScoped<IRepository<Condominium, Guid>, CondominiumRepository>();
         services.AddScoped<ICondominiumReader, CondominiumReader>();
+        services.AddScoped<IFrontDeskContactRepository, FrontDeskContactRepository>();
         services.AddScoped<IRepository<Property, Guid>, PropertyRepository>();
         services.AddScoped<IPropertyReader, PropertyReader>();
         services.AddScoped<IPropertyAuditWriter, PropertyAuditWriter>();
@@ -120,6 +123,20 @@ public static class PropertyManagementCommandDispatchExtensions
         services.AddScoped<
             IPipelineBehavior<GetCondominiumDetailQuery, Result<CondominiumResult>>,
             TenantTransactionBehavior<GetCondominiumDetailQuery, Result<CondominiumResult>, PropertyManagementDbContext>>();
+
+        // Fase 10, Checkpoint 4 (Portaria Notification Foundation):
+        // SetFrontDeskContactCommand publishes no Integration Event, but
+        // still gets its own closed-generic tenant-aware behavior (never the
+        // shared generic TenantTransactionBehavior<,>) for consistency with
+        // every other write command in this dispatch extension.
+        // GetFrontDeskContactByCondominiumQuery is a plain read, using the
+        // shared generic behavior like every other query here.
+        services.AddScoped<
+            IPipelineBehavior<SetFrontDeskContactCommand, Result<FrontDeskContactResult>>,
+            SetFrontDeskContactTenantAwareBehavior>();
+        services.AddScoped<
+            IPipelineBehavior<GetFrontDeskContactByCondominiumQuery, Result<FrontDeskContactResult>>,
+            TenantTransactionBehavior<GetFrontDeskContactByCondominiumQuery, Result<FrontDeskContactResult>, PropertyManagementDbContext>>();
 
         services.AddScoped<
             IPipelineBehavior<CreatePropertyCommand, Result<PropertyResult>>,

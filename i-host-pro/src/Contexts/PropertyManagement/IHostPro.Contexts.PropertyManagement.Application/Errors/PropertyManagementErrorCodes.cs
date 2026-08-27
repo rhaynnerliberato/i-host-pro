@@ -148,4 +148,12 @@ public static class PropertyManagementErrorCodes
     /// not-found", not "conflict" — Checkpoint 5 plan, item 8/13).
     /// </summary>
     public const string PropertyOwnerNotLinked = "PropertyManagement.PropertyOwnerNotLinked";
+
+    /// <summary>
+    /// <c>GET /api/v1/condominiums/{id}/front-desk-contact</c> called for a
+    /// condominium that has no <c>FrontDeskContact</c> configured yet — a
+    /// distinct case from <see cref="CondominiumNotFound"/> (Fase 10,
+    /// Checkpoint 4).
+    /// </summary>
+    public const string FrontDeskContactNotFound = "PropertyManagement.FrontDeskContactNotFound";
 }

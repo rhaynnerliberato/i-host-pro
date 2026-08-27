@@ -29,6 +29,7 @@ public sealed class PropertyManagementDbContext : BaseDbContext
     public DbSet<Property> Properties => Set<Property>();
     public DbSet<PropertyOwnerLink> PropertyOwnerLinks => Set<PropertyOwnerLink>();
     public DbSet<PropertyAuditEntry> PropertyAuditLog => Set<PropertyAuditEntry>();
+    public DbSet<FrontDeskContact> FrontDeskContacts => Set<FrontDeskContact>();
 
     public PropertyManagementDbContext(DbContextOptions<PropertyManagementDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)
