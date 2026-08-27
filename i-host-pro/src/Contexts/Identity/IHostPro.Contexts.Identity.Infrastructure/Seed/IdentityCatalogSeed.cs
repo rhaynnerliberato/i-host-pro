@@ -36,6 +36,17 @@ namespace IHostPro.Contexts.Identity.Infrastructure.Seed;
 /// approved explicitly for this checkpoint (CP2.0 audit + CP2.1 mandate,
 /// Decisão K), not a promotion of an already-seeded-but-unused code like
 /// every other constant in <c>IdentityPermissionCodes</c>.
+///
+/// <c>GUEST_OPERATIONS:MANAGE</c>/<c>GUEST_OPERATIONS:READ</c> (Fase 10,
+/// Checkpoint 1 — Guest Operations Foundation) are the SECOND genuinely new
+/// catalog entries, explicitly authorized for this checkpoint. Unlike
+/// <c>INTEGRATIONS:MANAGE</c>, no real controller exists yet to consume
+/// them (CP1 has zero public API endpoints) — they follow the
+/// SETTINGS:MANAGE/SETTINGS:READ lifecycle instead: seeded here (and granted
+/// to ADMIN below) ahead of any consumer, deliberately NOT promoted to
+/// <c>IdentityPermissionCodes</c> and NOT registered in
+/// <c>IdentityAuthorizationExtensions</c> until a future checkpoint's real
+/// endpoint needs them.
 /// </summary>
 public static class IdentityCatalogSeed
 {
@@ -98,6 +109,18 @@ public static class IdentityCatalogSeed
         // Fase 9, Checkpoint 2.1 — CP2.1 mandate §24: ADMIN only, no
         // INTEGRATIONS:READ counterpart created by symmetry.
         new Permission(IdentityPermissionCodes.IntegrationsManage, "INTEGRATIONS", "MANAGE"),
+
+        // Fase 10, Checkpoint 1 (Guest Operations Foundation) — CP1 has zero
+        // public API endpoints, so, unlike IntegrationsManage above, these
+        // are NOT promoted to IdentityPermissionCodes and have NO AddPolicy
+        // registration in IdentityAuthorizationExtensions yet (that class's
+        // own documented rule: only policies an existing endpoint actually
+        // consumes are registered). Mirrors this same list's own
+        // SETTINGS:MANAGE/SETTINGS:READ precedent — seeded ahead of any
+        // consumer, promoted/wired only once a real controller references
+        // them by value.
+        new Permission("GUEST_OPERATIONS:MANAGE", "GUEST_OPERATIONS", "MANAGE"),
+        new Permission("GUEST_OPERATIONS:READ", "GUEST_OPERATIONS", "READ"),
     ];
 
     public static IReadOnlyList<RolePermission> RolePermissions { get; } =
@@ -117,6 +140,8 @@ public static class IdentityCatalogSeed
         new RolePermission("ADMIN", IdentityPermissionCodes.RolesRead),
         new RolePermission("ADMIN", IdentityPermissionCodes.PermissionsRead),
         new RolePermission("ADMIN", IdentityPermissionCodes.IntegrationsManage),
+        new RolePermission("ADMIN", "GUEST_OPERATIONS:MANAGE"),
+        new RolePermission("ADMIN", "GUEST_OPERATIONS:READ"),
 
         // OPERATOR — Documento 09 §6.
         new RolePermission("OPERATOR", "PROPERTIES:READ"),
