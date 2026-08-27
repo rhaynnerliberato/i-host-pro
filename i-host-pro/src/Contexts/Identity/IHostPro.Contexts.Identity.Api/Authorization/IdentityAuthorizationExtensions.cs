@@ -75,6 +75,14 @@ namespace IHostPro.Contexts.Identity.Api.Authorization;
 /// 'INTEGRATIONS:MANAGE' was not found</c>, for any caller including an
 /// Administrator — the constant/seed/controller reference all existed, only
 /// this registration was missing.
+///
+/// <see cref="IdentityPermissionCodes.GuestOperationsManage"/> was already
+/// seeded into the persisted catalog since Fase 10, Checkpoint 1, but had no
+/// policy registered here until Checkpoint 2 — <c>GuestStayOperationsController</c>
+/// is its first consumer (CP1 shipped zero endpoints, per the standing rule
+/// against repeating the INTEGRATIONS:MANAGE incident: constant, seed, ADMIN
+/// grant, AddPolicy and consistency tests all land together with the first
+/// real endpoint).
 /// </summary>
 public static class IdentityAuthorizationExtensions
 {
@@ -114,7 +122,9 @@ public static class IdentityAuthorizationExtensions
             .AddPolicy(IdentityPermissionCodes.TemplatesRead, policy =>
                 policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.TemplatesRead)))
             .AddPolicy(IdentityPermissionCodes.IntegrationsManage, policy =>
-                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.IntegrationsManage)));
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.IntegrationsManage)))
+            .AddPolicy(IdentityPermissionCodes.GuestOperationsManage, policy =>
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.GuestOperationsManage)));
 
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

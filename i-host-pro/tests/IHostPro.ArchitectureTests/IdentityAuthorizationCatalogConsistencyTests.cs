@@ -69,6 +69,7 @@ public class IdentityAuthorizationCatalogConsistencyTests
         typeof(IHostPro.Contexts.Housekeeping.Api.Controllers.CleaningsController).Assembly,
         typeof(IHostPro.Contexts.Dashboard.Api.Controllers.DashboardController).Assembly,
         typeof(IHostPro.Contexts.ExternalIntegrations.Api.Controllers.WhatsAppIntegrationController).Assembly,
+        typeof(IHostPro.Contexts.GuestOperations.Api.Controllers.GuestStayOperationsController).Assembly,
     ];
 
     public static IEnumerable<object[]> RequiredAuthorizationPolicyNames() => ControllerAssemblies

@@ -121,4 +121,16 @@ public static class IdentityPermissionCodes
     /// (Decisão K): ADMIN only, no <c>INTEGRATIONS:READ</c> counterpart.
     /// </summary>
     public const string IntegrationsManage = "INTEGRATIONS:MANAGE";
+
+    /// <summary>
+    /// Fase 10, Checkpoint 1 (Guest Operations Foundation). Already seeded
+    /// into the persisted catalog since that checkpoint's own migration
+    /// (ADMIN=manage — Documento 09 update); promoted here only now because
+    /// Checkpoint 2's <c>GuestStayOperationsController</c> needs to
+    /// reference it by value for the first time — CP1 shipped zero
+    /// endpoints, so no policy registration existed yet (deliberate, per
+    /// the CP1 homologation record). <c>GUEST_OPERATIONS:READ</c> remains
+    /// unpromoted and unregistered — no read-only endpoint exists.
+    /// </summary>
+    public const string GuestOperationsManage = "GUEST_OPERATIONS:MANAGE";
 }
