@@ -93,7 +93,10 @@ Templates, notificações, WhatsApp e sincronização inicial com Airbnb. Escopo
 
 ### Fase 10 — Check-in, Checkout e Operações do Hóspede
 
-Check-in, checkout, early check-in, late checkout e comunicação com portaria. Escopo detalhado a refinar e aprovar antes da implementação.
+Check-in, checkout, early check-in, late checkout e comunicação com portaria.
+
+**Status:** Em andamento. Checkpoint 0 (Architecture & Product Decision Gate, read-only) e Checkpoint 1 (Guest Operations Foundation) concluídos — novo Bounded Context Guest Operations, `ReservationStatus.Closed`, comando cross-context `CloseReservation`, evento `GuestCheckedOut`, segundo orquestrador de Workflow, tudo provado por testes reais (unitários, arquitetura e E2E via RabbitMQ/Worker/Postgres reais). Zero endpoints HTTP, check-in form, credencial de acesso, Early/Late, Portaria, PIX/Payment ainda implementados — todos deferidos a checkpoints futuros.
+**Homologação:** `Fase 10 - Check-in, Checkout e Operacoes do Hospede - Validacao e Homologacao.md`.
 
 ### Fase 11 — AI Agent
 

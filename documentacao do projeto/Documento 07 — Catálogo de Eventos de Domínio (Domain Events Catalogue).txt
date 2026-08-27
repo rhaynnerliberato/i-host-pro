@@ -762,7 +762,7 @@ Configuration & Policy	PolicyUpdated
 
 27. Eventos do Módulo Reservations — Payloads e Roteamento (Fase 3, Incremento 1)
 
-Complementa a lista prospectiva do §5 ("Eventos do Módulo Reservas") com o payload e roteamento reais dos três eventos já implementados no Incremento 1 da Fase 3 (Reservation Management) — ReservationCreated, ReservationUpdated, ReservationCancelled. Os demais eventos listados no §5 (ReservationConfirmed, GuestCheckedIn, GuestCheckedOut, ReservationClosed) permanecem prospectivos, sem payload/roteamento definidos até serem implementados em fase futura (ver Plano Executivo de Desenvolvimento por Fases, Fase 10).
+Complementa a lista prospectiva do §5 ("Eventos do Módulo Reservas") com o payload e roteamento reais dos três eventos já implementados no Incremento 1 da Fase 3 (Reservation Management) — ReservationCreated, ReservationUpdated, ReservationCancelled — mais ReservationClosed, implementado na Fase 10, Checkpoint 1 (ver §27.4). Os demais eventos listados no §5 (ReservationConfirmed, GuestCheckedIn) permanecem prospectivos, sem payload/roteamento definidos. GuestCheckedOut é publicado pelo Bounded Context Guest Operations, não por Reservations — ver §30.
 
 Anexado como seção nova ao final do documento — deliberadamente não inserido como subseção do §14 (que é específico do módulo Property Management) e sem renumerar nenhuma seção existente, preservando as referências já registradas em outros documentos (ex.: ADR-013 cita §13.2/§19).
 
@@ -815,6 +815,17 @@ Convenção já registrada em ADR-013 (exchange único por Bounded Context, tipo
 | ReservationCreated | reservation-events | reservation_created | Incremento 1 (Fase 3) |
 | ReservationUpdated | reservation-events | reservation_updated | Incremento 1 (Fase 3) |
 | ReservationCancelled | reservation-events | reservation_cancelled | Incremento 1 (Fase 3) |
+| ReservationClosed | reservation-events | reservation_closed | Fase 10, Checkpoint 1 |
+
+27.4 ReservationClosed — novo evento (Fase 10, Checkpoint 1 — Guest Operations Foundation)
+
+Publicado quando uma Reservation transiciona para `Closed` (o checkout real do hóspede) — terminal, nunca em uma tentativa rejeitada/já-fechada (ver ADR-024). Mirra o payload de ReservationCancelled exatamente. ActorType é sempre "System" — esta transição não tem ator humano, é disparada exclusivamente pela cadeia interna Guest Operations → Workflow → Reservations (`CloseReservation`, um comando cross-context, nunca um Integration Event — não catalogado aqui pela mesma razão que `CreateCleaningForReservation` da ADR-018 não é; ver ADR-024).
+
+ReservationClosed
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ReservationId | Guid | Redundante com AggregateId |
+| PropertyId | Guid | Identificador opaco do Imóvel no momento do fechamento |
 
 28. Evento do Módulo Configuration & Policy — Payload e Roteamento (Fase 5, Incremento 1, Checkpoint 6)
 
@@ -952,3 +963,26 @@ Deliberadamente excluído: `Description` (texto livre, pode conter PII/conteúdo
 Roteamento RabbitMQ: exchange `housekeeping-events` (o mesmo exchange dos dez eventos de ciclo de vida de `Cleaning` — §29.1-§29.7), routing key `cleaning_occurrence_registered`.
 
 Não foi criado nenhum outro evento de Occurrence (ex.: `OccurrenceResolved`) — `CleaningOccurrence` não possui lifecycle de resolução documentado neste incremento (Checkpoint 0 decisão 3).
+
+30. Evento do Módulo Guest Operations — Payload e Roteamento (Fase 10, Checkpoint 1 — Guest Operations Foundation)
+
+Formalizado em GuestOperations.Contracts (ADR-024). Publicado quando um `GuestStayOperation` transiciona para `CheckedOut`. Produtor: Guest Operations (`RecordGuestCheckedOutCommandHandler`). Consumidor: Workflow Orchestration (`GuestCheckedOutCloseReservationOrchestrator`), que envia o comando cross-context `CloseReservation` a Reservations em reação (ver §27.4) — nunca um consumo direto por Reservations.
+
+30.1 Payload de GuestCheckedOut
+
+ActorType é sempre "System" — nenhum ator HTTP existe ainda neste checkpoint (zero endpoints públicos). Sem PropertyId — nenhum consumidor real o exige (Reservations já o possui; `CloseReservation` não precisa dele).
+
+GuestCheckedOut
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ReservationId | Guid | A Reservation cujo checkout disparou este evento — não redundante com AggregateId (AggregateId é o id do próprio GuestStayOperation) |
+
+30.2 Roteamento RabbitMQ de GuestCheckedOut
+
+| Evento | Exchange | Routing Key | Registrado desde |
+|---|---|---|---|
+| GuestCheckedOut | guest-operations-events | guest_checked_out | Fase 10, Checkpoint 1 |
+
+30.3 Consumidor
+
+Workflow Orchestration, fila `workflow.guest-checked-out-trigger` — segunda fila independente deste Bounded Context (a primeira é `workflow.reservation-created-trigger`, ADR-018). Guest Operations nunca precisa saber que Workflow está ouvindo — mesmo padrão de pub/sub desacoplado já usado por toda fila deste catálogo.
