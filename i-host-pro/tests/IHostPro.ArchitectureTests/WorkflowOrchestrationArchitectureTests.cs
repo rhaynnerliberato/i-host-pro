@@ -119,26 +119,30 @@ public class WorkflowOrchestrationArchitectureTests
     {
         // Single-entrypoint proof for Workflow's own transport surface, same
         // discipline already applied to Housekeeping/Reservations/
-        // Dashboard's own adapters. Fase 8, Checkpoint 1.1: two of the three
+        // Dashboard's own adapters. Fase 8, Checkpoint 1.1: two of the five
         // types are the thin Wolverine adapter (ReservationCreatedHandler)
         // and WolverineWorkflowCommandDispatcher (the Infrastructure-side
         // implementation of Workflow.Application's IWorkflowCommandDispatcher)
         // — the orchestration use case itself moved OUT of this namespace,
         // into Workflow.Application. Fase 10, Checkpoint 1 (Guest Operations
         // Foundation) adds the third: GuestCheckedOutHandler, the thin
-        // Wolverine adapter for Workflow's second trigger consumer —
-        // updated explicitly, by exact expected count, rather than merely
-        // relaxed to "any count," so an unapproved future addition still
-        // fails this test the same way an unapproved capability would.
+        // Wolverine adapter for Workflow's second trigger consumer. Fase 10,
+        // Checkpoint 3 (Early Check-in / Late Checkout) adds the fourth and
+        // fifth: EarlyCheckinApprovedHandler/LateCheckoutApprovedHandler, the
+        // thin Wolverine adapters for Workflow's third and fourth trigger
+        // consumers — updated explicitly, by exact expected count, rather
+        // than merely relaxed to "any count," so an unapproved future
+        // addition still fails this test the same way an unapproved
+        // capability would.
         var handlerTypes = Types.InAssembly(typeof(ReservationCreatedHandler).Assembly)
             .That()
             .ResideInNamespace("IHostPro.Contexts.Workflow.Infrastructure.Messaging")
             .GetTypes();
 
-        handlerTypes.Should().HaveCount(3,
-            "exactly three types are expected: the thin Wolverine adapters (ReservationCreatedHandler, " +
-            "GuestCheckedOutHandler) and WolverineWorkflowCommandDispatcher, the transport-only implementation " +
-            "of IWorkflowCommandDispatcher");
+        handlerTypes.Should().HaveCount(5,
+            "exactly five types are expected: the thin Wolverine adapters (ReservationCreatedHandler, " +
+            "GuestCheckedOutHandler, EarlyCheckinApprovedHandler, LateCheckoutApprovedHandler) and " +
+            "WolverineWorkflowCommandDispatcher, the transport-only implementation of IWorkflowCommandDispatcher");
     }
 
     // ---- Fase 8, Checkpoint 1.1 — Workflow.Application/.Infrastructure layering ----

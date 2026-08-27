@@ -168,13 +168,22 @@ public class ReservationsSourceConventionTests
         // Airbnb import-update-cancel consumers as genuinely in-scope
         // Reservations concepts now, never a temporary exception the way
         // Fase7IncrementoUmAllowedFiles' Cleaning-projection files are.
-        // Pricing/Commission/iCal/EarlyCheckIn/LateCheckout/WhatsApp/Payment/
-        // PropertyGroup remain out of scope and still forbidden.
+        //
+        // "EarlyCheckIn"/"LateCheckout" removed from this list in Fase 10,
+        // Checkpoint 3 ("Early Check-in / Late Checkout") — the mandate
+        // approved RescheduleReservationForEarlyCheckIn/
+        // RescheduleReservationForLateCheckout/IReservationScheduleReader
+        // (ADR-024 amendment, synchronous exception #7) as genuinely
+        // in-scope Reservations concepts now, same "no longer a temporary
+        // exception" precedent as Airbnb above.
+        //
+        // Pricing/Commission/iCal/WhatsApp/Payment/PropertyGroup remain out
+        // of scope and still forbidden.
         string[] forbiddenFragments =
         [
             "Booking.com", "iCal", "ICalendar", "class Payment", "record Payment",
             "class Pricing", "record Pricing", "Commission", "WhatsApp", "class Cleaning", "record Cleaning",
-            "EarlyCheckIn", "LateCheckout", "class PropertyGroup", "record PropertyGroup",
+            "class PropertyGroup", "record PropertyGroup",
         ];
 
         var offendingFiles = ReservationsSourceFiles()
