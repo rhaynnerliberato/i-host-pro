@@ -820,6 +820,13 @@ try
                 // "reservations.workflow-commands", mirroring
                 // Housekeeping's own queue-naming convention exactly.
                 exchange.BindQueue("reservations.workflow-commands", "close_reservation");
+                // Fase 10, Checkpoint 3 (Early Check-in / Late Checkout): a
+                // third and fourth cross-context command, same
+                // "reservations.workflow-commands" queue (two more routing
+                // keys, never a second queue) — Reservations already owns
+                // and consumes this queue for close_reservation above.
+                exchange.BindQueue("reservations.workflow-commands", "reschedule_for_early_check_in");
+                exchange.BindQueue("reservations.workflow-commands", "reschedule_for_late_checkout");
             })
             // Fase 9, Checkpoint 2.3.3 (ADR-022 item 13/14): External
             // Integrations' OWN published event, bound to Communication's
@@ -860,6 +867,28 @@ try
             {
                 exchange.ExchangeType = ExchangeType.Topic;
                 exchange.BindQueue("workflow.guest-checked-out-trigger", "guest_checked_out");
+                // guest_checked_in (Fase 10, Checkpoint 2) is deliberately
+                // NOT bound to any queue — no consumer exists yet, mirroring
+                // the same "unbound topic message, simply dropped" precedent
+                // documented on IHostPro.Api's own PublishMessage rule for
+                // it. early_checkin_denied/late_checkout_denied (Checkpoint
+                // 3) follow the identical precedent below — see the two
+                // events' own PublishMessage rules in IHostPro.Api's
+                // Program.cs.
+
+                // Fase 10, Checkpoint 3 (Early Check-in / Late Checkout):
+                // Workflow Orchestration's third trigger consumer — same
+                // decoupled pub/sub pattern as guest_checked_out above.
+                exchange.BindQueue("workflow.early-checkin-approved-trigger", "early_checkin_approved");
+
+                // Fase 10, Checkpoint 3: LateCheckoutApproved has TWO
+                // independent subscriber queues on this exchange — Workflow
+                // Orchestration's own reschedule orchestrator (always) and
+                // Housekeeping's own reaction (gated on UpdatesCleaning,
+                // ADR-020 second consumer) — Guest Operations never needs to
+                // know either is listening.
+                exchange.BindQueue("workflow.late-checkout-approved-trigger", "late_checkout_approved");
+                exchange.BindQueue("housekeeping.late-checkout-approved-trigger", "late_checkout_approved");
             });
     });
 

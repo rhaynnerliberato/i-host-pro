@@ -117,6 +117,13 @@ try
     // Orchestration (see AddWorkflowModule below).
     builder.Services.AddReservationsCloseReservationCommand();
 
+    // Fase 10, Checkpoint 3 (Early Check-in / Late Checkout): the two
+    // RescheduleReservationForEarlyCheckIn/RescheduleReservationForLateCheckout
+    // cross-context command consumers — mirrors AddReservationsCloseReservationCommand
+    // immediately above. Sent exclusively by Workflow Orchestration's own
+    // reschedule orchestrators (see AddWorkflowModule below).
+    builder.Services.AddReservationsRescheduleCommands();
+
     // Dashboard & Reporting module (Fase 7, Incremento 2): DashboardDbContext
     // + the four projection synchronizers' full DI graph, so the tenant-safe
     // execution boundary (IDashboardMessageExecutionScope, ADR-016) can
@@ -571,6 +578,47 @@ try
         opts.ListenToRabbitQueue("workflow.guest-checked-out-trigger")
             .AddStickyHandler(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.GuestCheckedOutHandler));
 
+        // Workflow Orchestration's third trigger consumer (Fase 10,
+        // Checkpoint 3 — Early Check-in / Late Checkout): a new, independent
+        // subscriber queue on the NEW guest-operations-events exchange
+        // (Guest Operations never needs to know Workflow is listening — same
+        // decoupled pub/sub pattern as every queue above). The queue itself,
+        // and its binding, is provisioned exclusively by
+        // IHostPro.MigrationRunner. EarlyCheckinApprovedHandler lives in the
+        // SAME Workflow.Infrastructure assembly as ReservationCreatedHandler/
+        // GuestCheckedOutHandler above — already included, no second
+        // IncludeAssembly needed. EarlyCheckinApproved has exactly one
+        // consumer in this process (Workflow) — sticky-bound anyway,
+        // mirroring GuestCheckedOutHandler's own registration shape for
+        // consistency.
+        opts.ListenToRabbitQueue("workflow.early-checkin-approved-trigger")
+            .AddStickyHandler(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.EarlyCheckinApprovedHandler));
+
+        // Workflow Orchestration's fourth trigger consumer (Fase 10,
+        // Checkpoint 3 — Early Check-in / Late Checkout): a new, independent
+        // subscriber queue on the SAME guest-operations-events exchange.
+        // Unlike EarlyCheckinApproved above, LateCheckoutApproved has a
+        // SECOND, independent in-process consumer — Housekeeping's own
+        // reaction (see housekeeping.late-checkout-approved-trigger below) —
+        // so AddStickyHandler is mandatory here, not just
+        // consistency-mirroring (ADR-020).
+        opts.ListenToRabbitQueue("workflow.late-checkout-approved-trigger")
+            .AddStickyHandler(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.LateCheckoutApprovedHandler));
+
+        // Housekeeping's own reaction to LateCheckoutApproved (Fase 10,
+        // Checkpoint 3 — gated on UpdatesCleaning; ADR-020 second consumer
+        // alongside Workflow's own queue immediately above): a SEPARATE
+        // subscriber queue on the SAME guest-operations-events exchange —
+        // Guest Operations never needs to know Housekeeping is listening,
+        // same decoupled pub/sub pattern as every queue above. The queue
+        // itself, and its binding, is provisioned exclusively by
+        // IHostPro.MigrationRunner. Housekeeping's own LateCheckoutApprovedHandler
+        // lives in the SAME Housekeeping.Infrastructure assembly as
+        // PropertyCreatedHandler above — already included, no second
+        // IncludeAssembly needed.
+        opts.ListenToRabbitQueue("housekeeping.late-checkout-approved-trigger")
+            .AddStickyHandler(typeof(IHostPro.Contexts.Housekeeping.Infrastructure.Messaging.LateCheckoutApprovedHandler));
+
         // Communication's own single trigger consumer (Fase 9, Checkpoint 1):
         // a fourth, independent subscriber queue on the EXISTING
         // reservation-events exchange (Reservations never needs to know
@@ -730,6 +778,30 @@ try
         opts.PublishMessage(typeof(CloseReservation))
             .ToRabbitRoutingKey(
                 workflowOrchestrationCommandsExchange, "close_reservation",
+                exchange => exchange.ExchangeType = ExchangeType.Direct)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        // Fase 10, Checkpoint 3 (Early Check-in / Late Checkout): Reservations'
+        // own two new cross-context commands — same workflow-orchestration-commands
+        // exchange (two more routing keys, never a second exchange), same
+        // Send-not-Publish semantics as CloseReservation above (see
+        // EarlyCheckinApprovedRescheduleOrchestrator/
+        // LateCheckoutApprovedRescheduleOrchestrator/WolverineWorkflowCommandDispatcher).
+        // Delivered to the SAME reservations.workflow-commands queue Reservations
+        // already listens to above (new bindings only, provisioned exclusively by
+        // IHostPro.MigrationRunner) — single consumer by design per command type,
+        // not at risk, no sticky mapping needed.
+        opts.PublishMessage(typeof(RescheduleReservationForEarlyCheckIn))
+            .ToRabbitRoutingKey(
+                workflowOrchestrationCommandsExchange, "reschedule_for_early_check_in",
+                exchange => exchange.ExchangeType = ExchangeType.Direct)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        opts.PublishMessage(typeof(RescheduleReservationForLateCheckout))
+            .ToRabbitRoutingKey(
+                workflowOrchestrationCommandsExchange, "reschedule_for_late_checkout",
                 exchange => exchange.ExchangeType = ExchangeType.Direct)
             .UseDurableOutbox()
             .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);

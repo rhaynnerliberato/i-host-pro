@@ -246,6 +246,13 @@ try
     // (ReservationCreated), so no new Wolverine wiring is needed here.
     builder.Services.AddReservationsCloseReservationCommand();
 
+    // Fase 10, Checkpoint 3: IRescheduleReservationForEarlyCheckInHandler/
+    // IRescheduleReservationForLateCheckoutHandler are also resolved directly
+    // from this host by their own deterministic E2E tests' idempotency
+    // checks — mirrors AddReservationsCloseReservationCommand immediately
+    // above exactly.
+    builder.Services.AddReservationsRescheduleCommands();
+
     // Wolverine's own Main message store (Fase 2, Incremento 1, Checkpoint 6
     // homologação — found and fixed during real-host startup validation):
     // Identity's and Property Management's outboxes are both registered as
@@ -591,6 +598,46 @@ try
         // never an error, mirroring AirbnbSyncStarted's own precedent above.
         opts.PublishMessage(typeof(GuestCheckedIn))
             .ToRabbitRoutingKey(guestOperationsEventsExchange, "guest_checked_in", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        // Guest Operations' third and fourth Integration Events (Fase 10,
+        // Checkpoint 3 — Early Check-in / Late Checkout), same exchange as
+        // GuestCheckedOut/GuestCheckedIn above, published by
+        // RequestEarlyCheckInCommandHandler. Workflow Orchestration's new
+        // reschedule orchestrator (running in IHostPro.Worker) is its sole
+        // consumer — see the Worker's own Program.cs for the corresponding
+        // ListenToRabbitQueue.
+        opts.PublishMessage(typeof(EarlyCheckinApproved))
+            .ToRabbitRoutingKey(guestOperationsEventsExchange, "early_checkin_approved", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        // Deliberately routed with no current consumer — no Bounded Context
+        // reacts to a denial this checkpoint (Reservation's schedule never
+        // changes), mirroring GuestCheckedIn's own "no current consumer"
+        // precedent above: an unbound topic message is simply dropped, never
+        // an error.
+        opts.PublishMessage(typeof(EarlyCheckinDenied))
+            .ToRabbitRoutingKey(guestOperationsEventsExchange, "early_checkin_denied", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        // Published by RequestLateCheckoutCommandHandler — TWO consumers in
+        // IHostPro.Worker (Workflow Orchestration's reschedule orchestrator,
+        // ALWAYS; Housekeeping's own reaction, gated on UpdatesCleaning) —
+        // see the Worker's own Program.cs for both corresponding
+        // ListenToRabbitQueue calls (ADR-020 two independent subscriber
+        // queues on this exchange).
+        opts.PublishMessage(typeof(LateCheckoutApproved))
+            .ToRabbitRoutingKey(guestOperationsEventsExchange, "late_checkout_approved", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        // Deliberately routed with no current consumer — mirrors
+        // EarlyCheckinDenied above exactly.
+        opts.PublishMessage(typeof(LateCheckoutDenied))
+            .ToRabbitRoutingKey(guestOperationsEventsExchange, "late_checkout_denied", exchange => exchange.ExchangeType = ExchangeType.Topic)
             .UseDurableOutbox()
             .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
     });
