@@ -27,6 +27,7 @@ public static class PropertyManagementResultHttpMapper
         PropertyManagementErrorCodes.PropertyNotFound,
         PropertyManagementErrorCodes.OwnerUserNotFound,
         PropertyManagementErrorCodes.PropertyOwnerNotLinked,
+        PropertyManagementErrorCodes.FrontDeskContactNotFound,
     };
 
     private static readonly HashSet<string> ConflictErrorCodes = new(StringComparer.Ordinal)
