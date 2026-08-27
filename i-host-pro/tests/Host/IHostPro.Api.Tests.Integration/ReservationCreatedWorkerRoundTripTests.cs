@@ -289,6 +289,7 @@ public sealed class ReservationCreatedWorkerRoundTripTests : IAsyncLifetime
         ["ConnectionStrings__Configuration"] = _appConnectionString,
         ["ConnectionStrings__Housekeeping"] = _appConnectionString,
         ["ConnectionStrings__Communication"] = _appConnectionString,
+        ["ConnectionStrings__GuestOperations"] = _appConnectionString,
         ["ConnectionStrings__ExternalIntegrations"] = _appConnectionString,
         ["ConnectionStrings__Dashboard"] = _appConnectionString,
         ["ConnectionStrings__Platform"] = _appConnectionString,
@@ -415,6 +416,7 @@ public sealed class ReservationCreatedWorkerRoundTripTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__Configuration"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Communication"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__GuestOperations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__ExternalIntegrations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _migratorConnectionString;

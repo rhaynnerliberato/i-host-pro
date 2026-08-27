@@ -120,6 +120,7 @@ public sealed class CleaningLifecycleRoutingFixParityTests : IAsyncLifetime
             ["ConnectionStrings__Configuration"] = _appConnectionString,
             ["ConnectionStrings__Housekeeping"] = _appConnectionString,
             ["ConnectionStrings__Communication"] = _appConnectionString,
+            ["ConnectionStrings__GuestOperations"] = _appConnectionString,
             ["ConnectionStrings__ExternalIntegrations"] = _appConnectionString,
             ["ConnectionStrings__Dashboard"] = _appConnectionString,
             ["ConnectionStrings__Platform"] = _appConnectionString,
@@ -180,6 +181,7 @@ public sealed class CleaningLifecycleRoutingFixParityTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__Configuration"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Housekeeping"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Communication"] = migratorConnectionString;
+        psi.Environment["ConnectionStrings__GuestOperations"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__ExternalIntegrations"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = migratorConnectionString;

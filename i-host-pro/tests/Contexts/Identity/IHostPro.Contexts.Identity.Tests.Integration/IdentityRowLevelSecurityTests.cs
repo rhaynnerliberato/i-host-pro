@@ -123,8 +123,12 @@ public class IdentityRowLevelSecurityTests : IClassFixture<IdentityRowLevelSecur
         // single ADMIN role mapping — the first genuinely new catalog entry
         // since the platform-fixed-for-v1 seed (see IdentityCatalogSeed's own
         // doc comment), explicitly approved by the CP2.1 mandate (Decisão K).
-        (await dbContext.Permissions.CountAsync()).Should().Be(33);
-        (await dbContext.RolePermissions.CountAsync()).Should().Be(40);
+        // Fase 10, Checkpoint 1: +2 permissions (GUEST_OPERATIONS:MANAGE/READ)
+        // and their two ADMIN role mappings — seeded ahead of any consumer
+        // (mirrors the pre-existing SETTINGS:MANAGE/READ precedent), see
+        // ADR-024.
+        (await dbContext.Permissions.CountAsync()).Should().Be(35);
+        (await dbContext.RolePermissions.CountAsync()).Should().Be(42);
     }
 
     [Fact]
