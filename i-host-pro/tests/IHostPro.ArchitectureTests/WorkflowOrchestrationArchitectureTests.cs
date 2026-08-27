@@ -1,6 +1,9 @@
+using System.Reflection;
 using FluentAssertions;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
+using IHostPro.Contexts.GuestOperations.Contracts;
 using IHostPro.Contexts.Housekeeping.Contracts;
+using IHostPro.Contexts.Reservations.Contracts;
 using IHostPro.Contexts.Workflow.Application;
 using IHostPro.Contexts.Workflow.Infrastructure.Messaging;
 using NetArchTest.Rules;
@@ -112,24 +115,30 @@ public class WorkflowOrchestrationArchitectureTests
     }
 
     [Fact]
-    public void Exactly_One_Wolverine_Entrypoint_Consumes_ReservationCreated_In_Workflow_Assembly()
+    public void Exactly_The_Known_Approved_Types_Exist_In_Workflow_Infrastructure_Messaging()
     {
-        // Single-entrypoint proof for Workflow's own consumer, same
+        // Single-entrypoint proof for Workflow's own transport surface, same
         // discipline already applied to Housekeeping/Reservations/
-        // Dashboard's own adapters. Fase 8, Checkpoint 1.1: the two types
-        // are now the thin Wolverine adapter (ReservationCreatedHandler)
+        // Dashboard's own adapters. Fase 8, Checkpoint 1.1: two of the three
+        // types are the thin Wolverine adapter (ReservationCreatedHandler)
         // and WolverineWorkflowCommandDispatcher (the Infrastructure-side
         // implementation of Workflow.Application's IWorkflowCommandDispatcher)
         // — the orchestration use case itself moved OUT of this namespace,
-        // into Workflow.Application.
+        // into Workflow.Application. Fase 10, Checkpoint 1 (Guest Operations
+        // Foundation) adds the third: GuestCheckedOutHandler, the thin
+        // Wolverine adapter for Workflow's second trigger consumer —
+        // updated explicitly, by exact expected count, rather than merely
+        // relaxed to "any count," so an unapproved future addition still
+        // fails this test the same way an unapproved capability would.
         var handlerTypes = Types.InAssembly(typeof(ReservationCreatedHandler).Assembly)
             .That()
             .ResideInNamespace("IHostPro.Contexts.Workflow.Infrastructure.Messaging")
             .GetTypes();
 
-        handlerTypes.Should().HaveCount(2,
-            "exactly two types are expected: the thin Wolverine adapter (ReservationCreatedHandler) and " +
-            "WolverineWorkflowCommandDispatcher, the transport-only implementation of IWorkflowCommandDispatcher");
+        handlerTypes.Should().HaveCount(3,
+            "exactly three types are expected: the thin Wolverine adapters (ReservationCreatedHandler, " +
+            "GuestCheckedOutHandler) and WolverineWorkflowCommandDispatcher, the transport-only implementation " +
+            "of IWorkflowCommandDispatcher");
     }
 
     // ---- Fase 8, Checkpoint 1.1 — Workflow.Application/.Infrastructure layering ----
@@ -268,5 +277,80 @@ public class WorkflowOrchestrationArchitectureTests
         result.IsSuccessful.Should().BeTrue(
             "Workflow.Application must reference other Bounded Contexts exclusively via their public Contracts " +
             "assemblies, never their Domain/Application/Infrastructure/Api layers");
+    }
+
+    // ---- Fase 10, Checkpoint 1 (Guest Operations Foundation) ----------------
+
+    [Fact]
+    public void CloseReservation_Is_Never_An_IntegrationEvent()
+    {
+        // Mirrors CreateCleaningForReservation_Is_Never_An_IntegrationEvent
+        // exactly: a cross-context command is a request for the destination
+        // BC to do something, never a fact that already happened.
+        typeof(IntegrationEvent).IsAssignableFrom(typeof(CloseReservation)).Should().BeFalse(
+            "CloseReservation is a command, not a fact that already happened");
+
+        typeof(CloseReservation).Name.Should().NotEndWith("Event")
+            .And.NotContain("Requested", "a command must never be named/modeled like an Integration Event");
+    }
+
+    [Fact]
+    public void No_Other_Context_Assembly_References_CloseReservation()
+    {
+        // Mirrors No_Other_Context_Assembly_References_CreateCleaningForReservation:
+        // Workflow Orchestration is the ONLY Bounded Context authorized to
+        // send this command, and Reservations is the ONLY destination.
+        var otherContextAssemblies = new[]
+        {
+            typeof(IHostPro.Contexts.Housekeeping.Domain.Cleaning).Assembly,
+            typeof(IHostPro.Contexts.Housekeeping.Application.Cleanings.IReservationCancellationGuard).Assembly,
+            typeof(IHostPro.Contexts.Housekeeping.Infrastructure.HousekeepingModuleExtensions).Assembly,
+            typeof(IHostPro.Contexts.Dashboard.Domain.AssemblyReference).Assembly,
+            typeof(IHostPro.Contexts.Dashboard.Application.IDashboardMessageExecutionScope).Assembly,
+            typeof(IHostPro.Contexts.Dashboard.Infrastructure.Persistence.DashboardDbContext).Assembly,
+            typeof(IHostPro.Contexts.Dashboard.Api.AssemblyReference).Assembly,
+            typeof(IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence.PropertyManagementDbContext).Assembly,
+            typeof(IHostPro.Contexts.Identity.Infrastructure.Persistence.IdentityDbContext).Assembly,
+            typeof(IHostPro.Contexts.Configuration.Infrastructure.Messaging.PolicyUpdatedHandler).Assembly,
+            typeof(IHostPro.Contexts.GuestOperations.Domain.GuestStayOperation).Assembly,
+            typeof(GuestCheckedOut).Assembly,
+            typeof(IHostPro.Contexts.GuestOperations.Infrastructure.GuestOperationsModuleExtensions).Assembly,
+        };
+
+        foreach (var assembly in otherContextAssemblies.Distinct())
+        {
+            var referencingTypes = Types.InAssembly(assembly)
+                .That()
+                .HaveDependencyOn(typeof(CloseReservation).FullName)
+                .GetTypes();
+
+            referencingTypes.Should().BeEmpty(
+                $"only Reservations (owner) and Workflow (sender) may reference CloseReservation — " +
+                $"{assembly.GetName().Name} referencing it would mean an unauthorized Bounded Context is sending this command");
+        }
+    }
+
+    [Fact]
+    public void GuestCheckedOut_Never_Declares_A_Forbidden_PII_Property()
+    {
+        // Mirrors Airbnb_Reservation_Events_Never_Declare_A_Forbidden_PII_Property:
+        // GuestCheckedOut carries only ReservationId — no guest name/phone/
+        // any other business-sensitive content.
+        var forbiddenSubstrings = new[]
+        {
+            "Name", "Phone", "Email", "Payload", "Price", "Currency", "Payment", "Secret", "Token", "Credential",
+        };
+
+        var propertyNames = typeof(GuestCheckedOut)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(p => p.Name)
+            .ToList();
+
+        foreach (var forbidden in forbiddenSubstrings)
+        {
+            propertyNames.Should().NotContain(
+                name => name.Contains(forbidden, StringComparison.OrdinalIgnoreCase),
+                $"GuestCheckedOut must stay PII-safe/minimal — no property name may reference '{forbidden}'");
+        }
     }
 }

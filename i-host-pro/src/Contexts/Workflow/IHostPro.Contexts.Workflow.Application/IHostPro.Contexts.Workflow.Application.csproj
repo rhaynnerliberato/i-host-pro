@@ -14,6 +14,12 @@
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
     <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
     <ProjectReference Include="..\..\Housekeeping\IHostPro.Contexts.Housekeeping.Contracts\IHostPro.Contexts.Housekeeping.Contracts.csproj" />
+    <!-- Fase 10, Checkpoint 1 — Guest Operations Foundation: the second
+         trigger->action use case this context implements
+         (GuestCheckedOut -> CloseReservation), referenced solely for the
+         GuestCheckedOut event type this checkpoint consumes — never Guest
+         Operations' Application/Infrastructure/Api layers. -->
+    <ProjectReference Include="..\..\GuestOperations\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
   </ItemGroup>
 
   <!-- Fase 8, Checkpoint 2.1 — corrective audit gate: structured, PII-safe

@@ -1,4 +1,5 @@
 using IHostPro.BuildingBlocks.Application;
+using IHostPro.Contexts.GuestOperations.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
 using IHostPro.Contexts.Workflow.Application;
 using IHostPro.Contexts.Workflow.Infrastructure.Messaging;
@@ -37,6 +38,15 @@ public static class WorkflowModuleExtensions
         // Workflow.Application; this registration is unchanged in shape,
         // only in which assembly the implementation comes from.
         services.AddKeyedScoped<IIntegrationEventHandler<ReservationCreated>, ReservationCreatedCleaningOrchestrator>(HandlerKey);
+
+        // Fase 10, Checkpoint 1 (Guest Operations Foundation): the second
+        // trigger consumer this context registers. GuestCheckedOut has
+        // exactly one consumer in this process (Workflow) — keyed anyway,
+        // mirroring ReservationCreatedCleaningOrchestrator's own
+        // registration shape for consistency, rather than a "sometimes
+        // keyed" convention that could silently stop applying if a second
+        // in-process consumer is ever added.
+        services.AddKeyedScoped<IIntegrationEventHandler<GuestCheckedOut>, GuestCheckedOutCloseReservationOrchestrator>(HandlerKey);
 
         // Fase 8, Checkpoint 2.1: the orchestrator's own structured audit
         // log needs a real timestamp source for DurationMs — mirrors every

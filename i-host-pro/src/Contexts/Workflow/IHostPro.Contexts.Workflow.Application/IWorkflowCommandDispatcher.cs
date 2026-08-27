@@ -1,4 +1,5 @@
 using IHostPro.Contexts.Housekeeping.Contracts;
+using IHostPro.Contexts.Reservations.Contracts;
 
 namespace IHostPro.Contexts.Workflow.Application;
 
@@ -24,4 +25,15 @@ public interface IWorkflowCommandDispatcher
 {
     Task DispatchCreateCleaningForReservationAsync(
         CreateCleaningForReservation command, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends Reservations' own cross-context command <see cref="CloseReservation"/>
+    /// (Fase 10, Checkpoint 1 — Guest Operations Foundation) — the second
+    /// command this dispatcher sends, added narrowly rather than
+    /// generalized into an open command-bus method, mirroring
+    /// <see cref="DispatchCreateCleaningForReservationAsync"/>'s own
+    /// precedent exactly.
+    /// </summary>
+    Task DispatchCloseReservationAsync(
+        CloseReservation command, CancellationToken cancellationToken);
 }

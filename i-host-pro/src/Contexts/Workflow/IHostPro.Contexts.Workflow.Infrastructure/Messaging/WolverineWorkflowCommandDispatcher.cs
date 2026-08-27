@@ -1,4 +1,5 @@
 using IHostPro.Contexts.Housekeeping.Contracts;
+using IHostPro.Contexts.Reservations.Contracts;
 using IHostPro.Contexts.Workflow.Application;
 using Microsoft.Extensions.Logging;
 using Wolverine;
@@ -49,6 +50,23 @@ public sealed class WolverineWorkflowCommandDispatcher : IWorkflowCommandDispatc
             _logger.LogError(ex,
                 "Failed to send {MessageType} (correlation {CorrelationId}) over the transport",
                 nameof(CreateCleaningForReservation), command.CorrelationId);
+            throw;
+        }
+    }
+
+    /// <inheritdoc cref="IWorkflowCommandDispatcher.DispatchCloseReservationAsync"/>
+    public async Task DispatchCloseReservationAsync(
+        CloseReservation command, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _messageBus.SendAsync(command);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to send {MessageType} (correlation {CorrelationId}) over the transport",
+                nameof(CloseReservation), command.CorrelationId);
             throw;
         }
     }

@@ -44,6 +44,15 @@ public class ReservationCreatedCleaningOrchestratorTests
             DispatchedCommands.Add(command);
             return Task.CompletedTask;
         }
+
+        // Not exercised by this test class (only ReservationCreated ->
+        // CreateCleaningForReservation is in scope here) — required only to
+        // satisfy IWorkflowCommandDispatcher after Fase 10, Checkpoint 1
+        // added DispatchCloseReservationAsync. See
+        // GuestCheckedOutCloseReservationOrchestratorTests for its own
+        // dedicated fake/coverage.
+        public Task DispatchCloseReservationAsync(CloseReservation command, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 
     private sealed record LoggedEntry(LogLevel Level, Exception? Exception, IReadOnlyList<KeyValuePair<string, object?>> State);

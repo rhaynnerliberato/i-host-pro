@@ -8,6 +8,9 @@
          Workflow.Application; this project is transport-only (the Wolverine
          adapter + the IWorkflowCommandDispatcher implementation). -->
     <ProjectReference Include="..\IHostPro.Contexts.Workflow.Application\IHostPro.Contexts.Workflow.Application.csproj" />
+    <!-- Fase 10, Checkpoint 1 — Guest Operations Foundation: GuestCheckedOutHandler
+         (the thin Wolverine adapter) needs the GuestCheckedOut type. -->
+    <ProjectReference Include="..\..\GuestOperations\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
