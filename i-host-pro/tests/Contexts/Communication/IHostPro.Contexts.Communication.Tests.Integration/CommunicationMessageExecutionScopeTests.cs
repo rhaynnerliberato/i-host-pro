@@ -145,7 +145,7 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         var reservationId = Guid.NewGuid();
         using var serviceProvider = BuildServiceProvider(
             new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent),
-            new ReservationGuestContact(reservationId, "+5511999998888"));
+            new ReservationGuestContact(reservationId, "+5511999998888", "Ana Silva"));
 
         await ExecuteAsync(serviceProvider, NewEvent(tenantId, reservationId));
 
@@ -164,7 +164,7 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         var rejectingConnector = FakeOutboundMessageConnector.Rejecting("provider_unavailable");
         using var serviceProvider = BuildServiceProvider(
             new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent),
-            new ReservationGuestContact(reservationId, "+5511999998888"),
+            new ReservationGuestContact(reservationId, "+5511999998888", "Ana Silva"),
             rejectingConnector);
 
         await ExecuteAsync(serviceProvider, NewEvent(tenantId, reservationId));
@@ -202,7 +202,7 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         var connector = FakeOutboundMessageConnector.SucceedingWithProviderMessageId("wamid.HBgL...");
         using var serviceProvider = BuildServiceProvider(
             new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent),
-            new ReservationGuestContact(reservationId, "+5511999998888"),
+            new ReservationGuestContact(reservationId, "+5511999998888", "Ana Silva"),
             connector);
 
         await ExecuteAsync(serviceProvider, NewEvent(tenantId, reservationId));
@@ -222,7 +222,7 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         var connector = FakeOutboundMessageConnector.Succeeding();
         using var serviceProvider = BuildServiceProvider(
             new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent),
-            new ReservationGuestContact(reservationId, "+5511999998888"),
+            new ReservationGuestContact(reservationId, "+5511999998888", "Ana Silva"),
             connector);
         var @event = NewEvent(tenantId, reservationId);
 
@@ -244,7 +244,7 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         var reservationId = Guid.NewGuid();
         using var serviceProvider = BuildServiceProvider(
             new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent),
-            new ReservationGuestContact(reservationId, "+5511999998888"));
+            new ReservationGuestContact(reservationId, "+5511999998888", "Ana Silva"));
 
         await ExecuteAsync(serviceProvider, NewEvent(tenantA, reservationId));
 

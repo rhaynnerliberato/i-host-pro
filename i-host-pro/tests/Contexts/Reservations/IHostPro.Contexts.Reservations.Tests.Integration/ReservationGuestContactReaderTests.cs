@@ -104,6 +104,7 @@ public class ReservationGuestContactReaderTests : IClassFixture<ReservationGuest
         result.Should().NotBeNull();
         result!.ReservationId.Should().Be(reservationId);
         result.GuestPhone.Should().Be("+5511999998888");
+        result.GuestName.Should().Be("Test Guest", "GuestName was added in Fase 10, Checkpoint 4 (ADR-019 factual extension)");
     }
 
     [Fact]

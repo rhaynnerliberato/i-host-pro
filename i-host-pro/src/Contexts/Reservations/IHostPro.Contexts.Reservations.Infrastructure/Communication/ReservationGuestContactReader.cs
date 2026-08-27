@@ -65,6 +65,6 @@ public sealed class ReservationGuestContactReader : IReservationGuestContactRead
             "Guest contact read for {Purpose} by {Caller}: tenant {TenantId} reservation {ReservationId} — result {Result}",
             Purpose, Caller, tenantId, reservationId, "Found");
 
-        return new ReservationGuestContact(reservation.Id, reservation.GuestPhone);
+        return new ReservationGuestContact(reservation.Id, reservation.GuestPhone, reservation.GuestName);
     }
 }

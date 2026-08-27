@@ -46,7 +46,7 @@ public class ReservationCreatedCommunicationProcessorTests
         var connector = FakeOutboundMessageConnector.Succeeding();
         var processor = CreateProcessor(
             FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
-            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888", "Ana Silva")),
             repository, connector);
 
         await processor.HandleAsync(BuildEvent(), CancellationToken.None);
@@ -62,7 +62,7 @@ public class ReservationCreatedCommunicationProcessorTests
         var connector = FakeOutboundMessageConnector.Succeeding();
         var processor = CreateProcessor(
             FakeTemplateReader.Returning(null),
-            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888", "Ana Silva")),
             repository, connector);
 
         await processor.HandleAsync(BuildEvent(), CancellationToken.None);
@@ -78,7 +78,7 @@ public class ReservationCreatedCommunicationProcessorTests
         var connector = FakeOutboundMessageConnector.Succeeding();
         var processor = CreateProcessor(
             FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
-            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, null)),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, null, "Ana Silva")),
             repository, connector);
 
         await processor.HandleAsync(BuildEvent(), CancellationToken.None);
@@ -114,7 +114,7 @@ public class ReservationCreatedCommunicationProcessorTests
         var connector = FakeOutboundMessageConnector.Succeeding();
         var processor = CreateProcessor(
             FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
-            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888", "Ana Silva")),
             repository, connector);
 
         await processor.HandleAsync(BuildEvent(), CancellationToken.None);
@@ -138,7 +138,7 @@ public class ReservationCreatedCommunicationProcessorTests
         var connector = FakeOutboundMessageConnector.SucceedingWithProviderMessageId("wamid.HBgL...");
         var processor = CreateProcessor(
             FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
-            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888", "Ana Silva")),
             repository, connector);
 
         await processor.HandleAsync(BuildEvent(), CancellationToken.None);
@@ -155,7 +155,7 @@ public class ReservationCreatedCommunicationProcessorTests
         var connector = FakeOutboundMessageConnector.Succeeding();
         var processor = CreateProcessor(
             FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
-            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888", "Ana Silva")),
             repository, connector);
 
         await processor.HandleAsync(BuildEvent(), CancellationToken.None);
@@ -172,7 +172,7 @@ public class ReservationCreatedCommunicationProcessorTests
         var connector = FakeOutboundMessageConnector.Rejecting("provider_unavailable");
         var processor = CreateProcessor(
             FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
-            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888", "Ana Silva")),
             repository, connector);
 
         await processor.HandleAsync(BuildEvent(), CancellationToken.None);
@@ -189,7 +189,7 @@ public class ReservationCreatedCommunicationProcessorTests
         var connector = FakeOutboundMessageConnector.Throwing(new InvalidOperationException("network down"));
         var processor = CreateProcessor(
             FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
-            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888", "Ana Silva")),
             repository, connector);
 
         var act = async () => await processor.HandleAsync(BuildEvent(), CancellationToken.None);
@@ -207,7 +207,7 @@ public class ReservationCreatedCommunicationProcessorTests
         var connector = FakeOutboundMessageConnector.Succeeding();
         var processor = CreateProcessor(
             FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
-            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888", "Ana Silva")),
             repository, connector);
 
         await processor.HandleAsync(BuildEvent(), CancellationToken.None);
@@ -225,7 +225,7 @@ public class ReservationCreatedCommunicationProcessorTests
         var connector = FakeOutboundMessageConnector.Succeeding();
         var processor = CreateProcessor(
             FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
-            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888", "Ana Silva")),
             repository, connector);
 
         await processor.HandleAsync(BuildEvent() with { Source = "airbnb" }, CancellationToken.None);
@@ -242,7 +242,7 @@ public class ReservationCreatedCommunicationProcessorTests
         var connector = FakeOutboundMessageConnector.Succeeding();
         var processor = CreateProcessor(
             FakeTemplateReader.Returning(new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent)),
-            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888")),
+            FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, "+5511999998888", "Ana Silva")),
             repository, connector);
 
         await processor.HandleAsync(BuildEvent() with { Source = "manual" }, CancellationToken.None);
