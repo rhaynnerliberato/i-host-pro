@@ -1016,3 +1016,79 @@ Nenhum. A routing key `guest_checked_in` é declarada pela exchange, mas nenhuma
 32. Novo consumidor de ReservationCreated — Guest Operations (Fase 10, Checkpoint 2 — Check-in/Checkout Core)
 
 `ReservationCreated` (§27.2) ganha um quinto consumidor independente em Fase 10, Checkpoint 2: Guest Operations (`ReservationCreatedGuestStayInitializer`), reagindo por coreografia (nunca via Workflow Orchestration) para criar automaticamente o `GuestStayOperation` correspondente — a decisão resolvida do gatilho de criação (ver ADR-024, amendment Fase 10 Checkpoint 2). Fila `guestoperations.reservation-created-trigger`, vinculada à exchange já existente `reservation-events` (mesma routing key `reservation_created`, nenhuma exchange nova). Idempotente por busca-antes-de-criar (nunca duplica um `GuestStayOperation` já existente para a mesma Reservation — a restrição única `(tenant_id, reservation_id)` já documentada em §30 permanece como defesa em profundidade, nunca a única garantia).
+
+33. Eventos EarlyCheckinApproved / EarlyCheckinDenied — Payload e Roteamento (Fase 10, Checkpoint 3 — Early Check-in / Late Checkout)
+
+Formalizados em GuestOperations.Contracts (ADR-024, amendment Fase 10 Checkpoint 3). Publicados por `RequestEarlyCheckInCommandHandler` ao decidir sincronamente um `EarlyCheckInRequest`. `EarlyCheckinDenied` fecha a assimetria do catálogo sinalizada desde o §31 (só existia o par Approved/Denied para nenhum dos dois fluxos de Guest Operations até este Checkpoint).
+
+33.1 Payload de EarlyCheckinApproved
+
+ActorType é sempre "System" — a decisão é automática, síncrona, na mesma requisição de sua própria criação, nunca um passo de aprovação humana distinto.
+
+EarlyCheckinApproved
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ReservationId | Guid | A Reservation cujo check-in antecipado foi aprovado — não redundante com AggregateId (AggregateId é o id do próprio EarlyCheckInRequest) |
+| ApprovedCheckInAt | DateTimeOffset | O novo horário de check-in aprovado — o mesmo valor que Workflow Orchestration usa para reagendar a Reservation real |
+
+33.2 Payload de EarlyCheckinDenied
+
+EarlyCheckinDenied
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ReservationId | Guid | A Reservation cujo pedido de check-in antecipado foi negado |
+| ReasonCode | string | Um dos códigos estáveis de `EarlyCheckinDeniedReasonCodes` (`policy_not_configured`, `policy_not_allowed`, `before_earliest_time`, `schedule_conflict`, `cleaning_not_ready`) — nunca texto livre |
+
+33.3 Roteamento RabbitMQ
+
+| Evento | Exchange | Routing Key | Registrado desde | Consumidor |
+|---|---|---|---|---|
+| EarlyCheckinApproved | guest-operations-events | early_checkin_approved | Fase 10, Checkpoint 3 | Workflow Orchestration (`workflow.early-checkin-approved-trigger`) — único consumidor, envia `RescheduleReservationForEarlyCheckIn` a Reservations em reação |
+| EarlyCheckinDenied | guest-operations-events | early_checkin_denied | Fase 10, Checkpoint 3 | Nenhum — mesma convenção de `guest_checked_in` (§31.3): rota declarada, sem fila vinculada; mensagem publicada é descartada, nunca um erro |
+
+Mesma exchange de GuestCheckedOut/GuestCheckedIn (§30.2/§31.2) — duas novas routing keys, nunca uma segunda exchange.
+
+34. Eventos LateCheckoutApproved / LateCheckoutDenied — Payload e Roteamento (Fase 10, Checkpoint 3 — Early Check-in / Late Checkout)
+
+Formalizados em GuestOperations.Contracts (ADR-024, amendment Fase 10 Checkpoint 3). Publicados por `RequestLateCheckoutCommandHandler` ao decidir sincronamente um `LateCheckoutRequest`. `LateCheckoutApproved` nunca é publicado para o desfecho `PendingPayment` — apenas para uma aprovação final e definitiva (ver §5.6/§5.7 da homologação da Fase 10 para a fronteira exata de PIX).
+
+34.1 Payload de LateCheckoutApproved
+
+LateCheckoutApproved
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ReservationId | Guid | A Reservation cujo checkout tardio foi aprovado |
+| ApprovedCheckOutAt | DateTimeOffset | O novo horário de checkout aprovado — o mesmo valor que Workflow Orchestration usa para reagendar a Reservation real |
+| UpdatesCleaning | bool | Snapshot da política `LateCheckoutPolicy.UpdatesCleaning` no momento da decisão — o único gate da reação de Housekeeping (§34.3); nunca persistido no agregado `LateCheckoutRequest`, apenas transportado neste evento |
+
+34.2 Payload de LateCheckoutDenied
+
+LateCheckoutDenied
+| Campo | Tipo | Descrição |
+|---|---|---|
+| ReservationId | Guid | A Reservation cujo pedido de checkout tardio foi negado |
+| ReasonCode | string | Um dos códigos estáveis de `LateCheckoutDeniedReasonCodes` (`policy_not_configured`, `policy_not_allowed`, `after_latest_time`, `schedule_conflict`) — nunca texto livre |
+
+34.3 Roteamento RabbitMQ
+
+| Evento | Exchange | Routing Key | Registrado desde | Consumidores |
+|---|---|---|---|---|
+| LateCheckoutApproved | guest-operations-events | late_checkout_approved | Fase 10, Checkpoint 3 | Dois, cada um em fila própria (ADR-020): Workflow Orchestration (`workflow.late-checkout-approved-trigger`, sempre — envia `RescheduleReservationForLateCheckout` a Reservations); Housekeeping (`housekeeping.late-checkout-approved-trigger`, gated em `UpdatesCleaning=true` — registra apenas uma `CleaningAuditEntry`, nunca muta `Cleaning.ScheduledAtUtc`, ver §29 e ADR-024 amendment §B7) |
+| LateCheckoutDenied | guest-operations-events | late_checkout_denied | Fase 10, Checkpoint 3 | Nenhum — mesma convenção de `EarlyCheckinDenied` (§33.3) |
+
+Isolamento dos dois consumidores de `LateCheckoutApproved` provado empiricamente contra broker real (nunca apenas por inspeção estática) — ver homologação da Fase 10, §5.8.
+
+35. Comandos cross-context RescheduleReservationForEarlyCheckIn / RescheduleReservationForLateCheckout (Fase 10, Checkpoint 3)
+
+Formalizados em Reservations.Contracts (ADR-024, amendment Fase 10 Checkpoint 3; ADR-018). Nunca Integration Events — comandos cross-context enviados exclusivamente por Workflow Orchestration via `IMessageBus.SendAsync`, mesma exchange `workflow-orchestration-commands` já criada pelo ADR-018, entregues à mesma fila `reservations.workflow-commands` que já recebe `CloseReservation` (§27.4).
+
+| Comando | Exchange | Routing Key | Fila |
+|---|---|---|---|
+| RescheduleReservationForEarlyCheckIn | workflow-orchestration-commands | reschedule_for_early_check_in | reservations.workflow-commands |
+| RescheduleReservationForLateCheckout | workflow-orchestration-commands | reschedule_for_late_checkout | reservations.workflow-commands |
+
+Cada um publica `ReservationUpdated` (§27.3) ao mutar a Reservation real — nunca um evento novo (decisão do usuário: a Reservation continua a única fonte de verdade da agenda) — com `ChangedFields=["check_in_at"]`/`["check_out_at"]` respectivamente, `ActorType="System"`.
+
+36. Consumidor síncrono ICleaningReadinessReader — primeira exceção síncrona de Housekeeping (Fase 10, Checkpoint 3)
+
+Não é um Integration Event nem um comando — registrado aqui por completude do catálogo de comunicação cross-context. `Housekeeping.Contracts.ICleaningReadinessReader` (ADR-024 amendment; Architecture Principles §14, Exceção 8) é a primeira interface de leitura síncrona que Housekeeping concede a outro Bounded Context — consumida exclusivamente por Guest Operations, para decidir `EarlyCheckinDenied` com `ReasonCode=cleaning_not_ready` (§33.2). Ver `IReservationScheduleReader` (Exceção 7, mesmo amendment) para o par de leituras síncronas deste Checkpoint.

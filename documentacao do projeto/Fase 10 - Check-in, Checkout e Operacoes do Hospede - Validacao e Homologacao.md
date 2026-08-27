@@ -1,7 +1,7 @@
 # Fase 10 — Check-in, Checkout e Operações do Hóspede — Validação e Homologação
 
-Versão: 1.1
-Status: Em andamento — Checkpoint 1 e Checkpoint 2 concluídos
+Versão: 1.2
+Status: Em andamento — Checkpoint 1, Checkpoint 2 e Checkpoint 3 concluídos
 
 ## 1. Objetivo
 
@@ -175,6 +175,104 @@ Formulário de check-in, Credencial de Acesso (deferida — ver §4.7), Early Ch
 
 **Concluído e homologado.** Regressão final (§4.8) e aplicação real do backfill ao banco de desenvolvimento (§4.5) sem pendências.
 
-## 5. Próximo Checkpoint Recomendado
+## 5. Checkpoint 3 — Early Check-in / Late Checkout Core
 
-Checkpoint 3, conforme a estrutura CP0–CP6 já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado aos dois Checkpoints anteriores.
+### 5.1 Escopo aprovado
+
+Os dois primeiros fluxos completos de decisão automática deste Bounded Context: `EarlyCheckInRequest`/`LateCheckoutRequest` (agregados novos, `guest_operations`), as duas primeiras exceções síncronas cross-context que Guest Operations consome (`IReservationScheduleReader` — Reservations; `ICleaningReadinessReader` — primeira exceção síncrona que Housekeeping concede), os dois novos endpoints HTTP (`POST .../early-check-in`, `POST .../late-checkout`), o reagendamento real da Reservation via dois novos orquestradores de Workflow (`RescheduleReservationForEarlyCheckIn`/`...LateCheckout`), quatro novos Integration Events, e a reação real (auditoria, nunca mutação de agenda inventada) de Housekeeping a `LateCheckoutApproved`. Decisões completas registradas no amendment "Checkpoint 3" do `ADR-024` (2026-08-27) e no Architecture Principles §14 (Exceções 7 e 8).
+
+### 5.2 Correção de governança — numeração de ADR (reafirmação)
+
+`ADR-025` permanece reservada, vazia, exclusivamente para o Boundary de PIX Payment (Checkpoint 5) — nenhum arquivo com esse número foi criado neste Checkpoint. Todas as decisões do Checkpoint 3 foram registradas como um segundo amendment ao `ADR-024` existente, mesma disciplina já aplicada ao Checkpoint 2.
+
+### 5.3 Exceções síncronas #7/#8 — real, nunca fake, em nenhum teste
+
+`IReservationScheduleReader` (Reservations.Infrastructure) e `ICleaningReadinessReader` (Housekeeping.Infrastructure, primeira concessão deste tipo por Housekeeping) — ambas implementadas via `TenantAwareTransactionScope`, mirroring `IReservationGuestContactReader` (ADR-019). Confirmado por auditoria de código e pelos próprios testes: nenhum dos seis E2E reais deste Checkpoint (§5.5–§5.7) nem os dois testes de autorização (§5.10) substituem qualquer um dos dois leitores — ou o leitor/leitores de política — por um fake. `ScheduleReaderReal=true`, `CleaningReadinessReaderReal=true`, `PolicyReaderReal=true`. Validado estruturalmente por `ArchitectureTests` (`GuestOperationsDependencyTests`, três novos testes: um positivo de referência exclusiva, dois de exclusividade de consumidor).
+
+### 5.4 Agregados, cardinalidade e RLS
+
+`EarlyCheckInRequest`/`LateCheckoutRequest` (RLS `ENABLE`+`FORCE`, schema `guest_operations`, migração `AddEarlyCheckInLateCheckoutRequests`) nascem `Pending` e são decididos sincronamente na mesma transação — nunca existe aprovação manual. Cardinalidade garantida por índice único parcial: `WHERE status = 'Pending'` (Early), `WHERE status IN ('Pending', 'PendingPayment')` (Late — `PendingPayment` conta como ativo). Grants de `ihostpro_app` restritos a `SELECT`/`INSERT`/`UPDATE` (sem `DELETE`), mesma convenção de `guest_stay_operations`. Ver `ADR-024` amendment §B3 para o desenho completo.
+
+### 5.5 Early Check-in — E2E real (Approved e Denied)
+
+**Approved** (`EarlyCheckIn_Approved_flows_through_the_real_broker_chain_and_reschedules_the_real_Reservation`): requisição HTTP real (JWT real, `GUEST_OPERATIONS:MANAGE`) contra `IHostPro.Api` real → política `EARLY_CHECKIN` lida de verdade de Configuration & Policy (seedada explicitamente para o teste via `CreatePolicyValueVersionCommand`, nunca um default global de produto) → `IReservationScheduleReader` real → `EarlyCheckInRequest.Status=Approved` → `EarlyCheckinApproved` publicado → RabbitMQ real → `IHostPro.Worker` real consome → orquestrador de Workflow envia `RescheduleReservationForEarlyCheckIn` → Reservations executa o reagendamento real → `Reservation.CheckInAt` atualizado para o horário solicitado, `Reservation.CheckOutAt` inalterado. `EarlyApprovedRealE2E=true`, `EarlyReservationRescheduled=true`.
+
+**Denied** (`EarlyCheckIn_Denied_for_CleaningNotReady_never_dispatches_a_reschedule`): mesma cadeia, política exigindo limpeza concluída, Cleaning real (auto-criada pela coreografia já existente desde a Fase 8) ainda `Pending` → `EarlyCheckInRequest.Status=Denied`, `DenialReason=CleaningNotReady` → `EarlyCheckinDenied` publicado exatamente uma vez → nenhum reagendamento, nenhum comando de Workflow, `Reservation.CheckInAt` inalterado. `EarlyDeniedRealE2E=true`.
+
+### 5.6 Late Checkout — E2E real (Approved sem PIX, PendingPayment, Percentage)
+
+**Approved sem PIX** (`LateCheckout_Approved_without_Pix_reschedules_the_Reservation_and_Housekeeping_observes_it_without_mutating_the_schedule`): mesma cadeia real de ponta a ponta, política `LATE_CHECKOUT` com `chargeType=none`, `requiresPix=false`, `updatesCleaning=true` → `LateCheckoutRequest.Status=Approved` → `LateCheckoutApproved` publicado → Workflow reagenda a Reservation real (`Reservation.CheckOutAt` atualizado, `CheckInAt` inalterado) **e**, no mesmo publish, Housekeeping reage de forma independente (§5.8). `LateApprovedNoPixRealE2E=true`, `LateReservationRescheduled=true`.
+
+**PendingPayment — gate crítico** (`LateCheckout_requiring_Pix_settles_at_PendingPayment_and_triggers_absolutely_no_downstream_effect`): política com `requiresPix=true` → `LateCheckoutRequest.Status=PendingPayment` (nunca `Approved`) → provado, de forma real e não apenas por ausência de asserção: zero reagendamento de Reservation, zero publicação de `LateCheckoutApproved`, zero reação de Housekeeping (zero entradas de auditoria), zero chamada a provedor de PIX, zero `ExternalPaymentId` (nenhuma coluna/tabela desse tipo existe em lugar nenhum do schema). `LatePendingPaymentRealE2E=true`, `PendingPaymentReservationUnchanged=true`.
+
+**Percentage — gap de pricing confirmado** (`LateCheckout_with_a_Percentage_policy_fails_explicitly_before_persisting_any_row`): política com `chargeType=percentage` → falha funcional explícita (HTTP 409, `late_checkout_charge_type_percentage_unsupported`) ANTES de qualquer persistência. `PercentageUnsupportedVerified=true`: `RequestPersisted=false`, `ApprovalEventPublished=false`, `DenialEventPublished=false`, `ReservationChanged=false`. Nenhuma base de cálculo foi inventada — confirma o gap já registrado no Decision Gate deste Checkpoint (nenhum campo monetário existe em `Reservation`/`Property`/`AirbnbReservationImported`).
+
+**Cardinalidade Late** (`LateCheckout_second_request_while_the_first_is_PendingPayment_is_rejected_as_already_active`): uma segunda requisição enquanto a primeira permanece `PendingPayment` (ativa) é rejeitada (HTTP 409), nenhuma segunda linha criada. Early não possui um cenário sequencial equivalente reproduzível por construção — a decisão síncrona sempre resolve para um status terminal antes da resposta HTTP retornar (ver `ADR-024` amendment §B3).
+
+### 5.7 Reação de Housekeeping — auditoria real, sem mutação de agenda inventada
+
+`LateCheckoutApprovedCleaningReactor` observado reagindo de verdade, no mesmo teste do §5.6 (Approved sem PIX): exatamente uma `CleaningAuditEntry` (`action_code=late_checkout_approved`) registrada contra a Cleaning automatizada existente, nunca duplicada. `LateHousekeepingReactionObserved=true`, `CleaningScheduleMutationImplemented=false`, `CleaningScheduleMutationReason=NoDocumentedSchedulingRule` — `Cleaning.ScheduledAtUtc` permanece `null`, nunca mutado, porque o Documento 10 não define uma regra de offset a partir de um checkout tardio. Isso não é um blocker do Core deste Checkpoint — é um gap de produto genuíno e explicitamente registrado, não um gap técnico escondido.
+
+### 5.8 Fan-out real — ADR-020
+
+`EarlyCheckinApprovedConsumerCount=1` (Workflow, único). `LateCheckoutApprovedConsumerCount=2` (Workflow — sempre; Housekeeping — quando `UpdatesCleaning=true`), cada um em fila própria (`workflow.late-checkout-approved-trigger`/`housekeeping.late-checkout-approved-trigger`), `ADR020IsolationVerified=true` — provado empiricamente pelo mesmo E2E do §5.6 (uma entrada de auditoria, nenhuma duplicação, nenhum consumidor rouba a entrega do outro), nunca apenas por inspeção estática. `EarlyCheckinDeniedConsumerCount=0`, `LateCheckoutDeniedConsumerCount=0` — nenhum consumidor artificial foi criado para evitar essa contagem.
+
+### 5.9 Autorização/RLS — dois novos endpoints
+
+Oito testes reais (`EarlyCheckInLateCheckoutAuthorizationTests`, host ASP.NET Core real + JWT real, módulos Reservations/Housekeeping/Configuration reais — nenhum leitor cross-context fake): para cada endpoint, anônimo → 401; autenticado sem `GUEST_OPERATIONS:MANAGE` → 403 (nunca 500); ADMIN + `GUEST_OPERATIONS:MANAGE` → 200 real (avaliação real, `policy_not_configured` — nenhuma política foi seedada nesses testes especificamente, cenário de sucesso deliberadamente simples); tenant errado → 404, nunca vaza existência. Nenhuma política nova — reaproveita `GUEST_OPERATIONS:MANAGE`, já promovida no Checkpoint 2.
+
+### 5.10 MigrationRunner — Run #1/#2 (ambiente descartável real)
+
+`Run1Exit=0`, `Run2Exit=0`, `Run2MigrationsApplied=0` (idempotência confirmada — exatamente as duas migrações esperadas em `guest_operations.__EFMigrationsHistory`, nenhuma duplicata). `RlsIntact=true`, `ForceRlsIntact=true` (`early_check_in_requests`/`late_checkout_requests`, `relrowsecurity`/`relforcerowsecurity` ambos `t` após as duas execuções). `IndexesIntact=true` (6 índices confirmados: PK + alternate key + índice único parcial, para cada uma das duas tabelas). `GrantsIntact=true` (`ihostpro_app`: `SELECT`/`INSERT`/`UPDATE` apenas, idênticos após Run #1 e Run #2). Topologia RabbitMQ confirmada nos logs reais: as três novas filas (`workflow.early-checkin-approved-trigger`, `workflow.late-checkout-approved-trigger`, `housekeeping.late-checkout-approved-trigger`) e as duas novas routing keys de `reschedule_for_early_check_in`/`reschedule_for_late_checkout` na exchange `workflow-orchestration-commands` já existente.
+
+### 5.11 NSwag e Angular
+
+Geração #1: ambos os novos endpoints (`earlyCheckIn`/`lateCheckout`) e seus quatro DTOs presentes no client gerado. Geração #2: diff zero contra a geração #1 (determinístico). Nenhuma edição manual do client gerado. `ng build`: sucesso, nenhuma UI nova (apenas o client TypeScript regenerado).
+
+### 5.12 Investigação de teste order-dependent — descoberta durante a regressão completa
+
+A primeira execução completa de `IHostPro.Api.Tests.Integration` (42 testes, incluindo os seis E2E deste Checkpoint) revelou uma falha: `WhatsAppMessageStatusRetryPolicyScopingTests.The_specific_exception_retries_while_an_unrelated_one_does_not` — `System.InvalidOperationException: Cannot resolve scoped service 'Wolverine.IMessageBus' from root provider`. Investigada por bisecção real (nunca aceita como flake conhecida sem prova):
+
+- **Reprodução isolada:** o teste passa sozinho (1/1) — não é um defeito determinístico no próprio teste.
+- **Sequência mínima identificada por trace cronológico do log real:** `OpenApiOperationIdTests` (teste pré-existente, não tocado por este Checkpoint) executando imediatamente antes, na mesma suíte.
+- **Root cause confirmada por leitura direta do código** (nunca assumida por ser "provável"): `OpenApiOperationIdTests.EnvironmentKeys` — a lista que seu próprio bloco `finally` usa para limpar variáveis de ambiente do processo — havia saído de sincronia com o dicionário `values` que realmente as define, faltando `DOTNET_ENVIRONMENT` (e, adicionalmente, quatro chaves de connection string: `Communication`/`GuestOperations`/`ExternalIntegrations`/`Dashboard`, cada uma adicionada a `values` por commits anteriores sem atualizar essa lista). `WhatsAppMessageStatusRetryPolicyScopingTests` é o único teste da suíte que usa `Host.CreateDefaultBuilder()` puro — que habilita `ValidateScopes=true` automaticamente sob `DOTNET_ENVIRONMENT=Development`, exatamente a falha observada.
+- **Classificação:** `PreExisting=true` (`git diff --stat` do arquivo estava vazio antes da correção; o último commit real a tocá-lo, `ae4339c`, parte do trabalho do Checkpoint 2 anterior, só adicionou uma entrada de connection string a `values`, nunca tocou `EnvironmentKeys`), `IntroducedByCP3=false`, `ExposedByCP3=false` (18+ outras classes de teste executaram normalmente entre a própria suíte deste Checkpoint e a falha).
+- **Correção:** estritamente um test isolation fix — `EnvironmentKeys` sincronizada para incluir as cinco chaves faltantes. Nenhum código de produção alterado.
+- **Prova:** teste isolado → PASS; sequência mínima anteriormente falha (`OpenApiOperationIdTests` → `WhatsApp...`) → PASS, repetida duas vezes limpas; **segunda execução completa da suíte, limpa: 42/42 aprovados** — esta é a execução válida para o gate deste Checkpoint.
+
+### 5.13 Testes — contagens exatas (regressão final)
+
+| Suíte | Resultado |
+|---|---|
+| `IHostPro.Contexts.GuestOperations.Tests.Unit` | 60 aprovados |
+| `IHostPro.Contexts.GuestOperations.Tests.Integration` | 18 aprovados |
+| `IHostPro.Contexts.Reservations.Tests.Unit` | 90 aprovados |
+| `IHostPro.Contexts.Reservations.Tests.Integration` | 97 aprovados |
+| `IHostPro.Contexts.Housekeeping.Tests.Unit` | 120 aprovados |
+| `IHostPro.Contexts.Housekeeping.Tests.Integration` | 97 aprovados |
+| `IHostPro.Contexts.Configuration.Tests.Unit` | 93 aprovados |
+| `IHostPro.Contexts.Configuration.Tests.Integration` | 80 aprovados |
+| `IHostPro.Contexts.Workflow.Tests.Unit` | 11 aprovados |
+| `IHostPro.Contexts.Identity.Tests.Unit` | 470 aprovados |
+| `IHostPro.Contexts.Identity.Tests.Integration` | 420 aprovados |
+| `IHostPro.BuildingBlocks.Tests.Unit` | 13 aprovados |
+| `IHostPro.ArchitectureTests` | 237 aprovados |
+| `IHostPro.Api.Tests.Integration` (suíte completa, execução final limpa) | **42/42 aprovados** |
+| MigrationRunner Run #1 (Postgres+RabbitMQ descartáveis reais) | Exit code 0 |
+| MigrationRunner Run #2 (mesmo ambiente) | Exit code 0, zero migração nova, RLS/índices/grants intactos |
+| NSwag (geração #1 e #2) | Diff zero entre as duas gerações |
+| Angular build (`ng build`) | Sucesso, nenhuma UI nova |
+| Build Release (solução completa) | 0 erro |
+| `git diff --check` | Sem erros novos — apenas ruído pré-existente de NSwag (2 linhas, já presentes 23x no arquivo commitado) e avisos benignos de normalização LF→CRLF |
+
+### 5.14 Escopo explicitamente NÃO implementado neste checkpoint
+
+PIX/Payment real (Checkpoint 5, `ADR-025` reservada), Portaria/Front Desk (Checkpoint 4), qualquer cálculo de `Percentage`/domínio de pricing/moeda, qualquer offset de agenda de limpeza inventado, qualquer UI nova além do client TypeScript regenerado, qualquer nova exceção síncrona além das duas aprovadas (#7/#8), aprovação manual de request.
+
+### 5.15 Status do Checkpoint 3
+
+**Concluído e homologado.** Todos os gates obrigatórios fechados nesta ordem: seis E2E reais contra broker real (§5.5–§5.7), fan-out real (§5.8), autorização/RLS real (§5.9), MigrationRunner Run#1/#2 (§5.10), NSwag/Angular (§5.11), investigação e correção completa de um teste order-dependent pré-existente não relacionado (§5.12), regressão final limpa em todas as suítes relevantes (§5.13).
+
+## 6. Próximo Checkpoint Recomendado
+
+Checkpoint 4 (Portaria/Front Desk), conforme a estrutura CP0–CP6 já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado aos três Checkpoints anteriores. Não iniciado.
