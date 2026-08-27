@@ -1371,6 +1371,148 @@ export class Client {
     }
 
     /**
+     * @return OK
+     */
+    checkIn(reservationId: string): Observable<GuestStayOperationResponse> {
+        let url_ = this.baseUrl + "/api/v1/guest-operations/reservations/{reservationId}/check-in";
+        if (reservationId === undefined || reservationId === null)
+            throw new globalThis.Error("The parameter 'reservationId' must be defined.");
+        url_ = url_.replace("{reservationId}", encodeURIComponent("" + reservationId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processCheckIn(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processCheckIn(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<GuestStayOperationResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<GuestStayOperationResponse>;
+        }));
+    }
+
+    protected processCheckIn(response: HttpResponseBase): Observable<GuestStayOperationResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as GuestStayOperationResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @return OK
+     */
+    checkout(reservationId: string): Observable<GuestStayOperationResponse> {
+        let url_ = this.baseUrl + "/api/v1/guest-operations/reservations/{reservationId}/checkout";
+        if (reservationId === undefined || reservationId === null)
+            throw new globalThis.Error("The parameter 'reservationId' must be defined.");
+        url_ = url_.replace("{reservationId}", encodeURIComponent("" + reservationId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processCheckout(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processCheckout(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<GuestStayOperationResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<GuestStayOperationResponse>;
+        }));
+    }
+
+    protected processCheckout(response: HttpResponseBase): Observable<GuestStayOperationResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as GuestStayOperationResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
      * @param status (optional) 
      * @param page (optional) 
      * @param pageSize (optional) 
@@ -5905,6 +6047,17 @@ export interface EffectivePolicyResponse {
     value?: any | undefined;
     resolvedScope?: string | undefined;
     version?: number | undefined;
+}
+
+export interface GuestStayOperationResponse {
+    id?: string;
+    reservationId?: string;
+    propertyId?: string;
+    status?: string | undefined;
+    checkedInAtUtc?: Date | undefined;
+    checkedOutAtUtc?: Date | undefined;
+    createdAtUtc?: Date;
+    updatedAtUtc?: Date;
 }
 
 export interface LinkPropertyOwnerRequest {
