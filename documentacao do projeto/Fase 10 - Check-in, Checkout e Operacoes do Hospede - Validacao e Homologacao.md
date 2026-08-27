@@ -1,7 +1,7 @@
 # Fase 10 — Check-in, Checkout e Operações do Hóspede — Validação e Homologação
 
-Versão: 1.2
-Status: Em andamento — Checkpoint 1, Checkpoint 2 e Checkpoint 3 concluídos
+Versão: 1.3
+Status: Em andamento — Checkpoint 1, Checkpoint 2, Checkpoint 3 e Checkpoint 4 concluídos
 
 ## 1. Objetivo
 
@@ -273,6 +273,95 @@ PIX/Payment real (Checkpoint 5, `ADR-025` reservada), Portaria/Front Desk (Check
 
 **Concluído e homologado.** Todos os gates obrigatórios fechados nesta ordem: seis E2E reais contra broker real (§5.5–§5.7), fan-out real (§5.8), autorização/RLS real (§5.9), MigrationRunner Run#1/#2 (§5.10), NSwag/Angular (§5.11), investigação e correção completa de um teste order-dependent pré-existente não relacionado (§5.12), regressão final limpa em todas as suítes relevantes (§5.13).
 
-## 6. Próximo Checkpoint Recomendado
+## 6. Checkpoint 4 — Portaria Notification Foundation
 
-Checkpoint 4 (Portaria/Front Desk), conforme a estrutura CP0–CP6 já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado aos três Checkpoints anteriores. Não iniciado.
+### 6.1 Escopo e Decision Gate
+
+Um Architecture & Product Decision Gate read-only (zero alteração de arquivo) precedeu a implementação, auditando Documento 10, Documento 07, GuestOperations/Communication/Identity/PropertyManagement/Reservations atuais, Architecture Principles e ADR-024. Achado prévio relevante: "Documento 10 — Portaria" não existe como documento dedicado — a Portaria é especificada de forma rasa dentro de `Documento 10 - Mapa Funcional do Sistema (Feature Map).txt` (§15, quatro itens sem elaboração, mais menções esparsas em §3/§22/§11/§13/§25). O gate produziu um relatório de 30 itens (recipient model, ownership, cardinalidade, PII, etc.), classificando decisões em SAFE TO APPROVE / USER DECISION REQUIRED / DEFERRED / NOT MVP. As decisões abaixo foram confirmadas explicitamente pelo usuário antes de qualquer implementação.
+
+Decisões oficiais do gate: Portaria **não** é usuário Identity — sem login, sem role dedicada, sem portal próprio, sem acknowledgement, sem capacidade de edição. É um **external/passive operational recipient** (destinatário externo e passivo).
+
+### 6.2 Ownership
+
+O cadastro estrutural da Portaria pertence a **Property Management** — `Architecture Principles.md` §3 já registrava "Portarias" como dado desta Bounded Context, antes mesmo deste checkpoint. Guest Operations não possui (nem nunca possuiu) cadastro de Portaria. Communication permanece o único dono da entrega de mensagem (rendering, recipient delivery, provider interaction, Message lifecycle) — Guest Operations e Property Management nunca chamam o provider.
+
+### 6.3 Cardinalidade
+
+Decisão: **um `FrontDeskContact` ativo por Condomínio** (`Condominium → 0..1 active FrontDeskContact`). Múltiplas portarias/guaritas por Condomínio permanecem **DEFERRED** — não implementado. O schema existente de `Condominium`/`Property` não impôs nenhum impedimento a essa relação (nenhum STOP necessário).
+
+### 6.4 Entidade `FrontDeskContact`
+
+Criada em `PropertyManagement.Domain`: `Id, TenantId, CondominiumId, DisplayName, PhoneNumber, IsActive, CreatedAtUtc, UpdatedAtUtc`. Deliberadamente sem guest data, sem `AccessCredential`, sem `ProviderMessageId`/identificador provider-specific — `PhoneNumber` é dado de contato operacional puro. Atualizada em local (`UpdateContact`) — nunca soft-deletada e recriada, portanto nenhuma linha histórica; `IsActive` é o único toggle liga/desliga.
+
+### 6.5 RLS e cardinalidade no banco
+
+Migração `20260827202539_AddFrontDeskContact` cria `property_management.front_desk_contacts` com FK composta (`tenant_id, condominium_id`) → `condominiums(tenant_id, id)`, `ENABLE`/`FORCE ROW LEVEL SECURITY`, política `tenant_isolation` (mesmo padrão fail-closed de todas as tabelas tenant-owned), e `REVOKE DELETE` (never explicitamente concedido — a tabela é atualizada em local, nunca apagada). Cardinalidade "no máximo um contato por Condomínio" enforced por **unique constraint simples** em `(tenant_id, condominium_id)` — não parcial/filtrado, já que não há histórico a excluir.
+
+### 6.6 Exceção Síncrona #9 (ADR-026)
+
+`Communication → PropertyManagement.Contracts`, via `IFrontDeskContactReader.GetActiveByPropertyIdAsync(TenantId, PropertyId)`, retornando `FrontDeskContactReadResult(ContactId, DisplayName?, PhoneNumber)`. Resolução interna Property → Condomínio → contato ativo é responsabilidade exclusiva de Property Management — Communication nunca conhece `CondominiumId`. Três casos colapsam no mesmo `null` (Property sem Condomínio; Condomínio sem contato; contato inativo) — tratados pelo chamador como a mesma situação ordinária ("nada a notificar"), nunca uma falha. Implementação em `PropertyManagement.Infrastructure`, mesmo padrão `TenantAwareTransactionScope` de `PropertyReservationEligibilityReader`/`ReservationGuestContactReader`. Registrada em **ADR-026** (nova, dedicada — não uma amendment de ADR-024, já que o par de contextos não envolve Guest Operations). `ADR-025` permanece reservada para PIX/CP5 — não criada, não tocada.
+
+### 6.7 Extensão factual de ADR-019 (`GuestName`)
+
+`ReservationGuestContact` (Communication → Reservations, Exceção #4/ADR-019) foi estendido com um terceiro campo, `GuestName` (string, não-nulo), para permitir que os processadores de notificação de Portaria rendericem o nome do hóspede. O próprio ADR-019 (item 4) já previa essa decisão explícita como necessária antes de qualquer extensão — registrada como amendment na própria ADR-019, não como nova exceção síncrona (o boundary permanece exatamente o mesmo). `GuestPhone` nunca atravessa para o caso de uso de Portaria.
+
+### 6.8 Eventos e correção de payload (`PropertyId`)
+
+Auditoria revelou que a premissa inicial do mandato ("Communication já possui `PropertyId` vindo do evento") estava factualmente incorreta — `GuestCheckedIn`/`EarlyCheckinApproved`/`LateCheckoutApproved` não carregavam `PropertyId`. Decisão confirmada pelo usuário: adicionar `PropertyId` (Guid, `required`) aos três eventos — extensão aditiva, mesmo precedente de `ReservationCreated` ganhar `CheckInAt`/`CheckOutAt` na Fase 7. Todos os três producers (`RecordGuestCheckedInCommandHandler`, `RequestEarlyCheckInCommandHandler`, `RequestLateCheckoutCommandHandler`) já possuíam `PropertyId` naturalmente disponível (via `GuestStayOperation.PropertyId`) — nenhum novo synchronous reader foi necessário para preenchê-lo. `GuestName`/`GuestPhone`/`CondominiumId`/`AccessCredential` NUNCA foram adicionados a nenhum evento.
+
+Nenhum evento novo foi criado. `FrontDeskContactCreated`/`Updated` foram deliberadamente NÃO criados — resolução é sempre síncrona, nenhum consumidor real precisaria deles.
+
+### 6.9 Processadores de Communication
+
+Três processadores, um por business intent (nunca um `FrontDeskEventProcessor` genérico): `GuestCheckedInFrontDeskNotificationProcessor`, `EarlyCheckinApprovedFrontDeskNotificationProcessor`, `LateCheckoutApprovedFrontDeskNotificationProcessor`. Cada um: verifica idempotência (mesmo padrão `IdempotencyKey` de `ReservationCreatedCommunicationProcessor`) → resolve `IFrontDeskContactReader` → se `null`, no-op deliberado (log `FrontDeskContactNotConfigured`, zero `Message` criada, zero retry) → resolve Template (`FRONT_DESK_GUEST_CHECKED_IN`/`FRONT_DESK_EARLY_CHECKIN_APPROVED`/`FRONT_DESK_LATE_CHECKOUT_APPROVED`) → resolve `GuestName` via `IReservationGuestContactReader` → renderiza → cria/envia `Message` via `IOutboundMessageConnector` (mesmo `FakeWhatsAppConnector`, nenhum provider real). `LateCheckoutApprovedFrontDeskNotificationProcessor` nunca lê `UpdatesCleaning` — esse campo é gate exclusivo da reação de Housekeeping, não relacionado à notificação de Portaria. Nenhum conteúdo de mensagem real foi criado — apenas texto determinístico de teste/dev.
+
+### 6.10 PII
+
+`PropertyId`: permitido em Integration Event (provider-neutral, não-PII). `GuestName`: nunca no evento — resolvido via ADR-019 dentro do processamento de Communication. `GuestPhone`/`AccessCredential`/CPF/RG/email/documento: nunca em nenhum DTO/evento deste checkpoint — provado por testes de arquitetura dedicados (`Front_Desk_Trigger_Events_Never_Declare_A_Forbidden_PII_Property`, `FrontDeskContactReadResult_Never_Carries_Guest_Data_Or_Access_Credential`, `FrontDeskContact_Never_Declares_Guest_Data_Access_Credential_Or_Provider_Specific_Fields`). `PhoneNumber` da Portaria: mascarado em `Message.DestinationMasked` (últimos 4 dígitos, mesmo algoritmo de `ReservationCreatedCommunicationProcessor`), nunca logado por inteiro.
+
+### 6.11 Fan-out (ADR-020)
+
+`GuestCheckedIn`: 0 → 1 consumidor (Communication, primeiro consumidor real desde a Fase 10 CP2). `EarlyCheckinApproved`: 1 → 2 consumidores (Workflow + Communication). `LateCheckoutApproved`: 2 → 3 consumidores (Workflow + Housekeeping + Communication). Todos sticky-bound, filas próprias (`communication.guest-checked-in-trigger`, `communication.early-checkin-approved-trigger`, `communication.late-checkout-approved-trigger`), gated a `Development` (mesmo padrão de `communication.reservation-created-trigger` desde a Fase 9 CP1 — `FakeWhatsAppConnector` é o único connector). Isolamento provado por E2E real: ao adicionar Communication como consumidor adicional, Workflow continua reagendando a Reservation e Housekeeping continua registrando exatamente 1 audit entry — nenhum consumidor rouba ou duplica a entrega de outro.
+
+### 6.12 No-contact / contato inativo / Property sem Condomínio
+
+Todos os três casos resultam em `IFrontDeskContactReader` retornando `null`, tratado pelos processadores como no-op deliberado: zero `Message` criada, zero retry infinito, log estruturado com `FrontDeskContactNotConfigured`. Provado por E2E real (`GuestCheckedIn_without_a_front_desk_contact_is_a_deliberate_no_op`) e por testes de integração dedicados do reader (contato ativo encontrado; sem contato; contato inativo tratado como não configurado; Property sem Condomínio; isolamento de tenant; forma mínima da resposta, nunca o agregado).
+
+### 6.13 API administrativa
+
+`GET`/`PUT /api/v1/condominiums/{condominiumId}/front-desk-contact` — reaproveita `PROPERTIES:MANAGE` (nenhuma permissão nova criada). `GET` distingue Condomínio inexistente (404, `CondominiumNotFound`) de Condomínio sem contato configurado ainda (404, `FrontDeskContactNotFound`) — dois códigos de erro distintos. `PUT` faz upsert (cria se não existir, atualiza em local se existir, idempotente quando nenhum campo muda). Nenhum endpoint de leitura operacional (lista diária de chegadas/saídas) foi criado — explicitamente DEFERRED (§6.16).
+
+### 6.14 Autorização/RLS real
+
+Provado por teste HTTP real (`FrontDeskContactsEndpointsTests`, Postgres real + JWT real + catálogo de permissões real): sem token → 401; role sem `PROPERTIES:MANAGE` → 403; ADMIN → sucesso (`PUT` seguido de `GET` confirma o mesmo `Id`); Condomínio inexistente → 404; Condomínio de outro tenant → 404 (indistinguível de inexistente, RLS).
+
+### 6.15 E2E real (broker/Worker/Postgres reais)
+
+Quatro cenários, todos contra Postgres real, RabbitMQ real, `IHostPro.Worker.dll` real (subprocess não modificado) e HTTP real de `IHostPro.Api` com JWT real (`FrontDeskNotificationWorkflowRoundTripTests`):
+
+1. `GuestCheckedIn` com contato configurado → `Message` real criada, `DestinationMasked` termina nos últimos 4 dígitos do telefone da PORTARIA (nunca do hóspede), status `Sent` via `FakeWhatsAppConnector`.
+2. `GuestCheckedIn` sem contato configurado → zero `Message`, log `FrontDeskContactNotConfigured`, pipeline permanece verde.
+3. `EarlyCheckinApproved` com contato configurado → Workflow reagenda a Reservation real E Communication cria a `Message` real (fan-out 2 consumidores).
+4. `LateCheckoutApproved` com contato configurado → Workflow reagenda, Housekeeping registra exatamente 1 audit entry, Communication cria a `Message` real (fan-out 3 consumidores, nenhuma duplicação).
+
+`IFrontDeskContactReader` nunca foi mockado nestes testes — toda resolução roda a implementação real de Infrastructure contra dados reais semeados no Postgres.
+
+### 6.16 Escopo explicitamente NÃO implementado neste Checkpoint
+
+Portal de Portaria (nenhuma menção em Documento 10, nem mesmo como funcionalidade futura); lista diária de chegadas/saídas (read model operacional); "Histórico" (audit subsystem novo); acknowledgement/confirmação de recebimento; role `FRONT_DESK`/`PORTARIA`; `GuestPhone` na notificação de Portaria; `AccessCredential`/senha/PIN entregue à Portaria (permanece `DEFERRED PENDING SECURE DELIVERY BOUNDARY`, ADR-024 §A7, sem qualquer relação com este checkpoint); múltiplas portarias por Condomínio; qualquer nova exceção síncrona além da #9; UI nova (frontend permanece backend/API only — nenhuma tela Angular criada); conteúdo textual real de mensagem (apenas texto determinístico de teste/dev).
+
+### 6.17 MigrationRunner (Run #1/#2) e regressão completa
+
+MigrationRunner executado duas vezes contra um ambiente Postgres+RabbitMQ descartável (containers manuais, não Testcontainers, nunca o banco de desenvolvimento compartilhado): Run#1 aplicou `20260827202539_AddFrontDeskContact` com exit code 0 e provisionou as três novas filas de Communication (`communication.guest-checked-in-trigger`, `communication.early-checkin-approved-trigger`, `communication.late-checkout-approved-trigger`); Run#2 (exit code 0, nenhuma exceção) confirmou idempotência — nenhuma migração pendente, nenhuma tentativa de recriar a tabela. Verificado diretamente contra o Postgres descartável após os dois runs: `front_desk_contacts` com `ENABLE`/`FORCE ROW LEVEL SECURITY` intactos, política `tenant_isolation` presente, três índices corretos (chave primária, chave alternada `(tenant_id, id)`, e o índice único de cardinalidade `(tenant_id, condominium_id)`), e grants de `ihostpro_app` limitados a `SELECT`/`INSERT`/`UPDATE` (sem `DELETE`, confirmando o `REVOKE DELETE` da migração).
+
+Regressão completa executada nesta ordem, todas verdes: ArchitectureTests 243/243; PropertyManagement.Tests.Unit 192/192; PropertyManagement.Tests.Integration 200/200 (Postgres real); Communication.Tests.Unit 82/82; Communication.Tests.Integration 12/12 (Postgres real); Reservations.Tests.Unit 90/90; Reservations.Tests.Integration (leitor com `GuestName`) 6/6 (Postgres real); Workflow.Tests.Unit 11/11; GuestOperations.Tests.Unit 60/60; Housekeeping.Tests.Unit 120/120; full `IHostPro.Api.Tests.Integration` — **46/46**, 0 falhas, execução única e limpa (30min5s, broker/Worker/Postgres reais para toda a suíte, incluindo os quatro cenários novos deste Checkpoint e os 42 já homologados no Checkpoint 3, provando que nenhuma regressão foi introduzida). `dotnet build IHostPro.sln -c Release`: 0 erros. `npx tsc --noEmit` (Angular): 0 erros, nenhuma UI nova a compilar. `git diff` revisado integralmente: nenhum conteúdo proibido encontrado (sem `ADR-025`, sem `FRONT_DESK:MANAGE`, sem role/controller literal de "Portaria", sem `AccessCredential`, sem `Currency`/`Price`).
+
+O container de desenvolvimento `ihostpro-rabbitmq` foi parado e restaurado ao redor de cada execução de E2E de porta fixa (5672) — nunca `ihostpro-postgres`/`ihostpro-redis` — sem operações concorrentes de Docker durante qualquer suíte em execução.
+
+### 6.18 Status do Checkpoint 4
+
+**Concluído e homologado.** Gates fechados: Decision Gate read-only prévio (§6.1), ownership/cardinalidade/entidade/RLS confirmados (§6.2–§6.5), Exceção Síncrona #9 registrada em ADR-026 nova e dedicada (§6.6), extensão factual de ADR-019 registrada (§6.7), correção de premissa sobre `PropertyId` confirmada e implementada (§6.8), três processadores de Communication provados por testes unitários e E2E real (§6.9, §6.15), PII provada por testes de arquitetura dedicados (§6.10), fan-out isolado provado por E2E real (§6.11), comportamento no-contact/inativo provado (§6.12), API administrativa e autorização real provadas (§6.13–§6.14), MigrationRunner Run#1/#2 e regressão completa limpos em todas as suítes relevantes, incluindo full `IHostPro.Api.Tests.Integration` 46/46 (§6.17).
+
+## 7. Próximo Checkpoint Recomendado
+
+Checkpoint 5 (PIX/Payment Boundary), conforme a estrutura CP0–CP6 já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado aos quatro Checkpoints anteriores. `ADR-025` permanece reservada para este checkpoint. Não iniciado.

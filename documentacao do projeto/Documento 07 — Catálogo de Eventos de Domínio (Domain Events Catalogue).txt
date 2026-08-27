@@ -989,16 +989,17 @@ Workflow Orchestration, fila `workflow.guest-checked-out-trigger` — segunda fi
 
 31. Evento GuestCheckedIn — Payload e Roteamento (Fase 10, Checkpoint 2 — Check-in/Checkout Core)
 
-Formalizado em GuestOperations.Contracts (ADR-024, amendment Fase 10 Checkpoint 2). Publicado quando um `GuestStayOperation` transiciona para `CheckedIn`. Produtor: Guest Operations (`RecordGuestCheckedInCommandHandler`). Deliberadamente sem consumidor real ainda — Front Desk (notificação de portaria) é deferido à Fase 10, Checkpoint 4; Communication segue o padrão-default explícito de não adicionar nenhum novo consumidor apenas para provar que um existe (decisão do usuário, Checkpoint 2, §33 do mandato). Mirroring §30 (GuestCheckedOut) exatamente.
+Formalizado em GuestOperations.Contracts (ADR-024, amendment Fase 10 Checkpoint 2). Publicado quando um `GuestStayOperation` transiciona para `CheckedIn`. Produtor: Guest Operations (`RecordGuestCheckedInCommandHandler`). Mirroring §30 (GuestCheckedOut) exatamente. **Atualizado na Fase 10, Checkpoint 4** (Portaria Notification Foundation): ganhou `PropertyId` (ver §37.1) e seu primeiro consumidor real (Communication, ver §37.2) — as afirmações "sem PropertyId"/"nenhum consumidor real" desta seção, válidas através do Checkpoint 3, não se aplicam mais.
 
 31.1 Payload de GuestCheckedIn
 
-ActorType é sempre "System" — nenhum ator HTTP é registrado no payload ainda (o endpoint HTTP que dispara este evento existe desde este Checkpoint, mas a identidade do chamador não é transportada no evento — mesma omissão de GuestCheckedOut). Sem PropertyId — nenhum consumidor real o exige.
+ActorType é sempre "System" — nenhum ator HTTP é registrado no payload ainda (o endpoint HTTP que dispara este evento existe desde este Checkpoint, mas a identidade do chamador não é transportada no evento — mesma omissão de GuestCheckedOut).
 
 GuestCheckedIn
 | Campo | Tipo | Descrição |
 |---|---|---|
 | ReservationId | Guid | A Reservation cujo check-in disparou este evento — não redundante com AggregateId (AggregateId é o id do próprio GuestStayOperation) |
+| PropertyId | Guid | Adicionado na Fase 10, Checkpoint 4 — permite que Communication resolva o contato de Portaria (ADR-026, Exceção Síncrona #9) sem uma segunda consulta. Provider-neutral, não-PII |
 | CheckedInAtUtc | DateTimeOffset | O instante real do check-in, mesmo valor persistido em `GuestStayOperation.CheckedInAtUtc` |
 
 31.2 Roteamento RabbitMQ de GuestCheckedIn
@@ -1011,7 +1012,7 @@ Mesma exchange de GuestCheckedOut (§30.2) — uma segunda routing key, nunca um
 
 31.3 Consumidor
 
-Nenhum. A routing key `guest_checked_in` é declarada pela exchange, mas nenhuma fila está vinculada a ela ainda — uma mensagem publicada é simplesmente descartada pelo RabbitMQ, nunca um erro (mesmo comportamento já documentado para `airbnb_sync_started`, §29 — ver também IHostPro.Api/Program.cs).
+**Atualizado na Fase 10, Checkpoint 4**: Communication (`GuestCheckedInFrontDeskNotificationProcessor`, fila `communication.guest-checked-in-trigger`, gated a `Development` — mesmo padrão de `communication.reservation-created-trigger`) é o primeiro consumidor real deste evento — ver §37.2. Através do Checkpoint 3, nenhuma fila estava vinculada à routing key `guest_checked_in` e uma mensagem publicada era simplesmente descartada pelo RabbitMQ, nunca um erro (mesmo comportamento documentado para `airbnb_sync_started`, §29) — esse comportamento permanece o histórico correto até o Checkpoint 4, não o estado atual.
 
 32. Novo consumidor de ReservationCreated — Guest Operations (Fase 10, Checkpoint 2 — Check-in/Checkout Core)
 
@@ -1029,6 +1030,7 @@ EarlyCheckinApproved
 | Campo | Tipo | Descrição |
 |---|---|---|
 | ReservationId | Guid | A Reservation cujo check-in antecipado foi aprovado — não redundante com AggregateId (AggregateId é o id do próprio EarlyCheckInRequest) |
+| PropertyId | Guid | Adicionado na Fase 10, Checkpoint 4 — permite que Communication resolva o contato de Portaria (ADR-026, Exceção Síncrona #9) sem uma segunda consulta |
 | ApprovedCheckInAt | DateTimeOffset | O novo horário de check-in aprovado — o mesmo valor que Workflow Orchestration usa para reagendar a Reservation real |
 
 33.2 Payload de EarlyCheckinDenied
@@ -1043,7 +1045,7 @@ EarlyCheckinDenied
 
 | Evento | Exchange | Routing Key | Registrado desde | Consumidor |
 |---|---|---|---|---|
-| EarlyCheckinApproved | guest-operations-events | early_checkin_approved | Fase 10, Checkpoint 3 | Workflow Orchestration (`workflow.early-checkin-approved-trigger`) — único consumidor, envia `RescheduleReservationForEarlyCheckIn` a Reservations em reação |
+| EarlyCheckinApproved | guest-operations-events | early_checkin_approved | Fase 10, Checkpoint 3 | Dois desde a Fase 10, Checkpoint 4 (cada um em fila própria, ADR-020): Workflow Orchestration (`workflow.early-checkin-approved-trigger`, envia `RescheduleReservationForEarlyCheckIn` a Reservations); Communication (`communication.early-checkin-approved-trigger`, `EarlyCheckinApprovedFrontDeskNotificationProcessor`, ver §37.2) |
 | EarlyCheckinDenied | guest-operations-events | early_checkin_denied | Fase 10, Checkpoint 3 | Nenhum — mesma convenção de `guest_checked_in` (§31.3): rota declarada, sem fila vinculada; mensagem publicada é descartada, nunca um erro |
 
 Mesma exchange de GuestCheckedOut/GuestCheckedIn (§30.2/§31.2) — duas novas routing keys, nunca uma segunda exchange.
@@ -1058,8 +1060,9 @@ LateCheckoutApproved
 | Campo | Tipo | Descrição |
 |---|---|---|
 | ReservationId | Guid | A Reservation cujo checkout tardio foi aprovado |
+| PropertyId | Guid | Adicionado na Fase 10, Checkpoint 4 — permite que Communication resolva o contato de Portaria (ADR-026, Exceção Síncrona #9) sem uma segunda consulta |
 | ApprovedCheckOutAt | DateTimeOffset | O novo horário de checkout aprovado — o mesmo valor que Workflow Orchestration usa para reagendar a Reservation real |
-| UpdatesCleaning | bool | Snapshot da política `LateCheckoutPolicy.UpdatesCleaning` no momento da decisão — o único gate da reação de Housekeeping (§34.3); nunca persistido no agregado `LateCheckoutRequest`, apenas transportado neste evento |
+| UpdatesCleaning | bool | Snapshot da política `LateCheckoutPolicy.UpdatesCleaning` no momento da decisão — o único gate da reação de Housekeeping (§34.3); nunca persistido no agregado `LateCheckoutRequest`, apenas transportado neste evento. Nunca lido pela reação de Communication (§37.2) — os dois consumidores têm gates independentes |
 
 34.2 Payload de LateCheckoutDenied
 
@@ -1073,7 +1076,7 @@ LateCheckoutDenied
 
 | Evento | Exchange | Routing Key | Registrado desde | Consumidores |
 |---|---|---|---|---|
-| LateCheckoutApproved | guest-operations-events | late_checkout_approved | Fase 10, Checkpoint 3 | Dois, cada um em fila própria (ADR-020): Workflow Orchestration (`workflow.late-checkout-approved-trigger`, sempre — envia `RescheduleReservationForLateCheckout` a Reservations); Housekeeping (`housekeeping.late-checkout-approved-trigger`, gated em `UpdatesCleaning=true` — registra apenas uma `CleaningAuditEntry`, nunca muta `Cleaning.ScheduledAtUtc`, ver §29 e ADR-024 amendment §B7) |
+| LateCheckoutApproved | guest-operations-events | late_checkout_approved | Fase 10, Checkpoint 3 | Três desde a Fase 10, Checkpoint 4, cada um em fila própria (ADR-020): Workflow Orchestration (`workflow.late-checkout-approved-trigger`, sempre — envia `RescheduleReservationForLateCheckout` a Reservations); Housekeeping (`housekeeping.late-checkout-approved-trigger`, gated em `UpdatesCleaning=true` — registra apenas uma `CleaningAuditEntry`, nunca muta `Cleaning.ScheduledAtUtc`, ver §29 e ADR-024 amendment §B7); Communication (`communication.late-checkout-approved-trigger`, `LateCheckoutApprovedFrontDeskNotificationProcessor`, nunca gated em `UpdatesCleaning` — ver §37.2) |
 | LateCheckoutDenied | guest-operations-events | late_checkout_denied | Fase 10, Checkpoint 3 | Nenhum — mesma convenção de `EarlyCheckinDenied` (§33.3) |
 
 Isolamento dos dois consumidores de `LateCheckoutApproved` provado empiricamente contra broker real (nunca apenas por inspeção estática) — ver homologação da Fase 10, §5.8.
@@ -1092,3 +1095,23 @@ Cada um publica `ReservationUpdated` (§27.3) ao mutar a Reservation real — nu
 36. Consumidor síncrono ICleaningReadinessReader — primeira exceção síncrona de Housekeeping (Fase 10, Checkpoint 3)
 
 Não é um Integration Event nem um comando — registrado aqui por completude do catálogo de comunicação cross-context. `Housekeeping.Contracts.ICleaningReadinessReader` (ADR-024 amendment; Architecture Principles §14, Exceção 8) é a primeira interface de leitura síncrona que Housekeeping concede a outro Bounded Context — consumida exclusivamente por Guest Operations, para decidir `EarlyCheckinDenied` com `ReasonCode=cleaning_not_ready` (§33.2). Ver `IReservationScheduleReader` (Exceção 7, mesmo amendment) para o par de leituras síncronas deste Checkpoint.
+
+37. Portaria Notification Foundation — PropertyId nos eventos de Guest Operations e novos consumidores de Communication (Fase 10, Checkpoint 4)
+
+37.1 Extensão de payload — PropertyId
+
+`GuestCheckedIn` (§31), `EarlyCheckinApproved` (§33) e `LateCheckoutApproved` (§34) ganharam o campo `required Guid PropertyId` — extensão aditiva, mesmo precedente de `ReservationCreated` ganhar `CheckInAt`/`CheckOutAt` na Fase 7, Incremento 2 (§27.3). Motivo: Communication precisa de `PropertyId` para resolver o contato de Portaria via `IFrontDeskContactReader` (ADR-026, Exceção Síncrona #9, ver §38) sem uma segunda consulta síncrona. `PropertyId` já estava disponível nos três handlers produtores (via `GuestStayOperation.PropertyId`) — nenhuma nova leitura síncrona foi criada apenas para preencher este campo. `GuestName`/`GuestPhone`/`CondominiumId`/`AccessCredential` NUNCA foram adicionados a nenhum dos três eventos.
+
+37.2 Novos consumidores de Communication
+
+Três novos processadores, um por business intent (`GuestCheckedInFrontDeskNotificationProcessor`, `EarlyCheckinApprovedFrontDeskNotificationProcessor`, `LateCheckoutApprovedFrontDeskNotificationProcessor`), cada um resolvendo o contato de Portaria via `IFrontDeskContactReader` (ADR-026) a partir do `PropertyId` do evento, o nome do hóspede via `IReservationGuestContactReader` (ADR-019, estendido — ver §39), renderizando um Template (`FRONT_DESK_GUEST_CHECKED_IN`/`FRONT_DESK_EARLY_CHECKIN_APPROVED`/`FRONT_DESK_LATE_CHECKOUT_APPROVED`) e criando/enviando uma `Message` através do mesmo `IOutboundMessageConnector`/`FakeWhatsAppConnector` já usado pelo fluxo de confirmação de reserva (Fase 9, Checkpoint 1). Gated a `Development` (mesmo padrão de `communication.reservation-created-trigger`) — nenhum provider real é chamado.
+
+Quando nenhum `FrontDeskContact` ativo é resolvido (Condomínio não configurado, Property sem Condomínio, ou contato `IsActive=false`), o processador correspondente é um no-op deliberado: zero `Message` criada, log estruturado com `FrontDeskContactNotConfigured`, zero retry — mesma disciplina de "no-op para uma condição operacional esperada" já usada para `NoActiveTemplate` no fluxo de confirmação de reserva.
+
+38. Consumidor síncrono IFrontDeskContactReader — Exceção Síncrona #9 (Fase 10, Checkpoint 4, ADR-026)
+
+Não é um Integration Event nem um comando — registrado aqui por completude do catálogo de comunicação cross-context, mesma convenção de §36. `PropertyManagement.Contracts.IFrontDeskContactReader.GetActiveByPropertyIdAsync(TenantId, PropertyId)` (ADR-026; Architecture Principles §14, Exceção 9) é consumido exclusivamente por Communication, retornando `FrontDeskContactReadResult(ContactId, DisplayName?, PhoneNumber)`. Resolução interna Property → Condomínio → contato ativo é responsabilidade exclusiva de Property Management. Property sem Condomínio, Condomínio sem contato configurado e contato inativo colapsam no mesmo resultado `null`.
+
+39. Extensão factual de ADR-019 — GuestName em ReservationGuestContact (Fase 10, Checkpoint 4)
+
+`Reservations.Contracts.ReservationGuestContact` (ADR-019, Exceção Síncrona #5/#4 conforme numeração) ganhou um terceiro campo, `GuestName` (string, não-nulo), para que os três processadores de Portaria (§37.2) possam renderizar o nome do hóspede. O boundary permanece exatamente o mesmo (Communication → Reservations, um único consumidor) — não é uma nova exceção síncrona. `GuestPhone` nunca é usado pelos processadores de Portaria. Ver amendment ao final de ADR-019 para o registro completo desta extensão.

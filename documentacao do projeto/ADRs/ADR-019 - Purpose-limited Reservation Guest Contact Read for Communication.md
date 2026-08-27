@@ -1,7 +1,8 @@
 # ADR-019 — Purpose-limited Reservation Guest Contact Read for Communication
 
-Status: Aceito
-Data: 2026-08-18
+Status: Atualizado
+Data original: 2026-08-18
+Data desta revisão: 2026-08-27 (Fase 10, Checkpoint 4 — extensão factual do contrato, ver seção ao final)
 
 ## Contexto
 
@@ -56,4 +57,18 @@ A exceção obedece obrigatoriamente a:
 - ADR-014 (Exceção Síncrona Reservations → Property Management) — precedente estrutural direto, mesma forma de contrato/implementação/teste
 - `Fase 8 - Workflow Orchestration - Validacao e Homologacao.md`, §5.13 (precedente de auditoria estruturada, PII-safe, via `ILogger<T>`)
 - `Fase 9 - Comunicacao e Integracoes do MVP - Validacao e Homologacao.md` (Checkpoint 1)
-- `IPropertyReservationEligibilityReader.cs`, `PropertyReservationEligibility.cs`, `PropertyReservationEligibilityReader.cs` (forma espelhada)
+- `IPropertyReservationEligibilityReader.cs`, `PropertyReservationEligibilityReader.cs` (forma espelhada)
+
+## Amendment — Fase 10, Checkpoint 4 (extensão factual: `GuestName`)
+
+O item 4 desta ADR já previa esta situação: *"`GuestName` está deliberadamente fora desta versão do contrato... se um template futuro exigir `GuestName`, essa é uma decisão material separada, exigindo avaliação explícita antes de estender o DTO, nunca uma adição silenciosa 'por via das dúvidas'."*
+
+Fase 10, Checkpoint 4 (Portaria Notification Foundation) é exatamente essa decisão explícita: os três novos processadores de notificação de Portaria (`GuestCheckedInFrontDeskNotificationProcessor`, `EarlyCheckinApprovedFrontDeskNotificationProcessor`, `LateCheckoutApprovedFrontDeskNotificationProcessor`) precisam do nome do hóspede para renderizar uma notificação operacional legível ("Hóspede {{GuestName}} chegou..."). `ReservationGuestContact` foi estendido com um terceiro campo, `GuestName` (`string`, não-nulo — `Reservation.GuestName` é obrigatório desde a Fase 3).
+
+Esta extensão é registrada aqui, não como uma nova exceção síncrona (o boundary permanece exatamente o mesmo — Communication → Reservations, um único consumidor, um único propósito ampliado: "entrega de UMA comunicação vinculada a uma Reservation existente", agora explicitamente cobrindo tanto a mensagem ao hóspede quanto a notificação à Portaria sobre o mesmo evento do hóspede):
+
+- **Escopo inalterado**: itens 1, 2, 3, 5-14 desta ADR permanecem exatamente como escritos — mesmo contrato (`Reservations.Contracts`), mesma implementação exclusiva (`Reservations.Infrastructure`), mesmo consumidor exclusivo (Communication), mesma auditoria PII-safe, mesmo isolamento tenant-scoped/RLS.
+- **`GuestPhone` nunca é usado na notificação de Portaria** — a Exceção Síncrona #9 (ADR-026) resolve o destinatário da Portaria separadamente (`IFrontDeskContactReader`); `GuestName` é o único campo desta ADR que atravessa para o novo caso de uso. `GuestPhone` continua reservado exclusivamente ao envio da mensagem ao hóspede.
+- **Nenhuma nova exceção síncrona foi criada por esta extensão** — permanece a mesma exceção #4, apenas com um DTO factualmente mais amplo.
+
+Ver ADR-026 para a exceção síncrona #9 (Communication → Property Management, resolução do contato de Portaria) que acompanha esta extensão no mesmo checkpoint.
