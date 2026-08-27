@@ -212,6 +212,7 @@ public sealed class RequestLateCheckoutCommandHandler : ICommandHandler<RequestL
                 CorrelationId = Guid.NewGuid(),
                 ActorType = "System",
                 ReservationId = command.ReservationId,
+                PropertyId = operation.PropertyId,
                 ApprovedCheckOutAt = command.RequestedCheckOutAt,
                 UpdatesCleaning = policy.UpdatesCleaning,
             });

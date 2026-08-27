@@ -199,6 +199,7 @@ public sealed class RequestEarlyCheckInCommandHandler : ICommandHandler<RequestE
                 CorrelationId = Guid.NewGuid(),
                 ActorType = "System",
                 ReservationId = command.ReservationId,
+                PropertyId = operation.PropertyId,
                 ApprovedCheckInAt = command.RequestedCheckInAt,
             });
 

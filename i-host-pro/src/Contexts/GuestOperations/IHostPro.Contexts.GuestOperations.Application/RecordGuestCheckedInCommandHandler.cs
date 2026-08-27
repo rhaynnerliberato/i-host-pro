@@ -99,6 +99,7 @@ public sealed class RecordGuestCheckedInCommandHandler : ICommandHandler<RecordG
                 CorrelationId = Guid.NewGuid(),
                 ActorType = "System",
                 ReservationId = command.ReservationId,
+                PropertyId = operation.PropertyId,
                 CheckedInAtUtc = now,
             });
 
