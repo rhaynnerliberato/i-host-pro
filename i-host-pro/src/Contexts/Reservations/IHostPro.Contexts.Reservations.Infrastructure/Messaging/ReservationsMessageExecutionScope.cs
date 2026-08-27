@@ -75,4 +75,30 @@ public sealed class ReservationsMessageExecutionScope : IReservationsMessageExec
         var handler = scope.ServiceProvider.GetRequiredService<ICloseReservationHandler>();
         await handler.HandleAsync(command, cancellationToken);
     }
+
+    /// <inheritdoc cref="IReservationsMessageExecutionScope.ExecuteRescheduleForEarlyCheckInAsync"/>
+    public async Task ExecuteRescheduleForEarlyCheckInAsync(
+        RescheduleReservationForEarlyCheckIn command, Guid messageId, CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+        tenantContext.SetTenant(command.TenantId);
+
+        var handler = scope.ServiceProvider.GetRequiredService<IRescheduleReservationForEarlyCheckInHandler>();
+        await handler.HandleAsync(command, cancellationToken);
+    }
+
+    /// <inheritdoc cref="IReservationsMessageExecutionScope.ExecuteRescheduleForLateCheckoutAsync"/>
+    public async Task ExecuteRescheduleForLateCheckoutAsync(
+        RescheduleReservationForLateCheckout command, Guid messageId, CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+        tenantContext.SetTenant(command.TenantId);
+
+        var handler = scope.ServiceProvider.GetRequiredService<IRescheduleReservationForLateCheckoutHandler>();
+        await handler.HandleAsync(command, cancellationToken);
+    }
 }

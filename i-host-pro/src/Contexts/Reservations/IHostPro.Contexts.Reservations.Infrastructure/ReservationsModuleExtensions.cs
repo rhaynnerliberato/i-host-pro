@@ -47,6 +47,13 @@ public static class ReservationsModuleExtensions
         // registration of IPropertyReservationEligibilityReader (ADR-014).
         services.AddScoped<IReservationGuestContactReader, ReservationGuestContactReader>();
 
+        // Fase 10, Checkpoint 3 — ADR-024 amendment, synchronous exception
+        // #7: the single, purpose-limited synchronous query port Guest
+        // Operations may use to evaluate an Early Check-in/Late Checkout
+        // request's schedule eligibility. Same registration placement
+        // reasoning as IReservationGuestContactReader above.
+        services.AddScoped<IReservationScheduleReader, IHostPro.Contexts.Reservations.Infrastructure.GuestOperations.ReservationScheduleReader>();
+
         return services;
     }
 
@@ -177,6 +184,34 @@ public static class ReservationsModuleExtensions
         services.AddScoped<IReservationsTransactionExecutor, ReservationsOutboxTransactionExecutor>();
         services.AddScoped<IRepository<Reservation, Guid>, ReservationRepository>();
         services.AddScoped<ICloseReservationHandler, CloseReservationCommandHandler>();
+
+        services.AddScoped<IReservationsMessageExecutionScope, ReservationsMessageExecutionScope>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// The minimal composition root for consuming Workflow Orchestration's
+    /// own <see cref="RescheduleReservationForEarlyCheckIn"/>/
+    /// <see cref="RescheduleReservationForLateCheckout"/> cross-context
+    /// commands inside <c>IHostPro.Worker</c> (Fase 10, Checkpoint 3 — Early
+    /// Check-in/Late Checkout) — mirrors
+    /// <see cref="AddReservationsCloseReservationCommand"/>'s own structure
+    /// exactly. <see cref="IReservationConflictGuard"/> is registered here
+    /// (not shared with <see cref="ReservationsCommandDispatchExtensions.AddReservationsCommandDispatch"/>,
+    /// Api-only by design) because these two handlers re-run Reservations'
+    /// own real conflict guard before mutating — Guest Operations' own
+    /// <see cref="IReservationScheduleReader"/> read is an eligibility
+    /// check, never a substitute for this transactional invariant.
+    /// </summary>
+    public static IServiceCollection AddReservationsRescheduleCommands(this IServiceCollection services)
+    {
+        services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
+        services.AddScoped<IReservationsTransactionExecutor, ReservationsOutboxTransactionExecutor>();
+        services.AddScoped<IRepository<Reservation, Guid>, ReservationRepository>();
+        services.AddScoped<IReservationConflictGuard, ReservationConflictGuard>();
+        services.AddScoped<IRescheduleReservationForEarlyCheckInHandler, RescheduleReservationForEarlyCheckInCommandHandler>();
+        services.AddScoped<IRescheduleReservationForLateCheckoutHandler, RescheduleReservationForLateCheckoutCommandHandler>();
 
         services.AddScoped<IReservationsMessageExecutionScope, ReservationsMessageExecutionScope>();
 

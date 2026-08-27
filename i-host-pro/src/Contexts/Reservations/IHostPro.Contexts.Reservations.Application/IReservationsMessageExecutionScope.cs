@@ -59,4 +59,20 @@ public interface IReservationsMessageExecutionScope
     /// </summary>
     Task ExecuteCloseReservationAsync(
         CloseReservation command, Guid messageId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Same tenant-safe scope-opening mechanism, for the cross-context
+    /// command <see cref="RescheduleReservationForEarlyCheckIn"/> (Fase 10,
+    /// Checkpoint 3 — Early Check-in/Late Checkout).
+    /// </summary>
+    Task ExecuteRescheduleForEarlyCheckInAsync(
+        RescheduleReservationForEarlyCheckIn command, Guid messageId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Same tenant-safe scope-opening mechanism, for the cross-context
+    /// command <see cref="RescheduleReservationForLateCheckout"/> (Fase 10,
+    /// Checkpoint 3 — Early Check-in/Late Checkout).
+    /// </summary>
+    Task ExecuteRescheduleForLateCheckoutAsync(
+        RescheduleReservationForLateCheckout command, Guid messageId, CancellationToken cancellationToken);
 }
