@@ -36,4 +36,22 @@ public interface IWorkflowCommandDispatcher
     /// </summary>
     Task DispatchCloseReservationAsync(
         CloseReservation command, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends Reservations' own cross-context command
+    /// <see cref="RescheduleReservationForEarlyCheckIn"/> (Fase 10,
+    /// Checkpoint 3 — Early Check-in / Late Checkout), mirroring
+    /// <see cref="DispatchCloseReservationAsync"/>'s own precedent exactly.
+    /// </summary>
+    Task DispatchRescheduleForEarlyCheckInAsync(
+        RescheduleReservationForEarlyCheckIn command, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends Reservations' own cross-context command
+    /// <see cref="RescheduleReservationForLateCheckout"/> (Fase 10,
+    /// Checkpoint 3 — Early Check-in / Late Checkout), mirroring
+    /// <see cref="DispatchCloseReservationAsync"/>'s own precedent exactly.
+    /// </summary>
+    Task DispatchRescheduleForLateCheckoutAsync(
+        RescheduleReservationForLateCheckout command, CancellationToken cancellationToken);
 }

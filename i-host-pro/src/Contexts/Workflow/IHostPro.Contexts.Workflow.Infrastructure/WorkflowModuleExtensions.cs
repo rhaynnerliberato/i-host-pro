@@ -48,6 +48,18 @@ public static class WorkflowModuleExtensions
         // in-process consumer is ever added.
         services.AddKeyedScoped<IIntegrationEventHandler<GuestCheckedOut>, GuestCheckedOutCloseReservationOrchestrator>(HandlerKey);
 
+        // Fase 10, Checkpoint 3 (Early Check-in / Late Checkout): the third
+        // and fourth trigger consumers this context registers.
+        // EarlyCheckinApproved has exactly one consumer in this process
+        // (Workflow). LateCheckoutApproved will ALSO be consumed by
+        // Housekeeping in this same IHostPro.Worker process (gated on
+        // UpdatesCleaning) — keyed registration is therefore mandatory here,
+        // not just consistency-mirroring, exactly the ADR-020 "second
+        // consumer" scenario this codebase already has precedent for
+        // (ReservationCreated: Housekeeping/Dashboard/Workflow/GuestOperations).
+        services.AddKeyedScoped<IIntegrationEventHandler<EarlyCheckinApproved>, EarlyCheckinApprovedRescheduleOrchestrator>(HandlerKey);
+        services.AddKeyedScoped<IIntegrationEventHandler<LateCheckoutApproved>, LateCheckoutApprovedRescheduleOrchestrator>(HandlerKey);
+
         // Fase 8, Checkpoint 2.1: the orchestrator's own structured audit
         // log needs a real timestamp source for DurationMs — mirrors every
         // other module's own AddSingleton(TimeProvider.System) (see e.g.

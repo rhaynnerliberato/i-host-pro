@@ -48,10 +48,21 @@ public class ReservationCreatedCleaningOrchestratorTests
         // Not exercised by this test class (only ReservationCreated ->
         // CreateCleaningForReservation is in scope here) — required only to
         // satisfy IWorkflowCommandDispatcher after Fase 10, Checkpoint 1
-        // added DispatchCloseReservationAsync. See
-        // GuestCheckedOutCloseReservationOrchestratorTests for its own
+        // added DispatchCloseReservationAsync, and Checkpoint 3 added the two
+        // reschedule dispatch methods. See
+        // GuestCheckedOutCloseReservationOrchestratorTests/
+        // EarlyCheckinApprovedRescheduleOrchestratorTests/
+        // LateCheckoutApprovedRescheduleOrchestratorTests for their own
         // dedicated fake/coverage.
         public Task DispatchCloseReservationAsync(CloseReservation command, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task DispatchRescheduleForEarlyCheckInAsync(
+            RescheduleReservationForEarlyCheckIn command, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task DispatchRescheduleForLateCheckoutAsync(
+            RescheduleReservationForLateCheckout command, CancellationToken cancellationToken) =>
             Task.CompletedTask;
     }
 

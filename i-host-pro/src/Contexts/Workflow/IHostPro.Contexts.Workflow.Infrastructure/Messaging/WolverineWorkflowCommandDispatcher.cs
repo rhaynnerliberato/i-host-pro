@@ -70,4 +70,38 @@ public sealed class WolverineWorkflowCommandDispatcher : IWorkflowCommandDispatc
             throw;
         }
     }
+
+    /// <inheritdoc cref="IWorkflowCommandDispatcher.DispatchRescheduleForEarlyCheckInAsync"/>
+    public async Task DispatchRescheduleForEarlyCheckInAsync(
+        RescheduleReservationForEarlyCheckIn command, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _messageBus.SendAsync(command);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to send {MessageType} (correlation {CorrelationId}) over the transport",
+                nameof(RescheduleReservationForEarlyCheckIn), command.CorrelationId);
+            throw;
+        }
+    }
+
+    /// <inheritdoc cref="IWorkflowCommandDispatcher.DispatchRescheduleForLateCheckoutAsync"/>
+    public async Task DispatchRescheduleForLateCheckoutAsync(
+        RescheduleReservationForLateCheckout command, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _messageBus.SendAsync(command);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to send {MessageType} (correlation {CorrelationId}) over the transport",
+                nameof(RescheduleReservationForLateCheckout), command.CorrelationId);
+            throw;
+        }
+    }
 }

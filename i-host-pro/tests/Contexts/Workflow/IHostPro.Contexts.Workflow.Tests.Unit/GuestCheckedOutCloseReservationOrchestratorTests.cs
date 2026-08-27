@@ -37,6 +37,21 @@ public class GuestCheckedOutCloseReservationOrchestratorTests
             DispatchedCommands.Add(command);
             return Task.CompletedTask;
         }
+
+        // Not exercised by this test class (only GuestCheckedOut ->
+        // CloseReservation is in scope here) — required only to satisfy
+        // IWorkflowCommandDispatcher after Fase 10, Checkpoint 3 added the
+        // two reschedule dispatch methods. See
+        // EarlyCheckinApprovedRescheduleOrchestratorTests/
+        // LateCheckoutApprovedRescheduleOrchestratorTests for their own
+        // dedicated fake/coverage.
+        public Task DispatchRescheduleForEarlyCheckInAsync(
+            RescheduleReservationForEarlyCheckIn command, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task DispatchRescheduleForLateCheckoutAsync(
+            RescheduleReservationForLateCheckout command, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 
     private sealed record LoggedEntry(LogLevel Level, Exception? Exception, IReadOnlyList<KeyValuePair<string, object?>> State);
