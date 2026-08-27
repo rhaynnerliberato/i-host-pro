@@ -87,6 +87,7 @@
     <ProjectReference Include="..\..\src\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Application\IHostPro.Contexts.GuestOperations.Application.csproj" />
     <ProjectReference Include="..\..\src\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Infrastructure\IHostPro.Contexts.GuestOperations.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Api\IHostPro.Contexts.GuestOperations.Api.csproj" />
   </ItemGroup>
 
 </Project>

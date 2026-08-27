@@ -207,7 +207,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IHostPro.Contexts.GuestOper
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IHostPro.Contexts.GuestOperations.Infrastructure", "src\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Infrastructure\IHostPro.Contexts.GuestOperations.Infrastructure.csproj", "{205496A9-A137-4B95-B5DD-644DB548B7F6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IHostPro.Contexts.GuestOperations.Api", "src\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Api\IHostPro.Contexts.GuestOperations.Api.csproj", "{093B238C-8CAA-4036-9647-A3DBE65CD285}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IHostPro.Contexts.GuestOperations.Tests.Unit", "tests\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Tests.Unit\IHostPro.Contexts.GuestOperations.Tests.Unit.csproj", "{FC322DA5-0223-4200-A809-1116C9D2D5FD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IHostPro.Contexts.GuestOperations.Tests.Integration", "tests\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Tests.Integration\IHostPro.Contexts.GuestOperations.Tests.Integration.csproj", "{BAE3225F-423F-4580-87F0-96CA40A75169}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -1095,6 +1099,30 @@ Global
 		{FC322DA5-0223-4200-A809-1116C9D2D5FD}.Release|x64.Build.0 = Release|Any CPU
 		{FC322DA5-0223-4200-A809-1116C9D2D5FD}.Release|x86.ActiveCfg = Release|Any CPU
 		{FC322DA5-0223-4200-A809-1116C9D2D5FD}.Release|x86.Build.0 = Release|Any CPU
+		{093B238C-8CAA-4036-9647-A3DBE65CD285}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{093B238C-8CAA-4036-9647-A3DBE65CD285}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{093B238C-8CAA-4036-9647-A3DBE65CD285}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{093B238C-8CAA-4036-9647-A3DBE65CD285}.Debug|x64.Build.0 = Debug|Any CPU
+		{093B238C-8CAA-4036-9647-A3DBE65CD285}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{093B238C-8CAA-4036-9647-A3DBE65CD285}.Debug|x86.Build.0 = Debug|Any CPU
+		{093B238C-8CAA-4036-9647-A3DBE65CD285}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{093B238C-8CAA-4036-9647-A3DBE65CD285}.Release|Any CPU.Build.0 = Release|Any CPU
+		{093B238C-8CAA-4036-9647-A3DBE65CD285}.Release|x64.ActiveCfg = Release|Any CPU
+		{093B238C-8CAA-4036-9647-A3DBE65CD285}.Release|x64.Build.0 = Release|Any CPU
+		{093B238C-8CAA-4036-9647-A3DBE65CD285}.Release|x86.ActiveCfg = Release|Any CPU
+		{093B238C-8CAA-4036-9647-A3DBE65CD285}.Release|x86.Build.0 = Release|Any CPU
+		{BAE3225F-423F-4580-87F0-96CA40A75169}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BAE3225F-423F-4580-87F0-96CA40A75169}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BAE3225F-423F-4580-87F0-96CA40A75169}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BAE3225F-423F-4580-87F0-96CA40A75169}.Debug|x64.Build.0 = Debug|Any CPU
+		{BAE3225F-423F-4580-87F0-96CA40A75169}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BAE3225F-423F-4580-87F0-96CA40A75169}.Debug|x86.Build.0 = Debug|Any CPU
+		{BAE3225F-423F-4580-87F0-96CA40A75169}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BAE3225F-423F-4580-87F0-96CA40A75169}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BAE3225F-423F-4580-87F0-96CA40A75169}.Release|x64.ActiveCfg = Release|Any CPU
+		{BAE3225F-423F-4580-87F0-96CA40A75169}.Release|x64.Build.0 = Release|Any CPU
+		{BAE3225F-423F-4580-87F0-96CA40A75169}.Release|x86.ActiveCfg = Release|Any CPU
+		{BAE3225F-423F-4580-87F0-96CA40A75169}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1195,6 +1223,8 @@ Global
 		{9467A4A3-999E-4B1E-9D6A-41B94D8CD321} = {A4BBF5B2-4778-773A-81CA-3DDD0423EBCB}
 		{254A0129-3F40-494A-86F1-4326FA3A6C7F} = {A4BBF5B2-4778-773A-81CA-3DDD0423EBCB}
 		{205496A9-A137-4B95-B5DD-644DB548B7F6} = {A4BBF5B2-4778-773A-81CA-3DDD0423EBCB}
+		{093B238C-8CAA-4036-9647-A3DBE65CD285} = {A4BBF5B2-4778-773A-81CA-3DDD0423EBCB}
 		{FC322DA5-0223-4200-A809-1116C9D2D5FD} = {A4BBF5B2-4778-773A-81CA-3DDD0423EBCB}
+		{BAE3225F-423F-4580-87F0-96CA40A75169} = {A4BBF5B2-4778-773A-81CA-3DDD0423EBCB}
 	EndGlobalSection
 EndGlobal

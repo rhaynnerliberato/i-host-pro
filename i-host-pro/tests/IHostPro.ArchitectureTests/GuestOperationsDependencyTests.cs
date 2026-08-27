@@ -62,22 +62,30 @@ public class GuestOperationsDependencyTests
     }
 
     /// <summary>
-    /// This checkpoint has zero public API endpoints — no
-    /// GuestOperations.Api project exists at all yet (mirrors
-    /// Workflow.Infrastructure's own precedent of skipping an Api project
-    /// until a real endpoint exists).
+    /// Fase 10, Checkpoint 2 — Check-in/Checkout Core added the first two
+    /// public endpoints, so <c>GuestOperations.Api</c> now exists (CP1 had
+    /// zero endpoints and deliberately skipped the project — mirrors
+    /// Workflow.Infrastructure's own precedent). Mirrors
+    /// <c>ReservationsDependencyTests.Api_Depends_On_Identity_Contracts_Only_Never_Application_Infrastructure_Or_Api_And_Never_PropertyManagement</c>:
+    /// the Api project may reference Application/Identity.Contracts only,
+    /// never Infrastructure or any other Bounded Context's internals.
     /// </summary>
     [Fact]
-    public void No_GuestOperations_Api_Assembly_Exists()
+    public void Api_Depends_On_Application_And_Identity_Contracts_Only_Never_Infrastructure_Or_Identity_Internals()
     {
-        var loadedAssemblyNames = AppDomain.CurrentDomain.GetAssemblies()
-            .Select(a => a.GetName().Name)
-            .Where(name => name is not null)
-            .ToList();
+        var apiAssembly = typeof(IHostPro.Contexts.GuestOperations.Api.AssemblyReference).Assembly;
 
-        loadedAssemblyNames.Should().NotContain(
-            "IHostPro.Contexts.GuestOperations.Api",
-            "Fase 10, Checkpoint 1 has zero public API endpoints — no Api project exists until a future checkpoint needs one");
+        var result = Types.InAssembly(apiAssembly)
+            .Should()
+            .NotHaveDependencyOnAny(
+                "IHostPro.Contexts.GuestOperations.Infrastructure",
+                "IHostPro.Contexts.Identity.Domain",
+                "IHostPro.Contexts.Identity.Application",
+                "IHostPro.Contexts.Identity.Infrastructure",
+                "IHostPro.Contexts.Identity.Api")
+            .GetResult();
+
+        result.IsSuccessful.Should().BeTrue(BuildFailureMessage(result));
     }
 
     /// <summary>

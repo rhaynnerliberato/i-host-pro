@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- References ONLY Application (never Infrastructure), mirroring
+       Reservations.Api/Housekeeping.Api. Identity.Contracts referenced
+       solely for IdentityPermissionCodes' policy-name constants; never
+       Identity.Application/Infrastructure/Api. -->
+  <ItemGroup>
+    <ProjectReference Include="..\IHostPro.Contexts.GuestOperations.Application\IHostPro.Contexts.GuestOperations.Application.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Domain\IHostPro.BuildingBlocks.Domain.csproj" />
+    <ProjectReference Include="..\..\Identity\IHostPro.Contexts.Identity.Contracts\IHostPro.Contexts.Identity.Contracts.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>
