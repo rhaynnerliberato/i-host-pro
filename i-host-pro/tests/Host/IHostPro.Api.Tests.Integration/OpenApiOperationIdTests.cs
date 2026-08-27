@@ -42,17 +42,35 @@ public sealed class OpenApiOperationIdTests : IAsyncLifetime
     private string _migratorConnectionString = null!;
     private string _appConnectionString = null!;
 
+    // Fase 10, Checkpoint 3 full-regression gate: this list had silently
+    // drifted out of sync with the `values` dictionary below — missing
+    // ConnectionStrings__Communication/GuestOperations/ExternalIntegrations/
+    // Dashboard (added to `values` by earlier commits without updating this
+    // cleanup list) and DOTNET_ENVIRONMENT (never included at all). The
+    // DOTNET_ENVIRONMENT gap is what caused a real, reproduced failure:
+    // leaking DOTNET_ENVIRONMENT=Development onto the shared test-runner
+    // process made every later test in the same run that builds a plain
+    // Host.CreateDefaultBuilder() (WhatsAppMessageStatusRetryPolicyScopingTests,
+    // the only one of this suite that does) pick up ValidateScopes=true,
+    // failing with "Cannot resolve scoped service 'Wolverine.IMessageBus'
+    // from root provider" — order-dependent, reproduced only when this test
+    // runs first in the same process. Pre-existing, predates Fase 10 checkpoint
+    // 2's own unrelated edit to the `values` dictionary two lines below (which
+    // added ConnectionStrings__GuestOperations there but not here). Test-only
+    // isolation fix — no product behavior changed.
     private static readonly string[] EnvironmentKeys =
     [
         "ConnectionStrings__Identity", "ConnectionStrings__PropertyManagement", "ConnectionStrings__Reservations",
-        "ConnectionStrings__Configuration", "ConnectionStrings__Housekeeping", "ConnectionStrings__Platform",
+        "ConnectionStrings__Configuration", "ConnectionStrings__Housekeeping", "ConnectionStrings__Communication",
+        "ConnectionStrings__GuestOperations", "ConnectionStrings__ExternalIntegrations", "ConnectionStrings__Dashboard",
+        "ConnectionStrings__Platform",
         "Identity__Jwt__Issuer", "Identity__Jwt__Audience", "Identity__Jwt__AccessTokenLifetime", "Identity__Jwt__ClockSkew",
         "Identity__Jwt__SigningKey__PrivateKeyPem",
         "Identity__AccountLockout__MaxFailedAccessAttempts", "Identity__AccountLockout__DefaultLockoutDuration", "Identity__AccountLockout__AllowedForNewUsers",
         "Identity__RefreshToken__Lifetime", "Identity__RefreshToken__SecretSizeBytes", "Identity__RefreshToken__ConcurrentRotationGraceWindow",
         "RabbitMq__Host", "RabbitMq__VirtualHost", "RabbitMq__Username", "RabbitMq__Password",
         "OpenTelemetry__OtlpEndpoint",
-        "ASPNETCORE_ENVIRONMENT",
+        "ASPNETCORE_ENVIRONMENT", "DOTNET_ENVIRONMENT",
     ];
 
     public async Task InitializeAsync()
