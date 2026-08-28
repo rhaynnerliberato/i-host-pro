@@ -1818,6 +1818,77 @@ export class Client {
     }
 
     /**
+     * @return OK
+     */
+    accessDelivery(reservationId: string): Observable<GuestStayOperationResponse> {
+        let url_ = this.baseUrl + "/api/v1/guest-operations/reservations/{reservationId}/access-delivery";
+        if (reservationId === undefined || reservationId === null)
+            throw new globalThis.Error("The parameter 'reservationId' must be defined.");
+        url_ = url_.replace("{reservationId}", encodeURIComponent("" + reservationId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processAccessDelivery(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processAccessDelivery(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<GuestStayOperationResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<GuestStayOperationResponse>;
+        }));
+    }
+
+    protected processAccessDelivery(response: HttpResponseBase): Observable<GuestStayOperationResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as GuestStayOperationResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
      * @param status (optional) 
      * @param page (optional) 
      * @param pageSize (optional) 
@@ -4007,6 +4078,147 @@ export class Client {
         if (status === 204) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
             return _observableOf(null as any);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @return OK
+     */
+    accessConfigurationGET(propertyId: string): Observable<PropertyAccessConfigurationResponse> {
+        let url_ = this.baseUrl + "/api/v1/properties/{propertyId}/access-configuration";
+        if (propertyId === undefined || propertyId === null)
+            throw new globalThis.Error("The parameter 'propertyId' must be defined.");
+        url_ = url_.replace("{propertyId}", encodeURIComponent("" + propertyId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processAccessConfigurationGET(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processAccessConfigurationGET(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<PropertyAccessConfigurationResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<PropertyAccessConfigurationResponse>;
+        }));
+    }
+
+    protected processAccessConfigurationGET(response: HttpResponseBase): Observable<PropertyAccessConfigurationResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PropertyAccessConfigurationResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @param body (optional) 
+     * @return OK
+     */
+    accessConfigurationPUT(propertyId: string, body?: SetPropertyAccessConfigurationRequest | undefined): Observable<PropertyAccessConfigurationResponse> {
+        let url_ = this.baseUrl + "/api/v1/properties/{propertyId}/access-configuration";
+        if (propertyId === undefined || propertyId === null)
+            throw new globalThis.Error("The parameter 'propertyId' must be defined.");
+        url_ = url_.replace("{propertyId}", encodeURIComponent("" + propertyId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(body);
+
+        let options_ : any = {
+            body: content_,
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("put", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processAccessConfigurationPUT(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processAccessConfigurationPUT(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<PropertyAccessConfigurationResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<PropertyAccessConfigurationResponse>;
+        }));
+    }
+
+    protected processAccessConfigurationPUT(response: HttpResponseBase): Observable<PropertyAccessConfigurationResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PropertyAccessConfigurationResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
             }));
         } else if (status === 401) {
             return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
@@ -6496,6 +6708,16 @@ export interface ProblemDetails {
     [key: string]: any;
 }
 
+export interface PropertyAccessConfigurationResponse {
+    id?: string;
+    propertyId?: string;
+    accessCredentialSecretReference?: string | undefined;
+    accessInstructions?: string | undefined;
+    isActive?: boolean;
+    createdAtUtc?: Date;
+    updatedAtUtc?: Date;
+}
+
 export interface PropertyDetailResponse {
     id?: string;
     code?: string | undefined;
@@ -6608,6 +6830,12 @@ export interface SetChecklistItemRequest {
 export interface SetFrontDeskContactRequest {
     displayName?: string | undefined;
     phoneNumber?: string | undefined;
+    isActive?: boolean;
+}
+
+export interface SetPropertyAccessConfigurationRequest {
+    accessCredentialSecretReference?: string | undefined;
+    accessInstructions?: string | undefined;
     isActive?: boolean;
 }
 
