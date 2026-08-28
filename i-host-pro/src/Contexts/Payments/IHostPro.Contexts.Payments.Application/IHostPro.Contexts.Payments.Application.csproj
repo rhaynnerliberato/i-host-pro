@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fase 10, Checkpoint 5 — PIX/Payment Deterministic Foundation.
+    GuestOperations.Contracts referenced solely for LateCheckoutPaymentRequired
+    (the trigger this context consumes) — never GuestOperations.Domain/
+    Application/Infrastructure/Api. ExternalIntegrations.Contracts referenced
+    solely for IPixProvider (ADR-025, synchronous exception #10) — never
+    ExternalIntegrations.Domain/Application/Infrastructure/Api.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\IHostPro.Contexts.Payments.Domain\IHostPro.Contexts.Payments.Domain.csproj" />
+    <ProjectReference Include="..\IHostPro.Contexts.Payments.Contracts\IHostPro.Contexts.Payments.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
+    <ProjectReference Include="..\..\GuestOperations\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
+    <ProjectReference Include="..\..\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Contracts\IHostPro.Contexts.ExternalIntegrations.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
