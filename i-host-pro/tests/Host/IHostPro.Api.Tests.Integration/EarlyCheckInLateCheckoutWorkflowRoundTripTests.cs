@@ -251,6 +251,7 @@ public sealed class EarlyCheckInLateCheckoutWorkflowRoundTripTests : IClassFixtu
             ["ConnectionStrings__Communication"] = AppConnectionString,
             ["ConnectionStrings__ExternalIntegrations"] = AppConnectionString,
             ["ConnectionStrings__GuestOperations"] = AppConnectionString,
+            ["ConnectionStrings__Payments"] = AppConnectionString,
             ["ConnectionStrings__Dashboard"] = AppConnectionString,
             ["ConnectionStrings__Platform"] = AppConnectionString,
             ["Identity__Jwt__Issuer"] = Issuer,
@@ -302,6 +303,7 @@ public sealed class EarlyCheckInLateCheckoutWorkflowRoundTripTests : IClassFixtu
             psi.Environment["ConnectionStrings__Communication"] = MigratorConnectionString;
             psi.Environment["ConnectionStrings__ExternalIntegrations"] = MigratorConnectionString;
             psi.Environment["ConnectionStrings__GuestOperations"] = MigratorConnectionString;
+            psi.Environment["ConnectionStrings__Payments"] = MigratorConnectionString;
             psi.Environment["ConnectionStrings__Dashboard"] = MigratorConnectionString;
             psi.Environment["ConnectionStrings__Platform"] = MigratorConnectionString;
             psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;
@@ -567,11 +569,15 @@ public sealed class EarlyCheckInLateCheckoutWorkflowRoundTripTests : IClassFixtu
         (await CountCleaningAuditEntriesAsync(tenantId, cleaningId, "late_checkout_approved")).Should().Be(0,
             "Housekeeping must never react to a PendingPayment outcome — LateCheckoutApproved was never published");
 
-        // No PIX provider integration exists in this checkpoint at all
-        // (Fase 10, Checkpoint 5 scope) — there is no ExternalPaymentId
-        // column/table anywhere in this schema to assert against; its
-        // absence is a structural fact, not something a runtime call could
-        // have populated.
+        // Fase 10, Checkpoint 5 (PIX/Payment Deterministic Foundation) now
+        // exists: PendingPayment DOES publish LateCheckoutPaymentRequired,
+        // and the real Worker (Payments' own consumer, wired
+        // unconditionally) reacts to it in the background during this test
+        // — that reaction is Payments' own concern and is proven separately
+        // by PixPaymentWorkflowRoundTripTests. This test's own assertions
+        // above remain the CP3 invariant that still holds: PendingPayment
+        // alone never reschedules the Reservation and never triggers
+        // Housekeeping — only a LATER PixChargeConfirmed does.
     }
 
     // ==================================================================
