@@ -430,8 +430,42 @@ O container de desenvolvimento `ihostpro-rabbitmq` foi parado e restaurado ao re
 
 ### 7.15 Status do Checkpoint 5
 
-**Concluído e homologado.** Gates fechados: Decision Gate read-only prévio (§7.1), novo Bounded Context Payments sem API pública (§7.2), ownership e boundary assíncrono confirmados (§7.3–§7.4), `PixCharge`/`PixChargeStatus` com matriz de transição completa e idempotência provados por teste unitário e de integração real (§7.5–§7.7), Exceções Síncronas #10/#11 registradas em ADR-025/ADR-027 novas e dedicadas (§7.8–§7.9), seam de confirmação provider-neutro e entrega segura ao hóspede provados por teste unitário e E2E real (§7.10–§7.12), MigrationRunner Run#1/#2 e regressão completa limpos em todas as suítes relevantes, incluindo full `IHostPro.Api.Tests.Integration` (§7.14). `RealMoneyTransactions=0`. `ExternalPixNetworkCalls=0`. `ProductionProviderSelected=false`.
+**Concluído, com uma lacuna de evidência identificada na revisão final e fechada pelo Checkpoint 5.1 (§8).** Gates fechados: Decision Gate read-only prévio (§7.1), novo Bounded Context Payments sem API pública (§7.2), ownership e boundary assíncrono confirmados (§7.3–§7.4), `PixCharge`/`PixChargeStatus` com matriz de transição completa e idempotência provados por teste unitário e de integração real (§7.5–§7.7), Exceções Síncronas #10/#11 registradas em ADR-025/ADR-027 novas e dedicadas (§7.8–§7.9), seam de confirmação provider-neutro e entrega segura ao hóspede provados por teste unitário e E2E real (§7.10–§7.12), MigrationRunner Run#1/#2 e regressão completa limpos em todas as suítes relevantes, incluindo full `IHostPro.Api.Tests.Integration` (§7.14). `RealMoneyTransactions=0`. `ExternalPixNetworkCalls=0`. `ProductionProviderSelected=false`.
 
-## 8. Próximo Checkpoint Recomendado
+O relatório final do Checkpoint 5 registrou honestamente `Failed/Expired E2E = NÃO PROVADO` (item 41 do relatório de 69 itens) — o mandato exigia prova E2E real das transições `Failed`/`Expired`, e nada no CP5 as disparava fora de teste unitário (`FakePixProvider` sempre aceita). A revisão do relatório considerou essa lacuna objetivamente bloqueante para homologação definitiva; o Checkpoint 5.1 (§8) fecha exclusivamente essa lacuna, sem reverter nenhuma arquitetura já publicada do CP5.
 
-Checkpoint 6, conforme a estrutura CP0–CP6 já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado aos cinco Checkpoints anteriores. Não iniciado.
+## 8. Checkpoint 5.1 — Payment Failure/Expiration Evidence Corrective Gate
+
+### 8.1 Motivo e escopo
+
+Gate corretivo, não um novo checkpoint funcional — fecha exclusivamente a lacuna de evidência `Failed/Expired E2E = NÃO PROVADO` apontada na revisão do relatório final do Checkpoint 5 (§7.15). Reaproveita integralmente a arquitetura já publicada em `7c96b01` (SHA base) — nenhuma reversão, nenhum novo Bounded Context, nenhuma nova exceção síncrona.
+
+### 8.2 `PixChargeFailureReceived` / `PixChargeExpirationReceived`
+
+Duas novas mensagens provider-neutras (`Payments.Contracts`, mesma natureza de `PixChargeConfirmationReceived` — não `IntegrationEvent`s), no MESMO seam já aprovado: mesma exchange Direct `payments-commands`, duas novas routing keys (`pix_charge_failure_received`/`pix_charge_expiration_received`), duas novas filas (`payments.failure-received`/`payments.expiration-received`). Payload mínimo provider-neutro: `TenantId`, `PixChargeId`, `OccurredAtUtc`/`ExpiredAtUtc`, `CorrelationId`, `CausationId?`. `PixChargeFailureReceived` aceita adicionalmente `FailureCode?`, usado apenas para diagnóstico/log — nunca persistido (mesmo tratamento que `PixChargeCreationResult.FailureCode` já recebia desde o CP5). Nenhum QR, nenhuma PII de pagador, nenhum dado de provider, nenhum secret. Único publicador: o harness de teste E2E, via envio real Wolverine/RabbitMQ — nunca um endpoint HTTP test-only (ver ADR-025).
+
+### 8.3 `PixCharge.Expire()` e a nova coluna `ExpiredAtUtc`
+
+`PixCharge.Expire()` é um método de domínio novo, mirroring `Fail()` exatamente: `Pending → Expired`, no-op idempotente se já `Confirmed`/`Failed`/`Expired` (nenhuma transição aprovada entre os dois estados terminais negativos). Persiste `ExpiredAtUtc` (nova coluna nullable, migração `AddPixChargeExpiredAtUtc`, sem mudança de RLS/grants — ambos já se aplicam à tabela inteira). Os dois novos handlers (`PixChargeFailureReceivedCommandHandler`/`PixChargeExpirationReceivedCommandHandler`) chamam `Fail()`/`Expire()` e **não publicam nenhum evento downstream** — nenhum consumidor real precisa reagir a `Failed`/`Expired`; `LateCheckoutRequest` permanece deliberadamente `PendingPayment`, sem `LateCheckoutDenied`.
+
+### 8.4 Provas E2E reais
+
+Três novos cenários adicionados a `PixPaymentWorkflowRoundTripTests` (mesma infraestrutura real — Postgres, RabbitMQ, `IHostPro.Worker.dll` subprocess, HTTP real de `IHostPro.Api`):
+
+1. `PixChargeFailureReceived` real → `PixCharge` Failed → `LateCheckoutRequest` permanece `PendingPayment`, Reservation inalterada, zero audit entry de Housekeeping, zero mensagem de Portaria.
+2. `PixChargeExpirationReceived` real → `PixCharge` Expired → mesmas quatro asserções de ausência de efeito.
+3. Fora de ordem: `PixChargeFailureReceived` real primeiro → `PixCharge` Failed → depois `PixChargeConfirmationReceived` real → `PixCharge` Confirmed → `PixChargeConfirmed` real → Guest Operations aprova → `LateCheckoutApproved` → Reservation reagendada, Housekeeping reage, Communication notifica a Portaria — prova real de que uma confirmação genuína sempre vence um sinal negativo fora de ordem.
+
+O caminho simétrico (`Expired → Confirmed`) permanece coberto exclusivamente por teste unitário de domínio (`PixChargeTests.Confirm_from_Expired_forwards_to_Confirmed`, agora usando o `Expire()` real em vez do hack de reflection do CP5) — proporcional, mesma máquina de estados já provada real pelo cenário 3.
+
+### 8.5 Regressão
+
+Payments.Tests.Unit, Payments.Tests.Integration (Postgres real), ArchitectureTests, e full `IHostPro.Api.Tests.Integration` — números exatos no relatório final do Checkpoint 5.1 (ver conversa de homologação). `dotnet build IHostPro.sln -c Release`: 0 erros.
+
+### 8.6 Status do Checkpoint 5.1
+
+**Concluído.** `FailedE2E=true`. `ExpiredE2E=true`. `RealMoneyTransactions=0`. `ExternalPixNetworkCalls=0`. `ProductionProviderSelected=false`. `RealProviderWebhookImplemented=false`. Fecha definitivamente a lacuna de evidência do Checkpoint 5 — Fase 10, Checkpoint 5, agora **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO** em conjunto com este gate corretivo.
+
+## 9. Próximo Checkpoint Recomendado
+
+Checkpoint 6, conforme a estrutura CP0–CP6 já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado aos Checkpoints anteriores. Não iniciado.

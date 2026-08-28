@@ -1154,3 +1154,18 @@ Não são Integration Events nem comandos — registrados aqui por completude do
 44. `LateCheckoutRequest.Approve()` — extensão de estado de origem (Fase 10, Checkpoint 5)
 
 Não é um evento — registrado aqui por completude. `GuestOperations.Domain.LateCheckoutRequest.Approve()` (Checkpoint 3) aceitava apenas `Pending` como estado de origem. O Checkpoint 5 estendeu o guard para também aceitar `PendingPayment` — a exata "transição em diante" que o próprio doc comment de `PendingPayment` já registrava desde o Checkpoint 3 como um estado não-terminal reservado a um checkpoint futuro. Nenhuma outra mudança de comportamento — `Approve()` continua terminal, `DecidedAtUtc`/`UpdatedAtUtc` continuam atualizados da mesma forma.
+
+45. PixChargeFailureReceived / PixChargeExpirationReceived — extensão do seam provider-neutro (Fase 10, Checkpoint 5.1 — Payment Failure/Expiration Evidence Corrective Gate)
+
+Não são Integration Events (mesma natureza de `PixChargeConfirmationReceived`, §42 — mensagens cross-context vivendo no `.Contracts` do contexto RECEPTOR, não herdam `IntegrationEvent`). Corrigem uma lacuna de evidência apontada na homologação do Checkpoint 5: o mandato exigia prova E2E real das transições `Failed`/`Expired`, e o relatório final do CP5 registrou `Failed/Expired E2E = NÃO PROVADO` (o `FakePixProvider` de produção sempre aceita, e nada no CP5 disparava essas transições fora de teste unitário). O CP5.1 fecha essa lacuna reaproveitando o MESMO seam provider-neutro de `PixChargeConfirmationReceived` — nunca uma arquitetura nova, nunca um provider real, nunca um webhook real.
+
+`Payments.Contracts.PixChargeFailureReceived` — payload: `TenantId`, `PixChargeId`, `FailureCode?` (provider-neutro/sanitizado, usado apenas para diagnóstico/log — `PixCharge` não tem coluna para ele, mesmo tratamento que `PixChargeCreationResult.FailureCode` já recebia desde o CP5), `OccurredAtUtc`, `CorrelationId`, `CausationId?`. `Payments.Contracts.PixChargeExpirationReceived` — payload: `TenantId`, `PixChargeId`, `ExpiredAtUtc`, `CorrelationId`, `CausationId?`. Nenhum dos dois carrega QR, PII de pagador, ou dado de provider.
+
+Os handlers (`PixChargeFailureReceivedCommandHandler`/`PixChargeExpirationReceivedCommandHandler`) chamam `PixCharge.Fail`/`PixCharge.Expire` — ambos idempotentes por construção — e **não publicam nenhum evento downstream** (nenhum consumidor real precisa reagir a `Failed`/`Expired`; `LateCheckoutRequest` permanece deliberadamente `PendingPayment`, sem `LateCheckoutDenied`). Mesma exchange Direct `payments-commands` de `PixChargeConfirmationReceived`, duas novas routing keys. Único publicador hoje: o harness de teste E2E (ver ADR-025, seção "Failure/Expiration — extensão do mesmo seam provider-neutro").
+
+`PixCharge.Expire()` é um método de domínio novo neste checkpoint (mirroring `Fail()` exatamente: no-op se já `Confirmed`/`Failed`/`Expired`) — persiste `ExpiredAtUtc` (nova coluna nullable, migração `AddPixChargeExpiredAtUtc`, sem mudança de RLS/grants — ambos já se aplicam à tabela inteira).
+
+| Mensagem | Exchange | Routing Key | Fila |
+|---|---|---|---|
+| PixChargeFailureReceived | payments-commands | pix_charge_failure_received | payments.failure-received |
+| PixChargeExpirationReceived | payments-commands | pix_charge_expiration_received | payments.expiration-received |

@@ -28,7 +28,7 @@ Payments confirma de volta via `PixChargeConfirmed` (`Payments.Contracts`). Gues
 
 ### `PixCharge`
 
-Campos: `Id`, `TenantId`, `LateCheckoutRequestId`, `ReservationId`, `Amount`, `CurrencyCode`, `Status`, `ProviderChargeId?`, `QrCodePayload?`, `IdempotencyKey` (gerada internamente), `ExpiresAtUtc?`, `ConfirmedAtUtc?`, `FailedAtUtc?`, `CreatedAtUtc`, `UpdatedAtUtc`.
+Campos: `Id`, `TenantId`, `LateCheckoutRequestId`, `ReservationId`, `Amount`, `CurrencyCode`, `Status`, `ProviderChargeId?`, `QrCodePayload?`, `IdempotencyKey` (gerada internamente), `ExpiresAtUtc?`, `ConfirmedAtUtc?`, `FailedAtUtc?`, `ExpiredAtUtc?` (Checkpoint 5.1), `CreatedAtUtc`, `UpdatedAtUtc`.
 
 `Amount`/`CurrencyCode` são um snapshot único, tirado de `LateCheckoutPaymentRequired` — Payments nunca relê ou recalcula `LateCheckoutPolicy`. `CurrencyCode` é **BRL-only** neste checkpoint — `Create` rejeita qualquer outro valor. `Percentage` continua oficialmente não suportado (ADR-024 §B3, decisão não reaberta).
 
@@ -58,6 +58,12 @@ No máximo uma `PixCharge` **ATIVA** (`Pending`) por `(TenantId, LateCheckoutReq
 Este checkpoint não tem provider real nem webhook real. `PixChargeConfirmationReceived` (`Payments.Contracts` — mensagem cross-context, não um `IntegrationEvent`, mirroring `CreateCleaningForReservation`/`CloseReservation`) representa o fato provider-neutro "uma cobrança PIX foi confirmada". É código de produção legítimo — representa o seam que uma futura normalização de webhook em External Integrations produziria, sem qualquer mudança no domínio Payments. Payload mínimo: `TenantId`, `PixChargeId`, `ConfirmedAtUtc`, `CorrelationId`, `CausationId?` — sem payload de provider, sem QR, sem PII de pagador, sem segredo de provider.
 
 Único publicador hoje: o harness de teste E2E, via um envio real Wolverine/RabbitMQ (exchange dedicada `payments-commands`, Direct, routing key `pix_charge_confirmation_received`) — nunca um endpoint HTTP test-only, nunca lógica de teste embutida no domínio.
+
+### Failure/Expiration — extensão do mesmo seam provider-neutro (Checkpoint 5.1)
+
+O Checkpoint 5.1 ("Payment Failure/Expiration Evidence Corrective Gate") estendeu o mesmo seam provider-neutro com `PixChargeFailureReceived` e `PixChargeExpirationReceived` (`Payments.Contracts`, mesma natureza de `PixChargeConfirmationReceived` — não `IntegrationEvent`s), na MESMA exchange `payments-commands` (Direct), duas novas routing keys (`pix_charge_failure_received`, `pix_charge_expiration_received`). Payload mínimo: `TenantId`, `PixChargeId`, `OccurredAtUtc`/`ExpiredAtUtc`, `CorrelationId`, `CausationId?` — `PixChargeFailureReceived` aceita adicionalmente um `FailureCode?` provider-neutro, usado apenas para diagnóstico/log, nunca persistido (`PixCharge` não tem coluna para ele — o mesmo tratamento que `PixChargeCreationResult.FailureCode` já recebia desde o Checkpoint 5).
+
+Os handlers chamam `PixCharge.Fail`/`PixCharge.Expire` — ambos já idempotentes por construção (mesmo guard: um estado terminal ou `Confirmed` já existente sempre tem precedência) — e **não publicam nenhum evento downstream**: nada neste checkpoint consome uma transição para `Failed`/`Expired`, e `LateCheckoutRequest` permanece deliberadamente intocado, ainda `PendingPayment`. Mesmo publicador único (harness de teste E2E) e mesma ausência de webhook/provider real desta checkpoint.
 
 ### Fake provider
 
@@ -98,4 +104,4 @@ Não implementado. Nenhum verificador de assinatura, nenhuma tabela de roteament
 - ADR-024 (Guest Operations Boundary and Checkout Orchestration), §B3/§B6 — o exato ponto de parada que este ADR retoma
 - ADR-021 (Communication → External Integrations) — precedente estrutural direto para a Exceção 10
 - ADR-027 (Communication to Payments Secure PIX Delivery) — Exceção 11, o boundary complementar de entrega
-- `Fase 10 - Check-in, Checkout e Operacoes do Hospede - Validacao e Homologacao.md`, Checkpoint 5
+- `Fase 10 - Check-in, Checkout e Operacoes do Hospede - Validacao e Homologacao.md`, Checkpoint 5 e Checkpoint 5.1 (Payment Failure/Expiration Evidence Corrective Gate — fecha a lacuna `Failed/Expired E2E` reaproveitando este mesmo boundary, sem revisão de decisão)
