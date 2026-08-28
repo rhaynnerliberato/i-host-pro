@@ -1169,3 +1169,19 @@ Os handlers (`PixChargeFailureReceivedCommandHandler`/`PixChargeExpirationReceiv
 |---|---|---|---|
 | PixChargeFailureReceived | payments-commands | pix_charge_failure_received | payments.failure-received |
 | PixChargeExpirationReceived | payments-commands | pix_charge_expiration_received | payments.expiration-received |
+
+46. GuestAccessDeliveryRequested / Exceção Síncrona #12 (Fase 10, Checkpoint 6.2 — Guest Access Secure Delivery Corrective Implementation)
+
+Fecha o requisito interno de Fase 10 identificado no Checkpoint 6 (Access Credential/"Enviar senha", Documento 10 §11) e resolvido no Checkpoint 6.1 (Decision Gate): MVP = senha fixa por Property, configurada manualmente, sem Smart Lock, sem geração automática.
+
+`GuestOperations.Contracts.GuestAccessDeliveryRequested` — Integration Event real, publicado por `RequestGuestAccessDeliveryCommandHandler` quando um administrador solicita explicitamente a entrega (nunca automático — nenhum publisher em `ReservationCreated`/`GuestCheckedIn`, nenhum scheduler). `AggregateId`/`AggregateType` são o id do `GuestStayOperation`/`"GuestStayOperation"`. Payload: `TenantId`, `ReservationId`, `PropertyId`, metadados padrão — deliberadamente sem credencial, sem referência de credencial, sem instruções, sem GuestName/GuestPhone. Exchange `guest-operations-events` (a mesma já existente), routing key `guest_access_delivery_requested`, consumida exclusivamente por Communication (`communication.guest-access-delivery-trigger`, gated a `Development`, mesmo padrão dos demais consumidores de Communication nesta exchange).
+
+Precondições, validadas antes de publicar (nenhuma mutação de domínio própria): Reservation deve estar `confirmed` (via `IReservationScheduleReader`, Exceção #7 já aprovada — nenhuma exceção síncrona nova foi necessária aqui), `GuestStayOperation` não pode estar `CheckedOut` (`CheckedIn` é explicitamente permitido — reenviar acesso após o check-in é uma necessidade operacional legítima). Idempotência é responsabilidade exclusiva de Communication (chave por intent) — Guest Operations republica a cada chamada, sem rastrear "já solicitado".
+
+`PropertyManagement.Contracts.IPropertyGuestAccessReader` (ADR-028; Architecture Principles §14, Exceção 12) — consumida exclusivamente por Communication, retornando `PropertyGuestAccessReadResult(AccessCredential?, AccessInstructions?)`. A credencial retornada já é o VALOR resolvido (nunca a referência) — resolvida internamente por `IPropertyAccessCredentialProvider` (abstração nova, independente de `IWhatsAppCredentialProvider`), nunca persistida de volta em nenhuma tabela. Configuração ausente/inativa → `null` (no-op ordinário); referência configurada mas não resolvível pelo provider → exceção (falha de infraestrutura, nunca engolida silenciosamente).
+
+`Communication.Application.GuestAccessDeliveryProcessor` trata dois business intents independentes a partir do mesmo evento — `GUEST_ACCESS_CREDENTIAL` (sensível: o valor real é enviado ao `IOutboundMessageConnector`, mas o `Message` persistido recebe o marcador fixo `"[SENSITIVE CONTENT REDACTED]"` em vez do conteúdo real — nenhuma mudança ao agregado `Message`) e `GUEST_ACCESS_INSTRUCTIONS` (não-secreto, pipeline padrão, persistido normalmente). Chaves de idempotência distintas por `TemplateKey` — a ausência de um intent nunca bloqueia o outro.
+
+| Evento/Contrato | Exchange | Routing Key | Fila |
+|---|---|---|---|
+| GuestAccessDeliveryRequested | guest-operations-events | guest_access_delivery_requested | communication.guest-access-delivery-trigger |

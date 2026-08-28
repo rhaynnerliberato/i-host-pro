@@ -169,7 +169,7 @@ Reafirmado, sem alteração: **DEFERRED PENDING SECURE DELIVERY BOUNDARY** — n
 
 ### 4.9 Escopo explicitamente NÃO implementado neste checkpoint
 
-Formulário de check-in, Credencial de Acesso (deferida — ver §4.7), Early Check-in, Late Checkout, Portaria/Front Desk, PIX/Payment, qualquer novo consumidor de `GuestCheckedIn` em Communication, granularidade completa de `CheckInStatus` além de `CheckedIn`.
+Formulário de check-in (`CheckInFormRequired=false` — decisão explícita, ver ADR-024 §A8; não implementado porque não é requerido, nunca uma lacuna esquecida), Credencial de Acesso (deferida — ver §4.7), Early Check-in, Late Checkout, Portaria/Front Desk, PIX/Payment, qualquer novo consumidor de `GuestCheckedIn` em Communication, granularidade completa de `CheckInStatus` além de `CheckedIn`.
 
 ### 4.10 Status do Checkpoint 2
 
@@ -356,6 +356,8 @@ MigrationRunner executado duas vezes contra um ambiente Postgres+RabbitMQ descar
 
 Regressão completa executada nesta ordem, todas verdes: ArchitectureTests 243/243; PropertyManagement.Tests.Unit 192/192; PropertyManagement.Tests.Integration 200/200 (Postgres real); Communication.Tests.Unit 82/82; Communication.Tests.Integration 12/12 (Postgres real); Reservations.Tests.Unit 90/90; Reservations.Tests.Integration (leitor com `GuestName`) 6/6 (Postgres real); Workflow.Tests.Unit 11/11; GuestOperations.Tests.Unit 60/60; Housekeeping.Tests.Unit 120/120; full `IHostPro.Api.Tests.Integration` — **46/46**, 0 falhas, execução única e limpa (30min5s, broker/Worker/Postgres reais para toda a suíte, incluindo os quatro cenários novos deste Checkpoint e os 42 já homologados no Checkpoint 3, provando que nenhuma regressão foi introduzida). `dotnet build IHostPro.sln -c Release`: 0 erros. `npx tsc --noEmit` (Angular): 0 erros, nenhuma UI nova a compilar. `git diff` revisado integralmente: nenhum conteúdo proibido encontrado (sem `ADR-025`, sem `FRONT_DESK:MANAGE`, sem role/controller literal de "Portaria", sem `AccessCredential`, sem `Currency`/`Price`).
 
+**Evidência de NSwag registrada retroativamente (Fase 10, Checkpoint 6.2, auditoria de código)**: `frontDeskContactGET`/`frontDeskContactPUT` e os tipos `FrontDeskContactResponse`/`SetFrontDeskContactRequest` já estavam corretos no client TypeScript gerado (`api-client.ts`) desde este Checkpoint — confirmado por busca direta no arquivo. O `npx tsc --noEmit` registrado acima já cobria a compilação desse client; a lacuna era apenas a ausência de uma linha explícita de "NSwag diff zero" nesta tabela, nunca um problema real de geração — fechada nesta nota, sem qualquer alteração de código.
+
 O container de desenvolvimento `ihostpro-rabbitmq` foi parado e restaurado ao redor de cada execução de E2E de porta fixa (5672) — nunca `ihostpro-postgres`/`ihostpro-redis` — sem operações concorrentes de Docker durante qualquer suíte em execução.
 
 ### 6.18 Status do Checkpoint 4
@@ -466,6 +468,35 @@ Payments.Tests.Unit, Payments.Tests.Integration (Postgres real), ArchitectureTes
 
 **Concluído.** `FailedE2E=true`. `ExpiredE2E=true`. `RealMoneyTransactions=0`. `ExternalPixNetworkCalls=0`. `ProductionProviderSelected=false`. `RealProviderWebhookImplemented=false`. Fecha definitivamente a lacuna de evidência do Checkpoint 5 — Fase 10, Checkpoint 5, agora **DEFINITIVAMENTE HOMOLOGADO E PUBLICADO** em conjunto com este gate corretivo.
 
-## 9. Próximo Checkpoint Recomendado
+## 9. Checkpoint 6 / 6.1 / 6.2 — Final Homologation Gate, Access Credential Decision Gate e Guest Access Secure Delivery
 
-Checkpoint 6, conforme a estrutura CP0–CP6 já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado aos Checkpoints anteriores. Não iniciado.
+### 9.1 Checkpoint 6 — Final Homologation Read-Only Gate
+
+Auditoria read-only (zero código) do escopo literal completo da Fase 10 contra Documento 10/07/13/19, Architecture Principles e todos os ADRs da fase. Achado decisivo: **Credencial de Acesso/"Enviar senha"** (Documento 10 §11) era um requisito interno da própria Fase 10 ainda em aberto — os documentos já existentes (ADR-024 §A7, §4.7 deste documento) afirmavam explicitamente que "não é um blocker externo/de produção" e que "um sub-gate específico precisa ser aberto e resolvido antes da homologação final da Fase 10 como um todo". Classificação final do gate: **NOT READY — CORRECTIVE WORK REQUIRED**. Dois itens adicionais identificados para triagem formal: "Enviar instruções" (órfão desde o Checkpoint 1, nunca fechado) e cancelamento de PIX (Documento 13 §9 lista a capacidade, nenhum caso de uso atual a exige).
+
+### 9.2 Checkpoint 6.1 — Access Credential & Remaining Scope Decision Gate
+
+Gate read-only/design-only. Resolveu: (a) significado de produto de "Fechadura" (Documento 12 §5 — atributo do Imóvel, MVP = senha fixa por Property, configurada manualmente, sem Smart Lock/geração automática); (b) ownership (Property Management, mesmo padrão de `FrontDeskContact`); (c) achado crítico de segurança — `Communication.Message.RenderedContent` é persistido em texto puro (auditoria de código confirmada), o que exigia um design de entrega distinto do já usado para o QR PIX (ADR-025); (d) classificação formal de PIX cancellation = `DEFERRED — NO CURRENT BUSINESS USE CASE` (nenhum caso de uso, `Cancelled→Confirmed` permanece não decidido até cancelamento virar capability real); (e) classificação formal de "Enviar instruções" = `IMPLEMENT NOW` (infraestrutura de `Configuration.Template` já suporta, sem código novo de infraestrutura). Classificação final: `READY FOR CORRECTIVE IMPLEMENTATION`.
+
+### 9.3 Checkpoint 6.2 — Guest Access Secure Delivery Corrective Implementation
+
+**Escopo aprovado**: `PropertyAccessConfiguration` (`PropertyManagement.Domain`, um por Property — `AccessCredentialSecretReference`, `AccessInstructions?`, `IsActive`), a décima segunda exceção síncrona (`IPropertyGuestAccessReader`, Communication → Property Management, ADR-028 dedicada), `IPropertyAccessCredentialProvider`/`DevelopmentPropertyAccessCredentialProvider` (abstração NOVA e independente de `IWhatsAppCredentialProvider`, mesmo padrão de Development/Production de ADR-012 — nenhum backend de Production existe, `ProductionAccessCredentialSecretBackendAvailable=false`), `RequestGuestAccessDeliveryCommand`/endpoint `POST /api/v1/guest-operations/reservations/{reservationId}/access-delivery` (Guest Operations, reutiliza `GUEST_OPERATIONS:MANAGE`), endpoint administrativo `GET`/`PUT /api/v1/properties/{propertyId}/access-configuration` (reutiliza `PROPERTIES:MANAGE`), evento `GuestAccessDeliveryRequested` (provider-neutro, sem credencial/instruções no payload), e `GuestAccessDeliveryProcessor` (Communication) — dois business intents independentes (`GUEST_ACCESS_CREDENTIAL`/`GUEST_ACCESS_INSTRUCTIONS`).
+
+**Decisão central de segurança**: a credencial resolvida é renderizada em memória e enviada ao `IOutboundMessageConnector` (seu destino final legítimo), mas o `Message` persistido para o intent de credencial recebe um marcador fixo de redação (`"[SENSITIVE CONTENT REDACTED]"`) em vez do conteúdo real — nenhuma mudança foi necessária ao agregado `Message` já existente. As instruções, por não serem segredo, seguem o pipeline padrão sem alteração.
+
+**Provado por testes reais**: PropertyManagement.Tests.Unit (domínio + handler, incluindo prova de que o comando nunca resolve/transforma a referência), GuestOperations.Tests.Unit (precondições — Reservation Confirmed, GuestStayOperation não CheckedOut, CheckedIn explicitamente permitido), Communication.Tests.Unit (`GuestAccessDeliveryProcessorTests` — prova unitária central: o connector recebe o valor real, o `Message` persistido nunca o contém), PropertyManagement.Tests.Integration (endpoint HTTP real, RLS, cross-tenant, idempotência), ArchitectureTests (Exceção #12, PII), e um E2E real dedicado (`GuestAccessDeliveryWorkflowRoundTripTests`, Postgres + RabbitMQ + Worker + Api reais) provando fim-a-fim: a credencial sentinela chega ao delivery real via o secret de Development (variável de ambiente, mesmo mecanismo de User Secrets), mas nunca aparece em nenhuma linha persistida consultável — nem em `communication.messages.rendered_content` (marcador de redação), nem em `property_management.property_access_configurations` (apenas a referência). MigrationRunner Run#1/#2 confirmados (exit 0 ambos, `AddPropertyAccessConfiguration` aplicada e idempotente).
+
+**Fechamentos de escopo remanescentes desta Fase**:
+- **Formulário de check-in**: `CheckInFormRequired=false` (ADR-024 §A8) é reafirmada como decisão de MVP genuína — cross-reference agora explícita nas próprias listas de escopo desta Fase (§3.10/§4.9 referem-se a essa decisão, nunca uma lacuna esquecida).
+- **NSwag do Checkpoint 4**: gap de evidência documental fechado — o client gerado (`api-client.ts`) já continha `frontDeskContactGET`/`frontDeskContactPUT`/`FrontDeskContactResponse`/`SetFrontDeskContactRequest` corretamente desde o Checkpoint 4; nunca foi um gap de código, apenas de registro na tabela de regressão do §6.17.
+- **PIX cancellation**: `DEFERRED — NO CURRENT BUSINESS USE CASE` (§9.2), reafirmado — sem alteração de código, `PixChargeStatus.Cancelled` permanece defensive/future-proof.
+
+`AccessCredentialMvpGapClosed=true`. `InstructionsMvpGapClosed=true`.
+
+### 9.4 Status do Checkpoint 6.2
+
+**Concluído e homologado**, condicionado à regressão completa registrada na conversa de homologação (ArchitectureTests, unit/integration de PropertyManagement/GuestOperations/Communication, full `IHostPro.Api.Tests.Integration`, MigrationRunner Run#1/#2, Release, NSwag, Angular — números exatos no relatório final desta etapa). `RealMoneyTransactions=0`. `ExternalPixNetworkCalls=0`. `ProductionProviderSelected=false`. `RealProviderWebhookImplemented=false`.
+
+## 10. Próximo Checkpoint Recomendado
+
+Um novo Checkpoint 6 (revisão final read-only de fechamento da Fase 10), conforme a estrutura já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado aos Checkpoints anteriores. Não iniciado.
