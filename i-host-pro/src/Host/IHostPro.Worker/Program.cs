@@ -838,6 +838,17 @@ try
         // future ExternalIntegrations webhook-normalization step would use.
         opts.ListenToRabbitQueue("payments.confirmation-received");
 
+        // Fase 10, Checkpoint 5.1 (Payment Failure/Expiration Evidence
+        // Corrective Gate): two more independent queues on the SAME
+        // payments-commands Direct exchange — same provider-neutral seam,
+        // same "no real provider/webhook yet, E2E test harness is the only
+        // publisher today" reasoning as payments.confirmation-received
+        // above. PixChargeFailureReceivedHandler/PixChargeExpirationReceivedHandler
+        // live in the SAME Payments.Infrastructure assembly already included
+        // via IncludeAssembly above — no second IncludeAssembly needed.
+        opts.ListenToRabbitQueue("payments.failure-received");
+        opts.ListenToRabbitQueue("payments.expiration-received");
+
         // Communication's WhatsApp status consumer (Fase 9, Checkpoint 2.3.3,
         // ADR-022 item 14) — a new, independent subscriber queue on the NEW
         // external-integrations-events exchange (External Integrations never

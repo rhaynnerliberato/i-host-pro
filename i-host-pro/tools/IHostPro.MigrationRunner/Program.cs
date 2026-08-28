@@ -995,10 +995,22 @@ try
             // production code representing the seam a FUTURE
             // ExternalIntegrations webhook-normalization step is expected to
             // publish through, unchanged.
+            //
+            // Fase 10, Checkpoint 5.1 (Payment Failure/Expiration Evidence
+            // Corrective Gate): two more routing keys on this SAME Direct
+            // exchange — same provider-neutral seam, same "E2E test harness
+            // is the only publisher today" reasoning as the confirmation
+            // binding above. Never a new exchange — mirrors
+            // workflow-orchestration-commands' own multi-routing-key
+            // pattern (RescheduleReservationForEarlyCheckIn/
+            // RescheduleReservationForLateCheckout already share ONE
+            // exchange with two routing keys each).
             .DeclareExchange("payments-commands", exchange =>
             {
                 exchange.ExchangeType = ExchangeType.Direct;
                 exchange.BindQueue("payments.confirmation-received", "pix_charge_confirmation_received");
+                exchange.BindQueue("payments.failure-received", "pix_charge_failure_received");
+                exchange.BindQueue("payments.expiration-received", "pix_charge_expiration_received");
             });
     });
 
