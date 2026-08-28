@@ -96,7 +96,10 @@ public class PropertyManagementCondominiumsEndpointsArchitectureTests
         // — the front desk CONTACT (an operational recipient configuration)
         // is explicitly approved; a generic "Group" controller, or a
         // controller literally named for "Portaria" itself (as opposed to
-        // its contact), still does not exist. See
+        // its contact), still does not exist. Fase 10, Checkpoint 6.2 (Guest
+        // Access Secure Delivery Corrective Implementation) legitimately
+        // adds PropertyAccessConfigurationController — the guest access
+        // CONFIGURATION (never the raw credential itself). See
         // PropertyManagementPropertiesEndpointsArchitectureTests for the
         // per-action rules.
         var controllerTypes = Types.InAssembly(typeof(CondominiumsController).Assembly)
@@ -105,8 +108,8 @@ public class PropertyManagementCondominiumsEndpointsArchitectureTests
             .GetTypes();
 
         controllerTypes.Select(t => t.Name).Should().BeEquivalentTo(
-            [nameof(CondominiumsController), "PropertiesController", "MyPropertiesController", "FrontDeskContactsController"],
-            "no Group controller may exist yet — only CondominiumsController/PropertiesController/MyPropertiesController (through Checkpoint 5) " +
-            "and FrontDeskContactsController (Fase 10, Checkpoint 4)");
+            [nameof(CondominiumsController), "PropertiesController", "MyPropertiesController", "FrontDeskContactsController", "PropertyAccessConfigurationController"],
+            "no Group controller may exist yet — only CondominiumsController/PropertiesController/MyPropertiesController (through Checkpoint 5), " +
+            "FrontDeskContactsController (Fase 10, Checkpoint 4), and PropertyAccessConfigurationController (Fase 10, Checkpoint 6.2)");
     }
 }

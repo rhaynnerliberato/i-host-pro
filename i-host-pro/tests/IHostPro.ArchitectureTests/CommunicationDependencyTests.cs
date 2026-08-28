@@ -269,6 +269,76 @@ public class CommunicationDependencyTests
         }
     }
 
+    /// <summary>
+    /// ADR-028's own testable consequence (Fase 10, Checkpoint 6.2 —
+    /// synchronous exception #12): Communication is the ONLY Bounded
+    /// Context authorized to consume <c>IPropertyGuestAccessReader</c> —
+    /// Property Management owns/implements it, everyone else must never
+    /// reference it. Mirrors <see cref="No_Other_Context_Assembly_References_IFrontDeskContactReader_Except_Communication"/>
+    /// exactly.
+    /// </summary>
+    [Fact]
+    public void No_Other_Context_Assembly_References_IPropertyGuestAccessReader_Except_Communication()
+    {
+        var otherContextAssemblies = new[]
+        {
+            typeof(IHostPro.Contexts.Housekeeping.Domain.Cleaning).Assembly,
+            typeof(IHostPro.Contexts.Housekeeping.Infrastructure.Persistence.HousekeepingDbContext).Assembly,
+            typeof(IHostPro.Contexts.Reservations.Domain.Reservation).Assembly,
+            typeof(IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext).Assembly,
+            typeof(IHostPro.Contexts.GuestOperations.Domain.GuestStayOperation).Assembly,
+            typeof(IHostPro.Contexts.GuestOperations.Infrastructure.Persistence.GuestOperationsDbContext).Assembly,
+            typeof(IHostPro.Contexts.Identity.Domain.Tenant).Assembly,
+            typeof(IHostPro.Contexts.Identity.Infrastructure.Persistence.IdentityDbContext).Assembly,
+            typeof(IHostPro.Contexts.Configuration.Domain.PolicyDefinition).Assembly,
+            typeof(IHostPro.Contexts.Configuration.Infrastructure.Persistence.ConfigurationDbContext).Assembly,
+            typeof(IHostPro.Contexts.Dashboard.Domain.AssemblyReference).Assembly,
+            typeof(IHostPro.Contexts.Dashboard.Infrastructure.Persistence.DashboardDbContext).Assembly,
+            typeof(IHostPro.Contexts.Workflow.Application.IWorkflowCommandDispatcher).Assembly,
+            typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler).Assembly,
+            typeof(IHostPro.Contexts.Payments.Domain.PixCharge).Assembly,
+            typeof(IHostPro.Contexts.Payments.Infrastructure.Persistence.PaymentsDbContext).Assembly,
+            typeof(IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.ExternalIntegrationsDbContext).Assembly,
+        };
+
+        var readerFullName = typeof(IHostPro.Contexts.PropertyManagement.Contracts.IPropertyGuestAccessReader).FullName!;
+
+        foreach (var assembly in otherContextAssemblies.Distinct())
+        {
+            var referencingTypes = Types.InAssembly(assembly)
+                .That()
+                .HaveDependencyOn(readerFullName)
+                .GetTypes();
+
+            referencingTypes.Should().BeEmpty(
+                $"only Property Management (owner) and Communication (the sole authorized consumer, ADR-028) may " +
+                $"reference IPropertyGuestAccessReader — {assembly.GetName().Name} referencing it would mean " +
+                "an unauthorized Bounded Context bypassed the purpose-limited exception");
+        }
+    }
+
+    /// <summary>
+    /// <c>PropertyGuestAccessReadResult</c> (ADR-028's minimal response)
+    /// legitimately carries the resolved credential/instructions — its
+    /// whole purpose — but must never carry guest identity data or any
+    /// provider-specific identifier (Fase 10, Checkpoint 6.2).
+    /// </summary>
+    [Fact]
+    public void PropertyGuestAccessReadResult_Never_Carries_Guest_Identity_Or_Provider_Data()
+    {
+        var propertyNames = typeof(IHostPro.Contexts.PropertyManagement.Contracts.PropertyGuestAccessReadResult)
+            .GetProperties()
+            .Select(p => p.Name)
+            .ToList();
+
+        foreach (var forbidden in new[] { "GuestName", "GuestPhone", "Cpf", "Rg", "Passport", "Document", "Email", "ProviderMessageId" })
+        {
+            propertyNames.Should().NotContain(
+                name => name.Contains(forbidden, StringComparison.OrdinalIgnoreCase),
+                $"PropertyGuestAccessReadResult must never carry a property containing '{forbidden}'");
+        }
+    }
+
     [Fact]
     public void CommunicationDbContext_Owns_The_Approved_Schema_Name()
     {
@@ -346,6 +416,7 @@ public class CommunicationDependencyTests
     [InlineData(typeof(IHostPro.Contexts.GuestOperations.Contracts.GuestCheckedIn))]
     [InlineData(typeof(IHostPro.Contexts.GuestOperations.Contracts.EarlyCheckinApproved))]
     [InlineData(typeof(IHostPro.Contexts.GuestOperations.Contracts.LateCheckoutApproved))]
+    [InlineData(typeof(IHostPro.Contexts.GuestOperations.Contracts.GuestAccessDeliveryRequested))]
     public void Front_Desk_Trigger_Events_Never_Declare_A_Forbidden_PII_Property(Type eventType)
     {
         var propertyNames = eventType.GetProperties().Select(p => p.Name).ToList();

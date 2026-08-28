@@ -198,6 +198,33 @@ public class PropertyManagementDependencyTests
         }
     }
 
+    /// <summary>
+    /// Fase 10, Checkpoint 6.2 (Guest Access Secure Delivery Corrective
+    /// Implementation): <c>PropertyAccessConfiguration</c> may carry a
+    /// SecretReference (an opaque pointer, resolved elsewhere) but must
+    /// never carry a property that looks like it holds the raw credential
+    /// value itself, and must never carry guest data.
+    /// </summary>
+    [Fact]
+    public void PropertyAccessConfiguration_Never_Declares_A_Raw_Credential_Value_Or_Guest_Data()
+    {
+        var propertyNames = typeof(IHostPro.Contexts.PropertyManagement.Domain.PropertyAccessConfiguration)
+            .GetProperties()
+            .Select(p => p.Name)
+            .ToList();
+
+        foreach (var forbidden in new[] { "Password", "Pin", "RawCredential", "GuestName", "GuestPhone", "Cpf", "Rg", "Passport", "Document" })
+        {
+            propertyNames.Should().NotContain(
+                name => name.Contains(forbidden, StringComparison.OrdinalIgnoreCase),
+                $"PropertyAccessConfiguration must never carry a property containing '{forbidden}'");
+        }
+
+        propertyNames.Should().Contain(
+            name => name.EndsWith("SecretReference", StringComparison.Ordinal),
+            "the one credential-related property must be an opaque *SecretReference, never a raw value holder");
+    }
+
     [Fact]
     public void PropertyManagementDbContext_Owns_The_Approved_Schema_Name()
     {
