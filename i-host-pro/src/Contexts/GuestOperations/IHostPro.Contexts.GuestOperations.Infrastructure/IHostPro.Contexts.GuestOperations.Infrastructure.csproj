@@ -9,6 +9,9 @@
     <!-- Fase 10, Checkpoint 2 — ReservationCreatedHandler (the thin Wolverine
          adapter) needs the ReservationCreated type. -->
     <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
+    <!-- Fase 10, Checkpoint 5 — PixChargeConfirmedHandler (the thin Wolverine
+         adapter) needs the PixChargeConfirmed type. -->
+    <ProjectReference Include="..\..\Payments\IHostPro.Contexts.Payments.Contracts\IHostPro.Contexts.Payments.Contracts.csproj" />
   </ItemGroup>
 
   <!--

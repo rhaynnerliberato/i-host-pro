@@ -195,6 +195,27 @@ public sealed class RequestLateCheckoutCommandHandler : ICommandHandler<RequestL
             {
                 request.MarkPendingPayment(now);
 
+                // Fase 10, Checkpoint 5 (PIX/Payment Deterministic
+                // Foundation) — approved decision: Guest Operations does NOT
+                // call Payments synchronously. It publishes this
+                // provider-neutral event; Payments is the sole consumer and
+                // creates its own PixCharge. Amount/CurrencyCode are a
+                // snapshot of what was already resolved above — never
+                // recalculated by Payments.
+                _eventCollector.Enqueue(new LateCheckoutPaymentRequired
+                {
+                    TenantId = command.TenantId,
+                    AggregateId = request.Id,
+                    AggregateType = "LateCheckoutRequest",
+                    CorrelationId = Guid.NewGuid(),
+                    ActorType = "System",
+                    LateCheckoutRequestId = request.Id,
+                    ReservationId = command.ReservationId,
+                    Amount = request.ChargeValue!.Value,
+                    CurrencyCode = "BRL",
+                    OccurredAtUtc = now,
+                });
+
                 _logger.LogInformation(
                     "Late checkout pending payment for tenant {TenantId} reservationId {ReservationId}",
                     command.TenantId, command.ReservationId);

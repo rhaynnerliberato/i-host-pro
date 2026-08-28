@@ -4,6 +4,7 @@ using IHostPro.Contexts.GuestOperations.Application;
 using IHostPro.Contexts.GuestOperations.Domain;
 using IHostPro.Contexts.GuestOperations.Infrastructure.Messaging;
 using IHostPro.Contexts.GuestOperations.Infrastructure.Persistence;
+using IHostPro.Contexts.Payments.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -66,6 +67,34 @@ public static class GuestOperationsModuleExtensions
         services.AddScoped<IGuestOperationsTransactionExecutor, GuestOperationsOutboxTransactionExecutor>();
 
         services.AddKeyedScoped<IIntegrationEventHandler<ReservationCreated>, ReservationCreatedGuestStayInitializer>(
+            GuestOperationsMessageExecutionScope.HandlerKey);
+
+        services.AddScoped<IGuestOperationsMessageExecutionScope, GuestOperationsMessageExecutionScope>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// The composition root for consuming Payments' own
+    /// <see cref="PixChargeConfirmed"/> event inside <c>IHostPro.Worker</c>
+    /// (Fase 10, Checkpoint 5 — PIX/Payment Deterministic Foundation).
+    /// Mirrors <see cref="AddGuestOperationsReservationCreatedConsumer"/>'s
+    /// own structure exactly — <see cref="IGuestOperationsMessageExecutionScope"/>
+    /// is re-registered here too (harmless — the last registration wins for
+    /// a given service type) so this method also works if ever called
+    /// without <see cref="AddGuestOperationsReservationCreatedConsumer"/> in
+    /// the same composition root. <see cref="Configuration.Contracts.ILateCheckoutPolicyReader"/>
+    /// is NOT registered here — it is already registered unconditionally by
+    /// <c>AddConfigurationModule</c>, which every process consuming this
+    /// method already calls.
+    /// </summary>
+    public static IServiceCollection AddGuestOperationsPixChargeConfirmedConsumer(this IServiceCollection services)
+    {
+        services.AddScoped<IRepository<LateCheckoutRequest, Guid>, LateCheckoutRequestRepository>();
+        services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
+        services.AddScoped<IGuestOperationsTransactionExecutor, GuestOperationsOutboxTransactionExecutor>();
+
+        services.AddKeyedScoped<IIntegrationEventHandler<PixChargeConfirmed>, PixChargeConfirmedLateCheckoutApprover>(
             GuestOperationsMessageExecutionScope.HandlerKey);
 
         services.AddScoped<IGuestOperationsMessageExecutionScope, GuestOperationsMessageExecutionScope>();

@@ -22,6 +22,12 @@
     Configuration exception every Bounded Context already holds (Fase 5).
     Never Housekeeping.Domain/Application/Infrastructure, never
     Configuration.Application/Infrastructure.
+
+    Fase 10, Checkpoint 5 — PIX/Payment Deterministic Foundation:
+    Payments.Contracts added — supplies PixChargeConfirmed, the trigger
+    PixChargeConfirmedLateCheckoutApprover consumes (approved async
+    boundary: Guest Operations never calls Payments synchronously). Never
+    Payments.Domain/Application/Infrastructure.
   -->
   <ItemGroup>
     <ProjectReference Include="..\IHostPro.Contexts.GuestOperations.Domain\IHostPro.Contexts.GuestOperations.Domain.csproj" />
@@ -30,6 +36,7 @@
     <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Contracts\IHostPro.Contexts.Reservations.Contracts.csproj" />
     <ProjectReference Include="..\..\Housekeeping\IHostPro.Contexts.Housekeeping.Contracts\IHostPro.Contexts.Housekeeping.Contracts.csproj" />
     <ProjectReference Include="..\..\Configuration\IHostPro.Contexts.Configuration.Contracts\IHostPro.Contexts.Configuration.Contracts.csproj" />
+    <ProjectReference Include="..\..\Payments\IHostPro.Contexts.Payments.Contracts\IHostPro.Contexts.Payments.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
