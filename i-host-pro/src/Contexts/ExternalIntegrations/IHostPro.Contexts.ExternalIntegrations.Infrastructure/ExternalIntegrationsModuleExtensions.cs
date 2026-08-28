@@ -8,6 +8,7 @@ using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppTenantRoutes;
 using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Meta;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
+using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Pix;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -130,6 +131,24 @@ public static class ExternalIntegrationsModuleExtensions
             services.AddScoped<IMessagingProvider, MetaWhatsAppMessagingProvider>();
         }
 
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="IPixProvider"/> (Fase 10, Checkpoint 5 — PIX/Payment
+    /// Deterministic Foundation, ADR-025, synchronous exception #10) —
+    /// deliberately a SEPARATE method from <see cref="AddExternalIntegrationsModule"/>,
+    /// called only by the process that hosts Payments' own consumer
+    /// (<c>IHostPro.Worker</c>), mirroring how <see cref="IMessagingProvider"/>'s
+    /// real registration above is scoped to where it is actually consumed.
+    /// Unconditional — <see cref="FakePixProvider"/> is this checkpoint's ONLY
+    /// implementation, no real provider exists to gate against (unlike
+    /// <see cref="IMessagingProvider"/>, which has both a fake, in
+    /// Communication, and this real, Development-gated one).
+    /// </summary>
+    public static IServiceCollection AddExternalIntegrationsPixProvider(this IServiceCollection services)
+    {
+        services.AddScoped<IPixProvider, FakePixProvider>();
         return services;
     }
 }
