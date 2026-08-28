@@ -1,7 +1,7 @@
 # Fase 10 — Check-in, Checkout e Operações do Hóspede — Validação e Homologação
 
-Versão: 1.3
-Status: Em andamento — Checkpoint 1, Checkpoint 2, Checkpoint 3 e Checkpoint 4 concluídos
+Versão: 1.4
+Status: Concluída — DEFINITIVAMENTE HOMOLOGADA NO NÍVEL MVP, COM BLOCKERS DE PRODUCTION DOCUMENTADOS. `ProductionReady=false`.
 
 ## 1. Objetivo
 
@@ -144,7 +144,9 @@ Também provado: duplicidade (check-in chamado duas vezes via HTTP real → amba
 
 ### 4.7 Credencial de Acesso
 
-Reafirmado, sem alteração: **DEFERRED PENDING SECURE DELIVERY BOUNDARY** — nenhuma implementação neste Checkpoint. Um sub-gate específico precisa ser aberto e resolvido antes da homologação final da Fase 10 como um todo. Não é um blocker externo/de produção nem uma lacuna esquecida.
+**Estado neste Checkpoint (registro histórico preservado sem alteração):** **DEFERRED PENDING SECURE DELIVERY BOUNDARY** — nenhuma implementação neste Checkpoint. Um sub-gate específico precisa ser aberto e resolvido antes da homologação final da Fase 10 como um todo. Não é um blocker externo/de produção nem uma lacuna esquecida.
+
+**Resolvido posteriormente:** este sub-gate foi aberto no Checkpoint 6.1 e fechado no Checkpoint 6.2 — ver §9.2/§9.3 abaixo, ADR-024 §A7 (amendment) e ADR-028. `AccessCredentialMvpGapClosed=true`.
 
 ### 4.8 Testes — contagens exatas (regressão final)
 
@@ -495,8 +497,58 @@ Gate read-only/design-only. Resolveu: (a) significado de produto de "Fechadura" 
 
 ### 9.4 Status do Checkpoint 6.2
 
-**Concluído e homologado**, condicionado à regressão completa registrada na conversa de homologação (ArchitectureTests, unit/integration de PropertyManagement/GuestOperations/Communication, full `IHostPro.Api.Tests.Integration`, MigrationRunner Run#1/#2, Release, NSwag, Angular — números exatos no relatório final desta etapa). `RealMoneyTransactions=0`. `ExternalPixNetworkCalls=0`. `ProductionProviderSelected=false`. `RealProviderWebhookImplemented=false`.
+**Concluído e homologado**, condicionado à regressão completa registrada na conversa de homologação (ArchitectureTests, unit/integration de PropertyManagement/GuestOperations/Communication, full `IHostPro.Api.Tests.Integration`, MigrationRunner Run#1/#2, Release, NSwag, Angular — números exatos no relatório final desta etapa). `RealMoneyTransactions=0`. `ExternalPixNetworkCalls=0`. `ProductionProviderSelected=false`. `RealProviderWebhookImplemented=false`. `Cp6_2CommitCount=14` (base `ab46c81` → `f4d45f5`).
 
-## 10. Próximo Checkpoint Recomendado
+### 9.5 Checkpoint 6 (Final) — Docs-Only Closure e Homologação Definitiva da Fase 10
 
-Um novo Checkpoint 6 (revisão final read-only de fechamento da Fase 10), conforme a estrutura já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado aos Checkpoints anteriores. Não iniciado.
+Auditoria read-only de fechamento (Checkpoint 6 final) confirmou zero item do escopo literal da Fase 10 (Documento 10/12/13, Architecture Principles, ADRs da fase) permanecendo `UNCLASSIFIED`. Fechamento formalizado neste gate, exclusivamente documental — zero código, migração, schema, API ou comportamento de teste alterado.
+
+**Matriz final do fluxo literal de check-in (Documento 10 §11):**
+
+| Item | Classificação |
+|---|---|
+| Aguardar formulário | `N/A_BY_APPROVED_MVP_DECISION` (ADR-024 §A8) |
+| Aguardar contato | `N/A_BY_APPROVED_MVP_DECISION` |
+| Enviar senha | `PASS` (Checkpoint 6.2) |
+| Enviar instruções | `PASS` (Checkpoint 6.2) |
+| Avisar portaria | `PASS` (Checkpoint 4) |
+| Liberar entrada | `SATISFIED_BY_MANUAL_OPERATIONAL_FLOW` |
+
+`Liberar entrada` não corresponde a nenhuma ação técnica adicional documentada em nenhum documento de escopo — é satisfeita conjuntamente por `GuestCheckedIn` (registro de chegada), a entrega da credencial (Checkpoint 6.2) e a notificação de Portaria (Checkpoint 4): o hóspede entra com a credencial recebida, ou a Portaria já notificada libera manualmente. Nenhum comando de fechadura foi criado; Smart Lock permanece escopo futuro, não implementado.
+
+**Decisão final — Consulta de Pagamento PIX** (item de Documento 13 §9, nunca antes triado formalmente): `PixPaymentQueryCapability=DEFERRED_NO_CURRENT_MVP_USE_CASE`. Rationale: Documento 13 lista genericamente "consulta de pagamento" entre as capacidades da estratégia PIX; nenhum fluxo funcional da Fase 10 exige um endpoint público de consulta — Payments foi deliberadamente implementado sem API pública, e Guest Operations não tem necessidade operacional de query financeira, já que o fluxo de Late Checkout recebe confirmação automaticamente via o lifecycle de Payments e seus eventos (`PixChargeConfirmed`/`PixChargeFailureReceived`/`PixChargeExpirationReceived`). Nenhum endpoint artificial foi criado sem consumidor real. A capacidade poderá ser aberta futuramente quando existir um caso de uso concreto (portal do hóspede, agente conversacional da Fase 11, ou operação administrativa).
+
+**PIX cancellation:** `PixCancellation=DEFERRED_NO_CURRENT_USE_CASE`, reafirmado sem alteração (§9.2). `Cancelled→Confirmed` permanece deferido junto da capability.
+
+**Refunds:** `N/A` — não é requisito de nenhum documento de escopo desta fase (Documento 04/05/10/13), não é item deferido, apenas fora do universo de requisitos da Fase 10.
+
+**Portaria — itens deferidos (sem mudança):** portal, lista diária, histórico, acknowledgement (não é requisito de MVP), `GuestPhone` em `FrontDeskContact`, compartilhamento de credencial de acesso com a Portaria (decisão preservada desde o Checkpoint 4 — a Portaria nunca recebe a credencial).
+
+**Production blockers (não bloqueiam o MVP — `BlocksPhase10Mvp=false` para todos):** provider PIX real; conta/KYC do provider; webhook PIX real; hospedagem pública de webhook; backend de secret de Production para Access Credential (ADR-011, decisão de provedor de nuvem ainda pendente); revisão de hardening at-rest do QR PIX; reconciliação/monitoramento financeiro; ativação de dinheiro real; integração de Smart Lock.
+
+**Débitos técnicos preservados (não corrigidos neste gate):** `WolverineClusterAgentAssignmentDebt=true` (`BlocksPhase10Mvp=false`, destino Fase 12); histórico intermitente de `PolicyUpdated` (pre-existing/non-causal a qualquer checkpoint desta fase).
+
+**Evidência de teste consolidada (carregada dos checkpoints anteriores, não re-executada neste gate):** `IHostPro.Api.Tests.Integration`=55/55; `ArchitectureTests`=262/262; CP6.2 E2E=3/3; MigrationRunner Run#1/Run#2=exit 0/exit 0; NSwag determinístico (diff zero entre duas gerações); Angular build=sucesso; Release=0 erros.
+
+**Status flags finais:**
+
+`Phase10MvpCompleted=true`
+`ProductionReady=false`
+`AccessCredentialMvpGapClosed=true`
+`InstructionsMvpGapClosed=true`
+`PixCancellation=DEFERRED_NO_CURRENT_USE_CASE`
+`PixPaymentQueryCapability=DEFERRED_NO_CURRENT_MVP_USE_CASE`
+`Percentage=DEFERRED_PENDING_PRICING_DOMAIN`
+`ProductionProviderSelected=false`
+`RealProviderWebhookImplemented=false`
+`RealMoneyTransactions=0`
+`ExternalPixNetworkCalls=0`
+`SmartLockIntegrated=false`
+`WolverineClusterAgentAssignmentDebt=true`
+`BlocksPhase10Mvp=false`
+
+**Classificação final da Fase 10:** `B — DEFINITIVAMENTE CONCLUÍDA E HOMOLOGADA NO NÍVEL MVP, COM BLOCKERS DE PRODUCTION DOCUMENTADOS.`
+
+## 10. Status Final da Fase
+
+A Fase 10 está **definitivamente concluída e homologada no nível MVP**, com os blockers de Production listados em §9.5 formalmente documentados e não resolvidos (fora do escopo do MVP). Nenhum novo Checkpoint dentro da Fase 10 é necessário. A Fase 11 (AI Agent) não foi iniciada — seu escopo detalhado permanece a refinar e aprovar antes de qualquer implementação, conforme `Plano Executivo de Desenvolvimento por Fases.md` §4.

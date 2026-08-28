@@ -113,9 +113,21 @@ As interfaces de handler customizadas foram removidas antes de qualquer commit; 
 
 `GUEST_OPERATIONS:MANAGE` (não `READ` — nenhum endpoint somente-leitura existe) é promovido a `IdentityPermissionCodes` e registrado em `IdentityAuthorizationExtensions.AddIdentityAuthorization` — o primeiro consumidor real desde que foi seedado no Checkpoint 1 (Seção 7 acima). Aplicado o bundle completo exigido pela regra permanente registrada pelo usuário após o incidente `INTEGRATIONS:MANAGE` (Fase 9): constante + seed (já existente) + grant ADMIN (já existente) + `AddPolicy` (novo) + teste de consistência (novo — `IdentityAuthorizationCatalogConsistencyTests.ControllerAssemblies` estendido com o assembly de `GuestOperations.Api`, descoberto automaticamente pelo mecanismo de reflexão já existente desde a correção da Fase 9).
 
-### A7. Credencial de Acesso — permanece deferida, dentro da Fase 10
+### A7. Credencial de Acesso — histórico da decisão e resolução (amendment de Checkpoint 6.2)
 
-Reafirmado sem alteração: `AccessCredentialSecretReference`/`IGuestAccessCredentialProvider`/qualquer entrega de senha/PIN de acesso continuam **DEFERRED PENDING SECURE DELIVERY BOUNDARY** — um sub-gate específico precisa ser aberto e resolvido antes da homologação final da Fase 10 como um todo. Não é um blocker externo/de produção nem uma lacuna esquecida.
+**Estado original, no Checkpoint 2 (registro histórico preservado sem alteração):** `AccessCredentialSecretReference`/`IGuestAccessCredentialProvider`/qualquer entrega de senha/PIN de acesso permaneciam **DEFERRED PENDING SECURE DELIVERY BOUNDARY** — um sub-gate específico precisaria ser aberto e resolvido antes da homologação final da Fase 10 como um todo. Não era um blocker externo/de produção nem uma lacuna esquecida — apenas uma decisão de produto/segurança ainda não tomada neste Checkpoint.
+
+**Amendment (Checkpoint 6.1 → Checkpoint 6.2):** o sub-gate mencionado acima foi formalmente aberto no Checkpoint 6.1 (Access Credential & Remaining Scope Decision Gate) e resolvido no Checkpoint 6.2 (Guest Access Secure Delivery Corrective Implementation). Decisão final implementada, registrada em `ADR-028 - Communication to Property Management Secure Guest Access Delivery.md`:
+
+- MVP = senha fixa por Property (Documento 12 §5), configurada manualmente, sem Smart Lock/geração automática;
+- ownership em Property Management (`PropertyAccessConfiguration`, um por Property);
+- armazenamento apenas por referência (`AccessCredentialSecretReference`), nunca o valor real, no domínio/banco de dados;
+- resolução do valor real via `IPropertyAccessCredentialProvider` (abstração nova, independente de `IWhatsAppCredentialProvider`), com implementação apenas para Development (`ProductionAccessCredentialSecretBackendAvailable=false`, bloqueado por ADR-011);
+- décima segunda exceção síncrona cross-context, `IPropertyGuestAccessReader` (Communication → Property Management), formalizada em ADR-028;
+- entrega segura e transiente: o valor real é enviado ao conector de saída real, mas o `Message` persistido para esse intent recebe um marcador de redação fixo (nunca o conteúdo verdadeiro) — zero alteração ao agregado `Message` pré-existente;
+- prova real por E2E dedicado com valor sentinela, confirmando zero vazamento em qualquer linha persistida consultável.
+
+Este amendment não reescreve a decisão como se já existisse desde o Checkpoint 2 — o estado original acima permanece registrado como o histórico factual daquele momento. `AccessCredentialMvpGapClosed=true`.
 
 ### A8. Escopo explicitamente fora deste Checkpoint (reafirmado)
 
@@ -133,7 +145,7 @@ Formulário de check-in (`CheckInFormRequired=false`), Early Check-in/Late Check
 
 **Positivas**: o gatilho de criação fecha definitivamente a lacuna estrutural sinalizada desde o Checkpoint 1 — `GuestStayOperation` agora nasce de um evento de domínio real, nunca de seed manual; a correção do despacho HTTP alinha Guest Operations a 100% do precedente do codebase antes de qualquer commit.
 
-**Riscos aceitos**: Credencial de Acesso permanece um ponto de decisão de segurança em aberto — deve ser resolvido antes da homologação final da Fase 10; `GuestCheckedIn` é publicado sem nenhum consumidor real ainda (Front Desk, Checkpoint 4, é o consumidor esperado).
+**Riscos aceitos**: Credencial de Acesso era, neste Checkpoint, um ponto de decisão de segurança em aberto — resolvido posteriormente nos Checkpoints 6.1/6.2 (ver §A7 acima); `GuestCheckedIn` é publicado sem nenhum consumidor real ainda (Front Desk, Checkpoint 4, é o consumidor esperado).
 
 ## Amendment — Fase 10, Checkpoint 3 (Early Check-in / Late Checkout, 2026-08-27)
 
