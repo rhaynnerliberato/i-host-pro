@@ -88,6 +88,10 @@
     <ProjectReference Include="..\..\src\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Application\IHostPro.Contexts.GuestOperations.Application.csproj" />
     <ProjectReference Include="..\..\src\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Infrastructure\IHostPro.Contexts.GuestOperations.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Api\IHostPro.Contexts.GuestOperations.Api.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Payments\IHostPro.Contexts.Payments.Domain\IHostPro.Contexts.Payments.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Payments\IHostPro.Contexts.Payments.Contracts\IHostPro.Contexts.Payments.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Payments\IHostPro.Contexts.Payments.Application\IHostPro.Contexts.Payments.Application.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Payments\IHostPro.Contexts.Payments.Infrastructure\IHostPro.Contexts.Payments.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

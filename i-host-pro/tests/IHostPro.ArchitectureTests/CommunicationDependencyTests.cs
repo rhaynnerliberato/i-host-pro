@@ -72,14 +72,16 @@ public class CommunicationDependencyTests
 
     /// <summary>
     /// Communication.Application/.Infrastructure may reference other
-    /// Bounded Contexts exclusively through the four approved Contracts
+    /// Bounded Contexts exclusively through the approved Contracts
     /// assemblies (Reservations.Contracts — ReservationCreated + ADR-019;
     /// Configuration.Contracts — ADR-002; GuestOperations.Contracts — Fase
     /// 10, Checkpoint 4 triggers; PropertyManagement.Contracts — Fase 10,
-    /// Checkpoint 4, ADR-026 synchronous exception #9) — never any Domain/
-    /// Application/Infrastructure/Api layer of any context, including
-    /// Reservations'/Configuration's/GuestOperations'/PropertyManagement's
-    /// own, and never Housekeeping/Identity/Dashboard/Workflow at all.
+    /// Checkpoint 4, ADR-026 synchronous exception #9; Payments.Contracts —
+    /// Fase 10, Checkpoint 5, PixChargeCreated + ADR-027 synchronous
+    /// exception #11) — never any Domain/Application/Infrastructure/Api
+    /// layer of any context, including Reservations'/Configuration's/
+    /// GuestOperations'/PropertyManagement's/Payments' own, and never
+    /// Housekeeping/Identity/Dashboard/Workflow at all.
     /// </summary>
     [Fact]
     public void Application_And_Infrastructure_Never_Reference_Other_Contexts_Domain_Application_Infrastructure_Or_Api()
@@ -108,6 +110,9 @@ public class CommunicationDependencyTests
             "IHostPro.Contexts.GuestOperations.Application",
             "IHostPro.Contexts.GuestOperations.Infrastructure",
             "IHostPro.Contexts.GuestOperations.Api",
+            "IHostPro.Contexts.Payments.Domain",
+            "IHostPro.Contexts.Payments.Application",
+            "IHostPro.Contexts.Payments.Infrastructure",
             "IHostPro.Contexts.Housekeeping",
             "IHostPro.Contexts.Identity",
             "IHostPro.Contexts.Dashboard",
@@ -157,6 +162,8 @@ public class CommunicationDependencyTests
             typeof(IHostPro.Contexts.Dashboard.Infrastructure.Persistence.DashboardDbContext).Assembly,
             typeof(IHostPro.Contexts.Workflow.Application.IWorkflowCommandDispatcher).Assembly,
             typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler).Assembly,
+            typeof(IHostPro.Contexts.Payments.Domain.PixCharge).Assembly,
+            typeof(IHostPro.Contexts.Payments.Infrastructure.Persistence.PaymentsDbContext).Assembly,
         };
 
         foreach (var assembly in otherContextAssemblies.Distinct())

@@ -92,19 +92,22 @@ public class GuestOperationsDependencyTests
     /// Fase 10, Checkpoint 3 — Early Check-in / Late Checkout (ADR-024
     /// amendment, synchronous exceptions #7/#8): GuestOperations.Application/
     /// .Infrastructure may reference other Bounded Contexts exclusively
-    /// through three approved Contracts assemblies (Reservations.Contracts —
+    /// through approved Contracts assemblies (Reservations.Contracts —
     /// ReservationCreated + IReservationScheduleReader; Housekeeping.Contracts —
     /// ICleaningReadinessReader; Configuration.Contracts — the universal
     /// Configuration &amp; Policy exception, IEarlyCheckInPolicyReader/
-    /// ILateCheckoutPolicyReader) — never any Domain/Application/
+    /// ILateCheckoutPolicyReader; Payments.Contracts — Fase 10, Checkpoint 5,
+    /// PixChargeConfirmed, ordinary async Integration Event consumption, no
+    /// new synchronous exception) — never any Domain/Application/
     /// Infrastructure/Api layer of any context, including Reservations'/
-    /// Housekeeping's/Configuration's own, and never PropertyManagement/
-    /// Identity/Dashboard/Workflow/Communication/ExternalIntegrations at all.
-    /// Mirrors <c>CommunicationDependencyTests.Application_And_Infrastructure_Never_Reference_Other_Contexts_Domain_Application_Infrastructure_Or_Api</c>
+    /// Housekeeping's/Configuration's/Payments' own, and never
+    /// PropertyManagement/Identity/Dashboard/Workflow/Communication/
+    /// ExternalIntegrations at all. Mirrors
+    /// <c>CommunicationDependencyTests.Application_And_Infrastructure_Never_Reference_Other_Contexts_Domain_Application_Infrastructure_Or_Api</c>
     /// exactly.
     /// </summary>
     [Fact]
-    public void Application_And_Infrastructure_Only_Reference_Reservations_Housekeeping_Configuration_Contracts()
+    public void Application_And_Infrastructure_Only_Reference_Reservations_Housekeeping_Configuration_Payments_Contracts()
     {
         var assembliesToCheck = new[]
         {
@@ -126,6 +129,9 @@ public class GuestOperationsDependencyTests
             "IHostPro.Contexts.Configuration.Application",
             "IHostPro.Contexts.Configuration.Infrastructure",
             "IHostPro.Contexts.Configuration.Api",
+            "IHostPro.Contexts.Payments.Domain",
+            "IHostPro.Contexts.Payments.Application",
+            "IHostPro.Contexts.Payments.Infrastructure",
             "IHostPro.Contexts.PropertyManagement",
             "IHostPro.Contexts.Identity",
             "IHostPro.Contexts.Dashboard",
@@ -268,6 +274,8 @@ public class GuestOperationsDependencyTests
             typeof(IHostPro.Contexts.Identity.Infrastructure.Persistence.IdentityDbContext).Assembly,
             typeof(IHostPro.Contexts.Configuration.Infrastructure.Messaging.PolicyUpdatedHandler).Assembly,
             typeof(IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.ExternalIntegrationsDbContext).Assembly,
+            typeof(IHostPro.Contexts.Payments.Domain.PixCharge).Assembly,
+            typeof(IHostPro.Contexts.Payments.Infrastructure.Persistence.PaymentsDbContext).Assembly,
         };
 
         foreach (var assembly in otherContextAssemblies.Distinct())
