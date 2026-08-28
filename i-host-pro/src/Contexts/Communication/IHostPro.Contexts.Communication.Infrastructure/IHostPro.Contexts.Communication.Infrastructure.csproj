@@ -17,6 +17,9 @@
          Wolverine adapters for GuestCheckedIn/EarlyCheckinApproved/
          LateCheckoutApproved reference these event types directly. -->
     <ProjectReference Include="..\..\GuestOperations\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
+    <!-- Fase 10, Checkpoint 5 — PixChargeCreatedHandler (the thin Wolverine
+         adapter) needs the PixChargeCreated type. -->
+    <ProjectReference Include="..\..\Payments\IHostPro.Contexts.Payments.Contracts\IHostPro.Contexts.Payments.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

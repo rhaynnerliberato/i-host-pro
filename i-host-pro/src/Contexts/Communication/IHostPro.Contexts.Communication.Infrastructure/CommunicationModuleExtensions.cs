@@ -4,6 +4,7 @@ using IHostPro.Contexts.Communication.Infrastructure.Messaging;
 using IHostPro.Contexts.Communication.Infrastructure.Persistence;
 using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.GuestOperations.Contracts;
+using IHostPro.Contexts.Payments.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -101,6 +102,24 @@ public static class CommunicationModuleExtensions
         services.AddKeyedScoped<IIntegrationEventHandler<EarlyCheckinApproved>, EarlyCheckinApprovedFrontDeskNotificationProcessor>(
             CommunicationMessageExecutionScope.HandlerKey);
         services.AddKeyedScoped<IIntegrationEventHandler<LateCheckoutApproved>, LateCheckoutApprovedFrontDeskNotificationProcessor>(
+            CommunicationMessageExecutionScope.HandlerKey);
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="PixChargeCreatedDeliveryProcessor"/> (Fase 10,
+    /// Checkpoint 5 — PIX/Payment Deterministic Foundation) — mirrors
+    /// <see cref="AddCommunicationFrontDeskConsumer"/>'s own shape and gate
+    /// exactly: reuses the SAME <see cref="IOutboundMessageConnector"/>
+    /// registration (<see cref="FakeWhatsAppConnector"/>, Development-only)
+    /// as every other Communication consumer, so this method must be called
+    /// alongside it, never independently, and under the same
+    /// <c>IsDevelopment()</c> gate at the call site.
+    /// </summary>
+    public static IServiceCollection AddCommunicationPixDeliveryConsumer(this IServiceCollection services)
+    {
+        services.AddKeyedScoped<IIntegrationEventHandler<PixChargeCreated>, PixChargeCreatedDeliveryProcessor>(
             CommunicationMessageExecutionScope.HandlerKey);
 
         return services;

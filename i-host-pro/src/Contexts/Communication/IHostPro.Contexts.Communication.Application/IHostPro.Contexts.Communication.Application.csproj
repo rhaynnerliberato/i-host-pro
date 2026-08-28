@@ -21,6 +21,11 @@
     third/fourth/fifth Integration Events Communication consumes.
     PropertyManagement.Contracts added — IFrontDeskContactReader is the new
     synchronous exception #9 (ADR-026), same "Contracts only" boundary.
+
+    Fase 10, Checkpoint 5 (PIX/Payment Deterministic Foundation):
+    Payments.Contracts added — PixChargeCreated is the sixth Integration
+    Event Communication consumes; IPixChargeDeliveryReader is the new
+    synchronous exception #11 (ADR-027), same "Contracts only" boundary.
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Domain\IHostPro.BuildingBlocks.Domain.csproj" />
@@ -31,6 +36,7 @@
     <ProjectReference Include="..\..\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Contracts\IHostPro.Contexts.ExternalIntegrations.Contracts.csproj" />
     <ProjectReference Include="..\..\GuestOperations\IHostPro.Contexts.GuestOperations.Contracts\IHostPro.Contexts.GuestOperations.Contracts.csproj" />
     <ProjectReference Include="..\..\PropertyManagement\IHostPro.Contexts.PropertyManagement.Contracts\IHostPro.Contexts.PropertyManagement.Contracts.csproj" />
+    <ProjectReference Include="..\..\Payments\IHostPro.Contexts.Payments.Contracts\IHostPro.Contexts.Payments.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
