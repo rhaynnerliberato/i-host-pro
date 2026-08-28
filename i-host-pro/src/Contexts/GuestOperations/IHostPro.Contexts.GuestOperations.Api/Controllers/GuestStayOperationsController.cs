@@ -131,6 +131,27 @@ public sealed class GuestStayOperationsController : ControllerBase
             : GuestOperationsResultHttpMapper.ToActionResult(result.Error);
     }
 
+    [HttpPost("{reservationId:guid}/access-delivery")]
+    [Authorize(Policy = IdentityPermissionCodes.GuestOperationsManage)]
+    [ProducesResponseType(typeof(GuestStayOperationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RequestAccessDelivery(Guid reservationId, CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        if (!GuestOperationsIdentityReader.TryRead(User, out var identity))
+            return Unauthorized();
+
+        var command = new RequestGuestAccessDeliveryCommand { TenantId = identity.TenantId, ReservationId = reservationId };
+        var result = await _sender.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(ToResponse(result.Value))
+            : GuestOperationsResultHttpMapper.ToActionResult(result.Error);
+    }
+
     private static GuestStayOperationResponse ToResponse(GuestStayOperationResult result) => new(
         result.Id, result.ReservationId, result.PropertyId, result.Status,
         result.CheckedInAtUtc, result.CheckedOutAtUtc, result.CreatedAtUtc, result.UpdatedAtUtc);
