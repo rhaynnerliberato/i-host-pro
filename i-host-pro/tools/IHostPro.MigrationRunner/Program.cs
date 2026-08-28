@@ -9,6 +9,7 @@ using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
 using IHostPro.Contexts.GuestOperations.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
+using IHostPro.Contexts.Payments.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 using JasperFx;
@@ -71,6 +72,7 @@ try
         typeof(CommunicationDbContext).Assembly,
         typeof(ExternalIntegrationsDbContext).Assembly,
         typeof(GuestOperationsDbContext).Assembly,
+        typeof(PaymentsDbContext).Assembly,
     };
 
     var moduleDbContextTypes = moduleAssemblies
@@ -596,6 +598,48 @@ try
 
     log.LogInformation("Guest Operations' durable outbox provisioned");
 
+    // Payments' own durable outbox (Fase 10, Checkpoint 5 — PIX/Payment
+    // Deterministic Foundation) — mirrors every other context's provisioning
+    // above exactly, in its own schema (payments_messaging), never shared
+    // with any of the other eight. PixChargeCreated/PixChargeConfirmed
+    // (routed below) are its published Integration Events.
+    var paymentsMigratorConnectionString = builder.Configuration.GetConnectionString("Payments")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Payments'.");
+
+    log.LogInformation("Provisioning Payments' durable outbox (schema payments_messaging)");
+
+    var paymentsOutboxHostBuilder = Host.CreateApplicationBuilder();
+    paymentsOutboxHostBuilder.UseWolverine(opts =>
+    {
+        opts.EnrollAncillaryPostgresqlOutbox(
+            paymentsMigratorConnectionString, "payments_messaging", typeof(PaymentsDbContext));
+        opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+        opts.UseEntityFrameworkCoreTransactions();
+    });
+
+    using (var paymentsOutboxHost = paymentsOutboxHostBuilder.Build())
+    {
+        await paymentsOutboxHost.SetupResources();
+    }
+
+    await using (var connection = new NpgsqlConnection(paymentsMigratorConnectionString))
+    {
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            GRANT USAGE ON SCHEMA payments_messaging TO ihostpro_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA payments_messaging TO ihostpro_app;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA payments_messaging TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA payments_messaging
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA payments_messaging
+              GRANT USAGE, SELECT ON SEQUENCES TO ihostpro_app;
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    log.LogInformation("Payments' durable outbox provisioned");
+
     // RabbitMQ messaging topology (Checkpoint 6 homologação, third production
     // defect: neither IHostPro.Api nor IHostPro.Worker ever declared the
     // topic exchanges they publish/route to — AutoProvision defaults to
@@ -617,7 +661,7 @@ try
     // IHostPro.Api/IHostPro.Worker use — so host/vhost/user/password/
     // timeouts can never drift between this provisioning step and the real
     // runtime connection.
-    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events, configuration-events, housekeeping-events, external-integrations-events, guest-operations-events exchanges)");
+    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events, configuration-events, housekeeping-events, external-integrations-events, guest-operations-events, payments-events, payments-commands exchanges)");
 
     var messagingTopologyHostBuilder = Host.CreateApplicationBuilder();
     messagingTopologyHostBuilder.UseWolverine(opts =>
@@ -908,6 +952,53 @@ try
                     exchange.BindQueue("communication.early-checkin-approved-trigger", "early_checkin_approved");
                     exchange.BindQueue("communication.late-checkout-approved-trigger", "late_checkout_approved");
                 }
+
+                // Fase 10, Checkpoint 5 (PIX/Payment Deterministic
+                // Foundation): Payments' own reaction to
+                // LateCheckoutPaymentRequired — a sixth, independent
+                // subscriber queue on this same exchange (Guest Operations
+                // never needs to know Payments is listening). Unconditional
+                // (not gated to Development): PixCharge creation has no
+                // fake/real provider distinction that makes it unsafe to run
+                // everywhere — FakePixProvider is this checkpoint's only
+                // provider, in every environment.
+                exchange.BindQueue("payments.late-checkout-payment-required-trigger", "late_checkout_payment_required");
+            })
+            // Fase 10, Checkpoint 5 (PIX/Payment Deterministic Foundation):
+            // Payments' OWN published events. Bound to Guest Operations'
+            // "guestoperations.pixcharge-confirmed-trigger" queue
+            // (unconditional — same reasoning as the binding above) and to
+            // Communication's "communication.pixcharge-created-trigger"
+            // queue (Development-only, same allowlist as every other
+            // Communication queue above — the delivery processor depends on
+            // FakeWhatsAppConnector).
+            .DeclareExchange("payments-events", exchange =>
+            {
+                exchange.ExchangeType = ExchangeType.Topic;
+                exchange.BindQueue("guestoperations.pixcharge-confirmed-trigger", "pix_charge_confirmed");
+
+                if (builder.Environment.IsDevelopment())
+                {
+                    exchange.BindQueue("communication.pixcharge-created-trigger", "pix_charge_created");
+                }
+            })
+            // Fase 10, Checkpoint 5 (PIX/Payment Deterministic Foundation):
+            // Payments' inbound provider-neutral confirmation seam (mandate
+            // items 30/54) — a deliberately separate, narrowly-scoped Direct
+            // exchange (mirrors workflow-orchestration-commands' own
+            // reasoning: exactly one destination queue, never a fan-out
+            // pattern), never the Topic payments-events exchange above. This
+            // checkpoint has no real PIX provider/webhook — the only
+            // publisher today is the E2E test harness itself, simulating the
+            // provider-neutral fact via a real Wolverine send (never a
+            // test-only HTTP endpoint). The Payments-side handler is genuine
+            // production code representing the seam a FUTURE
+            // ExternalIntegrations webhook-normalization step is expected to
+            // publish through, unchanged.
+            .DeclareExchange("payments-commands", exchange =>
+            {
+                exchange.ExchangeType = ExchangeType.Direct;
+                exchange.BindQueue("payments.confirmation-received", "pix_charge_confirmation_received");
             });
     });
 

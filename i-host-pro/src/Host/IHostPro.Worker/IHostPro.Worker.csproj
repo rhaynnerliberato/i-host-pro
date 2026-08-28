@@ -55,5 +55,17 @@
          (choreography). CP1 registered nothing here (zero Wolverine
          consumers that checkpoint). -->
     <ProjectReference Include="..\..\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Infrastructure\IHostPro.Contexts.GuestOperations.Infrastructure.csproj" />
+    <!-- Fase 10, Checkpoint 5 (PIX/Payment Deterministic Foundation):
+         Worker's first-ever Payments wiring — consumes Guest Operations'
+         own LateCheckoutPaymentRequired to create a PixCharge via the (fake,
+         this checkpoint) IPixProvider, and consumes its own
+         PixChargeConfirmationReceived seam. -->
+    <ProjectReference Include="..\..\Contexts\Payments\IHostPro.Contexts.Payments.Infrastructure\IHostPro.Contexts.Payments.Infrastructure.csproj" />
+    <!-- Fase 10, Checkpoint 5: Worker's first-ever External Integrations
+         wiring — registers FakePixProvider (IPixProvider, ADR-025) for
+         Payments' own consumer above. Only AddExternalIntegrationsPixProvider
+         is called from this process — never the full AddExternalIntegrationsModule
+         (no ExternalIntegrationsDbContext access needed here). -->
+    <ProjectReference Include="..\..\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Infrastructure\IHostPro.Contexts.ExternalIntegrations.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

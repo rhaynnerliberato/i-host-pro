@@ -9,6 +9,7 @@ using IHostPro.Contexts.Configuration.Infrastructure.Caching;
 using IHostPro.Contexts.Configuration.Infrastructure.Messaging;
 using IHostPro.Contexts.Communication.Infrastructure;
 using IHostPro.Contexts.Dashboard.Infrastructure;
+using IHostPro.Contexts.ExternalIntegrations.Infrastructure;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
 using IHostPro.Contexts.GuestOperations.Infrastructure;
 using IHostPro.Contexts.GuestOperations.Infrastructure.Persistence;
@@ -16,6 +17,8 @@ using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Messaging;
 using IHostPro.Contexts.Identity.Infrastructure;
+using IHostPro.Contexts.Payments.Infrastructure;
+using IHostPro.Contexts.Payments.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Infrastructure;
 using IHostPro.Contexts.Reservations.Contracts;
 using IHostPro.Contexts.Reservations.Infrastructure;
@@ -195,6 +198,14 @@ try
         // registered immediately above by AddCommunicationReservationConsumer
         // — same Development-only gate, same "zero real provider" reasoning.
         builder.Services.AddCommunicationFrontDeskConsumer();
+
+        // Fase 10, Checkpoint 5 (PIX/Payment Deterministic Foundation): the
+        // PIX-to-guest delivery processor reuses the SAME FakeWhatsAppConnector
+        // registered above — same Development-only gate, same "zero real
+        // provider" reasoning (PixChargeCreatedDeliveryProcessor depends on
+        // IOutboundMessageConnector, unlike Payments' own PixCharge creation
+        // path above, which is unconditional).
+        builder.Services.AddCommunicationPixDeliveryConsumer();
     }
 
     // Fase 10, Checkpoint 2 (Check-in/Checkout Core): the ReservationCreated
@@ -204,6 +215,31 @@ try
     // consumers), Worker now touches GuestOperationsDbContext directly.
     builder.Services.AddGuestOperationsModule(builder.Configuration);
     builder.Services.AddGuestOperationsReservationCreatedConsumer();
+
+    // Fase 10, Checkpoint 5 (PIX/Payment Deterministic Foundation): Guest
+    // Operations' own reaction to Payments' PixChargeConfirmed — mirrors
+    // AddGuestOperationsReservationCreatedConsumer's own placement exactly.
+    builder.Services.AddGuestOperationsPixChargeConfirmedConsumer();
+
+    // Payments module (Fase 10, Checkpoint 5 — PIX/Payment Deterministic
+    // Foundation): DbContext + IPixChargeDeliveryReader (ADR-027, exception
+    // #11 — needed by Communication's delivery processor below) +
+    // LateCheckoutPaymentRequired/PixChargeConfirmationReceived consumers.
+    // Unconditional (not gated to Development): unlike Communication's own
+    // WhatsApp delivery, PixCharge creation/confirmation has no fake/real
+    // provider distinction that would make it unsafe to run everywhere —
+    // FakePixProvider IS this checkpoint's only provider, in every
+    // environment (mirrors Guest Operations' own ReservationCreated
+    // consumer reasoning above).
+    builder.Services.AddPaymentsModule(builder.Configuration);
+    builder.Services.AddPaymentsLateCheckoutPaymentRequiredConsumer();
+
+    // FakePixProvider (Fase 10, Checkpoint 5 — ADR-025, synchronous
+    // exception #10) — the ONLY IPixProvider implementation this
+    // checkpoint has, registered unconditionally: no real provider exists
+    // to gate against (unlike IMessagingProvider, which has a real,
+    // Development-gated implementation alongside Communication's own fake).
+    builder.Services.AddExternalIntegrationsPixProvider();
 
     // Workflow Orchestration module (Fase 8, Checkpoint 1 — ADR-018):
     // stateless — no DbContext, no aggregates, no persistence (approved
@@ -292,6 +328,16 @@ try
             "guest_operations_messaging",
             typeof(GuestOperationsDbContext));
 
+        // Payments' own durable outbox (Fase 10, Checkpoint 5 — PIX/Payment
+        // Deterministic Foundation) — a ninth "ancillary" store, in its own
+        // payments_messaging schema, never shared with any other context's.
+        // PixChargeCreated/PixChargeConfirmed (routed below) are its
+        // published Integration Events.
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("Payments")!,
+            "payments_messaging",
+            typeof(PaymentsDbContext));
+
         // Required in addition to EnrollAncillaryPostgresqlOutbox above —
         // same empirically-confirmed requirement documented in
         // IHostPro.Api's Program.cs for Identity's own outbox: without this,
@@ -350,6 +396,12 @@ try
         // GuestOperationsMessageExecutionScope is the single, deliberately-
         // authorized place in Guest Operations that holds IServiceScopeFactory.
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.GuestOperations.Application.IGuestOperationsMessageExecutionScope>();
+
+        // ADR-016, sixth application (Fase 10, Checkpoint 5) — same rationale
+        // as every other Bounded Context's own AlwaysUseServiceLocationFor
+        // above: PaymentsMessageExecutionScope is the single, deliberately-
+        // authorized place in Payments that holds IServiceScopeFactory.
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Payments.Application.IPaymentsMessageExecutionScope>();
 
         opts.Policies.AddMiddleware(
             typeof(TenantResolutionMiddleware),
@@ -701,6 +753,15 @@ try
                 .AddStickyHandler(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.EarlyCheckinApprovedHandler));
             opts.ListenToRabbitQueue("communication.late-checkout-approved-trigger")
                 .AddStickyHandler(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.LateCheckoutApprovedHandler));
+
+            // Fase 10, Checkpoint 5 (PIX/Payment Deterministic Foundation):
+            // Communication's PIX-to-guest delivery consumer, on the NEW
+            // payments-events exchange — same Development-only gate as
+            // every other Communication consumer above (same
+            // FakeWhatsAppConnector, same "no real provider yet" reasoning).
+            opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.PixChargeCreatedHandler).Assembly);
+            opts.ListenToRabbitQueue("communication.pixcharge-created-trigger")
+                .AddStickyHandler(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.PixChargeCreatedHandler));
         }
 
         // Guest Operations' own single trigger consumer (Fase 10, Checkpoint
@@ -734,6 +795,48 @@ try
         opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.GuestOperations.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
         opts.ListenToRabbitQueue("guestoperations.reservation-created-trigger")
             .AddStickyHandler(typeof(IHostPro.Contexts.GuestOperations.Infrastructure.Messaging.ReservationCreatedHandler));
+
+        // Guest Operations' own reaction to Payments' PixChargeConfirmed
+        // (Fase 10, Checkpoint 5 — PIX/Payment Deterministic Foundation): a
+        // new, independent subscriber queue on the NEW payments-events
+        // exchange (Payments never needs to know Guest Operations is
+        // listening — same decoupled pub/sub pattern as every queue above).
+        // PixChargeConfirmedHandler lives in the SAME GuestOperations.Infrastructure
+        // assembly as ReservationCreatedHandler above — already included, no
+        // second IncludeAssembly needed. PixChargeConfirmed has exactly one
+        // consumer in this process (Guest Operations) — sticky-bound anyway,
+        // mirroring every other handler's own registration shape for
+        // consistency (ADR-020).
+        opts.ListenToRabbitQueue("guestoperations.pixcharge-confirmed-trigger")
+            .AddStickyHandler(typeof(IHostPro.Contexts.GuestOperations.Infrastructure.Messaging.PixChargeConfirmedHandler));
+
+        // Payments' own two consumers (Fase 10, Checkpoint 5 — PIX/Payment
+        // Deterministic Foundation). LateCheckoutPaymentRequiredHandler/
+        // PixChargeConfirmationReceivedHandler live in
+        // Payments.Infrastructure, a separate assembly from this entry
+        // assembly, so it must be explicitly included in Wolverine's handler
+        // discovery. Neither message type has a second in-process consumer
+        // — no AddStickyHandler needed (ADR-020's own "single discovered
+        // handler" default).
+        opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Payments.Infrastructure.Messaging.LateCheckoutPaymentRequiredHandler).Assembly);
+
+        // Payments' reaction to Guest Operations' own LateCheckoutPaymentRequired
+        // — a new, independent subscriber queue on the EXISTING
+        // guest-operations-events exchange (Guest Operations never needs to
+        // know Payments is listening — same decoupled pub/sub pattern as
+        // every queue above).
+        opts.ListenToRabbitQueue("payments.late-checkout-payment-required-trigger");
+
+        // Payments' inbound provider-neutral confirmation seam (Fase 10,
+        // Checkpoint 5 mandate items 30/54): a new, independent, dedicated
+        // Direct-exchange queue — see IHostPro.MigrationRunner's own
+        // Program.cs for the "payments-commands" exchange declaration. This
+        // checkpoint has no real PIX provider/webhook — the only publisher
+        // today is the E2E test harness itself, simulating the
+        // provider-neutral fact deterministically via a real Wolverine send;
+        // the handler is genuine production code representing the seam a
+        // future ExternalIntegrations webhook-normalization step would use.
+        opts.ListenToRabbitQueue("payments.confirmation-received");
 
         // Communication's WhatsApp status consumer (Fase 9, Checkpoint 2.3.3,
         // ADR-022 item 14) — a new, independent subscriber queue on the NEW
@@ -838,6 +941,25 @@ try
             .ToRabbitRoutingKey(
                 workflowOrchestrationCommandsExchange, "reschedule_for_late_checkout",
                 exchange => exchange.ExchangeType = ExchangeType.Direct)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        // Payments' own two Integration Events (Fase 10, Checkpoint 5 —
+        // PIX/Payment Deterministic Foundation), published by
+        // LateCheckoutPaymentRequiredChargeInitializer/
+        // PixChargeConfirmationReceivedCommandHandler — both run in THIS
+        // process (unlike GuestOperations' own events, published from
+        // IHostPro.Api where its HTTP command handlers run). A new, dedicated
+        // Topic exchange — see IHostPro.MigrationRunner's own Program.cs for
+        // the queue bindings.
+        const string paymentsEventsExchange = "payments-events";
+        opts.PublishMessage(typeof(IHostPro.Contexts.Payments.Contracts.PixChargeCreated))
+            .ToRabbitRoutingKey(paymentsEventsExchange, "pix_charge_created", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        opts.PublishMessage(typeof(IHostPro.Contexts.Payments.Contracts.PixChargeConfirmed))
+            .ToRabbitRoutingKey(paymentsEventsExchange, "pix_charge_confirmed", exchange => exchange.ExchangeType = ExchangeType.Topic)
             .UseDurableOutbox()
             .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
     });

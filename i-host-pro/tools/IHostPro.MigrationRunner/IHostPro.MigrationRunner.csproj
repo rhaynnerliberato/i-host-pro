@@ -13,6 +13,7 @@
     <ProjectReference Include="..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Infrastructure\IHostPro.Contexts.Communication.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Infrastructure\IHostPro.Contexts.ExternalIntegrations.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Infrastructure\IHostPro.Contexts.GuestOperations.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Contexts\Payments\IHostPro.Contexts.Payments.Infrastructure\IHostPro.Contexts.Payments.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

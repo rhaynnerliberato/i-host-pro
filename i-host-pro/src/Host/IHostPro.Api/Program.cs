@@ -640,6 +640,17 @@ try
             .ToRabbitRoutingKey(guestOperationsEventsExchange, "late_checkout_denied", exchange => exchange.ExchangeType = ExchangeType.Topic)
             .UseDurableOutbox()
             .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        // Guest Operations' fifth Integration Event (Fase 10, Checkpoint 5 —
+        // PIX/Payment Deterministic Foundation), same exchange as every
+        // other Guest Operations event above, published by
+        // RequestLateCheckoutCommandHandler when the resolved policy
+        // requires PIX. Payments is the sole consumer — see the Worker's
+        // own Program.cs for the corresponding ListenToRabbitQueue.
+        opts.PublishMessage(typeof(LateCheckoutPaymentRequired))
+            .ToRabbitRoutingKey(guestOperationsEventsExchange, "late_checkout_payment_required", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
     });
 
     builder.Services.AddScoped<IEventPublisher, WolverineEventPublisher>();
