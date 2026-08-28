@@ -67,6 +67,13 @@ public static class PaymentsModuleExtensions
 
         services.AddScoped<IPixChargeConfirmationReceivedHandler, PixChargeConfirmationReceivedCommandHandler>();
 
+        // Fase 10, Checkpoint 5.1 (Payment Failure/Expiration Evidence
+        // Corrective Gate): same provider-neutral inbound seam as
+        // PixChargeConfirmationReceived above — see IPaymentsMessageExecutionScope's
+        // own two new dedicated methods.
+        services.AddScoped<IPixChargeFailureReceivedHandler, PixChargeFailureReceivedCommandHandler>();
+        services.AddScoped<IPixChargeExpirationReceivedHandler, PixChargeExpirationReceivedCommandHandler>();
+
         services.AddScoped<IPaymentsMessageExecutionScope, PaymentsMessageExecutionScope>();
 
         return services;

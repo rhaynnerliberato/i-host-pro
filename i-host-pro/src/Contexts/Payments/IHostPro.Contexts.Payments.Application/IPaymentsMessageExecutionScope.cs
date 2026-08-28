@@ -40,4 +40,22 @@ public interface IPaymentsMessageExecutionScope
     /// </summary>
     Task ExecutePixChargeConfirmationReceivedAsync(
         PixChargeConfirmationReceived message, Guid messageId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Same tenant-safe scope-opening mechanism as
+    /// <see cref="ExecutePixChargeConfirmationReceivedAsync"/>, for
+    /// <see cref="PixChargeFailureReceived"/> (Fase 10, Checkpoint 5.1 —
+    /// Payment Failure/Expiration Evidence Corrective Gate).
+    /// </summary>
+    Task ExecutePixChargeFailureReceivedAsync(
+        PixChargeFailureReceived message, Guid messageId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Same tenant-safe scope-opening mechanism as
+    /// <see cref="ExecutePixChargeConfirmationReceivedAsync"/>, for
+    /// <see cref="PixChargeExpirationReceived"/> (Fase 10, Checkpoint 5.1 —
+    /// Payment Failure/Expiration Evidence Corrective Gate).
+    /// </summary>
+    Task ExecutePixChargeExpirationReceivedAsync(
+        PixChargeExpirationReceived message, Guid messageId, CancellationToken cancellationToken);
 }

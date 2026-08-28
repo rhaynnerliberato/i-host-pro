@@ -55,4 +55,28 @@ public sealed class PaymentsMessageExecutionScope : IPaymentsMessageExecutionSco
         var handler = scope.ServiceProvider.GetRequiredService<IPixChargeConfirmationReceivedHandler>();
         await handler.HandleAsync(message, cancellationToken);
     }
+
+    public async Task ExecutePixChargeFailureReceivedAsync(
+        PixChargeFailureReceived message, Guid messageId, CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+        tenantContext.SetTenant(message.TenantId);
+
+        var handler = scope.ServiceProvider.GetRequiredService<IPixChargeFailureReceivedHandler>();
+        await handler.HandleAsync(message, cancellationToken);
+    }
+
+    public async Task ExecutePixChargeExpirationReceivedAsync(
+        PixChargeExpirationReceived message, Guid messageId, CancellationToken cancellationToken)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+        tenantContext.SetTenant(message.TenantId);
+
+        var handler = scope.ServiceProvider.GetRequiredService<IPixChargeExpirationReceivedHandler>();
+        await handler.HandleAsync(message, cancellationToken);
+    }
 }
