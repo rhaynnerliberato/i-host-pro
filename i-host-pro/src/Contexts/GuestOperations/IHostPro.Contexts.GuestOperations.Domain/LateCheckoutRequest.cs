@@ -87,13 +87,17 @@ public sealed class LateCheckoutRequest : AggregateRoot<Guid>, ITenantOwned
     }
 
     /// <summary>
-    /// <see cref="LateCheckoutRequestStatus.Pending"/> → <see cref="LateCheckoutRequestStatus.Approved"/>.
-    /// Terminal. Never called when <see cref="RequiresPix"/> is true — that
-    /// path is <see cref="MarkPendingPayment"/> instead.
+    /// <see cref="LateCheckoutRequestStatus.Pending"/> → <see cref="LateCheckoutRequestStatus.Approved"/>
+    /// (the non-PIX path), or <see cref="LateCheckoutRequestStatus.PendingPayment"/> →
+    /// <see cref="LateCheckoutRequestStatus.Approved"/> (Fase 10, Checkpoint
+    /// 5 — PIX/Payment Deterministic Foundation: the exact "transition
+    /// onward" <see cref="MarkPendingPayment"/>'s own doc comment anticipated,
+    /// called by <c>PixChargeConfirmedLateCheckoutApprover</c> once the
+    /// associated PixCharge is confirmed). Terminal either way.
     /// </summary>
     public void Approve(DateTimeOffset now)
     {
-        if (Status != LateCheckoutRequestStatus.Pending)
+        if (Status is not (LateCheckoutRequestStatus.Pending or LateCheckoutRequestStatus.PendingPayment))
             throw new InvalidOperationException($"Cannot approve a late checkout request in status '{Status}'.");
 
         Status = LateCheckoutRequestStatus.Approved;
