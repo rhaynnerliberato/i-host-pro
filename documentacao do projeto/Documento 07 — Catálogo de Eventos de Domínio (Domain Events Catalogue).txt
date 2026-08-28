@@ -217,6 +217,8 @@ PaymentFailed
 RefundRequested
 RefundApproved
 RefundRejected
+
+Nota (Fase 10, Checkpoint 5): `PixPaymentReceived`/`PixPaymentConfirmed`, listados acima apenas como nomes prospectivos (sem payload, sem contexto de publicação), foram SUPERSEDIDOS pelo contrato real implementado — ver §41 (`PixChargeCreated`/`PixChargeConfirmed`, `Payments.Contracts`). Os dois nomes acima nunca serão materializados como eventos distintos. `PaymentFailed`/`RefundRequested`/`RefundApproved`/`RefundRejected` permanecem prospectivos, sem mudança — ver §41 para o registro completo desta decisão.
 10. Eventos da Comunicação
 MessageQueued
 MessageSending
@@ -1115,3 +1117,40 @@ Não é um Integration Event nem um comando — registrado aqui por completude d
 39. Extensão factual de ADR-019 — GuestName em ReservationGuestContact (Fase 10, Checkpoint 4)
 
 `Reservations.Contracts.ReservationGuestContact` (ADR-019, Exceção Síncrona #5/#4 conforme numeração) ganhou um terceiro campo, `GuestName` (string, não-nulo), para que os três processadores de Portaria (§37.2) possam renderizar o nome do hóspede. O boundary permanece exatamente o mesmo (Communication → Reservations, um único consumidor) — não é uma nova exceção síncrona. `GuestPhone` nunca é usado pelos processadores de Portaria. Ver amendment ao final de ADR-019 para o registro completo desta extensão.
+
+40. LateCheckoutPaymentRequired (Fase 10, Checkpoint 5 — PIX/Payment Deterministic Foundation)
+
+Publicado por `RequestLateCheckoutCommandHandler` (GuestOperations.Contracts) quando `LateCheckoutRequest` entra em `PendingPayment` — supersede o comportamento do Checkpoint 3, que não publicava nada nesse ramo (decisão async aprovada no CP5). Payload: `TenantId`, `LateCheckoutRequestId`, `ReservationId`, `Amount`, `CurrencyCode` (sempre `"BRL"` neste checkpoint), `OccurredAtUtc`, metadados padrão. Deliberadamente provider-neutro e sem PII/QR/dado de provider. Exchange `guest-operations-events`, routing key `late_checkout_payment_required`, consumida exclusivamente por Payments (`payments.late-checkout-payment-required-trigger`).
+
+| Evento | Exchange | Routing Key | Fila |
+|---|---|---|---|
+| LateCheckoutPaymentRequired | guest-operations-events | late_checkout_payment_required | payments.late-checkout-payment-required-trigger |
+
+41. PixChargeCreated / PixChargeConfirmed (Fase 10, Checkpoint 5, Payments.Contracts)
+
+Estes dois eventos SUPERSEDEM os nomes prospectivos listados em §9 (`PixPaymentReceived`, `PixPaymentConfirmed`) — que existiam apenas como lista de nomes, sem payload, sem contexto de publicação, desde antes da Fase 10. A decisão do CP5: o conceito real é `PixChargeConfirmed`; `PixPaymentReceived`/`PixPaymentConfirmed` (§9) nunca serão materializados como eventos distintos. `PaymentFailed`/`RefundRequested`/`RefundApproved`/`RefundRejected` (§9) permanecem prospectivos, sem mudança — Refunds continua DEFERRED (não reaberto neste checkpoint); `PaymentFailed` como evento publicado não foi criado (mandato item 33: "não criar mensagens adicionais só para aumentar cobertura" — nenhum consumidor real precisa dele; o status `Failed` é lido diretamente do estado persistido de `PixCharge` quando necessário).
+
+`PixChargeCreated` — publicado quando o (fake, este checkpoint) provider aceita a criação da cobrança. Payload: `TenantId`, `AggregateId` (o `PixChargeId`), `AggregateType="PixCharge"`, `LateCheckoutRequestId`, `ReservationId`, metadados padrão. Deliberadamente livre de `QrCodePayload`/`ProviderChargeId`/qualquer payload financeiro (ADR-025/ADR-027) — Communication resolve isso separadamente, de forma síncrona, via `IPixChargeDeliveryReader` (§43). Consumida exclusivamente por Communication (`communication.pixcharge-created-trigger`, gated a `Development`, mesmo padrão de `communication.reservation-created-trigger`).
+
+`PixChargeConfirmed` — publicado quando `PixCharge.Confirm()` aplica uma transição genuína (nunca em uma confirmação duplicada — idempotente). Payload: `TenantId`, `AggregateId` (o `PixChargeId`), `AggregateType="PixCharge"`, `LateCheckoutRequestId`, `ReservationId`, `ConfirmedAtUtc`, metadados padrão. Consumida exclusivamente por Guest Operations (`guestoperations.pixcharge-confirmed-trigger`, incondicional — sem distinção fake/real de provider que justifique gate).
+
+| Evento | Exchange | Routing Key | Fila |
+|---|---|---|---|
+| PixChargeCreated | payments-events | pix_charge_created | communication.pixcharge-created-trigger |
+| PixChargeConfirmed | payments-events | pix_charge_confirmed | guestoperations.pixcharge-confirmed-trigger |
+
+42. PixChargeConfirmationReceived — seam de confirmação provider-neutro (Fase 10, Checkpoint 5)
+
+Não é um Integration Event (não herda `IntegrationEvent` — mirroring `CreateCleaningForReservation`/`CloseReservation`, mensagens cross-context que vivem no `.Contracts` do contexto RECEPTOR). `Payments.Contracts.PixChargeConfirmationReceived` representa o fato provider-neutro "uma cobrança PIX foi confirmada" — o seam que uma futura normalização de webhook em External Integrations produziria, sem qualquer mudança no domínio Payments. Payload: `TenantId`, `PixChargeId`, `ConfirmedAtUtc`, `CorrelationId`, `CausationId?` — sem payload de provider, sem QR, sem PII de pagador. Exchange dedicada `payments-commands` (Direct, mesma razão estrutural de `workflow-orchestration-commands` — destino único, nunca fan-out), routing key `pix_charge_confirmation_received`, fila `payments.confirmation-received`. Único publicador neste checkpoint: o harness de teste E2E, via envio real Wolverine/RabbitMQ — nunca um endpoint HTTP test-only (ver ADR-025 §"Confirmação — o seam provider-neutro" para o registro completo da decisão).
+
+| Mensagem | Exchange | Routing Key | Fila |
+|---|---|---|---|
+| PixChargeConfirmationReceived | payments-commands | pix_charge_confirmation_received | payments.confirmation-received |
+
+43. Consumidores síncronos IPixProvider / IPixChargeDeliveryReader — Exceções Síncronas #10/#11 (Fase 10, Checkpoint 5)
+
+Não são Integration Events nem comandos — registrados aqui por completude do catálogo de comunicação cross-context, mesma convenção de §36/§38. `ExternalIntegrations.Contracts.IPixProvider.CreateChargeAsync` (ADR-025; Architecture Principles §14, Exceção 10) é consumida exclusivamente por Payments, executando a criação de uma cobrança PIX através do (fake, este checkpoint) provider — nunca uma leitura. `Payments.Contracts.IPixChargeDeliveryReader.GetForDeliveryAsync(TenantId, PixChargeId)` (ADR-027; Architecture Principles §14, Exceção 11) é consumida exclusivamente por Communication, retornando `PixChargeDeliveryReadResult(PixChargeId, QrCodePayload, Amount, CurrencyCode, ExpiresAtUtc?)` — nunca o agregado `PixCharge`, nunca `ProviderChargeId`/`IdempotencyKey`. Cobrança inexistente para o tenant informado e cobrança sem `QrCodePayload` ainda persistido colapsam no mesmo resultado `null`.
+
+44. `LateCheckoutRequest.Approve()` — extensão de estado de origem (Fase 10, Checkpoint 5)
+
+Não é um evento — registrado aqui por completude. `GuestOperations.Domain.LateCheckoutRequest.Approve()` (Checkpoint 3) aceitava apenas `Pending` como estado de origem. O Checkpoint 5 estendeu o guard para também aceitar `PendingPayment` — a exata "transição em diante" que o próprio doc comment de `PendingPayment` já registrava desde o Checkpoint 3 como um estado não-terminal reservado a um checkpoint futuro. Nenhuma outra mudança de comportamento — `Approve()` continua terminal, `DecidedAtUtc`/`UpdatedAtUtc` continuam atualizados da mesma forma.

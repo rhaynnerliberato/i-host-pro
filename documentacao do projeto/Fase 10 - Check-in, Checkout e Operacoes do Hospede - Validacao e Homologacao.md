@@ -362,6 +362,76 @@ O container de desenvolvimento `ihostpro-rabbitmq` foi parado e restaurado ao re
 
 **Concluído e homologado.** Gates fechados: Decision Gate read-only prévio (§6.1), ownership/cardinalidade/entidade/RLS confirmados (§6.2–§6.5), Exceção Síncrona #9 registrada em ADR-026 nova e dedicada (§6.6), extensão factual de ADR-019 registrada (§6.7), correção de premissa sobre `PropertyId` confirmada e implementada (§6.8), três processadores de Communication provados por testes unitários e E2E real (§6.9, §6.15), PII provada por testes de arquitetura dedicados (§6.10), fan-out isolado provado por E2E real (§6.11), comportamento no-contact/inativo provado (§6.12), API administrativa e autorização real provadas (§6.13–§6.14), MigrationRunner Run#1/#2 e regressão completa limpos em todas as suítes relevantes, incluindo full `IHostPro.Api.Tests.Integration` 46/46 (§6.17).
 
-## 7. Próximo Checkpoint Recomendado
+## 7. Checkpoint 5 — PIX/Payment Deterministic Foundation
 
-Checkpoint 5 (PIX/Payment Boundary), conforme a estrutura CP0–CP6 já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado aos quatro Checkpoints anteriores. `ADR-025` permanece reservada para este checkpoint. Não iniciado.
+### 7.1 Decision Gate read-only prévio
+
+Realizado antes de qualquer implementação, conforme o mesmo processo dos Checkpoints anteriores: auditoria de fonte de verdade (Documento 07 §9, Documento 10 §14, Documento 13 §9, Documento 19 §13), confirmação de que `LateCheckoutRequest.PendingPayment` era um estado puro sem coluna financeira, pesquisa oficial de providers PIX (Asaas/Pagar.me/OpenPix — nenhum escolhido), e um relatório de 49 itens classificando cada decisão pendente (SAFE TO APPROVE / USER DECISION REQUIRED / DEFERRED / EXTERNAL BLOCKER / NOT MVP). Duas decisões adicionais foram resolvidas via `AskUserQuestion` já durante a implementação (persistência do QR — coluna comum, não criptografada; e o mecanismo de disparo da confirmação E2E — mensagem provider-neutra real via Wolverine/RabbitMQ, nunca endpoint HTTP test-only).
+
+### 7.2 Novo Bounded Context: Payments
+
+Criado como Supporting Bounded Context, seguindo o padrão dos demais: `IHostPro.Contexts.Payments.Contracts`/`.Domain`/`.Application`/`.Infrastructure`. **Sem projeto `.Api`** — nenhum endpoint público foi criado (mandato explícito: "zero Payments public API neste CP5 foundation").
+
+### 7.3 Ownership
+
+Guest Operations continua dona de `LateCheckoutRequest` e da decisão final de aprovação/negação — nunca do ciclo de vida financeiro. Payments é dona exclusiva de `PixCharge`. External Integrations é dona de `IPixProvider`/ACL do provider real futuro. Communication é dona da entrega do QR ao hóspede.
+
+### 7.4 Boundary assíncrono Guest Operations ↔ Payments
+
+Decisão confirmada: **sem chamada síncrona**. `LateCheckoutRequest` em `PendingPayment` publica `LateCheckoutPaymentRequired` (`GuestOperations.Contracts`); Payments consome e cria `PixCharge`. Payments confirma via `PixChargeConfirmed` (`Payments.Contracts`); Guest Operations consome e chama `LateCheckoutRequest.Approve()` — reaproveitando integralmente o fluxo já homologado no Checkpoint 3. `Approve()` foi estendido para aceitar `PendingPayment` como estado de origem (além de `Pending`), exatamente a "transição em diante" que o próprio doc comment de `PendingPayment` já antecipava desde o Checkpoint 3.
+
+### 7.5 `PixCharge`
+
+Campos: `Id`, `TenantId`, `LateCheckoutRequestId`, `ReservationId`, `Amount`, `CurrencyCode`, `Status`, `ProviderChargeId?`, `QrCodePayload?`, `IdempotencyKey` (gerada internamente), `ExpiresAtUtc?`, `ConfirmedAtUtc?`, `FailedAtUtc?`, `CreatedAtUtc`, `UpdatedAtUtc`. `Amount`/`CurrencyCode` são snapshot único de `LateCheckoutPaymentRequired` — nunca recalculados. `CurrencyCode` é **BRL-only** (`Create` rejeita qualquer outro valor). `Percentage` continua oficialmente não suportado (decisão do Checkpoint 3, não reaberta).
+
+`QrCodePayload` é persistido em coluna comum (decisão explícita deste checkpoint, via `AskUserQuestion`) — protegido por RLS/tenant isolation como qualquer outra coluna tenant-owned, nunca por criptografia de coluna (nenhum padrão desse tipo existe nesta base hoje). Classificado como dado operacional de pagamento sensível, nunca um segredo (nunca roteado por `*SecretReference`). Nunca aparece em log, Integration Event, query string, ou mensagem de exceção. Revisão de proteção em repouso registrada como follow-up de Production hardening, não como bloqueador deste checkpoint.
+
+### 7.6 `PixChargeStatus` e matriz de transição
+
+`Pending, Confirmed, Failed, Expired, Cancelled` — sem `Created` separado. `Confirm()` aplica a matriz aprovada: `Pending/Failed/Expired → Confirmed` (avanço, inclusive fora de ordem — dinheiro confirmado tem precedência); `Confirmed → Confirmed` (no-op idempotente); `Confirmed → Failed`/`Expired` (regressão, no-op); `Cancelled → Confirmed` **não decidida** — lança `PixChargeCancelledConfirmationConflictException` em vez de decidir silenciosamente (nada neste checkpoint jamais define `Cancelled`, então este ramo é inalcançável hoje, provado por teste unitário via reflection). `Fail()` aplicado quando o provider rejeita/falha tecnicamente na criação. `PaymentFailed`/`Expired` nunca denegam nem cancelam o `LateCheckoutRequest` — permanece `PendingPayment`, sem `LateCheckoutDenied`; uma nova tentativa é uma operação futura explícita, fora de escopo.
+
+### 7.7 Idempotência e cardinalidade
+
+No máximo uma `PixCharge` ATIVA (`Pending`) por `(TenantId, LateCheckoutRequestId)` — índice único parcial, provado por teste de integração real (Postgres) rejeitando uma segunda `Pending` e permitindo uma nova após `Failed`. O handler de `LateCheckoutPaymentRequired` verifica essa mesma condição antes de criar.
+
+### 7.8 Exceção Síncrona #10 — ADR-025
+
+Payments → External Integrations, `IPixProvider` (`ExternalIntegrations.Contracts`), execução síncrona de criação de cobrança — mesma natureza da Exceção 6 (ADR-021). `FakePixProvider` é a única implementação: sempre aceita, determinística, sem rede, sem dinheiro real, registrada incondicionalmente (nenhum provider real existe para conflitar). Escolha de provider real permanece `DEFERRED`.
+
+### 7.9 Exceção Síncrona #11 — ADR-027
+
+Communication → Payments, `IPixChargeDeliveryReader` (`Payments.Contracts`), leitura síncrona purpose-limited do payload de entrega — nunca regenera via novo `IPixProvider.CreateChargeAsync`, sempre lê o `QrCodePayload` já persistido. `PixChargeCreated` nunca carrega o payload financeiro — apenas `TenantId`/`LateCheckoutRequestId`/`ReservationId`/identidade da charge.
+
+### 7.10 Seam de confirmação provider-neutro
+
+`PixChargeConfirmationReceived` (`Payments.Contracts`, mensagem cross-context, não um `IntegrationEvent` — mirroring `CreateCleaningForReservation`/`CloseReservation`) representa o fato "uma cobrança foi confirmada", código de produção legítimo, o seam que uma futura normalização de webhook em External Integrations produziria sem mudança de domínio. Único publicador hoje: o harness de teste E2E, via envio real Wolverine/RabbitMQ (exchange `payments-commands`, Direct, routing key `pix_charge_confirmation_received`) — nunca endpoint HTTP test-only, nunca lógica de teste embutida no domínio (decisão confirmada via `AskUserQuestion`).
+
+### 7.11 Entrega segura ao hóspede
+
+`PixChargeCreatedDeliveryProcessor` (Communication) consome `PixChargeCreated`, resolve `IReservationGuestContactReader` (ADR-019, telefone do HÓSPEDE, nunca da Portaria) e `IPixChargeDeliveryReader` (ADR-027, QR), renderiza e envia via `IOutboundMessageConnector` (`FakeWhatsAppConnector`, mesmo padrão de todo consumidor de Communication deste projeto). O QR é renderizado no CONTEÚDO da mensagem — seu destino final legítimo, nunca um vazamento.
+
+### 7.12 Provas E2E reais
+
+Três cenários, todos contra Postgres real, RabbitMQ real, `IHostPro.Worker.dll` real (subprocess não modificado) e HTTP real de `IHostPro.Api` com JWT real (`PixPaymentWorkflowRoundTripTests`):
+
+1. Late Checkout com PIX exigido → `LateCheckoutPaymentRequired` real → `PixCharge` criada com `ProviderChargeId`/`QrCodePayload` persistidos → `PixChargeCreated` real → Communication entrega ao HÓSPEDE (nunca à Portaria), `Message.RenderedContent` contém o QR persistido.
+2. `PixChargeConfirmationReceived` real → `PixCharge` Confirmed → `PixChargeConfirmed` real → Guest Operations aprova → `LateCheckoutApproved` → Workflow reagenda a Reservation real, Housekeeping registra exatamente 1 audit entry, Communication notifica a Portaria (fan-out completo disparado pelo caminho PIX, nunca testado antes por este caminho específico).
+3. Confirmação duplicada (mesma `PixChargeId`, publicada duas vezes) → exatamente um reagendamento, exatamente um audit entry, zero efeito duplicado.
+
+### 7.13 Escopo explicitamente NÃO implementado neste Checkpoint
+
+Provider PIX real (Asaas/Pagar.me/OpenPix — nenhum escolhido, `ProductionProviderSelected=false`); webhook real (nenhum verificador de assinatura, nenhuma tabela de roteamento por tenant, nenhum DTO de provider); retry/nova tentativa de cobrança (nenhum endpoint criado); CPF/CNPJ/dado de pagador; `Percentage` (decisão do Checkpoint 3, não reaberta); Refunds; criptografia de coluna para o QR (registrada como follow-up); qualquer API pública de Payments; qualquer nova permission; UI nova.
+
+### 7.14 MigrationRunner (Run #1/#2) e regressão completa
+
+MigrationRunner executado duas vezes contra um ambiente Postgres+RabbitMQ descartável (containers manuais, nunca o banco de desenvolvimento compartilhado): Run#1 aplicou `20260828000204_InitialCreate` (schema `payments`) com exit code 0 e provisionou as exchanges `payments-events`/`payments-commands` com todos os bindings; Run#2 (exit code 0, nenhuma exceção) confirmou idempotência. Regressão completa: ArchitectureTests 256/256; Payments.Tests.Unit 25/25; Payments.Tests.Integration 11/11 (Postgres real, RLS/cardinalidade/reader provados); Communication.Tests.Unit 87/87; GuestOperations.Tests.Unit 64/64; full `IHostPro.Api.Tests.Integration` — **todas as suítes verdes após correção de uma lacuna sistêmica pré-existente** (25 fixtures de E2E não tinham `ConnectionStrings__Payments`, exigido incondicionalmente por `IHostPro.MigrationRunner`/`IHostPro.Worker` desde que `PaymentsDbContext` foi registrado; corrigido em todos os arquivos afetados, incluindo uma lacuna independente e pré-existente em `PolicyUpdatedWolverineDiscoveryTests` que já omitia `ConnectionStrings__GuestOperations`/`ExternalIntegrations` antes deste checkpoint). `dotnet build IHostPro.sln -c Debug`: 0 erros.
+
+O container de desenvolvimento `ihostpro-rabbitmq` foi parado e restaurado ao redor de cada execução de E2E de porta fixa (5672) — nunca `ihostpro-postgres`/`ihostpro-redis`.
+
+### 7.15 Status do Checkpoint 5
+
+**Concluído e homologado.** Gates fechados: Decision Gate read-only prévio (§7.1), novo Bounded Context Payments sem API pública (§7.2), ownership e boundary assíncrono confirmados (§7.3–§7.4), `PixCharge`/`PixChargeStatus` com matriz de transição completa e idempotência provados por teste unitário e de integração real (§7.5–§7.7), Exceções Síncronas #10/#11 registradas em ADR-025/ADR-027 novas e dedicadas (§7.8–§7.9), seam de confirmação provider-neutro e entrega segura ao hóspede provados por teste unitário e E2E real (§7.10–§7.12), MigrationRunner Run#1/#2 e regressão completa limpos em todas as suítes relevantes, incluindo full `IHostPro.Api.Tests.Integration` (§7.14). `RealMoneyTransactions=0`. `ExternalPixNetworkCalls=0`. `ProductionProviderSelected=false`.
+
+## 8. Próximo Checkpoint Recomendado
+
+Checkpoint 6, conforme a estrutura CP0–CP6 já adotada — escopo a refinar e aprovar antes do início, seguindo o mesmo processo já aplicado aos cinco Checkpoints anteriores. Não iniciado.
