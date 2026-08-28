@@ -39,6 +39,7 @@ public sealed class PixCharge : AggregateRoot<Guid>, ITenantOwned
     public DateTimeOffset? ExpiresAtUtc { get; private set; }
     public DateTimeOffset? ConfirmedAtUtc { get; private set; }
     public DateTimeOffset? FailedAtUtc { get; private set; }
+    public DateTimeOffset? ExpiredAtUtc { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
 
@@ -122,6 +123,26 @@ public sealed class PixCharge : AggregateRoot<Guid>, ITenantOwned
 
         Status = PixChargeStatus.Failed;
         FailedAtUtc = now;
+        UpdatedAtUtc = now;
+    }
+
+    /// <summary>
+    /// <see cref="PixChargeStatus.Pending"/> → <see cref="PixChargeStatus.Expired"/>
+    /// (Fase 10, Checkpoint 5.1 — Payment Failure/Expiration Evidence
+    /// Corrective Gate, mandate item 6). Mirrors <see cref="Fail"/>'s own
+    /// idempotent-no-op guard exactly: a real confirmation or an
+    /// already-settled terminal state (including an already-<see cref="PixChargeStatus.Failed"/>
+    /// charge — no approved transition between the two negative terminal
+    /// states exists this checkpoint) always takes precedence over a late or
+    /// out-of-order expiration signal.
+    /// </summary>
+    public void Expire(DateTimeOffset now)
+    {
+        if (Status is PixChargeStatus.Confirmed or PixChargeStatus.Failed or PixChargeStatus.Expired)
+            return;
+
+        Status = PixChargeStatus.Expired;
+        ExpiredAtUtc = now;
         UpdatedAtUtc = now;
     }
 

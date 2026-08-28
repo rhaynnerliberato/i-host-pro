@@ -50,6 +50,7 @@ public sealed class PixChargeConfiguration : IEntityTypeConfiguration<PixCharge>
         builder.Property(c => c.ExpiresAtUtc).HasColumnName("expires_at_utc");
         builder.Property(c => c.ConfirmedAtUtc).HasColumnName("confirmed_at_utc");
         builder.Property(c => c.FailedAtUtc).HasColumnName("failed_at_utc");
+        builder.Property(c => c.ExpiredAtUtc).HasColumnName("expired_at_utc");
 
         builder.Property(c => c.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
         builder.Property(c => c.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
