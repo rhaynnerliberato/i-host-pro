@@ -33,11 +33,13 @@ namespace IHostPro.Api.Tests.Integration;
 
 /// <summary>
 /// Real end-to-end proof of Fase 10, Checkpoint 5 (PIX/Payment
-/// Deterministic Foundation) — mandate items 53-56: the mandatory
-/// acceptance gate, no unit/integration test in isolation is accepted as
-/// sufficient. Every scenario runs against a real Postgres instance, a real
-/// RabbitMQ broker, a real unmodified <c>IHostPro.Worker.dll</c> subprocess,
-/// and the real HTTP surface of <c>IHostPro.Api</c> — mirrors
+/// Deterministic Foundation) — mandate items 53-56 — extended by Checkpoint
+/// 5.1 (Payment Failure/Expiration Evidence Corrective Gate) mandate items
+/// 9/10/12: the mandatory acceptance gate, no unit/integration test in
+/// isolation is accepted as sufficient. Every scenario runs against a real
+/// Postgres instance, a real RabbitMQ broker, a real unmodified
+/// <c>IHostPro.Worker.dll</c> subprocess, and the real HTTP surface of
+/// <c>IHostPro.Api</c> — mirrors
 /// <c>FrontDeskNotificationWorkflowRoundTripTests</c>'/
 /// <c>EarlyCheckInLateCheckoutWorkflowRoundTripTests</c>' own infrastructure
 /// exactly (own copy of the Fixture, established precedent in this project).
@@ -45,11 +47,13 @@ namespace IHostPro.Api.Tests.Integration;
 /// This checkpoint has no real PIX provider and no real webhook — Payments'
 /// own <c>FakePixProvider</c> (ExternalIntegrations.Infrastructure) is the
 /// ONLY provider active, deterministic, zero network calls, zero real
-/// money. Confirmation is simulated via a real Wolverine/RabbitMQ send of
-/// <see cref="PixChargeConfirmationReceived"/> — the provider-neutral seam a
-/// future ExternalIntegrations webhook-normalization step would produce —
-/// never a test-only HTTP endpoint (approved decision, see this
-/// checkpoint's own Decision Gate record).
+/// money. Confirmation/Failure/Expiration are all simulated via a real
+/// Wolverine/RabbitMQ send of <see cref="PixChargeConfirmationReceived"/>/
+/// <see cref="PixChargeFailureReceived"/>/<see cref="PixChargeExpirationReceived"/>
+/// — the same provider-neutral seam a future ExternalIntegrations
+/// webhook-normalization step would produce — never a test-only HTTP
+/// endpoint (approved decision, see this checkpoint's own Decision Gate
+/// record).
 /// </summary>
 public sealed class PixPaymentWorkflowRoundTripTests : IClassFixture<PixPaymentWorkflowRoundTripTests.Fixture>
 {
@@ -125,6 +129,8 @@ public sealed class PixPaymentWorkflowRoundTripTests : IClassFixture<PixPaymentW
                 "communication.late-checkout-approved-trigger",
                 "payments.late-checkout-payment-required-trigger",
                 "payments.confirmation-received",
+                "payments.failure-received",
+                "payments.expiration-received",
                 "guestoperations.pixcharge-confirmed-trigger",
                 "communication.pixcharge-created-trigger",
             })
@@ -324,14 +330,34 @@ public sealed class PixPaymentWorkflowRoundTripTests : IClassFixture<PixPaymentW
         /// SAME exchange/routing key <c>IHostPro.MigrationRunner</c> already
         /// bound Payments' own queue to.
         /// </summary>
-        public async Task PublishPixChargeConfirmationReceivedAsync(PixChargeConfirmationReceived message)
+        public Task PublishPixChargeConfirmationReceivedAsync(PixChargeConfirmationReceived message) =>
+            PublishToPaymentsCommandsExchangeAsync(message, "pix_charge_confirmation_received");
+
+        /// <summary>
+        /// Publishes <see cref="PixChargeFailureReceived"/> onto the real
+        /// RabbitMQ broker via a throwaway, send-only Wolverine host (Fase
+        /// 10, Checkpoint 5.1 — Payment Failure/Expiration Evidence
+        /// Corrective Gate). Mirrors <see cref="PublishPixChargeConfirmationReceivedAsync"/>
+        /// exactly — same seam, same "E2E test harness is the only
+        /// publisher today" reasoning, same exchange
+        /// (<c>payments-commands</c>), a different routing key.
+        /// </summary>
+        public Task PublishPixChargeFailureReceivedAsync(PixChargeFailureReceived message) =>
+            PublishToPaymentsCommandsExchangeAsync(message, "pix_charge_failure_received");
+
+        /// <summary>Same as <see cref="PublishPixChargeFailureReceivedAsync"/>, for <see cref="PixChargeExpirationReceived"/>.</summary>
+        public Task PublishPixChargeExpirationReceivedAsync(PixChargeExpirationReceived message) =>
+            PublishToPaymentsCommandsExchangeAsync(message, "pix_charge_expiration_received");
+
+        private async Task PublishToPaymentsCommandsExchangeAsync<TMessage>(TMessage message, string routingKey)
+            where TMessage : class
         {
             var senderBuilder = Host.CreateApplicationBuilder();
             senderBuilder.UseWolverine(opts =>
             {
                 opts.UseIHostProRabbitMq(senderBuilder.Configuration, listen: false);
-                opts.PublishMessage(typeof(PixChargeConfirmationReceived))
-                    .ToRabbitRoutingKey("payments-commands", "pix_charge_confirmation_received", exchange => exchange.ExchangeType = ExchangeType.Direct);
+                opts.PublishMessage(typeof(TMessage))
+                    .ToRabbitRoutingKey("payments-commands", routingKey, exchange => exchange.ExchangeType = ExchangeType.Direct);
             });
             senderBuilder.Configuration["RabbitMq:Host"] = _rabbitMqContainer.Hostname;
             senderBuilder.Configuration["RabbitMq:VirtualHost"] = "/";
@@ -579,6 +605,241 @@ public sealed class PixPaymentWorkflowRoundTripTests : IClassFixture<PixPaymentW
 
         (await GetReservationCheckOutAtAsync(tenantId, reservationId)).Should().BeCloseTo(requestedCheckOutAt, TimeSpan.FromSeconds(1),
             "the Reservation must be rescheduled exactly once, never twice");
+    }
+
+    // ==================================================================
+    // 4. FAILURE — provider-neutral inbound seam (Fase 10, Checkpoint 5.1)
+    // ==================================================================
+
+    [Fact]
+    public async Task PixChargeFailureReceived_marks_the_charge_Failed_and_leaves_the_LateCheckoutRequest_at_PendingPayment_with_zero_downstream_effects()
+    {
+        var tenantId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var checkInAt = now.AddDays(5);
+        var checkOutAt = now.AddDays(8);
+        const string frontDeskPhone = "+5511977776666";
+
+        var condominiumId = await SeedCondominiumAsync(tenantId, now);
+        var propertyId = await SeedActivePropertyAsync(tenantId, now, condominiumId);
+        await SeedFrontDeskContactAsync(tenantId, condominiumId, "Portaria Bloco A", frontDeskPhone);
+        await SeedTemplateAsync(tenantId, "FRONT_DESK_LATE_CHECKOUT_APPROVED", "Checkout tardio de {{GuestName}} ate {{ApprovedCheckOutAt}}");
+
+        var reservationId = await SeedConfirmedReservationAsync(tenantId, propertyId, checkInAt, checkOutAt, "+5511999998888");
+        await WaitForGuestStayOperationStatusAsync(tenantId, reservationId, "Active");
+        await CheckInGuestAsync(tenantId, reservationId);
+        await WaitForGuestStayOperationStatusAsync(tenantId, reservationId, "CheckedIn");
+
+        var cleaningExists = await WaitUntilAsync(
+            () => GetCleaningIdAsync(tenantId, reservationId), id => id is not null, TimeSpan.FromSeconds(30));
+        cleaningExists.Should().BeTrue();
+        var cleaningId = (await GetCleaningIdAsync(tenantId, reservationId))!.Value;
+
+        await SeedLateCheckoutPolicyAsync(tenantId,
+            """{"allowed":true,"latestTime":null,"chargeType":"fixedAmount","chargeValue":50.00,"requiresPix":true,"blocksCalendar":false,"updatesCleaning":true}""");
+
+        var requestedCheckOutAt = checkOutAt.AddHours(3);
+        var token = await GenerateAdminTokenAsync(tenantId);
+
+        var response = await PostJsonAsync(
+            $"/api/v1/guest-operations/reservations/{reservationId}/late-checkout", token, new { requestedCheckOutAt });
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await SafeReadBodyAsync(response));
+        var lateCheckoutRequestId = (await response.Content.ReadFromJsonAsync<LateCheckoutResponseShape>())!.Id;
+
+        var chargeCreated = await WaitUntilAsync(
+            () => GetPixChargeAsync(tenantId, lateCheckoutRequestId), c => c is not null, TimeSpan.FromSeconds(30));
+        chargeCreated.Should().BeTrue("PixCharge must be created before it can fail. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+        var pixChargeId = (await GetPixChargeAsync(tenantId, lateCheckoutRequestId))!.Value.Id;
+
+        await _fixture.PublishPixChargeFailureReceivedAsync(new PixChargeFailureReceived
+        {
+            TenantId = tenantId,
+            PixChargeId = pixChargeId,
+            FailureCode = "pix_timeout",
+            OccurredAtUtc = DateTimeOffset.UtcNow,
+            CorrelationId = Guid.NewGuid(),
+        });
+
+        var failed = await WaitUntilAsync(
+            () => GetPixChargeStatusAsync(tenantId, pixChargeId), status => status == "Failed", TimeSpan.FromSeconds(30));
+        failed.Should().BeTrue("PixCharge must reach Failed within 30s. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+
+        // Settle window so a wrongly-fired downstream effect has time to land before asserting its absence.
+        await Task.Delay(TimeSpan.FromSeconds(5));
+
+        (await GetLateCheckoutRequestStatusAsync(tenantId, lateCheckoutRequestId)).Should().Be("PendingPayment",
+            "a Failed PixCharge must never approve or deny the LateCheckoutRequest (mandate item 6)");
+
+        (await GetReservationCheckOutAtAsync(tenantId, reservationId)).Should().BeCloseTo(checkOutAt, TimeSpan.FromSeconds(1),
+            "a Failed PixCharge must never reschedule the real Reservation");
+
+        (await CountCleaningAuditEntriesAsync(tenantId, cleaningId, "late_checkout_approved")).Should().Be(0,
+            "Housekeeping must never react to a Failed PixCharge");
+
+        (await GetMessageAsync(tenantId, reservationId, "FRONT_DESK_LATE_CHECKOUT_APPROVED")).Should().BeNull(
+            "Communication's Front Desk approval processor must never react to a Failed PixCharge");
+    }
+
+    // ==================================================================
+    // 5. EXPIRATION — provider-neutral inbound seam (Fase 10, Checkpoint 5.1)
+    // ==================================================================
+
+    [Fact]
+    public async Task PixChargeExpirationReceived_marks_the_charge_Expired_and_leaves_the_LateCheckoutRequest_at_PendingPayment_with_zero_downstream_effects()
+    {
+        var tenantId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var checkInAt = now.AddDays(5);
+        var checkOutAt = now.AddDays(8);
+        const string frontDeskPhone = "+5511977776666";
+
+        var condominiumId = await SeedCondominiumAsync(tenantId, now);
+        var propertyId = await SeedActivePropertyAsync(tenantId, now, condominiumId);
+        await SeedFrontDeskContactAsync(tenantId, condominiumId, "Portaria Bloco A", frontDeskPhone);
+        await SeedTemplateAsync(tenantId, "FRONT_DESK_LATE_CHECKOUT_APPROVED", "Checkout tardio de {{GuestName}} ate {{ApprovedCheckOutAt}}");
+
+        var reservationId = await SeedConfirmedReservationAsync(tenantId, propertyId, checkInAt, checkOutAt, "+5511999998888");
+        await WaitForGuestStayOperationStatusAsync(tenantId, reservationId, "Active");
+        await CheckInGuestAsync(tenantId, reservationId);
+        await WaitForGuestStayOperationStatusAsync(tenantId, reservationId, "CheckedIn");
+
+        var cleaningExists = await WaitUntilAsync(
+            () => GetCleaningIdAsync(tenantId, reservationId), id => id is not null, TimeSpan.FromSeconds(30));
+        cleaningExists.Should().BeTrue();
+        var cleaningId = (await GetCleaningIdAsync(tenantId, reservationId))!.Value;
+
+        await SeedLateCheckoutPolicyAsync(tenantId,
+            """{"allowed":true,"latestTime":null,"chargeType":"fixedAmount","chargeValue":50.00,"requiresPix":true,"blocksCalendar":false,"updatesCleaning":true}""");
+
+        var requestedCheckOutAt = checkOutAt.AddHours(3);
+        var token = await GenerateAdminTokenAsync(tenantId);
+
+        var response = await PostJsonAsync(
+            $"/api/v1/guest-operations/reservations/{reservationId}/late-checkout", token, new { requestedCheckOutAt });
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await SafeReadBodyAsync(response));
+        var lateCheckoutRequestId = (await response.Content.ReadFromJsonAsync<LateCheckoutResponseShape>())!.Id;
+
+        var chargeCreated = await WaitUntilAsync(
+            () => GetPixChargeAsync(tenantId, lateCheckoutRequestId), c => c is not null, TimeSpan.FromSeconds(30));
+        chargeCreated.Should().BeTrue("PixCharge must be created before it can expire. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+        var pixChargeId = (await GetPixChargeAsync(tenantId, lateCheckoutRequestId))!.Value.Id;
+
+        await _fixture.PublishPixChargeExpirationReceivedAsync(new PixChargeExpirationReceived
+        {
+            TenantId = tenantId,
+            PixChargeId = pixChargeId,
+            ExpiredAtUtc = DateTimeOffset.UtcNow,
+            CorrelationId = Guid.NewGuid(),
+        });
+
+        var expired = await WaitUntilAsync(
+            () => GetPixChargeStatusAsync(tenantId, pixChargeId), status => status == "Expired", TimeSpan.FromSeconds(30));
+        expired.Should().BeTrue("PixCharge must reach Expired within 30s. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+
+        // Settle window so a wrongly-fired downstream effect has time to land before asserting its absence.
+        await Task.Delay(TimeSpan.FromSeconds(5));
+
+        (await GetLateCheckoutRequestStatusAsync(tenantId, lateCheckoutRequestId)).Should().Be("PendingPayment",
+            "an Expired PixCharge must never approve or deny the LateCheckoutRequest (mandate item 6)");
+
+        (await GetReservationCheckOutAtAsync(tenantId, reservationId)).Should().BeCloseTo(checkOutAt, TimeSpan.FromSeconds(1),
+            "an Expired PixCharge must never reschedule the real Reservation");
+
+        (await CountCleaningAuditEntriesAsync(tenantId, cleaningId, "late_checkout_approved")).Should().Be(0,
+            "Housekeeping must never react to an Expired PixCharge");
+
+        (await GetMessageAsync(tenantId, reservationId, "FRONT_DESK_LATE_CHECKOUT_APPROVED")).Should().BeNull(
+            "Communication's Front Desk approval processor must never react to an Expired PixCharge");
+    }
+
+    // ==================================================================
+    // 6. OUT-OF-ORDER — Failed -> Confirmed still completes the full approval chain (mandate item 12)
+    // ==================================================================
+
+    [Fact]
+    public async Task PixChargeFailureReceived_followed_by_PixChargeConfirmationReceived_still_confirms_the_charge_and_completes_the_full_approval_chain()
+    {
+        var tenantId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var checkInAt = now.AddDays(5);
+        var checkOutAt = now.AddDays(8);
+        const string frontDeskPhone = "+5511977776666";
+
+        var condominiumId = await SeedCondominiumAsync(tenantId, now);
+        var propertyId = await SeedActivePropertyAsync(tenantId, now, condominiumId);
+        await SeedFrontDeskContactAsync(tenantId, condominiumId, "Portaria Bloco A", frontDeskPhone);
+        await SeedTemplateAsync(tenantId, "FRONT_DESK_LATE_CHECKOUT_APPROVED", "Checkout tardio de {{GuestName}} ate {{ApprovedCheckOutAt}}");
+
+        var reservationId = await SeedConfirmedReservationAsync(tenantId, propertyId, checkInAt, checkOutAt, "+5511999998888");
+        await WaitForGuestStayOperationStatusAsync(tenantId, reservationId, "Active");
+        await CheckInGuestAsync(tenantId, reservationId);
+        await WaitForGuestStayOperationStatusAsync(tenantId, reservationId, "CheckedIn");
+
+        var cleaningExists = await WaitUntilAsync(
+            () => GetCleaningIdAsync(tenantId, reservationId), id => id is not null, TimeSpan.FromSeconds(30));
+        cleaningExists.Should().BeTrue();
+        var cleaningId = (await GetCleaningIdAsync(tenantId, reservationId))!.Value;
+
+        await SeedLateCheckoutPolicyAsync(tenantId,
+            """{"allowed":true,"latestTime":null,"chargeType":"fixedAmount","chargeValue":50.00,"requiresPix":true,"blocksCalendar":false,"updatesCleaning":true}""");
+
+        var requestedCheckOutAt = checkOutAt.AddHours(3);
+        var token = await GenerateAdminTokenAsync(tenantId);
+
+        var response = await PostJsonAsync(
+            $"/api/v1/guest-operations/reservations/{reservationId}/late-checkout", token, new { requestedCheckOutAt });
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await SafeReadBodyAsync(response));
+        var lateCheckoutRequestId = (await response.Content.ReadFromJsonAsync<LateCheckoutResponseShape>())!.Id;
+
+        var chargeCreated = await WaitUntilAsync(
+            () => GetPixChargeAsync(tenantId, lateCheckoutRequestId), c => c is not null, TimeSpan.FromSeconds(30));
+        chargeCreated.Should().BeTrue("PixCharge must be created before it can fail or confirm. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+        var pixChargeId = (await GetPixChargeAsync(tenantId, lateCheckoutRequestId))!.Value.Id;
+
+        // ---- Out-of-order: the negative signal arrives FIRST ----
+        await _fixture.PublishPixChargeFailureReceivedAsync(new PixChargeFailureReceived
+        {
+            TenantId = tenantId,
+            PixChargeId = pixChargeId,
+            FailureCode = "pix_timeout",
+            OccurredAtUtc = DateTimeOffset.UtcNow,
+            CorrelationId = Guid.NewGuid(),
+        });
+
+        var failed = await WaitUntilAsync(
+            () => GetPixChargeStatusAsync(tenantId, pixChargeId), status => status == "Failed", TimeSpan.FromSeconds(30));
+        failed.Should().BeTrue("PixCharge must reach Failed within 30s before the out-of-order confirmation arrives. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+
+        // ---- The real confirmation arrives LATER — it must still win (Failed -> Confirmed is an approved forward transition) ----
+        await _fixture.PublishPixChargeConfirmationReceivedAsync(new PixChargeConfirmationReceived
+        {
+            TenantId = tenantId,
+            PixChargeId = pixChargeId,
+            ConfirmedAtUtc = DateTimeOffset.UtcNow,
+            CorrelationId = Guid.NewGuid(),
+        });
+
+        var confirmed = await WaitUntilAsync(
+            () => GetPixChargeStatusAsync(tenantId, pixChargeId), status => status == "Confirmed", TimeSpan.FromSeconds(30));
+        confirmed.Should().BeTrue("a real confirmation must still win over an earlier out-of-order Failed signal. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+
+        var approved = await WaitUntilAsync(
+            () => GetLateCheckoutRequestStatusAsync(tenantId, lateCheckoutRequestId), status => status == "Approved", TimeSpan.FromSeconds(30));
+        approved.Should().BeTrue("PixChargeConfirmed must still approve the LateCheckoutRequest after an out-of-order Failed signal. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+
+        var rescheduled = await WaitUntilAsync(
+            () => GetReservationCheckOutAtAsync(tenantId, reservationId),
+            value => Math.Abs((value - requestedCheckOutAt).TotalSeconds) < 1,
+            TimeSpan.FromSeconds(30));
+        rescheduled.Should().BeTrue("Workflow must still reschedule the real Reservation after an out-of-order Failed signal. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+
+        var auditRecorded = await WaitUntilAsync(
+            () => CountCleaningAuditEntriesAsync(tenantId, cleaningId, "late_checkout_approved"), count => count > 0, TimeSpan.FromSeconds(30));
+        auditRecorded.Should().BeTrue("Housekeeping must still react to the eventual approval. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+
+        var messageCreated = await WaitUntilAsync(
+            () => GetMessageAsync(tenantId, reservationId, "FRONT_DESK_LATE_CHECKOUT_APPROVED"), m => m is not null, TimeSpan.FromSeconds(30));
+        messageCreated.Should().BeTrue("Communication's Front Desk processor must still react. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
     }
 
     // ---- Helpers ----------------------------------------------------------
