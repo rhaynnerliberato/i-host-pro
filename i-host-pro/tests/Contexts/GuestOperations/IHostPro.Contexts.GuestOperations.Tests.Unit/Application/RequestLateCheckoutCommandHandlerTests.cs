@@ -281,8 +281,14 @@ public class RequestLateCheckoutCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_settles_at_PendingPayment_and_publishes_nothing_when_the_policy_requires_pix()
+    public async Task Handle_settles_at_PendingPayment_and_publishes_LateCheckoutPaymentRequired_when_the_policy_requires_pix()
     {
+        // Fase 10, Checkpoint 5 (PIX/Payment Deterministic Foundation):
+        // PendingPayment is still not a final decision — Reservation's
+        // schedule must never change for it — but it now publishes
+        // LateCheckoutPaymentRequired so Payments can create a PixCharge
+        // (approved async boundary; superseding CP3's own "publishes
+        // nothing" behavior).
         var operation = CreateCheckedInOperation();
         var ctx = new Context
         {
@@ -300,9 +306,15 @@ public class RequestLateCheckoutCommandHandlerTests
         result.Value.RequiresPix.Should().BeTrue();
         result.Value.ChargeValue.Should().Be(50m);
         ctx.RequestRepository.AddedRequests.Should().ContainSingle();
-        ctx.RequestRepository.AddedRequests[0].Status.Should().Be(LateCheckoutRequestStatus.PendingPayment);
-        ctx.EventCollector.EnqueuedEvents.Should().BeEmpty(
-            "PendingPayment is not a final decision — Reservation's schedule must never change for it, and no event fires until Fase 10, Checkpoint 5");
+        var request = ctx.RequestRepository.AddedRequests[0];
+        request.Status.Should().Be(LateCheckoutRequestStatus.PendingPayment);
+
+        ctx.EventCollector.EnqueuedEvents.Should().ContainSingle().Which.Should().BeOfType<LateCheckoutPaymentRequired>();
+        var published = (LateCheckoutPaymentRequired)ctx.EventCollector.EnqueuedEvents[0];
+        published.LateCheckoutRequestId.Should().Be(request.Id);
+        published.ReservationId.Should().Be(ReservationId);
+        published.Amount.Should().Be(50m);
+        published.CurrencyCode.Should().Be("BRL");
     }
 
     [Fact]

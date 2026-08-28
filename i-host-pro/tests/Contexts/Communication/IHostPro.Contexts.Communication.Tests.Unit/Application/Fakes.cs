@@ -1,6 +1,7 @@
 using IHostPro.Contexts.Communication.Application;
 using IHostPro.Contexts.Communication.Domain;
 using IHostPro.Contexts.Configuration.Contracts;
+using IHostPro.Contexts.Payments.Contracts;
 using IHostPro.Contexts.PropertyManagement.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
 
@@ -41,6 +42,19 @@ internal sealed class FakeReservationGuestContactReader : IReservationGuestConta
 
     public Task<ReservationGuestContact?> GetGuestContactAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken) =>
         Task.FromResult(_contact);
+}
+
+/// <summary>Fase 10, Checkpoint 5 (PIX/Payment Deterministic Foundation) — ADR-027's fake, mirrors <see cref="FakeFrontDeskContactReader"/> exactly.</summary>
+internal sealed class FakePixChargeDeliveryReader : IPixChargeDeliveryReader
+{
+    private readonly PixChargeDeliveryReadResult? _result;
+
+    private FakePixChargeDeliveryReader(PixChargeDeliveryReadResult? result) => _result = result;
+
+    public static FakePixChargeDeliveryReader Returning(PixChargeDeliveryReadResult? result) => new(result);
+
+    public Task<PixChargeDeliveryReadResult?> GetForDeliveryAsync(Guid tenantId, Guid pixChargeId, CancellationToken cancellationToken) =>
+        Task.FromResult(_result);
 }
 
 internal sealed class FakeMessageRepository : IMessageRepository
