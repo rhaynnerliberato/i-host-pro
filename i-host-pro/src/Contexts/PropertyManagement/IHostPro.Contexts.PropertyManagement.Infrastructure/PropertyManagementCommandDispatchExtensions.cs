@@ -5,6 +5,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Application;
 using IHostPro.Contexts.PropertyManagement.Application.Condominiums;
 using IHostPro.Contexts.PropertyManagement.Application.FrontDesk;
+using IHostPro.Contexts.PropertyManagement.Application.GuestAccess;
 using IHostPro.Contexts.PropertyManagement.Application.Owners;
 using IHostPro.Contexts.PropertyManagement.Application.Properties;
 using IHostPro.Contexts.PropertyManagement.Domain;
@@ -88,6 +89,7 @@ public static class PropertyManagementCommandDispatchExtensions
         services.AddScoped<IRepository<Condominium, Guid>, CondominiumRepository>();
         services.AddScoped<ICondominiumReader, CondominiumReader>();
         services.AddScoped<IFrontDeskContactRepository, FrontDeskContactRepository>();
+        services.AddScoped<IPropertyAccessConfigurationRepository, PropertyAccessConfigurationRepository>();
         services.AddScoped<IRepository<Property, Guid>, PropertyRepository>();
         services.AddScoped<IPropertyReader, PropertyReader>();
         services.AddScoped<IPropertyAuditWriter, PropertyAuditWriter>();
@@ -137,6 +139,18 @@ public static class PropertyManagementCommandDispatchExtensions
         services.AddScoped<
             IPipelineBehavior<GetFrontDeskContactByCondominiumQuery, Result<FrontDeskContactResult>>,
             TenantTransactionBehavior<GetFrontDeskContactByCondominiumQuery, Result<FrontDeskContactResult>, PropertyManagementDbContext>>();
+
+        // Fase 10, Checkpoint 6.2 (Guest Access Secure Delivery Corrective
+        // Implementation): SetPropertyAccessConfigurationCommand mirrors
+        // SetFrontDeskContactCommand exactly — no Integration Event, its own
+        // closed-generic tenant-aware behavior. GetPropertyAccessConfigurationQuery
+        // is a plain read, using the shared generic behavior.
+        services.AddScoped<
+            IPipelineBehavior<SetPropertyAccessConfigurationCommand, Result<PropertyAccessConfigurationResult>>,
+            SetPropertyAccessConfigurationTenantAwareBehavior>();
+        services.AddScoped<
+            IPipelineBehavior<GetPropertyAccessConfigurationQuery, Result<PropertyAccessConfigurationResult>>,
+            TenantTransactionBehavior<GetPropertyAccessConfigurationQuery, Result<PropertyAccessConfigurationResult>, PropertyManagementDbContext>>();
 
         services.AddScoped<
             IPipelineBehavior<CreatePropertyCommand, Result<PropertyResult>>,
