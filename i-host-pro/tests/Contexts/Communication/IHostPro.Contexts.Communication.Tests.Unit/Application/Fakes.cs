@@ -57,6 +57,26 @@ internal sealed class FakePixChargeDeliveryReader : IPixChargeDeliveryReader
         Task.FromResult(_result);
 }
 
+/// <summary>Fase 10, Checkpoint 6.2 (Guest Access Secure Delivery Corrective Implementation) — ADR-028's fake, mirrors <see cref="FakeFrontDeskContactReader"/>/<see cref="FakePixChargeDeliveryReader"/> exactly.</summary>
+internal sealed class FakePropertyGuestAccessReader : IPropertyGuestAccessReader
+{
+    private readonly PropertyGuestAccessReadResult? _result;
+    private readonly Exception? _exceptionToThrow;
+
+    private FakePropertyGuestAccessReader(PropertyGuestAccessReadResult? result, Exception? exceptionToThrow)
+    {
+        _result = result;
+        _exceptionToThrow = exceptionToThrow;
+    }
+
+    public static FakePropertyGuestAccessReader Returning(PropertyGuestAccessReadResult? result) => new(result, null);
+
+    public static FakePropertyGuestAccessReader Throwing(Exception exception) => new(null, exception);
+
+    public Task<PropertyGuestAccessReadResult?> GetForGuestAccessDeliveryAsync(Guid tenantId, Guid propertyId, CancellationToken cancellationToken) =>
+        _exceptionToThrow is not null ? throw _exceptionToThrow : Task.FromResult(_result);
+}
+
 internal sealed class FakeMessageRepository : IMessageRepository
 {
     private readonly Dictionary<string, Message> _byIdempotencyKey = new();
