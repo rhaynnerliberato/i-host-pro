@@ -63,7 +63,7 @@ public class TenantAwareDbContextResolutionTests
         services.AddIHostProTenantAwarePipeline();
 
         services.AddIdentityModule(configuration, isDevelopmentEnvironment: false);
-        services.AddPropertyManagementModule(configuration);
+        services.AddPropertyManagementModule(configuration, isDevelopmentEnvironment: false);
         services.AddReservationsModule(configuration);
 
         services.AddIdentityCommandDispatch();

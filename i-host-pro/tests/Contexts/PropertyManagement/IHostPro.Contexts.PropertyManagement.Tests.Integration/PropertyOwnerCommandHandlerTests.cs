@@ -189,7 +189,7 @@ public class PropertyOwnerCommandHandlerTests : IClassFixture<PropertyOwnerComma
         hostBuilder.Services.AddScoped<ICurrentTenantProvider, TenantContextCurrentTenantProvider>();
         hostBuilder.Services.AddIHostProTenantAwarePipeline();
         hostBuilder.Services.AddIdentityModule(configuration, isDevelopmentEnvironment: false);
-        hostBuilder.Services.AddPropertyManagementModule(configuration);
+        hostBuilder.Services.AddPropertyManagementModule(configuration, isDevelopmentEnvironment: false);
         hostBuilder.Services.AddPropertyManagementCommandDispatch();
 
         overrides?.Invoke(hostBuilder.Services);

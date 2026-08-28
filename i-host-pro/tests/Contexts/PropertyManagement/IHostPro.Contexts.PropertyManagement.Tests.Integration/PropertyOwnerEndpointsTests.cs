@@ -214,7 +214,7 @@ public class PropertyOwnerEndpointsTests : IClassFixture<PropertyOwnerEndpointsT
                     services.AddIdentityJwtBearerAuthentication();
                     services.AddIdentityAuthorization();
 
-                    services.AddPropertyManagementModule(configuration);
+                    services.AddPropertyManagementModule(configuration, isDevelopmentEnvironment: false);
                     services.AddPropertyManagementCommandDispatch();
 
                     overrides?.Invoke(services);

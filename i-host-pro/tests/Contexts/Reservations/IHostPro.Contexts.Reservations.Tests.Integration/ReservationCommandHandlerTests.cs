@@ -203,7 +203,7 @@ public class ReservationCommandHandlerTests : IClassFixture<ReservationCommandHa
         // needs only IPropertyReservationEligibilityReader, never to dispatch
         // a Property Management command (mirrors PropertyOwnerCommandHandlerTests'
         // identical reasoning for Identity's module).
-        hostBuilder.Services.AddPropertyManagementModule(configuration);
+        hostBuilder.Services.AddPropertyManagementModule(configuration, isDevelopmentEnvironment: false);
 
         hostBuilder.Services.AddReservationsModule(configuration);
         hostBuilder.Services.AddReservationsCommandDispatch();

@@ -198,7 +198,7 @@ public class PropertyOwnerIntegrationEventsTests : IClassFixture<PropertyOwnerIn
         hostBuilder.Services.AddScoped<ICurrentTenantProvider, TenantContextCurrentTenantProvider>();
         hostBuilder.Services.AddIHostProTenantAwarePipeline();
         hostBuilder.Services.AddIdentityModule(configuration, isDevelopmentEnvironment: false);
-        hostBuilder.Services.AddPropertyManagementModule(configuration);
+        hostBuilder.Services.AddPropertyManagementModule(configuration, isDevelopmentEnvironment: false);
         hostBuilder.Services.AddPropertyManagementCommandDispatch();
 
         hostBuilder.UseWolverine(opts =>

@@ -140,7 +140,7 @@ public class PropertyLifecycleCommandHandlerTests : IClassFixture<PropertyLifecy
         hostBuilder.Services.AddScoped<ITenantContext, TenantContext>();
         hostBuilder.Services.AddScoped<ICurrentTenantProvider, TenantContextCurrentTenantProvider>();
         hostBuilder.Services.AddIHostProTenantAwarePipeline();
-        hostBuilder.Services.AddPropertyManagementModule(configuration);
+        hostBuilder.Services.AddPropertyManagementModule(configuration, isDevelopmentEnvironment: false);
         hostBuilder.Services.AddPropertyManagementCommandDispatch();
 
         overrides?.Invoke(hostBuilder.Services);

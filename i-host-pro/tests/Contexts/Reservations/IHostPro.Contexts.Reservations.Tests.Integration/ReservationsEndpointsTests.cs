@@ -248,7 +248,7 @@ public class ReservationsEndpointsTests : IClassFixture<ReservationsEndpointsTes
                     // Property Management's module ONLY — never AddPropertyManagementCommandDispatch:
                     // this host needs only IPropertyReservationEligibilityReader,
                     // never to dispatch a Property Management command.
-                    services.AddPropertyManagementModule(configuration);
+                    services.AddPropertyManagementModule(configuration, isDevelopmentEnvironment: false);
 
                     services.AddReservationsModule(configuration);
                     services.AddReservationsCommandDispatch();

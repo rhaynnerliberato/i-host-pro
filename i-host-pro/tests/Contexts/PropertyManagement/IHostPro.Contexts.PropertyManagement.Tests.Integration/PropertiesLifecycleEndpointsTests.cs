@@ -205,7 +205,7 @@ public class PropertiesLifecycleEndpointsTests : IClassFixture<PropertiesLifecyc
                     services.AddIdentityJwtBearerAuthentication();
                     services.AddIdentityAuthorization();
 
-                    services.AddPropertyManagementModule(configuration);
+                    services.AddPropertyManagementModule(configuration, isDevelopmentEnvironment: false);
                     services.AddPropertyManagementCommandDispatch();
 
                     overrides?.Invoke(services);
