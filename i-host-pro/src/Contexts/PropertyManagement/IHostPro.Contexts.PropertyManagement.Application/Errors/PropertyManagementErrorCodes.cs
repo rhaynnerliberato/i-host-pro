@@ -156,4 +156,12 @@ public static class PropertyManagementErrorCodes
     /// Checkpoint 4).
     /// </summary>
     public const string FrontDeskContactNotFound = "PropertyManagement.FrontDeskContactNotFound";
+
+    /// <summary>
+    /// <c>GET /api/v1/properties/{propertyId}/access-configuration</c>
+    /// called for a property that has no <c>PropertyAccessConfiguration</c>
+    /// configured yet — a distinct case from <see cref="PropertyNotFound"/>
+    /// (Fase 10, Checkpoint 6.2).
+    /// </summary>
+    public const string PropertyAccessConfigurationNotFound = "PropertyManagement.PropertyAccessConfigurationNotFound";
 }
