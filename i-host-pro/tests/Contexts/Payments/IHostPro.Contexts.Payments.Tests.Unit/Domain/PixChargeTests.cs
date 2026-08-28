@@ -126,6 +126,58 @@ public class PixChargeTests
         charge.FailedAtUtc.Should().BeNull();
     }
 
+    [Fact]
+    public void Fail_is_a_no_op_when_already_Expired()
+    {
+        // Checkpoint 5.1: no approved transition exists between the two
+        // negative terminal states — a late Fail signal must never
+        // overwrite an already-Expired charge.
+        var charge = CreateValid();
+        charge.Expire(Now);
+
+        charge.Fail(Now.AddMinutes(1));
+
+        charge.Status.Should().Be(PixChargeStatus.Expired);
+        charge.FailedAtUtc.Should().BeNull();
+    }
+
+    // ---- Expire (Fase 10, Checkpoint 5.1 — Payment Failure/Expiration Evidence Corrective Gate) ----
+
+    [Fact]
+    public void Expire_from_Pending_transitions_to_Expired()
+    {
+        var charge = CreateValid();
+
+        charge.Expire(Now);
+
+        charge.Status.Should().Be(PixChargeStatus.Expired);
+        charge.ExpiredAtUtc.Should().Be(Now);
+    }
+
+    [Fact]
+    public void Expire_is_a_no_op_when_already_Confirmed()
+    {
+        var charge = CreateValid();
+        charge.Confirm(Now);
+
+        charge.Expire(Now.AddMinutes(1));
+
+        charge.Status.Should().Be(PixChargeStatus.Confirmed);
+        charge.ExpiredAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void Expire_is_a_no_op_when_already_Failed()
+    {
+        var charge = CreateValid();
+        charge.Fail(Now);
+
+        charge.Expire(Now.AddMinutes(1));
+
+        charge.Status.Should().Be(PixChargeStatus.Failed);
+        charge.ExpiredAtUtc.Should().BeNull();
+    }
+
     // ---- Confirm — full approved transition matrix (mandate item 10) ----
 
     [Fact]
@@ -165,10 +217,15 @@ public class PixChargeTests
     [Fact]
     public void Confirm_from_Expired_forwards_to_Confirmed()
     {
+        // Checkpoint 5.1: Expire() is now a real domain method (no longer
+        // needs the reflection-based SetStatusForTest helper this test used
+        // under Checkpoint 5, before Expire() existed) — this also proves
+        // the out-of-order Expired -> Confirmed path the mandate's item 12
+        // requires unit-level coverage for.
         var charge = CreateValid();
-        SetStatusForTest(charge, PixChargeStatus.Expired);
+        charge.Expire(Now);
 
-        charge.Confirm(Now);
+        charge.Confirm(Now.AddMinutes(1));
 
         charge.Status.Should().Be(PixChargeStatus.Confirmed);
     }
