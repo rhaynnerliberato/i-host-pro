@@ -124,4 +124,23 @@ public static class CommunicationModuleExtensions
 
         return services;
     }
+
+    /// <summary>
+    /// Registers <see cref="GuestAccessDeliveryProcessor"/> (Fase 10,
+    /// Checkpoint 6.2 — Guest Access Secure Delivery Corrective
+    /// Implementation) — mirrors <see cref="AddCommunicationPixDeliveryConsumer"/>'s
+    /// own shape and gate exactly: reuses the SAME
+    /// <see cref="IOutboundMessageConnector"/> registration
+    /// (<see cref="FakeWhatsAppConnector"/>, Development-only) as every
+    /// other Communication consumer, so this method must be called
+    /// alongside it, never independently, and under the same
+    /// <c>IsDevelopment()</c> gate at the call site.
+    /// </summary>
+    public static IServiceCollection AddCommunicationGuestAccessDeliveryConsumer(this IServiceCollection services)
+    {
+        services.AddKeyedScoped<IIntegrationEventHandler<GuestAccessDeliveryRequested>, GuestAccessDeliveryProcessor>(
+            CommunicationMessageExecutionScope.HandlerKey);
+
+        return services;
+    }
 }
