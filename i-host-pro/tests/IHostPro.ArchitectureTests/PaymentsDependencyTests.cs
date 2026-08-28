@@ -278,9 +278,16 @@ public class PaymentsDependencyTests
             "creating an Api project requires explicit new authorization, never silently added for test convenience");
     }
 
-    /// <summary>Mandate item 12/48: exactly one migration exists this checkpoint.</summary>
+    /// <summary>
+    /// Mandate item 12/48 (Checkpoint 5), extended by Checkpoint 5.1 mandate
+    /// item 19: exactly the two known, approved migrations exist —
+    /// <c>InitialCreate</c> and <c>AddPixChargeExpiredAtUtc</c> (the latter
+    /// adds the nullable <c>expired_at_utc</c> column <see cref="PixCharge.Expire"/>
+    /// needs — no RLS/grant changes required, both already apply at the
+    /// whole-table level).
+    /// </summary>
     [Fact]
-    public void Only_The_Known_Approved_Migration_Exists()
+    public void Only_The_Known_Approved_Migrations_Exist()
     {
         var migrationsDirectory = Path.Combine(
             RepositoryRoot(), "src", "Contexts", "Payments",
@@ -295,6 +302,36 @@ public class PaymentsDependencyTests
             .ToArray();
 
         migrationFiles.Should().ContainSingle(name => name!.EndsWith("_InitialCreate", StringComparison.Ordinal));
+        migrationFiles.Should().ContainSingle(name => name!.EndsWith("_AddPixChargeExpiredAtUtc", StringComparison.Ordinal));
+        migrationFiles.Should().HaveCount(2, "no other migration is approved for this checkpoint");
+    }
+
+    /// <summary>
+    /// Checkpoint 5.1 mandate item 16: the two new provider-neutral inbound
+    /// messages must never carry a vendor type, the QR/copy-paste payload,
+    /// payer PII, or a secret — mirrors
+    /// <see cref="Payments_Integration_Events_Never_Carry_QR_Provider_Or_Payer_Data"/>'s
+    /// own forbidden-name list exactly, extended to the two new record
+    /// types (neither is an <c>IntegrationEvent</c> — same reasoning as
+    /// <see cref="PixChargeConfirmationReceived"/> is not one either).
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(PixChargeFailureReceived))]
+    [InlineData(typeof(PixChargeExpirationReceived))]
+    public void Payments_Provider_Neutral_Inbound_Messages_Never_Carry_QR_Provider_Or_Payer_Data(Type messageType)
+    {
+        var propertyNames = messageType.GetProperties().Select(p => p.Name).ToList();
+
+        foreach (var forbidden in new[]
+        {
+            "QrCode", "CopyPaste", "PixCode", "Payload", "ProviderChargeId", "ProviderSecret",
+            "GuestName", "GuestPhone", "Cpf", "Cnpj", "Email", "Document",
+        })
+        {
+            propertyNames.Should().NotContain(
+                name => name.Contains(forbidden, StringComparison.OrdinalIgnoreCase),
+                $"{messageType.Name} must never carry a property containing '{forbidden}'");
+        }
     }
 
     private static string RepositoryRoot([System.Runtime.CompilerServices.CallerFilePath] string thisFilePath = "") =>
