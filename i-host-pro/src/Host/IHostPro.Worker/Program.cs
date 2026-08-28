@@ -147,7 +147,7 @@ try
     // writes, so (mirrors CommunicationDbContext's own precedent) no
     // EnrollAncillaryPostgresqlOutbox call is needed for
     // property_management_messaging here.
-    builder.Services.AddPropertyManagementModule(builder.Configuration);
+    builder.Services.AddPropertyManagementModule(builder.Configuration, builder.Environment.IsDevelopment());
 
     // Communication module (Fase 9, Checkpoint 1): CommunicationDbContext +
     // its shared execution-scope/repository/transaction-executor DI graph
@@ -206,6 +206,12 @@ try
         // IOutboundMessageConnector, unlike Payments' own PixCharge creation
         // path above, which is unconditional).
         builder.Services.AddCommunicationPixDeliveryConsumer();
+
+        // Fase 10, Checkpoint 6.2 (Guest Access Secure Delivery Corrective
+        // Implementation): the guest access credential/instructions delivery
+        // processor reuses the SAME FakeWhatsAppConnector registered above —
+        // same Development-only gate, same "zero real provider" reasoning.
+        builder.Services.AddCommunicationGuestAccessDeliveryConsumer();
     }
 
     // Fase 10, Checkpoint 2 (Check-in/Checkout Core): the ReservationCreated
@@ -762,6 +768,18 @@ try
             opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.PixChargeCreatedHandler).Assembly);
             opts.ListenToRabbitQueue("communication.pixcharge-created-trigger")
                 .AddStickyHandler(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.PixChargeCreatedHandler));
+
+            // Fase 10, Checkpoint 6.2 (Guest Access Secure Delivery
+            // Corrective Implementation): Communication's guest access
+            // credential/instructions delivery consumer, on the EXISTING
+            // guest-operations-events exchange — same Development-only gate
+            // as every other Communication consumer above (same
+            // FakeWhatsAppConnector, same "no real provider yet" reasoning).
+            // GuestAccessDeliveryRequestedHandler lives in the SAME
+            // Communication.Infrastructure assembly already included above —
+            // no second IncludeAssembly needed.
+            opts.ListenToRabbitQueue("communication.guest-access-delivery-trigger")
+                .AddStickyHandler(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.GuestAccessDeliveryRequestedHandler));
         }
 
         // Guest Operations' own single trigger consumer (Fase 10, Checkpoint

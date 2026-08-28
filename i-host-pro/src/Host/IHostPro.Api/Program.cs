@@ -162,7 +162,7 @@ try
 
     // Property Management module (Fase 2, Incremento 1, Checkpoint 1) —
     // DbContext registration.
-    builder.Services.AddPropertyManagementModule(builder.Configuration);
+    builder.Services.AddPropertyManagementModule(builder.Configuration, builder.Environment.IsDevelopment());
 
     // Property Management's Commands/Queries/handlers/validators/pipeline
     // behaviors (Fase 2, Incremento 1, Checkpoint 2) — mirrors
@@ -649,6 +649,17 @@ try
         // own Program.cs for the corresponding ListenToRabbitQueue.
         opts.PublishMessage(typeof(LateCheckoutPaymentRequired))
             .ToRabbitRoutingKey(guestOperationsEventsExchange, "late_checkout_payment_required", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        // Guest Operations' sixth Integration Event (Fase 10, Checkpoint 6.2
+        // — Guest Access Secure Delivery Corrective Implementation), same
+        // exchange as every other Guest Operations event above, published by
+        // RequestGuestAccessDeliveryCommandHandler. Communication is the
+        // sole consumer — see the Worker's own Program.cs for the
+        // corresponding ListenToRabbitQueue.
+        opts.PublishMessage(typeof(GuestAccessDeliveryRequested))
+            .ToRabbitRoutingKey(guestOperationsEventsExchange, "guest_access_delivery_requested", exchange => exchange.ExchangeType = ExchangeType.Topic)
             .UseDurableOutbox()
             .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
     });

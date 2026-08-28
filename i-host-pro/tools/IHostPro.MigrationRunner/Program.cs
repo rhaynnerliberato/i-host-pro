@@ -951,6 +951,14 @@ try
                     exchange.BindQueue("communication.guest-checked-in-trigger", "guest_checked_in");
                     exchange.BindQueue("communication.early-checkin-approved-trigger", "early_checkin_approved");
                     exchange.BindQueue("communication.late-checkout-approved-trigger", "late_checkout_approved");
+
+                    // Fase 10, Checkpoint 6.2 (Guest Access Secure Delivery
+                    // Corrective Implementation): guest_access_delivery_requested
+                    // gains its first-ever bound queue here — same
+                    // Development-only gate as every other Communication
+                    // consumer on this exchange (GuestAccessDeliveryProcessor
+                    // depends on FakeWhatsAppConnector).
+                    exchange.BindQueue("communication.guest-access-delivery-trigger", "guest_access_delivery_requested");
                 }
 
                 // Fase 10, Checkpoint 5 (PIX/Payment Deterministic
