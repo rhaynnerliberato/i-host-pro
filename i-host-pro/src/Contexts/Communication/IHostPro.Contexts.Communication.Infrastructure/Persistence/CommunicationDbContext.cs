@@ -2,6 +2,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Communication.Domain;
 using Microsoft.EntityFrameworkCore;
+using Wolverine.EntityFrameworkCore;
 
 namespace IHostPro.Contexts.Communication.Infrastructure.Persistence;
 
@@ -14,12 +15,11 @@ namespace IHostPro.Contexts.Communication.Infrastructure.Persistence;
 /// independent layer of defense — mirrors every other Bounded Context's own
 /// DbContext exactly.
 ///
-/// Deliberately does NOT call <c>ModelBuilder.MapWolverineEnvelopeStorage</c>
-/// — Communication publishes no Integration Event of its own this checkpoint
-/// and needs no <c>IDbContextOutbox&lt;CommunicationDbContext&gt;</c> (see
-/// <see cref="Application.ICommunicationTransactionExecutor"/>'s own doc
-/// comment) — the first Bounded Context's DbContext in this codebase that
-/// does not need this mapping.
+/// Fase 11, Checkpoint 2 (AI Agent Foundation): now calls
+/// <c>ModelBuilder.MapWolverineEnvelopeStorage</c> — Communication publishes
+/// its first Integration Event (<c>ConversationMessageReceived</c>) and needs
+/// its own <c>IDbContextOutbox&lt;CommunicationDbContext&gt;</c>, deliberately
+/// deferred since Fase 9, Checkpoint 1 until a real consumer existed.
 /// </summary>
 public sealed class CommunicationDbContext : BaseDbContext
 {
@@ -40,6 +40,10 @@ public sealed class CommunicationDbContext : BaseDbContext
         modelBuilder.UsePropertyAccessMode(PropertyAccessMode.PreferField);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CommunicationDbContext).Assembly);
+
+        // Must match Program.cs's own EnrollAncillaryPostgresqlOutbox(...,
+        // "communication_messaging", typeof(CommunicationDbContext)) schema literal exactly.
+        modelBuilder.MapWolverineEnvelopeStorage("communication_messaging");
 
         base.OnModelCreating(modelBuilder);
     }

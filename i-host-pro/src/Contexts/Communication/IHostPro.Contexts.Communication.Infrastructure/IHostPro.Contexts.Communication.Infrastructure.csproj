@@ -20,6 +20,9 @@
     <!-- Fase 10, Checkpoint 5 — PixChargeCreatedHandler (the thin Wolverine
          adapter) needs the PixChargeCreated type. -->
     <ProjectReference Include="..\..\Payments\IHostPro.Contexts.Payments.Contracts\IHostPro.Contexts.Payments.Contracts.csproj" />
+    <!-- Fase 11, Checkpoint 2 (AI Agent Foundation) — Communication's first
+         published Integration Event (ConversationMessageReceived). -->
+    <ProjectReference Include="..\IHostPro.Contexts.Communication.Contracts\IHostPro.Contexts.Communication.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -29,13 +32,14 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
-    <!-- Fase 9, Checkpoint 1: Communication publishes no Integration Event
-         and needs no Wolverine outbox (see ICommunicationTransactionExecutor's
-         own doc comment) — so, unlike every other Bounded Context's own
-         Infrastructure project, this one does NOT reference
-         WolverineFx.EntityFrameworkCore. Only plain WolverineFx (the thin
-         transport adapter — MessageContext, [NonTransactional]). -->
-    <PackageReference Include="WolverineFx" Version="6.22.0" />
+    <!-- Fase 11, Checkpoint 2 (AI Agent Foundation): Communication now
+         publishes its own first Integration Event (ConversationMessageReceived)
+         and needs the real Wolverine outbox — upgraded from plain WolverineFx
+         (the thin transport adapter) to WolverineFx.EntityFrameworkCore
+         (IDbContextOutbox<T>, MapWolverineEnvelopeStorage), mirroring every
+         other publishing Bounded Context's own Infrastructure project
+         (e.g. Payments). -->
+    <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.22.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
   </ItemGroup>

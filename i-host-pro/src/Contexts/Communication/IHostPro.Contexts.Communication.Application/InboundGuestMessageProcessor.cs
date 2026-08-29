@@ -1,4 +1,5 @@
 using IHostPro.BuildingBlocks.Application;
+using IHostPro.Contexts.Communication.Contracts;
 using IHostPro.Contexts.Communication.Domain;
 using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
@@ -48,6 +49,7 @@ public sealed class InboundGuestMessageProcessor : IIntegrationEventHandler<Inbo
     private readonly IReservationByGuestPhoneReader _reservationByGuestPhoneReader;
     private readonly IConversationResolver _conversationResolver;
     private readonly IMessageRepository _repository;
+    private readonly IIntegrationEventCollector _collector;
     private readonly ICommunicationTransactionExecutor _transactionExecutor;
     private readonly ILogger<InboundGuestMessageProcessor> _logger;
 
@@ -55,12 +57,14 @@ public sealed class InboundGuestMessageProcessor : IIntegrationEventHandler<Inbo
         IReservationByGuestPhoneReader reservationByGuestPhoneReader,
         IConversationResolver conversationResolver,
         IMessageRepository repository,
+        IIntegrationEventCollector collector,
         ICommunicationTransactionExecutor transactionExecutor,
         ILogger<InboundGuestMessageProcessor> logger)
     {
         _reservationByGuestPhoneReader = reservationByGuestPhoneReader;
         _conversationResolver = conversationResolver;
         _repository = repository;
+        _collector = collector;
         _transactionExecutor = transactionExecutor;
         _logger = logger;
     }
@@ -112,6 +116,26 @@ public sealed class InboundGuestMessageProcessor : IIntegrationEventHandler<Inbo
         await _transactionExecutor.ExecuteAsync(() =>
         {
             _repository.Add(message);
+
+            // Fase 11, Checkpoint 2 (AI Agent Foundation) — Communication's
+            // first published Integration Event, staged atomically with the
+            // Message insert above (same outbox transaction). Deliberately
+            // minimal: no message content, no PII beyond identifiers already
+            // public within the tenant boundary — the AI Agent Bounded
+            // Context resolves the actual (sanitized) content separately.
+            _collector.Enqueue(new ConversationMessageReceived
+            {
+                TenantId = @event.TenantId,
+                AggregateId = message.Id,
+                AggregateType = "Message",
+                CorrelationId = Guid.NewGuid(),
+                ActorType = "System",
+                ConversationId = conversationId,
+                ReservationId = reservationId,
+                MessageId = message.Id,
+                OccurredAtUtc = @event.OccurredAtUtc,
+            });
+
             return Task.FromResult(true);
         }, cancellationToken);
 

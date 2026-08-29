@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fase 11, Checkpoint 2 (AI Agent Foundation) — Communication's first-ever
+    Contracts project. Communication has been a choreography/consumer-only
+    Bounded Context since Fase 9 Checkpoint 1 (no Integration Event of its
+    own, no outbox — see CommunicationDbContext's own doc comment and
+    ICommunicationTransactionExecutor's own doc comment, both explicit about
+    this by design, "absent a real consumer"). The AI Agent Bounded Context
+    is now that real consumer (mandate item 8) — ConversationMessageReceived
+    is the ONLY Integration Event Communication publishes, mirroring every
+    other context's own Contracts project exactly (Architecture Principles
+    §16, item 5).
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Messaging.Abstractions\IHostPro.BuildingBlocks.Messaging.Abstractions.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

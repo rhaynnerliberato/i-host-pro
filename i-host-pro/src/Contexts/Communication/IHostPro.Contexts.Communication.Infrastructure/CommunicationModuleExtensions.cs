@@ -1,5 +1,7 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.Contexts.Communication.Application;
+using IHostPro.Contexts.Communication.Contracts;
+using IHostPro.Contexts.Communication.Infrastructure.AIAgent;
 using IHostPro.Contexts.Communication.Infrastructure.Messaging;
 using IHostPro.Contexts.Communication.Infrastructure.Persistence;
 using IHostPro.Contexts.ExternalIntegrations.Contracts;
@@ -40,7 +42,8 @@ public static class CommunicationModuleExtensions
         // which method registers it — so ReservationCreatedCommunicationProcessor's
         // own dependency graph is unaffected.
         services.AddScoped<IMessageRepository, MessageRepository>();
-        services.AddScoped<ICommunicationTransactionExecutor, CommunicationTransactionExecutor>();
+        services.AddScoped<ICommunicationTransactionExecutor, CommunicationOutboxTransactionExecutor>();
+        services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
         services.AddScoped<ICommunicationMessageExecutionScope, CommunicationMessageExecutionScope>();
 
         // Fase 11, Checkpoint 1 (Inbound Conversation Foundation): every
@@ -49,6 +52,12 @@ public static class CommunicationModuleExtensions
         // IMessageRepository rather than per-consumer method.
         services.AddScoped<IConversationRepository, ConversationRepository>();
         services.AddScoped<IConversationResolver, ConversationResolver>();
+
+        // Fase 11, Checkpoint 2 (AI Agent Foundation) — ADR-030, synchronous
+        // exception #14. Registered unconditionally like every other reader
+        // in this module (no fake/real distinction of its own — it is a
+        // plain, always-real read of Communication's own data).
+        services.AddScoped<IConversationHistoryReader, ConversationHistoryReader>();
 
         return services;
     }
