@@ -48,11 +48,16 @@ public sealed class WhatsAppWebhookController : ControllerBase
     private const string StatusNormalized = "WhatsAppWebhookStatusNormalized";
     private const string StatusIgnored = "WhatsAppWebhookStatusIgnored";
     private const string StatusEventPublished = "WhatsAppWebhookStatusEventPublished";
+    private const string MessageNormalized = "WhatsAppWebhookMessageNormalized";
+    private const string MessageIgnored = "WhatsAppWebhookMessageIgnored";
+    private const string MessageEventPublished = "WhatsAppWebhookMessageEventPublished";
 
     private readonly IWhatsAppWebhookCredentialProvider _credentialProvider;
     private readonly IWebhookSignatureVerifier _signatureVerifier;
     private readonly IWhatsAppWebhookStatusProcessor _statusProcessor;
     private readonly IWhatsAppWebhookStatusEventPublisher _eventPublisher;
+    private readonly IWhatsAppWebhookMessageProcessor _messageProcessor;
+    private readonly IWhatsAppWebhookMessageEventPublisher _messageEventPublisher;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
@@ -60,12 +65,16 @@ public sealed class WhatsAppWebhookController : ControllerBase
         IWebhookSignatureVerifier signatureVerifier,
         IWhatsAppWebhookStatusProcessor statusProcessor,
         IWhatsAppWebhookStatusEventPublisher eventPublisher,
+        IWhatsAppWebhookMessageProcessor messageProcessor,
+        IWhatsAppWebhookMessageEventPublisher messageEventPublisher,
         ILogger<WhatsAppWebhookController> logger)
     {
         _credentialProvider = credentialProvider;
         _signatureVerifier = signatureVerifier;
         _statusProcessor = statusProcessor;
         _eventPublisher = eventPublisher;
+        _messageProcessor = messageProcessor;
+        _messageEventPublisher = messageEventPublisher;
         _logger = logger;
     }
 
@@ -134,8 +143,14 @@ public sealed class WhatsAppWebhookController : ControllerBase
 
         _logger.LogInformation("{AuditEvent}: bodyLength {BodyLength}", SignatureAccepted, rawBody.Length);
 
-        var outcomes = await _statusProcessor.ProcessAsync(rawBody, cancellationToken);
-        foreach (var outcome in outcomes)
+        // Both processors independently parse the SAME raw body — statuses[]
+        // and messages[] are mutually exclusive per change (Meta never mixes
+        // them in one `value`), but a single delivery can legitimately carry
+        // one change with statuses[] and another with messages[] (mandate
+        // §37) — both must be processed, neither stealing/duplicating the
+        // other's entries.
+        var statusOutcomes = await _statusProcessor.ProcessAsync(rawBody, cancellationToken);
+        foreach (var outcome in statusOutcomes)
         {
             LogOutcome(outcome);
 
@@ -148,6 +163,19 @@ public sealed class WhatsAppWebhookController : ControllerBase
             {
                 await _eventPublisher.PublishAsync(outcome, cancellationToken);
                 _logger.LogInformation("{AuditEvent}: tenant {TenantId}", StatusEventPublished, outcome.TenantId);
+            }
+        }
+
+        var messageOutcomes = await _messageProcessor.ProcessAsync(rawBody, cancellationToken);
+        foreach (var outcome in messageOutcomes)
+        {
+            LogMessageOutcome(outcome);
+
+            // Same propagate-to-5xx discipline as the status path above.
+            if (outcome.Kind == WebhookMessageOutcomeKind.Accepted)
+            {
+                await _messageEventPublisher.PublishAsync(outcome, cancellationToken);
+                _logger.LogInformation("{AuditEvent}: tenant {TenantId}", MessageEventPublished, outcome.TenantId);
             }
         }
 
@@ -174,6 +202,25 @@ public sealed class WhatsAppWebhookController : ControllerBase
             case WebhookStatusOutcomeKind.Malformed:
                 _logger.LogWarning(
                     "{AuditEvent}: tenant {TenantId}", StatusIgnored, outcome.TenantId);
+                break;
+        }
+    }
+
+    private void LogMessageOutcome(WebhookMessageProcessingOutcome outcome)
+    {
+        switch (outcome.Kind)
+        {
+            case WebhookMessageOutcomeKind.Accepted:
+                _logger.LogInformation(
+                    "{AuditEvent}: tenant {TenantId} messageType {MessageType}",
+                    MessageNormalized, outcome.TenantId, outcome.MessageType);
+                break;
+            case WebhookMessageOutcomeKind.UnknownRoute:
+                _logger.LogWarning("{AuditEvent}", RouteUnknown);
+                break;
+            case WebhookMessageOutcomeKind.Malformed:
+                _logger.LogWarning(
+                    "{AuditEvent}: tenant {TenantId}", MessageIgnored, outcome.TenantId);
                 break;
         }
     }

@@ -40,6 +40,7 @@ public sealed class PixChargeCreatedDeliveryProcessor : IIntegrationEventHandler
     private readonly ITemplateReader _templateReader;
     private readonly IReservationGuestContactReader _guestContactReader;
     private readonly IMessageRepository _repository;
+    private readonly IConversationResolver _conversationResolver;
     private readonly ICommunicationTransactionExecutor _transactionExecutor;
     private readonly IOutboundMessageConnector _connector;
     private readonly TimeProvider _timeProvider;
@@ -50,6 +51,7 @@ public sealed class PixChargeCreatedDeliveryProcessor : IIntegrationEventHandler
         ITemplateReader templateReader,
         IReservationGuestContactReader guestContactReader,
         IMessageRepository repository,
+        IConversationResolver conversationResolver,
         ICommunicationTransactionExecutor transactionExecutor,
         IOutboundMessageConnector connector,
         TimeProvider timeProvider,
@@ -59,6 +61,7 @@ public sealed class PixChargeCreatedDeliveryProcessor : IIntegrationEventHandler
         _templateReader = templateReader;
         _guestContactReader = guestContactReader;
         _repository = repository;
+        _conversationResolver = conversationResolver;
         _transactionExecutor = transactionExecutor;
         _connector = connector;
         _timeProvider = timeProvider;
@@ -109,8 +112,10 @@ public sealed class PixChargeCreatedDeliveryProcessor : IIntegrationEventHandler
         var guestPhone = guestContact.GuestPhone;
 
         var now = _timeProvider.GetUtcNow();
+        var conversationId = await _conversationResolver.GetOrCreateActiveConversationIdAsync(
+            @event.TenantId, @event.ReservationId, Channel, now, cancellationToken);
         var message = Message.Create(
-            Guid.NewGuid(), @event.TenantId, @event.ReservationId, Channel, TemplateKey,
+            Guid.NewGuid(), @event.TenantId, conversationId, @event.ReservationId, Channel, TemplateKey,
             Mask(guestPhone), renderedContent, idempotencyKey, now);
         message.MarkQueued();
 

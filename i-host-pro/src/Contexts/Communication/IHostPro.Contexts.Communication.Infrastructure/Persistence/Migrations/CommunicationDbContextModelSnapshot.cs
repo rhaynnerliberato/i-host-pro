@@ -23,7 +23,7 @@ namespace IHostPro.Contexts.Communication.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("IHostPro.Contexts.Communication.Domain.Message", b =>
+            modelBuilder.Entity("IHostPro.Contexts.Communication.Domain.Conversation", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -39,6 +39,56 @@ namespace IHostPro.Contexts.Communication.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at_utc");
 
+                    b.Property<DateTimeOffset>("LastMessageAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_message_at_utc");
+
+                    b.Property<Guid>("ReservationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reservation_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "ReservationId", "Channel")
+                        .IsUnique();
+
+                    b.ToTable("conversations", "communication");
+                });
+
+            modelBuilder.Entity("IHostPro.Contexts.Communication.Domain.Message", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("channel");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
                     b.Property<DateTimeOffset?>("DeliveredAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("delivered_at_utc");
@@ -47,6 +97,14 @@ namespace IHostPro.Contexts.Communication.Infrastructure.Persistence.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("destination_masked");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Outbound")
+                        .HasColumnName("direction");
 
                     b.Property<DateTimeOffset?>("FailedAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -109,6 +167,8 @@ namespace IHostPro.Contexts.Communication.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "ProviderMessageId");
 
                     b.HasIndex("TenantId", "ReservationId");
+
+                    b.HasIndex("TenantId", "ConversationId", "CreatedAtUtc");
 
                     b.ToTable("messages", "communication");
                 });

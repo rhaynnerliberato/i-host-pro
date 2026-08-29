@@ -160,6 +160,14 @@ try
     var guestOperationsBootstrapConnectionString = builder.Configuration.GetConnectionString("GuestOperations")
         ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:GuestOperations'.");
 
+    // Fase 11, Checkpoint 1 (Inbound Conversation Foundation) — same-schema
+    // backfill (communication.messages.conversation_id from communication's
+    // own pre-existing data), still requires this mechanism because
+    // communication.messages/conversations both have FORCE ROW LEVEL
+    // SECURITY (see ConversationBackfillBootstrapStep's own doc comment).
+    var communicationBootstrapConnectionString = builder.Configuration.GetConnectionString("Communication")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Communication'.");
+
     var projectionBootstrapSteps = new List<IProjectionBootstrapStep>
     {
         new PropertyProjectionBootstrapStep(housekeepingConnectionString),
@@ -168,6 +176,7 @@ try
         new DashboardPropertyProjectionBootstrapStep(dashboardBootstrapConnectionString),
         new DashboardOccurrenceProjectionBootstrapStep(dashboardBootstrapConnectionString),
         new GuestStayOperationBackfillBootstrapStep(guestOperationsBootstrapConnectionString),
+        new ConversationBackfillBootstrapStep(communicationBootstrapConnectionString),
     };
 
     foreach (var step in projectionBootstrapSteps)
@@ -901,6 +910,14 @@ try
                 exchange.BindQueue("reservations.airbnb-import", "airbnb_reservation_imported");
                 exchange.BindQueue("reservations.airbnb-import", "airbnb_reservation_updated");
                 exchange.BindQueue("reservations.airbnb-import", "airbnb_reservation_cancelled");
+                // Fase 11, Checkpoint 1 (Inbound Conversation Foundation): a
+                // third, independent subscriber queue on this same exchange
+                // — Communication's own inbound guest message consumer.
+                // Unconditional in every environment, same rationale as
+                // "communication.whatsapp-status-projection" above: resolving
+                // a guest phone and persisting an inbound Message has no
+                // fake/real connector distinction of its own.
+                exchange.BindQueue("communication.inbound-guest-message-trigger", "inbound_guest_message_received");
             })
             // Fase 10, Checkpoint 1 (Guest Operations Foundation): Guest
             // Operations' OWN published event, bound to Workflow

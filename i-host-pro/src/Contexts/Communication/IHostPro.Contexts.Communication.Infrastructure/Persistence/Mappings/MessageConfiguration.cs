@@ -22,6 +22,17 @@ public sealed class MessageConfiguration : IEntityTypeConfiguration<Message>
 
         builder.Property(m => m.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(m => m.ReservationId).HasColumnName("reservation_id").IsRequired();
+
+        // Fase 11, Checkpoint 1 (Inbound Conversation Foundation).
+        // ConversationId deliberately has no default — every pre-existing
+        // row is backfilled deterministically by the migration itself
+        // (mandate item 15), never a placeholder/empty Guid. Direction DOES
+        // get a default: every row before this checkpoint is unambiguously
+        // Outbound, so the migration can add it as NOT NULL directly.
+        builder.Property(m => m.ConversationId).HasColumnName("conversation_id").IsRequired();
+        builder.Property(m => m.Direction).HasColumnName("direction").HasConversion<string>().HasMaxLength(20)
+            .HasDefaultValue(MessageDirection.Outbound).IsRequired();
+
         builder.Property(m => m.Channel).HasColumnName("channel").HasMaxLength(30).IsRequired();
         builder.Property(m => m.TemplateKey).HasColumnName("template_key").HasMaxLength(100).IsRequired();
         builder.Property(m => m.DestinationMasked).HasColumnName("destination_masked").HasMaxLength(30);
@@ -48,5 +59,8 @@ public sealed class MessageConfiguration : IEntityTypeConfiguration<Message>
         // id — indexed now since that real need is already known, never a
         // global unique (tenant-scoped, mirrors every other index here).
         builder.HasIndex(m => new { m.TenantId, m.ProviderMessageId });
+
+        // Fase 11, Checkpoint 1 — Conversation history ordering/lookup.
+        builder.HasIndex(m => new { m.TenantId, m.ConversationId, m.CreatedAtUtc });
     }
 }

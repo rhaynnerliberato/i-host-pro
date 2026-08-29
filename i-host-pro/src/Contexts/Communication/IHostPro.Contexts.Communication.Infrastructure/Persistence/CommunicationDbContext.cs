@@ -27,6 +27,9 @@ public sealed class CommunicationDbContext : BaseDbContext
 
     public DbSet<Message> Messages => Set<Message>();
 
+    /// <summary>Fase 11, Checkpoint 1 (Inbound Conversation Foundation).</summary>
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+
     public CommunicationDbContext(DbContextOptions<CommunicationDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)
     {

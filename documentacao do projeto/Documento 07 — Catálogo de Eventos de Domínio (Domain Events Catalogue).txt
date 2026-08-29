@@ -1185,3 +1185,18 @@ Precondições, validadas antes de publicar (nenhuma mutação de domínio próp
 | Evento/Contrato | Exchange | Routing Key | Fila |
 |---|---|---|---|
 | GuestAccessDeliveryRequested | guest-operations-events | guest_access_delivery_requested | communication.guest-access-delivery-trigger |
+
+47. InboundGuestMessageReceived / Exceção Síncrona #13 (Fase 11, Checkpoint 1 — Inbound Conversation Foundation)
+
+Fecha a fundação de recepção identificada no Checkpoint 0 (nenhuma mensagem inbound de convidado era processada até este ponto — ADR-022, item 19). Sem nenhuma lógica de IA (`AIImplemented=false`).
+
+`ExternalIntegrations.Contracts.InboundGuestMessageReceived` — o segundo Integration Event que External Integrations publica (o primeiro foi `WhatsAppMessageStatusChanged`, §41 acima é sobre Payments; ver Checkpoint 2.3.3 da Fase 9 para o primeiro de External Integrations). Publicado por `WhatsAppWebhookMessageEventPublisher` após verificação de assinatura, resolução de tenant e normalização (`MetaWebhookMessageProcessor`, confinado a `Infrastructure.Meta`). Payload: `TenantId`, `ProviderMessageId`, `Channel`, `SenderPhoneNormalized` (dígitos-somente), `MessageType` (`Text`/`Unsupported`), `Text` (apenas para `Text`), `OccurredAtUtc` — deliberadamente sem payload bruto do Meta, sem credencial, sem PhoneNumberId da plataforma. CP1 é TEXT ONLY — qualquer outro tipo (imagem/áudio/vídeo/documento/localização) é `Unsupported`, nunca baixado/modelado (Documento 16 §31). Exchange `external-integrations-events` (a mesma já existente, ADR-022), routing key `inbound_guest_message_received`, consumida exclusivamente por Communication (`communication.inbound-guest-message-trigger`, unconditional — sem distinção fake/real de conector, mesmo padrão de `communication.whatsapp-status-projection`).
+
+`Reservations.Contracts.IReservationByGuestPhoneReader` (ADR-029; Architecture Principles §14, Exceção 13) — consumida exclusivamente por Communication, retornando `IReadOnlyList<ReservationCandidate(ReservationId, PropertyId, CheckInAt, CheckOutAt)>`. Elegibilidade: apenas `ReservationStatus.Confirmed`, sem janela temporal. 0 candidatos ou N candidatos nunca resultam em `Conversation` criada — apenas exatamente 1 candidato resolve automaticamente; desambiguação entre N candidatos é deferida a um checkpoint futuro do AI Agent.
+
+`Communication.Domain.Conversation` (novo agregado) — um por `(TenantId, ReservationId, Channel)` ativo, origem sempre `ReservationId` (Documento 12 §9/§17). `Communication.Domain.Message` ganha `ConversationId`/`Direction` (`Outbound`/`Inbound`), sem quebra de nenhum invariante pré-existente — toda mensagem anterior foi backfillada deterministicamente (`IHostPro.MigrationRunner.ConversationBackfillBootstrapStep`, mecanismo ADR-017, necessário por RLS/FORCE nas duas tabelas). Idempotência do inbound por `TenantId`/`Channel`/`ProviderMessageId`, reaproveitando o mecanismo de `IdempotencyKey` já existente — nenhuma tabela de deduplicação nova.
+
+| Evento/Contrato | Exchange | Routing Key | Fila |
+|---|---|---|---|
+| GuestAccessDeliveryRequested | guest-operations-events | guest_access_delivery_requested | communication.guest-access-delivery-trigger |
+| InboundGuestMessageReceived | external-integrations-events | inbound_guest_message_received | communication.inbound-guest-message-trigger |

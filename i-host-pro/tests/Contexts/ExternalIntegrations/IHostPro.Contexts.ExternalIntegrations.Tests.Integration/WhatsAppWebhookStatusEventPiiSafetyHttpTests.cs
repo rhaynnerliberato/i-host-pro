@@ -68,6 +68,10 @@ public sealed class WhatsAppWebhookStatusEventPiiSafetyHttpTests : IAsyncDisposa
                     services.AddScoped<IExternalIntegrationsTransactionExecutor, PassThroughTransactionExecutor>();
                     services.AddSingleton<IIntegrationEventCollector>(_collector);
                     services.AddScoped<IWhatsAppWebhookStatusEventPublisher, WhatsAppWebhookStatusEventPublisher>();
+                    // Fase 11, Checkpoint 1: required controller dependencies, never exercised by
+                    // this file's own statuses[]-only payloads — see NoOpMessageProcessor's own doc comment.
+                    services.AddSingleton<IWhatsAppWebhookMessageProcessor>(new NoOpMessageProcessor());
+                    services.AddSingleton<IWhatsAppWebhookMessageEventPublisher>(new NoOpMessageEventPublisher());
                     services.AddLogging();
                 });
                 webHost.Configure(app =>
@@ -150,6 +154,19 @@ public sealed class WhatsAppWebhookStatusEventPiiSafetyHttpTests : IAsyncDisposa
     {
         public Task<Guid?> ResolveTenantIdAsync(string phoneNumberId, CancellationToken cancellationToken) =>
             Task.FromResult(phoneNumberId == knownPhoneNumberId ? (Guid?)knownTenantId : null);
+    }
+
+    /// <summary>Fase 11, Checkpoint 1 — this file's own scope is statuses[]/status PII-safety only; every payload here carries no messages[], so this is never actually invoked.</summary>
+    private sealed class NoOpMessageProcessor : IWhatsAppWebhookMessageProcessor
+    {
+        public Task<IReadOnlyList<WebhookMessageProcessingOutcome>> ProcessAsync(ReadOnlyMemory<byte> rawBody, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<WebhookMessageProcessingOutcome>>([]);
+    }
+
+    private sealed class NoOpMessageEventPublisher : IWhatsAppWebhookMessageEventPublisher
+    {
+        public Task PublishAsync(WebhookMessageProcessingOutcome outcome, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 
     private sealed class PassThroughTransactionExecutor : IExternalIntegrationsTransactionExecutor

@@ -43,6 +43,28 @@ public static class CommunicationModuleExtensions
         services.AddScoped<ICommunicationTransactionExecutor, CommunicationTransactionExecutor>();
         services.AddScoped<ICommunicationMessageExecutionScope, CommunicationMessageExecutionScope>();
 
+        // Fase 11, Checkpoint 1 (Inbound Conversation Foundation): every
+        // processor that creates a Message (inbound or outbound) needs
+        // IConversationResolver, so it is registered here alongside
+        // IMessageRepository rather than per-consumer method.
+        services.AddScoped<IConversationRepository, ConversationRepository>();
+        services.AddScoped<IConversationResolver, ConversationResolver>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="InboundGuestMessageProcessor"/> (Fase 11,
+    /// Checkpoint 1) — unconditional in every environment, same rationale as
+    /// <see cref="AddCommunicationWhatsAppStatusConsumer"/>: resolving a
+    /// guest phone to a Reservation and persisting an inbound Message has no
+    /// fake/real connector distinction of its own (nothing is sent out).
+    /// </summary>
+    public static IServiceCollection AddCommunicationInboundMessageConsumer(this IServiceCollection services)
+    {
+        services.AddKeyedScoped<IIntegrationEventHandler<InboundGuestMessageReceived>, InboundGuestMessageProcessor>(
+            CommunicationMessageExecutionScope.HandlerKey);
+
         return services;
     }
 

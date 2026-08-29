@@ -14,6 +14,7 @@ public class PixChargeCreatedDeliveryProcessorTests
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly Guid ReservationId = Guid.NewGuid();
     private static readonly Guid PixChargeId = Guid.NewGuid();
+    private static readonly Guid ConversationId = Guid.NewGuid();
     private static readonly DateTimeOffset Now = new(2026, 8, 28, 12, 0, 0, TimeSpan.Zero);
     private const string TemplateKey = "LATE_CHECKOUT_PIX_PAYMENT";
     private const string ActiveTemplateContent = "Olá {{GuestName}}, o valor de {{Amount}} pode ser pago via PIX: {{PixCode}}";
@@ -35,7 +36,8 @@ public class PixChargeCreatedDeliveryProcessorTests
         FakePixChargeDeliveryReader deliveryReader, FakeTemplateReader templateReader,
         FakeReservationGuestContactReader guestContactReader, FakeMessageRepository repository, FakeOutboundMessageConnector connector) =>
         new(
-            deliveryReader, templateReader, guestContactReader, repository, new PassThroughCommunicationTransactionExecutor(),
+            deliveryReader, templateReader, guestContactReader, repository, FakeConversationResolver.Returning(ConversationId),
+            new PassThroughCommunicationTransactionExecutor(),
             connector, new FixedTimeProvider(Now), NullLogger<PixChargeCreatedDeliveryProcessor>.Instance);
 
     [Fact]
@@ -111,7 +113,7 @@ public class PixChargeCreatedDeliveryProcessorTests
     public async Task HandleAsync_skips_when_a_message_already_exists_for_the_idempotency_key()
     {
         var idempotencyKey = $"{TenantId:D}:{PixChargeId:D}:{TemplateKey}:WhatsApp";
-        var existing = Message.Create(Guid.NewGuid(), TenantId, ReservationId, "WhatsApp", TemplateKey, null, "already sent", idempotencyKey, Now);
+        var existing = Message.Create(Guid.NewGuid(), TenantId, ConversationId, ReservationId, "WhatsApp", TemplateKey, null, "already sent", idempotencyKey, Now);
         var repository = FakeMessageRepository.WithExisting(existing);
         var connector = FakeOutboundMessageConnector.Succeeding();
         var processor = CreateProcessor(

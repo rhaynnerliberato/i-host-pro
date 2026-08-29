@@ -64,6 +64,7 @@ public sealed class GuestAccessDeliveryProcessor : IIntegrationEventHandler<Gues
     private readonly ITemplateReader _templateReader;
     private readonly IReservationGuestContactReader _guestContactReader;
     private readonly IMessageRepository _repository;
+    private readonly IConversationResolver _conversationResolver;
     private readonly ICommunicationTransactionExecutor _transactionExecutor;
     private readonly IOutboundMessageConnector _connector;
     private readonly TimeProvider _timeProvider;
@@ -74,6 +75,7 @@ public sealed class GuestAccessDeliveryProcessor : IIntegrationEventHandler<Gues
         ITemplateReader templateReader,
         IReservationGuestContactReader guestContactReader,
         IMessageRepository repository,
+        IConversationResolver conversationResolver,
         ICommunicationTransactionExecutor transactionExecutor,
         IOutboundMessageConnector connector,
         TimeProvider timeProvider,
@@ -83,6 +85,7 @@ public sealed class GuestAccessDeliveryProcessor : IIntegrationEventHandler<Gues
         _templateReader = templateReader;
         _guestContactReader = guestContactReader;
         _repository = repository;
+        _conversationResolver = conversationResolver;
         _transactionExecutor = transactionExecutor;
         _connector = connector;
         _timeProvider = timeProvider;
@@ -107,15 +110,19 @@ public sealed class GuestAccessDeliveryProcessor : IIntegrationEventHandler<Gues
             return;
         }
 
+        var now = _timeProvider.GetUtcNow();
+        var conversationId = await _conversationResolver.GetOrCreateActiveConversationIdAsync(
+            @event.TenantId, @event.ReservationId, Channel, now, cancellationToken);
+
         if (access.AccessCredential is null)
             LogSkipped(@event, CredentialTemplateKey, NoCredentialConfiguredReason);
         else
-            await DeliverCredentialAsync(@event, guestContact.GuestName, guestContact.GuestPhone, access.AccessCredential, cancellationToken);
+            await DeliverCredentialAsync(@event, conversationId, guestContact.GuestName, guestContact.GuestPhone, access.AccessCredential, cancellationToken);
 
         if (access.AccessInstructions is null)
             LogSkipped(@event, InstructionsTemplateKey, NoInstructionsConfiguredReason);
         else
-            await DeliverInstructionsAsync(@event, guestContact.GuestName, guestContact.GuestPhone, access.AccessInstructions, cancellationToken);
+            await DeliverInstructionsAsync(@event, conversationId, guestContact.GuestName, guestContact.GuestPhone, access.AccessInstructions, cancellationToken);
     }
 
     /// <summary>
@@ -125,7 +132,7 @@ public sealed class GuestAccessDeliveryProcessor : IIntegrationEventHandler<Gues
     /// comment for the full security rationale.
     /// </summary>
     private async Task DeliverCredentialAsync(
-        GuestAccessDeliveryRequested @event, string guestName, string guestPhone, string accessCredential, CancellationToken cancellationToken)
+        GuestAccessDeliveryRequested @event, Guid conversationId, string guestName, string guestPhone, string accessCredential, CancellationToken cancellationToken)
     {
         var idempotencyKey = BuildIdempotencyKey(@event.TenantId, @event.AggregateId, CredentialTemplateKey, Channel);
 
@@ -155,7 +162,7 @@ public sealed class GuestAccessDeliveryProcessor : IIntegrationEventHandler<Gues
 
         var now = _timeProvider.GetUtcNow();
         var message = Message.Create(
-            Guid.NewGuid(), @event.TenantId, @event.ReservationId, Channel, CredentialTemplateKey,
+            Guid.NewGuid(), @event.TenantId, conversationId, @event.ReservationId, Channel, CredentialTemplateKey,
             Mask(guestPhone), RedactedContentMarker, idempotencyKey, now);
         message.MarkQueued();
 
@@ -194,7 +201,7 @@ public sealed class GuestAccessDeliveryProcessor : IIntegrationEventHandler<Gues
 
     /// <summary>Ordinary delivery — <see cref="PropertyGuestAccessReadResult.AccessInstructions"/> is not a secret, uses the standard pipeline, persisted as-is (mirrors <see cref="PixChargeCreatedDeliveryProcessor"/> exactly).</summary>
     private async Task DeliverInstructionsAsync(
-        GuestAccessDeliveryRequested @event, string guestName, string guestPhone, string accessInstructions, CancellationToken cancellationToken)
+        GuestAccessDeliveryRequested @event, Guid conversationId, string guestName, string guestPhone, string accessInstructions, CancellationToken cancellationToken)
     {
         var idempotencyKey = BuildIdempotencyKey(@event.TenantId, @event.AggregateId, InstructionsTemplateKey, Channel);
 
@@ -222,7 +229,7 @@ public sealed class GuestAccessDeliveryProcessor : IIntegrationEventHandler<Gues
 
         var now = _timeProvider.GetUtcNow();
         var message = Message.Create(
-            Guid.NewGuid(), @event.TenantId, @event.ReservationId, Channel, InstructionsTemplateKey,
+            Guid.NewGuid(), @event.TenantId, conversationId, @event.ReservationId, Channel, InstructionsTemplateKey,
             Mask(guestPhone), renderedContent, idempotencyKey, now);
         message.MarkQueued();
 

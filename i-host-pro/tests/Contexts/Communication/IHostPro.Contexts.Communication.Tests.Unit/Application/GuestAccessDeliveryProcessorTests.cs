@@ -21,6 +21,7 @@ public class GuestAccessDeliveryProcessorTests
     private static readonly Guid ReservationId = Guid.NewGuid();
     private static readonly Guid PropertyId = Guid.NewGuid();
     private static readonly Guid GuestStayOperationId = Guid.NewGuid();
+    private static readonly Guid ConversationId = Guid.NewGuid();
     private static readonly DateTimeOffset Now = new(2026, 8, 28, 12, 0, 0, TimeSpan.Zero);
     private const string CredentialTemplateKey = "GUEST_ACCESS_CREDENTIAL";
     private const string InstructionsTemplateKey = "GUEST_ACCESS_INSTRUCTIONS";
@@ -49,7 +50,8 @@ public class GuestAccessDeliveryProcessorTests
         FakePropertyGuestAccessReader accessReader, ITemplateReader templateReader,
         FakeReservationGuestContactReader guestContactReader, FakeMessageRepository repository, FakeOutboundMessageConnector connector) =>
         new(
-            accessReader, templateReader, guestContactReader, repository, new PassThroughCommunicationTransactionExecutor(),
+            accessReader, templateReader, guestContactReader, repository, FakeConversationResolver.Returning(ConversationId),
+            new PassThroughCommunicationTransactionExecutor(),
             connector, new FixedTimeProvider(Now), NullLogger<GuestAccessDeliveryProcessor>.Instance);
 
     /// <summary>Ambiguous key: only one FakeTemplateReader can be configured with a single Returning() result, but the processor looks up TWO different template keys. This double serves both lookups by key.</summary>
@@ -76,7 +78,8 @@ public class GuestAccessDeliveryProcessorTests
             FakePropertyGuestAccessReader.Returning(new PropertyGuestAccessReadResult(SentinelCredential, null)),
             BothTemplates,
             FakeReservationGuestContactReader.Returning(new ReservationGuestContact(ReservationId, GuestPhone, "Ana Silva")),
-            repository, new PassThroughCommunicationTransactionExecutor(), connector, new FixedTimeProvider(Now),
+            repository, FakeConversationResolver.Returning(ConversationId),
+            new PassThroughCommunicationTransactionExecutor(), connector, new FixedTimeProvider(Now),
             NullLogger<GuestAccessDeliveryProcessor>.Instance);
 
         await processor.HandleAsync(BuildEvent(), CancellationToken.None);

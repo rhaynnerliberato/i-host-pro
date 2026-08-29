@@ -96,6 +96,17 @@ Corrigido fix-forward: `WhatsAppMessageNotYetAvailableException` (`Communication
 
 Provado por teste real (Wolverine host real, sem mock, sem inspeção de internals): a exceção específica recebe as quatro tentativas configuradas; uma `InvalidOperationException` genérica e não relacionada, de uma handler chain completamente diferente, recebe apenas uma tentativa — o comportamento default do Wolverine, confirmando que a política não vaza para fora do escopo pretendido.
 
+## Amendment cronológico (Fase 11, Checkpoint 1 — Inbound Conversation Foundation)
+
+Item 19 acima ("Nenhuma mensagem inbound de convidado é processada no MVP") registrava o estado do CP2.3 da Fase 9 — correto naquele momento, quando nenhum caso de uso de atendimento ao hóspede existia ainda. Fase 11, Checkpoint 1 abre exatamente esse sub-escopo, preservando integralmente as 18 decisões originais desta ADR (verificação de assinatura antes de qualquer resolução de tenant, App Secret/Verify Token app-level, corpo bruto verificado antes de qualquer desserialização, outbox obrigatório antes de publicar, eventos provider-neutros/PII-safe):
+
+- O webhook agora também processa `messages[]` (Meta's inbound-message payload), além de `statuses[]` — o mesmo POST, a mesma verificação de assinatura, o mesmo routing directory `PhoneNumberId → TenantId`. Um único delivery pode conter ambos, em `changes[]` distintos, ambos processados independentemente (`MetaWebhookStatusProcessor`/`MetaWebhookMessageProcessor`, cada um ignorando silenciosamente o outro formato).
+- Novo evento provider-neutro, PII-minimizado: `InboundGuestMessageReceived` (`ExternalIntegrations.Contracts`) — carrega `SenderPhoneNormalized` (dígitos-somente) e, apenas para mensagens `text`, o corpo da mensagem; nunca o payload bruto do Meta, nunca credencial/PIX/dado administrativo.
+- CP1 é **TEXT ONLY** — qualquer outro tipo de mensagem (imagem/áudio/vídeo/documento/localização/...) é classificado `Unsupported`, nunca baixado/modelado (Documento 16 §31 já classifica reconhecimento de mídia como escopo futuro).
+- Idempotência do inbound é responsabilidade de Communication (lookup-before-create por `TenantId`/`Channel`/`ProviderMessageId`, mesmo mecanismo de `IdempotencyKey` já usado pelo lado outbound) — nunca uma nova tabela de deduplicação em External Integrations.
+- Resolução de qual Reservation/Guest um telefone inbound representa é responsabilidade de Communication, via a nova décima terceira exceção síncrona (ADR-029, `IReservationByGuestPhoneReader`) — nunca inferida a partir de dado já presente no webhook.
+- Nenhuma das 18 decisões originais desta ADR foi reaberta ou enfraquecida — este amendment estende o escopo do payload processado, preservando integralmente a arquitetura de segurança/routing/durabilidade já homologada.
+
 ## Referências
 - ADR-012 (precedente de abstração de credencial Development-only, sem fallback de Production)
 - ADR-015, ADR-016 (limite tenant-safe para consumers que tocam `BaseDbContext`)

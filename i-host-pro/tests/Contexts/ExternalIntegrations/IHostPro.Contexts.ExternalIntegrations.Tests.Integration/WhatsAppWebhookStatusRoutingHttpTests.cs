@@ -63,6 +63,8 @@ public sealed class WhatsAppWebhookStatusRoutingHttpTests : IAsyncDisposable
                     // status normalization, not durable event publishing
                     // (see WhatsAppWebhookStatusDurabilityHttpTests for that).
                     services.AddSingleton<IWhatsAppWebhookStatusEventPublisher>(_eventPublisher);
+                    services.AddSingleton<IWhatsAppWebhookMessageProcessor>(new NoOpMessageProcessor());
+                    services.AddSingleton<IWhatsAppWebhookMessageEventPublisher>(new NoOpMessageEventPublisher());
                     services.AddLogging(logging => logging.AddProvider(_loggerProvider));
                 });
                 webHost.Configure(app =>
@@ -217,5 +219,17 @@ public sealed class WhatsAppWebhookStatusRoutingHttpTests : IAsyncDisposable
                     messages.Add(formatter(state, exception));
             }
         }
+    }
+
+    private sealed class NoOpMessageProcessor : IWhatsAppWebhookMessageProcessor
+    {
+        public Task<IReadOnlyList<WebhookMessageProcessingOutcome>> ProcessAsync(ReadOnlyMemory<byte> rawBody, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<WebhookMessageProcessingOutcome>>([]);
+    }
+
+    private sealed class NoOpMessageEventPublisher : IWhatsAppWebhookMessageEventPublisher
+    {
+        public Task PublishAsync(WebhookMessageProcessingOutcome outcome, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 }

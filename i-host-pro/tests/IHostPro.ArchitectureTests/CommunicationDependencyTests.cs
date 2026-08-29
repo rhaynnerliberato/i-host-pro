@@ -113,6 +113,10 @@ public class CommunicationDependencyTests
             "IHostPro.Contexts.Payments.Domain",
             "IHostPro.Contexts.Payments.Application",
             "IHostPro.Contexts.Payments.Infrastructure",
+            "IHostPro.Contexts.ExternalIntegrations.Domain",
+            "IHostPro.Contexts.ExternalIntegrations.Application",
+            "IHostPro.Contexts.ExternalIntegrations.Infrastructure",
+            "IHostPro.Contexts.ExternalIntegrations.Api",
             "IHostPro.Contexts.Housekeeping",
             "IHostPro.Contexts.Identity",
             "IHostPro.Contexts.Dashboard",
@@ -348,16 +352,18 @@ public class CommunicationDependencyTests
     }
 
     /// <summary>
-    /// CP1 mandate §16/§27: don't invent a <c>Conversation</c> or internal
-    /// <c>Notification</c> entity just because the conceptual model has one
-    /// — this checkpoint's single outbound use case only needs <c>Message</c>.
-    /// The Notifications BC (internal Admin/Faxineira/Proprietário alerts)
-    /// stays FUTURO — no such type belongs in Communication.Domain.
+    /// Fase 9 CP1 mandate §16/§27 originally forbade a <c>Conversation</c>
+    /// type here (that checkpoint's single outbound use case only needed
+    /// <c>Message</c>) — Fase 11, Checkpoint 1 (Inbound Conversation
+    /// Foundation) explicitly requires it (Documento 12 §9 — "Conversa...
+    /// representa um canal de atendimento", owned by Communication). The
+    /// internal <c>Notification</c> entity (Notifications BC — Admin/
+    /// Faxineira/Proprietário alerts) remains FUTURO and still forbidden.
     /// </summary>
     [Fact]
-    public void Domain_Declares_No_Conversation_Or_Notification_Type()
+    public void Domain_Declares_No_Notification_Type()
     {
-        var forbiddenTypeNames = new[] { "Conversation", "Notification" };
+        var forbiddenTypeNames = new[] { "Notification" };
 
         var domainTypeNames = Types.InAssembly(typeof(Message).Assembly)
             .GetTypes()
@@ -367,8 +373,8 @@ public class CommunicationDependencyTests
         foreach (var forbidden in forbiddenTypeNames)
         {
             domainTypeNames.Should().NotContain(forbidden,
-                $"Communication.Domain must not declare a {forbidden} type this checkpoint (CP1 mandate — " +
-                "no entity beyond what the single ReservationCreated -> WhatsApp use case needs)");
+                $"Communication.Domain must not declare a {forbidden} type — the Notifications Bounded " +
+                "Context (internal Admin/Faxineira/Proprietário alerts) remains FUTURO");
         }
     }
 

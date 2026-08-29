@@ -188,7 +188,7 @@ public sealed class WhatsAppMessageStatusChangedWorkerRoundTripTests : IAsyncLif
         await SetTenantAsync(dbContext.Database, tenantId);
 
         var message = Message.Create(
-            Guid.NewGuid(), tenantId, Guid.NewGuid(), "WhatsApp", "RESERVATION_CONFIRMATION",
+            Guid.NewGuid(), tenantId, Guid.NewGuid(), Guid.NewGuid(), "WhatsApp", "RESERVATION_CONFIRMATION",
             null, "Olá, sua reserva foi confirmada.", $"e2e-{Guid.NewGuid():N}", now);
         message.MarkQueued();
         message.MarkSending();

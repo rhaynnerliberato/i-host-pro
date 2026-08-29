@@ -15,6 +15,7 @@ public class LateCheckoutApprovedFrontDeskNotificationProcessorTests
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly Guid ReservationId = Guid.NewGuid();
     private static readonly Guid PropertyId = Guid.NewGuid();
+    private static readonly Guid ConversationId = Guid.NewGuid();
     private static readonly DateTimeOffset Now = new(2026, 8, 27, 12, 0, 0, TimeSpan.Zero);
     private const string TemplateKey = "FRONT_DESK_LATE_CHECKOUT_APPROVED";
     private const string ActiveTemplateContent = "Checkout tardio de {{GuestName}} até {{ApprovedCheckOutAt}}";
@@ -38,7 +39,8 @@ public class LateCheckoutApprovedFrontDeskNotificationProcessorTests
         FakeFrontDeskContactReader frontDeskReader, FakeTemplateReader templateReader,
         FakeReservationGuestContactReader guestContactReader, FakeMessageRepository repository, FakeOutboundMessageConnector connector) =>
         new(
-            frontDeskReader, templateReader, guestContactReader, repository, new PassThroughCommunicationTransactionExecutor(),
+            frontDeskReader, templateReader, guestContactReader, repository, FakeConversationResolver.Returning(ConversationId),
+            new PassThroughCommunicationTransactionExecutor(),
             connector, new FixedTimeProvider(Now), NullLogger<LateCheckoutApprovedFrontDeskNotificationProcessor>.Instance);
 
     [Fact]
@@ -116,7 +118,7 @@ public class LateCheckoutApprovedFrontDeskNotificationProcessorTests
     public async Task HandleAsync_skips_when_a_message_already_exists_for_the_idempotency_key()
     {
         var existing = Message.Create(
-            Guid.NewGuid(), TenantId, ReservationId, "WhatsApp", TemplateKey,
+            Guid.NewGuid(), TenantId, ConversationId, ReservationId, "WhatsApp", TemplateKey,
             null, "already sent", $"{TenantId:D}:{ReservationId:D}:{TemplateKey}:WhatsApp", Now);
         var repository = FakeMessageRepository.WithExisting(existing);
         var connector = FakeOutboundMessageConnector.Succeeding();

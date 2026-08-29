@@ -96,6 +96,8 @@ namespace IHostPro.Contexts.Reservations.Infrastructure.Persistence.Migrations
 
                     b.HasAlternateKey("TenantId", "Id");
 
+                    b.HasIndex("TenantId", "GuestPhone");
+
                     b.HasIndex("TenantId", "CheckInAt", "Id");
 
                     b.HasIndex("TenantId", "PropertyId", "CheckInAt");

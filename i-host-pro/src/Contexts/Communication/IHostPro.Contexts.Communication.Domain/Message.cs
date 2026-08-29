@@ -23,6 +23,19 @@ public sealed class Message : AggregateRoot<Guid>, ITenantOwned
 {
     public Guid TenantId { get; private set; }
     public Guid ReservationId { get; private set; }
+
+    /// <summary>
+    /// Fase 11, Checkpoint 1 — the <see cref="Conversation"/> this Message
+    /// belongs to. Added to every Message (both directions) — every
+    /// pre-existing outbound row was backfilled deterministically from its
+    /// own already-stored <see cref="TenantId"/>/<see cref="ReservationId"/>/
+    /// <see cref="Channel"/> (mandate item 15), never invented.
+    /// </summary>
+    public Guid ConversationId { get; private set; }
+
+    /// <summary>Fase 11, Checkpoint 1 — every row before this checkpoint is <see cref="MessageDirection.Outbound"/> (backfilled by migration).</summary>
+    public MessageDirection Direction { get; private set; }
+
     public string Channel { get; private set; } = null!;
     public string TemplateKey { get; private set; } = null!;
     public string? DestinationMasked { get; private set; }
@@ -37,29 +50,35 @@ public sealed class Message : AggregateRoot<Guid>, ITenantOwned
     public string? FailureReason { get; private set; }
     public string? ProviderMessageId { get; private set; }
 
+    private const string InboundTemplateKey = "INBOUND_GUEST_MESSAGE";
+
     private Message()
     {
         // EF Core materialization.
     }
 
     private Message(
-        Guid id, Guid tenantId, Guid reservationId, string channel, string templateKey,
-        string? destinationMasked, string renderedContent, string idempotencyKey, DateTimeOffset createdAtUtc)
+        Guid id, Guid tenantId, Guid conversationId, Guid reservationId, MessageDirection direction, string channel,
+        string templateKey, string? destinationMasked, string renderedContent, string idempotencyKey,
+        DateTimeOffset createdAtUtc, MessageStatus initialStatus, string? providerMessageId)
         : base(id)
     {
         TenantId = tenantId;
+        ConversationId = conversationId;
         ReservationId = reservationId;
+        Direction = direction;
         Channel = channel;
         TemplateKey = templateKey;
         DestinationMasked = destinationMasked;
         RenderedContent = renderedContent;
         IdempotencyKey = idempotencyKey;
-        Status = MessageStatus.Created;
+        Status = initialStatus;
         CreatedAtUtc = createdAtUtc;
+        ProviderMessageId = providerMessageId;
     }
 
     public static Message Create(
-        Guid id, Guid tenantId, Guid reservationId, string channel, string templateKey,
+        Guid id, Guid tenantId, Guid conversationId, Guid reservationId, string channel, string templateKey,
         string? destinationMasked, string renderedContent, string idempotencyKey, DateTimeOffset createdAtUtc)
     {
         if (string.IsNullOrWhiteSpace(channel))
@@ -72,7 +91,37 @@ public sealed class Message : AggregateRoot<Guid>, ITenantOwned
             throw new ArgumentException("Idempotency key cannot be empty.", nameof(idempotencyKey));
 
         return new Message(
-            id, tenantId, reservationId, channel, templateKey, destinationMasked, renderedContent, idempotencyKey, createdAtUtc);
+            id, tenantId, conversationId, reservationId, MessageDirection.Outbound, channel, templateKey,
+            destinationMasked, renderedContent, idempotencyKey, createdAtUtc, MessageStatus.Created, providerMessageId: null);
+    }
+
+    /// <summary>
+    /// Fase 11, Checkpoint 1 — an inbound guest message, already fully
+    /// resolved to a Conversation/Reservation by the caller (0/N-candidate
+    /// resolutions never reach this factory, mandate item 16). Born directly
+    /// in <see cref="MessageStatus.Received"/> — no Queued/Sending/Sent
+    /// lifecycle applies to a message the platform did not send.
+    /// <paramref name="text"/> is <see langword="null"/> for
+    /// <c>InboundGuestMessageType.Unsupported</c> (CP1 is TEXT ONLY, mandate
+    /// item 24) — stored here as <c>"[UNSUPPORTED MESSAGE TYPE]"</c>, never
+    /// null/empty, since <see cref="RenderedContent"/> remains NOT NULL for
+    /// every row regardless of direction.
+    /// </summary>
+    public static Message CreateInbound(
+        Guid id, Guid tenantId, Guid conversationId, Guid reservationId, string channel,
+        string? text, string providerMessageId, string idempotencyKey, DateTimeOffset receivedAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(channel))
+            throw new ArgumentException("Channel cannot be empty.", nameof(channel));
+        if (string.IsNullOrWhiteSpace(providerMessageId))
+            throw new ArgumentException("Provider message id cannot be empty.", nameof(providerMessageId));
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+            throw new ArgumentException("Idempotency key cannot be empty.", nameof(idempotencyKey));
+
+        return new Message(
+            id, tenantId, conversationId, reservationId, MessageDirection.Inbound, channel, InboundTemplateKey,
+            destinationMasked: null, renderedContent: text ?? "[UNSUPPORTED MESSAGE TYPE]", idempotencyKey,
+            receivedAtUtc, MessageStatus.Received, providerMessageId);
     }
 
     /// <summary>Criada → NaFila. The state actually persisted by the first <c>SaveChangesAsync</c> (CP1 mandate §34).</summary>

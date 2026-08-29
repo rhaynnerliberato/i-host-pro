@@ -60,5 +60,13 @@ public sealed class ReservationConfiguration : IEntityTypeConfiguration<Reservat
         builder.HasIndex(r => new { r.TenantId, r.Source, r.ExternalReservationId })
             .IsUnique()
             .HasFilter("external_reservation_id IS NOT NULL");
+
+        // Fase 11, Checkpoint 1 (ADR-029, synchronous exception #13):
+        // supports IReservationByGuestPhoneReader's lookup. Deliberately
+        // plain (tenant_id, guest_phone) — no status column, per the
+        // approved decision not to bake the Confirmed-only eligibility
+        // filter into the index shape until a real query plan proves it
+        // necessary.
+        builder.HasIndex(r => new { r.TenantId, r.GuestPhone });
     }
 }

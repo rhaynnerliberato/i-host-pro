@@ -6,11 +6,12 @@ namespace IHostPro.Contexts.Communication.Tests.Unit.Domain;
 public class MessageTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Guid ConversationId = Guid.NewGuid();
     private static readonly Guid ReservationId = Guid.NewGuid();
     private static readonly DateTimeOffset Now = new(2026, 8, 18, 12, 0, 0, TimeSpan.Zero);
 
     private static Message CreateMessage() => Message.Create(
-        Guid.NewGuid(), TenantId, ReservationId, "WhatsApp", "RESERVATION_CONFIRMATION",
+        Guid.NewGuid(), TenantId, ConversationId, ReservationId, "WhatsApp", "RESERVATION_CONFIRMATION",
         "*******1234", "Olá, sua reserva foi confirmada.", "idempotency-key", Now);
 
     [Fact]
@@ -30,7 +31,7 @@ public class MessageTests
     [InlineData("   ")]
     public void Create_rejects_empty_channel(string channel)
     {
-        var act = () => Message.Create(Guid.NewGuid(), TenantId, ReservationId, channel, "KEY", null, "content", "key", Now);
+        var act = () => Message.Create(Guid.NewGuid(), TenantId, ConversationId, ReservationId, channel, "KEY", null, "content", "key", Now);
 
         act.Should().Throw<ArgumentException>();
     }
@@ -40,7 +41,7 @@ public class MessageTests
     [InlineData("   ")]
     public void Create_rejects_empty_templateKey(string templateKey)
     {
-        var act = () => Message.Create(Guid.NewGuid(), TenantId, ReservationId, "WhatsApp", templateKey, null, "content", "key", Now);
+        var act = () => Message.Create(Guid.NewGuid(), TenantId, ConversationId, ReservationId, "WhatsApp", templateKey, null, "content", "key", Now);
 
         act.Should().Throw<ArgumentException>();
     }
@@ -50,7 +51,7 @@ public class MessageTests
     [InlineData("   ")]
     public void Create_rejects_empty_renderedContent(string content)
     {
-        var act = () => Message.Create(Guid.NewGuid(), TenantId, ReservationId, "WhatsApp", "KEY", null, content, "key", Now);
+        var act = () => Message.Create(Guid.NewGuid(), TenantId, ConversationId, ReservationId, "WhatsApp", "KEY", null, content, "key", Now);
 
         act.Should().Throw<ArgumentException>();
     }
@@ -60,7 +61,7 @@ public class MessageTests
     [InlineData("   ")]
     public void Create_rejects_empty_idempotencyKey(string idempotencyKey)
     {
-        var act = () => Message.Create(Guid.NewGuid(), TenantId, ReservationId, "WhatsApp", "KEY", null, "content", idempotencyKey, Now);
+        var act = () => Message.Create(Guid.NewGuid(), TenantId, ConversationId, ReservationId, "WhatsApp", "KEY", null, "content", idempotencyKey, Now);
 
         act.Should().Throw<ArgumentException>();
     }

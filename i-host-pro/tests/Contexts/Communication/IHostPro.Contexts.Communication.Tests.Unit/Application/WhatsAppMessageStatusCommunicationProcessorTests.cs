@@ -17,6 +17,7 @@ public class WhatsAppMessageStatusCommunicationProcessorTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly Guid ReservationId = Guid.NewGuid();
+    private static readonly Guid ConversationId = Guid.NewGuid();
     private static readonly DateTimeOffset Now = new(2026, 8, 20, 12, 0, 0, TimeSpan.Zero);
     private const string ProviderMessageId = "wamid.HBgL...";
 
@@ -37,7 +38,7 @@ public class WhatsAppMessageStatusCommunicationProcessorTests
     private static Message SentMessage()
     {
         var message = Message.Create(
-            Guid.NewGuid(), TenantId, ReservationId, "WhatsApp", "RESERVATION_CONFIRMATION",
+            Guid.NewGuid(), TenantId, ConversationId, ReservationId, "WhatsApp", "RESERVATION_CONFIRMATION",
             "*******1234", "Olá, sua reserva foi confirmada.", "idempotency-key", Now);
         message.MarkQueued();
         message.MarkSending();

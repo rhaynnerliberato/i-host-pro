@@ -11,6 +11,7 @@ public class ReservationCreatedCommunicationProcessorTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly Guid ReservationId = Guid.NewGuid();
+    private static readonly Guid ConversationId = Guid.NewGuid();
     private static readonly DateTimeOffset Now = new(2026, 8, 18, 12, 0, 0, TimeSpan.Zero);
     private const string ActiveTemplateContent = "Check-in em {{CheckInDate}}";
 
@@ -33,14 +34,15 @@ public class ReservationCreatedCommunicationProcessorTests
         FakeTemplateReader templateReader, FakeReservationGuestContactReader contactReader,
         FakeMessageRepository repository, FakeOutboundMessageConnector connector) =>
         new(
-            templateReader, contactReader, repository, new PassThroughCommunicationTransactionExecutor(),
+            templateReader, contactReader, repository, FakeConversationResolver.Returning(ConversationId),
+            new PassThroughCommunicationTransactionExecutor(),
             connector, new FixedTimeProvider(Now), NullLogger<ReservationCreatedCommunicationProcessor>.Instance);
 
     [Fact]
     public async Task HandleAsync_skips_when_a_message_already_exists_for_the_idempotency_key()
     {
         var existing = Message.Create(
-            Guid.NewGuid(), TenantId, ReservationId, "WhatsApp", "RESERVATION_CONFIRMATION",
+            Guid.NewGuid(), TenantId, ConversationId, ReservationId, "WhatsApp", "RESERVATION_CONFIRMATION",
             null, "already sent", $"{TenantId:D}:{ReservationId:D}:RESERVATION_CONFIRMATION:WhatsApp", Now);
         var repository = FakeMessageRepository.WithExisting(existing);
         var connector = FakeOutboundMessageConnector.Succeeding();

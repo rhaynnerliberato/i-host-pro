@@ -53,6 +53,8 @@ public sealed class WhatsAppWebhookStatusDurabilityHttpTests : IAsyncDisposable
                     services.AddScoped<IWhatsAppWebhookStatusProcessor, MetaWebhookStatusProcessor>();
                     services.AddSingleton<IWhatsAppWebhookStatusEventPublisher>(
                         new ThrowingStatusEventPublisher(new InvalidOperationException("simulated transient outbox failure")));
+                    services.AddSingleton<IWhatsAppWebhookMessageProcessor>(new NoOpMessageProcessor());
+                    services.AddSingleton<IWhatsAppWebhookMessageEventPublisher>(new NoOpMessageEventPublisher());
                     services.AddLogging();
                 });
                 webHost.Configure(app =>
@@ -134,5 +136,17 @@ public sealed class WhatsAppWebhookStatusDurabilityHttpTests : IAsyncDisposable
     {
         public Task PublishAsync(WebhookStatusProcessingOutcome outcome, CancellationToken cancellationToken) =>
             throw exception;
+    }
+
+    private sealed class NoOpMessageProcessor : IWhatsAppWebhookMessageProcessor
+    {
+        public Task<IReadOnlyList<WebhookMessageProcessingOutcome>> ProcessAsync(ReadOnlyMemory<byte> rawBody, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<WebhookMessageProcessingOutcome>>([]);
+    }
+
+    private sealed class NoOpMessageEventPublisher : IWhatsAppWebhookMessageEventPublisher
+    {
+        public Task PublishAsync(WebhookMessageProcessingOutcome outcome, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 }

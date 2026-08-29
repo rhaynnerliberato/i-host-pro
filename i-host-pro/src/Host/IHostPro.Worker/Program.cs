@@ -168,6 +168,12 @@ try
     // silently drop real status updates in every other environment.
     builder.Services.AddCommunicationWhatsAppStatusConsumer();
 
+    // Fase 11, Checkpoint 1 (Inbound Conversation Foundation) — same
+    // unconditional rationale as the status consumer above: resolving a
+    // guest phone and persisting an inbound Message has no fake/real
+    // connector distinction of its own.
+    builder.Services.AddCommunicationInboundMessageConsumer();
+
     // Gated to Development ONLY (CP1 closure — corrective homologation):
     // AddCommunicationReservationConsumer registers the ONLY
     // IOutboundMessageConnector this checkpoint has — FakeWhatsAppConnector,
@@ -892,6 +898,23 @@ try
         // handler" default).
         opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Communication.Infrastructure.Messaging.WhatsAppMessageStatusChangedHandler).Assembly);
         opts.ListenToRabbitQueue("communication.whatsapp-status-projection");
+
+        // Communication's inbound guest message consumer (Fase 11,
+        // Checkpoint 1 — Inbound Conversation Foundation) — a second,
+        // independent subscriber queue on the SAME external-integrations-events
+        // exchange (External Integrations never needs to know Communication
+        // is listening). Unconditional, same rationale as the WhatsApp
+        // status consumer above: resolving a guest phone and persisting an
+        // inbound Message has no fake/real connector distinction of its own.
+        // InboundGuestMessageReceivedHandler lives in the SAME
+        // Communication.Infrastructure assembly already included above — no
+        // second IncludeAssembly needed.
+        //
+        // ADR-020: exactly one Wolverine-discovered handler class exists for
+        // InboundGuestMessageReceived in this process (Communication's own)
+        // — no AddStickyHandler needed (ADR-020's own "single discovered
+        // handler" default).
+        opts.ListenToRabbitQueue("communication.inbound-guest-message-trigger");
 
         // Real defect found and fixed (Checkpoint 6 homologação, ADR-015
         // spike): IHostPro.Api/Program.cs already routes every real Cleaning

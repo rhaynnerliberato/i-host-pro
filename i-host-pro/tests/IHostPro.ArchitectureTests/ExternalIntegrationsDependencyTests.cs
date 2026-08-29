@@ -267,15 +267,18 @@ public class ExternalIntegrationsDependencyTests
 
     /// <summary>
     /// Fase 9, Checkpoint 2.3.3 (ADR-022 item 13): <c>WhatsAppWebhookStatusEventPublisher</c>
-    /// is the single, deliberately-authorized holder of <c>IServiceScopeFactory</c>
+    /// is a deliberately-authorized holder of <c>IServiceScopeFactory</c>
     /// in External Integrations — a fresh child DI scope per outcome is
     /// required because one Meta webhook delivery can batch status entries
     /// for multiple tenants, and the shared request-scoped <c>ITenantContext</c>
-    /// refuses to be re-set to a different tenant. Mirrors Communication's
-    /// own <c>Only_CommunicationMessageExecutionScope_May_Depend_On_IServiceScopeFactory</c>.
+    /// refuses to be re-set to a different tenant. Fase 11, Checkpoint 1
+    /// authorized a second, identical-pattern holder:
+    /// <c>WhatsAppWebhookMessageEventPublisher</c> (same multi-tenant-batch
+    /// reasoning, for inbound messages instead of statuses). Mirrors
+    /// Communication's own <c>Only_CommunicationMessageExecutionScope_May_Depend_On_IServiceScopeFactory</c>.
     /// </summary>
     [Fact]
-    public void Only_WhatsAppWebhookStatusEventPublisher_May_Depend_On_IServiceScopeFactory()
+    public void Only_WhatsAppWebhookEventPublishers_May_Depend_On_IServiceScopeFactory()
     {
         var typesDependingOnScopeFactory = Types.InAssembly(typeof(WhatsAppWebhookStatusEventPublisher).Assembly)
             .That()
@@ -283,11 +286,11 @@ public class ExternalIntegrationsDependencyTests
             .GetTypes()
             .ToList();
 
-        typesDependingOnScopeFactory.Should().ContainSingle()
-            .Which.Should().Be(typeof(WhatsAppWebhookStatusEventPublisher),
-                "WhatsAppWebhookStatusEventPublisher is the single, deliberately-authorized holder of " +
-                "IServiceScopeFactory in External Integrations — any other match means a new class started " +
-                "resolving its own child scope outside the approved boundary");
+        typesDependingOnScopeFactory.Select(t => t.Name).Should().BeEquivalentTo(
+            ["WhatsAppWebhookStatusEventPublisher", "WhatsAppWebhookMessageEventPublisher"],
+            "these two are the only deliberately-authorized holders of IServiceScopeFactory in External " +
+            "Integrations — any other match means a new class started resolving its own child scope outside " +
+            "the approved boundary");
     }
 
     /// <summary>
@@ -352,9 +355,11 @@ public class ExternalIntegrationsDependencyTests
     /// Deterministic Foundation", mandate §4) authorized four more:
     /// <c>AirbnbSyncStarted</c>/<c>AirbnbReservationImported</c>/
     /// <c>AirbnbReservationUpdated</c>/<c>AirbnbReservationCancelled</c>.
-    /// This test guards the inverse of its original intent — exactly these
-    /// five types, never another one added silently (mandate §3: a
-    /// dedicated, deliberately named event, never a reused/overloaded one).
+    /// Fase 11, Checkpoint 1 (Inbound Conversation Foundation) authorized a
+    /// sixth: <c>InboundGuestMessageReceived</c>. This test guards the
+    /// inverse of its original intent — exactly these six types, never
+    /// another one added silently (mandate §3: a dedicated, deliberately
+    /// named event, never a reused/overloaded one).
     /// </summary>
     [Fact]
     public void Contracts_Declares_Exactly_One_IntegrationEvent()
@@ -369,8 +374,9 @@ public class ExternalIntegrationsDependencyTests
             [
                 "WhatsAppMessageStatusChanged",
                 "AirbnbSyncStarted", "AirbnbReservationImported", "AirbnbReservationUpdated", "AirbnbReservationCancelled",
+                "InboundGuestMessageReceived",
             ],
-            "Checkpoint 2.3.3 (ADR-022 item 13/14) and Checkpoint 3.2 (mandate §4) authorized exactly these five Integration Events — " +
+            "Checkpoint 2.3.3 (ADR-022 item 13/14), Checkpoint 3.2 (mandate §4), and Fase 11 Checkpoint 1 authorized exactly these six Integration Events — " +
             "any other type here would mean a new event was added without an explicit checkpoint authorization");
     }
 
@@ -634,7 +640,12 @@ public class ExternalIntegrationsDependencyTests
             typeof(IWhatsAppCredentialProvider).Assembly, // Application
             typeof(IHostPro.Contexts.ExternalIntegrations.Api.Controllers.WhatsAppWebhookController).Assembly, // Api
         };
-        var forbiddenSubstrings = new[] { "MetaWebhookEnvelope", "MetaWebhookEntry", "MetaWebhookChange", "MetaWebhookValue", "MetaWebhookStatus", "MetaWebhookError" };
+        var forbiddenSubstrings = new[]
+        {
+            "MetaWebhookEnvelope", "MetaWebhookEntry", "MetaWebhookChange", "MetaWebhookValue", "MetaWebhookStatus", "MetaWebhookError",
+            // Fase 11, Checkpoint 1 (Inbound Conversation Foundation).
+            "MetaWebhookMessage", "MetaWebhookMessageText",
+        };
 
         foreach (var assembly in assembliesToCheck.Distinct())
         {

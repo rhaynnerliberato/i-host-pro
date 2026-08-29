@@ -54,6 +54,14 @@ public static class ReservationsModuleExtensions
         // reasoning as IReservationGuestContactReader above.
         services.AddScoped<IReservationScheduleReader, IHostPro.Contexts.Reservations.Infrastructure.GuestOperations.ReservationScheduleReader>();
 
+        // Fase 11, Checkpoint 1 — ADR-029, synchronous exception #13: the
+        // single, purpose-limited synchronous query port Communication may
+        // use to resolve which Confirmed Reservation(s) an inbound guest
+        // message's phone number could belong to. Same registration
+        // placement reasoning as IReservationGuestContactReader above —
+        // Communication's own Wolverine consumer runs in IHostPro.Worker.
+        services.AddScoped<IReservationByGuestPhoneReader, IHostPro.Contexts.Reservations.Infrastructure.Communication.ReservationByGuestPhoneReader>();
+
         return services;
     }
 

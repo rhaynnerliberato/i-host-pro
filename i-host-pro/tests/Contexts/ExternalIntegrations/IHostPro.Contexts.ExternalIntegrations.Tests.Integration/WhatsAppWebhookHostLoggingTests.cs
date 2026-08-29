@@ -95,6 +95,8 @@ public sealed class WhatsAppWebhookHostLoggingTests : IAsyncDisposable
                     // no-op rationale; NoOpStatusProcessor above never
                     // returns an Accepted outcome, so this is never invoked.
                     services.AddSingleton<IWhatsAppWebhookStatusEventPublisher>(new NoOpStatusEventPublisher());
+                    services.AddSingleton<IWhatsAppWebhookMessageProcessor>(new NoOpMessageProcessor());
+                    services.AddSingleton<IWhatsAppWebhookMessageEventPublisher>(new NoOpMessageEventPublisher());
                 });
                 webHost.Configure(app =>
                 {
@@ -215,6 +217,18 @@ public sealed class WhatsAppWebhookHostLoggingTests : IAsyncDisposable
     private sealed class NoOpStatusEventPublisher : IWhatsAppWebhookStatusEventPublisher
     {
         public Task PublishAsync(WebhookStatusProcessingOutcome outcome, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class NoOpMessageProcessor : IWhatsAppWebhookMessageProcessor
+    {
+        public Task<IReadOnlyList<WebhookMessageProcessingOutcome>> ProcessAsync(ReadOnlyMemory<byte> rawBody, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<WebhookMessageProcessingOutcome>>([]);
+    }
+
+    private sealed class NoOpMessageEventPublisher : IWhatsAppWebhookMessageEventPublisher
+    {
+        public Task PublishAsync(WebhookMessageProcessingOutcome outcome, CancellationToken cancellationToken) =>
             Task.CompletedTask;
     }
 

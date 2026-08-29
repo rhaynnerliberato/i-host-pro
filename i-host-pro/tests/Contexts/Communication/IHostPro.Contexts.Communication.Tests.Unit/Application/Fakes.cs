@@ -44,6 +44,20 @@ internal sealed class FakeReservationGuestContactReader : IReservationGuestConta
         Task.FromResult(_contact);
 }
 
+/// <summary>Fase 11, Checkpoint 1 (Inbound Conversation Foundation) — ADR-029's fake, mirrors <see cref="FakeReservationGuestContactReader"/> exactly.</summary>
+internal sealed class FakeReservationByGuestPhoneReader : IReservationByGuestPhoneReader
+{
+    private readonly IReadOnlyList<ReservationCandidate> _candidates;
+
+    private FakeReservationByGuestPhoneReader(IReadOnlyList<ReservationCandidate> candidates) => _candidates = candidates;
+
+    public static FakeReservationByGuestPhoneReader Returning(params ReservationCandidate[] candidates) => new(candidates);
+
+    public Task<IReadOnlyList<ReservationCandidate>> FindEligibleByGuestPhoneAsync(
+        Guid tenantId, string guestPhoneNormalized, CancellationToken cancellationToken) =>
+        Task.FromResult(_candidates);
+}
+
 /// <summary>Fase 10, Checkpoint 5 (PIX/Payment Deterministic Foundation) — ADR-027's fake, mirrors <see cref="FakeFrontDeskContactReader"/> exactly.</summary>
 internal sealed class FakePixChargeDeliveryReader : IPixChargeDeliveryReader
 {
@@ -128,6 +142,20 @@ internal sealed class PassThroughCommunicationTransactionExecutor : ICommunicati
 {
     public Task<TResponse> ExecuteAsync<TResponse>(Func<Task<TResponse>> operation, CancellationToken cancellationToken) =>
         operation();
+}
+
+/// <summary>Fase 11, Checkpoint 1 (Inbound Conversation Foundation) — returns a fixed ConversationId, no real lookup/create; every outbound processor's own Conversation-resolution behavior is exercised by the real <c>ConversationResolver</c>'s own tests instead.</summary>
+internal sealed class FakeConversationResolver : IConversationResolver
+{
+    private readonly Guid _conversationId;
+
+    private FakeConversationResolver(Guid conversationId) => _conversationId = conversationId;
+
+    public static FakeConversationResolver Returning(Guid conversationId) => new(conversationId);
+
+    public Task<Guid> GetOrCreateActiveConversationIdAsync(
+        Guid tenantId, Guid reservationId, string channel, DateTimeOffset occurredAtUtc, CancellationToken cancellationToken) =>
+        Task.FromResult(_conversationId);
 }
 
 internal sealed class FakeOutboundMessageConnector : IOutboundMessageConnector

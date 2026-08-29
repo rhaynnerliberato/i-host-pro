@@ -72,7 +72,7 @@ public class WhatsAppMessageStatusPersistenceTests : IClassFixture<Communication
         await SetTenantAsync(dbContext, tenantId);
 
         var message = Message.Create(
-            Guid.NewGuid(), tenantId, Guid.NewGuid(), "WhatsApp", "RESERVATION_CONFIRMATION",
+            Guid.NewGuid(), tenantId, Guid.NewGuid(), Guid.NewGuid(), "WhatsApp", "RESERVATION_CONFIRMATION",
             null, "Olá, sua reserva foi confirmada.", $"pg-{Guid.NewGuid():N}", sentAt);
         message.MarkQueued();
         message.MarkSending();

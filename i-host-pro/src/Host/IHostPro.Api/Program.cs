@@ -575,6 +575,13 @@ try
         RouteExternalIntegrationsEvent<AirbnbReservationUpdated>("airbnb_reservation_updated");
         RouteExternalIntegrationsEvent<AirbnbReservationCancelled>("airbnb_reservation_cancelled");
 
+        // Fase 11, Checkpoint 1 (Inbound Conversation Foundation) — External
+        // Integrations' second Integration Event, published by
+        // WhatsAppWebhookMessageEventPublisher after signature verification,
+        // tenant routing, and message normalization — same exchange as
+        // WhatsAppMessageStatusChanged/Airbnb events above.
+        RouteExternalIntegrationsEvent<InboundGuestMessageReceived>("inbound_guest_message_received");
+
         // Guest Operations' first Integration Event (Fase 10, Checkpoint 1 —
         // Guest Operations Foundation) — its own topic exchange, published by
         // RecordGuestCheckedOutCommandHandler. Workflow Orchestration's new

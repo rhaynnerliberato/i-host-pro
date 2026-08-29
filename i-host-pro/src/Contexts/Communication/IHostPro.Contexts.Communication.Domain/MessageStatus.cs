@@ -27,4 +27,13 @@ public enum MessageStatus
     Delivered,
     Read,
     Failed,
+
+    /// <summary>
+    /// Fase 11, Checkpoint 1 (Inbound Conversation Foundation) — the sole
+    /// status for a <see cref="MessageDirection.Inbound"/> row, set once at
+    /// <c>Message.CreateInbound</c> and never transitioned further this
+    /// checkpoint (no read-receipt/reply-tracking modeled yet). Documento
+    /// 06 §9's own <c>Recebida</c>.
+    /// </summary>
+    Received,
 }

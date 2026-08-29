@@ -69,6 +69,10 @@ public sealed class WhatsAppWebhookControllerHttpTests : IAsyncDisposable
                     // (NoOpStatusProcessor above never returns an Accepted
                     // outcome), but still a required constructor dependency.
                     services.AddSingleton<IWhatsAppWebhookStatusEventPublisher>(new NoOpStatusEventPublisher());
+                    // Fase 11, Checkpoint 1 added these dependencies to the controller — this
+                    // file's own scope is signature verification, never message processing.
+                    services.AddSingleton<IWhatsAppWebhookMessageProcessor>(new NoOpMessageProcessor());
+                    services.AddSingleton<IWhatsAppWebhookMessageEventPublisher>(new NoOpMessageEventPublisher());
                     services.AddLogging(logging => logging.AddProvider(_loggerProvider));
                 });
                 webHost.Configure(app =>
@@ -289,6 +293,18 @@ public sealed class WhatsAppWebhookControllerHttpTests : IAsyncDisposable
     private sealed class NoOpStatusEventPublisher : IWhatsAppWebhookStatusEventPublisher
     {
         public Task PublishAsync(WebhookStatusProcessingOutcome outcome, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class NoOpMessageProcessor : IWhatsAppWebhookMessageProcessor
+    {
+        public Task<IReadOnlyList<WebhookMessageProcessingOutcome>> ProcessAsync(ReadOnlyMemory<byte> rawBody, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<WebhookMessageProcessingOutcome>>([]);
+    }
+
+    private sealed class NoOpMessageEventPublisher : IWhatsAppWebhookMessageEventPublisher
+    {
+        public Task PublishAsync(WebhookMessageProcessingOutcome outcome, CancellationToken cancellationToken) =>
             Task.CompletedTask;
     }
 

@@ -257,7 +257,12 @@ public class ReservationsSourceConventionTests
         // rather than merely relaxed to "any count," so an unapproved future
         // migration still fails this test the same way an unapproved
         // capability would.
-        string[] approvedMigrationSuffixes = ["_InitialCreate", "_AddCleaningScheduleProjection", "_AddExternalReservationIdentity"];
+        string[] approvedMigrationSuffixes =
+        [
+            "_InitialCreate", "_AddCleaningScheduleProjection", "_AddExternalReservationIdentity",
+            // Fase 11, Checkpoint 1 (ADR-029, synchronous exception #13) — supports IReservationByGuestPhoneReader.
+            "_AddGuestPhoneIndex",
+        ];
 
         var migrationsDirectory = Path.Combine(
             RepositoryRoot(), "src", "Contexts", "Reservations",

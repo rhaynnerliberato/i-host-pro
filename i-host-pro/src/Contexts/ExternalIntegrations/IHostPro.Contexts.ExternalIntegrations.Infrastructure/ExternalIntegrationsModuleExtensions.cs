@@ -104,6 +104,13 @@ public static class ExternalIntegrationsModuleExtensions
         services.AddScoped<IExternalIntegrationsTransactionExecutor, ExternalIntegrationsOutboxTransactionExecutor>();
         services.AddScoped<IWhatsAppWebhookStatusEventPublisher, WhatsAppWebhookStatusEventPublisher>();
 
+        // Fase 11, Checkpoint 1 — Inbound Conversation Foundation. Same
+        // unconditional rationale as the status processor/publisher above:
+        // no secret, no external network call, and inbound guest messages
+        // must be normalized/published in every environment.
+        services.AddScoped<IWhatsAppWebhookMessageProcessor, MetaWebhookMessageProcessor>();
+        services.AddScoped<IWhatsAppWebhookMessageEventPublisher, WhatsAppWebhookMessageEventPublisher>();
+
         // Fase 9, Checkpoint 2.2 — real Meta Cloud API outbound connector.
         // Development-only, same rationale as IWhatsAppCredentialProvider
         // above: MetaWhatsAppMessagingProvider depends on it, so gating both
