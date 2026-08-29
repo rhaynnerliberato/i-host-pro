@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fase 11, Checkpoint 2 — AI Agent Foundation. This is the ONLY project of
+    AI Agent any other Bounded Context may reference (mirrors every other
+    context's own Contracts project). CP2 publishes no Integration Event of
+    its own yet (event-driven CONSUMER only — reacts to Communication's
+    ConversationMessageReceived) — this project exists now for structural
+    consistency with every other Bounded Context (Architecture Principles
+    §16, item 1) and is ready for a future published event without a second
+    scaffolding pass.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Messaging.Abstractions\IHostPro.BuildingBlocks.Messaging.Abstractions.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
