@@ -384,6 +384,7 @@ public sealed class CleaningCreatedScheduleProjectionWorkerRoundTripTests : IAsy
         ["ConnectionStrings__Communication"] = _appConnectionString,
         ["ConnectionStrings__GuestOperations"] = _appConnectionString,
         ["ConnectionStrings__Payments"] = _appConnectionString,
+        ["ConnectionStrings__AIAgent"] = _appConnectionString,
         ["ConnectionStrings__ExternalIntegrations"] = _appConnectionString,
         ["ConnectionStrings__Dashboard"] = _appConnectionString,
         ["ConnectionStrings__Platform"] = _appConnectionString,
@@ -438,6 +439,7 @@ public sealed class CleaningCreatedScheduleProjectionWorkerRoundTripTests : IAsy
         psi.Environment["ConnectionStrings__Communication"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__GuestOperations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Payments"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__AIAgent"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__ExternalIntegrations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _migratorConnectionString;

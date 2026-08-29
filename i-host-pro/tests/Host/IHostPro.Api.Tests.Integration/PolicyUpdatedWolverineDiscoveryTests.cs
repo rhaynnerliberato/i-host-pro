@@ -159,6 +159,7 @@ public sealed class PolicyUpdatedWolverineDiscoveryTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__Communication"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__GuestOperations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Payments"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__AIAgent"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__ExternalIntegrations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _migratorConnectionString;
@@ -209,6 +210,7 @@ public sealed class PolicyUpdatedWolverineDiscoveryTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__ExternalIntegrations"] = _appConnectionString;
         psi.Environment["ConnectionStrings__GuestOperations"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Payments"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__AIAgent"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _appConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _appConnectionString;
         psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";

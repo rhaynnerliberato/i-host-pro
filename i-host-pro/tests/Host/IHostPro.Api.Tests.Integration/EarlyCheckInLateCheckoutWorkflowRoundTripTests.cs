@@ -252,6 +252,7 @@ public sealed class EarlyCheckInLateCheckoutWorkflowRoundTripTests : IClassFixtu
             ["ConnectionStrings__ExternalIntegrations"] = AppConnectionString,
             ["ConnectionStrings__GuestOperations"] = AppConnectionString,
             ["ConnectionStrings__Payments"] = AppConnectionString,
+            ["ConnectionStrings__AIAgent"] = AppConnectionString,
             ["ConnectionStrings__Dashboard"] = AppConnectionString,
             ["ConnectionStrings__Platform"] = AppConnectionString,
             ["Identity__Jwt__Issuer"] = Issuer,
@@ -304,6 +305,7 @@ public sealed class EarlyCheckInLateCheckoutWorkflowRoundTripTests : IClassFixtu
             psi.Environment["ConnectionStrings__ExternalIntegrations"] = MigratorConnectionString;
             psi.Environment["ConnectionStrings__GuestOperations"] = MigratorConnectionString;
             psi.Environment["ConnectionStrings__Payments"] = MigratorConnectionString;
+            psi.Environment["ConnectionStrings__AIAgent"] = MigratorConnectionString;
             psi.Environment["ConnectionStrings__Dashboard"] = MigratorConnectionString;
             psi.Environment["ConnectionStrings__Platform"] = MigratorConnectionString;
             psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;

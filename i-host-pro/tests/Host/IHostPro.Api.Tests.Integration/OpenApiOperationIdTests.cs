@@ -63,7 +63,7 @@ public sealed class OpenApiOperationIdTests : IAsyncLifetime
         "ConnectionStrings__Identity", "ConnectionStrings__PropertyManagement", "ConnectionStrings__Reservations",
         "ConnectionStrings__Configuration", "ConnectionStrings__Housekeeping", "ConnectionStrings__Communication",
         "ConnectionStrings__GuestOperations", "ConnectionStrings__ExternalIntegrations", "ConnectionStrings__Dashboard",
-        "ConnectionStrings__Payments", "ConnectionStrings__Platform",
+        "ConnectionStrings__Payments", "ConnectionStrings__AIAgent", "ConnectionStrings__Platform",
         "Identity__Jwt__Issuer", "Identity__Jwt__Audience", "Identity__Jwt__AccessTokenLifetime", "Identity__Jwt__ClockSkew",
         "Identity__Jwt__SigningKey__PrivateKeyPem",
         "Identity__AccountLockout__MaxFailedAccessAttempts", "Identity__AccountLockout__DefaultLockoutDuration", "Identity__AccountLockout__AllowedForNewUsers",
@@ -160,6 +160,7 @@ public sealed class OpenApiOperationIdTests : IAsyncLifetime
             ["ConnectionStrings__Communication"] = _appConnectionString,
             ["ConnectionStrings__GuestOperations"] = _appConnectionString,
             ["ConnectionStrings__Payments"] = _appConnectionString,
+            ["ConnectionStrings__AIAgent"] = _appConnectionString,
             ["ConnectionStrings__ExternalIntegrations"] = _appConnectionString,
             ["ConnectionStrings__Dashboard"] = _appConnectionString,
             ["ConnectionStrings__Platform"] = _appConnectionString,
@@ -284,6 +285,7 @@ public sealed class OpenApiOperationIdTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__Communication"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__GuestOperations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Payments"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__AIAgent"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__ExternalIntegrations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _migratorConnectionString;

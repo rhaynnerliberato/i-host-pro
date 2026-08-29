@@ -359,6 +359,7 @@ public sealed class GuestCheckedOutCloseReservationWorkerRoundTripTests : IAsync
         ["ConnectionStrings__ExternalIntegrations"] = _appConnectionString,
         ["ConnectionStrings__GuestOperations"] = _appConnectionString,
         ["ConnectionStrings__Payments"] = _appConnectionString,
+        ["ConnectionStrings__AIAgent"] = _appConnectionString,
         ["ConnectionStrings__Dashboard"] = _appConnectionString,
         ["ConnectionStrings__Platform"] = _appConnectionString,
         ["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test",
@@ -504,6 +505,7 @@ public sealed class GuestCheckedOutCloseReservationWorkerRoundTripTests : IAsync
         psi.Environment["ConnectionStrings__ExternalIntegrations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__GuestOperations"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Payments"] = _migratorConnectionString;
+        psi.Environment["ConnectionStrings__AIAgent"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = _migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = _migratorConnectionString;
         psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;

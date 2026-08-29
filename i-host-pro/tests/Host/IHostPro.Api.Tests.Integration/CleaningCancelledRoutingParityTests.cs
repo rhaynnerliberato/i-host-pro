@@ -119,6 +119,7 @@ public sealed class CleaningCancelledRoutingParityTests : IAsyncLifetime
             ["ConnectionStrings__Communication"] = _appConnectionString,
             ["ConnectionStrings__GuestOperations"] = _appConnectionString,
             ["ConnectionStrings__Payments"] = _appConnectionString,
+            ["ConnectionStrings__AIAgent"] = _appConnectionString,
             ["ConnectionStrings__ExternalIntegrations"] = _appConnectionString,
             ["ConnectionStrings__Dashboard"] = _appConnectionString,
             ["ConnectionStrings__Platform"] = _appConnectionString,
@@ -173,6 +174,7 @@ public sealed class CleaningCancelledRoutingParityTests : IAsyncLifetime
         psi.Environment["ConnectionStrings__Communication"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__GuestOperations"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Payments"] = migratorConnectionString;
+        psi.Environment["ConnectionStrings__AIAgent"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__ExternalIntegrations"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Dashboard"] = migratorConnectionString;
         psi.Environment["ConnectionStrings__Platform"] = migratorConnectionString;
