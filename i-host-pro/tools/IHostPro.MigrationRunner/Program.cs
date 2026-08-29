@@ -2,6 +2,7 @@ using System.Reflection;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
+using IHostPro.Contexts.AIAgent.Infrastructure.Persistence;
 using IHostPro.Contexts.Communication.Infrastructure.Persistence;
 using IHostPro.Contexts.Configuration.Infrastructure.Persistence;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
@@ -73,6 +74,7 @@ try
         typeof(ExternalIntegrationsDbContext).Assembly,
         typeof(GuestOperationsDbContext).Assembly,
         typeof(PaymentsDbContext).Assembly,
+        typeof(AIAgentDbContext).Assembly,
     };
 
     var moduleDbContextTypes = moduleAssemblies
@@ -649,6 +651,93 @@ try
 
     log.LogInformation("Payments' durable outbox provisioned");
 
+    // Communication's own durable outbox (Fase 11, Checkpoint 2 — AI Agent
+    // Foundation) — mirrors every other context's provisioning above
+    // exactly, in its own schema (communication_messaging), never shared
+    // with any of the other nine. Deliberately absent since Fase 9,
+    // Checkpoint 1 (Communication was choreography/consumer-only, no
+    // Integration Event of its own) — ConversationMessageReceived (routed
+    // below) is its first, and so far only, published Integration Event.
+    var communicationMigratorConnectionString = builder.Configuration.GetConnectionString("Communication")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Communication'.");
+
+    log.LogInformation("Provisioning Communication's durable outbox (schema communication_messaging)");
+
+    var communicationOutboxHostBuilder = Host.CreateApplicationBuilder();
+    communicationOutboxHostBuilder.UseWolverine(opts =>
+    {
+        opts.EnrollAncillaryPostgresqlOutbox(
+            communicationMigratorConnectionString, "communication_messaging", typeof(CommunicationDbContext));
+        opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+        opts.UseEntityFrameworkCoreTransactions();
+    });
+
+    using (var communicationOutboxHost = communicationOutboxHostBuilder.Build())
+    {
+        await communicationOutboxHost.SetupResources();
+    }
+
+    await using (var connection = new NpgsqlConnection(communicationMigratorConnectionString))
+    {
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            GRANT USAGE ON SCHEMA communication_messaging TO ihostpro_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA communication_messaging TO ihostpro_app;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA communication_messaging TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA communication_messaging
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA communication_messaging
+              GRANT USAGE, SELECT ON SEQUENCES TO ihostpro_app;
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    log.LogInformation("Communication's durable outbox provisioned");
+
+    // AI Agent's own durable outbox (Fase 11, Checkpoint 2 — AI Agent
+    // Foundation) — mirrors every other context's provisioning above
+    // exactly, in its own schema (ai_agent_messaging), never shared with any
+    // of the other ten. Publishes no Integration Event of its own yet
+    // (mandate item 29) — still needed so IDbContextOutbox<AIAgentDbContext>
+    // can resolve inside the Worker's Wolverine consumer.
+    var aiAgentMigratorConnectionString = builder.Configuration.GetConnectionString("AIAgent")
+        ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:AIAgent'.");
+
+    log.LogInformation("Provisioning AI Agent's durable outbox (schema ai_agent_messaging)");
+
+    var aiAgentOutboxHostBuilder = Host.CreateApplicationBuilder();
+    aiAgentOutboxHostBuilder.UseWolverine(opts =>
+    {
+        opts.EnrollAncillaryPostgresqlOutbox(
+            aiAgentMigratorConnectionString, "ai_agent_messaging", typeof(AIAgentDbContext));
+        opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+        opts.UseEntityFrameworkCoreTransactions();
+    });
+
+    using (var aiAgentOutboxHost = aiAgentOutboxHostBuilder.Build())
+    {
+        await aiAgentOutboxHost.SetupResources();
+    }
+
+    await using (var connection = new NpgsqlConnection(aiAgentMigratorConnectionString))
+    {
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            GRANT USAGE ON SCHEMA ai_agent_messaging TO ihostpro_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ai_agent_messaging TO ihostpro_app;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ai_agent_messaging TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA ai_agent_messaging
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ihostpro_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA ai_agent_messaging
+              GRANT USAGE, SELECT ON SEQUENCES TO ihostpro_app;
+            """;
+        await command.ExecuteNonQueryAsync();
+    }
+
+    log.LogInformation("AI Agent's durable outbox provisioned");
+
     // RabbitMQ messaging topology (Checkpoint 6 homologação, third production
     // defect: neither IHostPro.Api nor IHostPro.Worker ever declared the
     // topic exchanges they publish/route to — AutoProvision defaults to
@@ -670,7 +759,7 @@ try
     // IHostPro.Api/IHostPro.Worker use — so host/vhost/user/password/
     // timeouts can never drift between this provisioning step and the real
     // runtime connection.
-    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events, configuration-events, housekeeping-events, external-integrations-events, guest-operations-events, payments-events, payments-commands exchanges)");
+    log.LogInformation("Provisioning RabbitMQ messaging topology (identity-events, property-management-events, reservation-events, configuration-events, housekeeping-events, external-integrations-events, communication-events, guest-operations-events, payments-events, payments-commands exchanges)");
 
     var messagingTopologyHostBuilder = Host.CreateApplicationBuilder();
     messagingTopologyHostBuilder.UseWolverine(opts =>
@@ -918,6 +1007,17 @@ try
                 // a guest phone and persisting an inbound Message has no
                 // fake/real connector distinction of its own.
                 exchange.BindQueue("communication.inbound-guest-message-trigger", "inbound_guest_message_received");
+            })
+            // Fase 11, Checkpoint 2 (AI Agent Foundation): Communication's
+            // OWN first published Integration Event
+            // (ConversationMessageReceived), bound to AI Agent's own
+            // dedicated subscriber queue — Communication never needs to know
+            // AI Agent is listening, same decoupled pub/sub pattern as every
+            // exchange above.
+            .DeclareExchange("communication-events", exchange =>
+            {
+                exchange.ExchangeType = ExchangeType.Topic;
+                exchange.BindQueue("aiagent.conversation-message-trigger", "conversation_message_received");
             })
             // Fase 10, Checkpoint 1 (Guest Operations Foundation): Guest
             // Operations' OWN published event, bound to Workflow

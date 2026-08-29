@@ -7,7 +7,11 @@ using IHostPro.Contexts.Configuration.Contracts;
 using IHostPro.Contexts.Configuration.Infrastructure;
 using IHostPro.Contexts.Configuration.Infrastructure.Caching;
 using IHostPro.Contexts.Configuration.Infrastructure.Messaging;
+using IHostPro.Contexts.AIAgent.Infrastructure;
+using IHostPro.Contexts.AIAgent.Infrastructure.Messaging;
+using IHostPro.Contexts.AIAgent.Infrastructure.Persistence;
 using IHostPro.Contexts.Communication.Infrastructure;
+using IHostPro.Contexts.Communication.Infrastructure.Persistence;
 using IHostPro.Contexts.Dashboard.Infrastructure;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
@@ -173,6 +177,14 @@ try
     // guest phone and persisting an inbound Message has no fake/real
     // connector distinction of its own.
     builder.Services.AddCommunicationInboundMessageConsumer();
+
+    // Fase 11, Checkpoint 2 (AI Agent Foundation) — unconditional, same
+    // rationale as Communication's own consumers above: FakeModelProvider is
+    // the ONLY IModelProvider implementation this checkpoint (zero network,
+    // zero real credentials), so there is no fake/real gate to apply — real
+    // Anthropic integration is Checkpoint 7's scope.
+    builder.Services.AddAIAgentModule(builder.Configuration);
+    builder.Services.AddAIAgentConversationMessageConsumer();
 
     // Gated to Development ONLY (CP1 closure — corrective homologation):
     // AddCommunicationReservationConsumer registers the ONLY
@@ -350,6 +362,32 @@ try
             "payments_messaging",
             typeof(PaymentsDbContext));
 
+        // Communication's own durable outbox (Fase 11, Checkpoint 2 — AI
+        // Agent Foundation) — a tenth "ancillary" store, in its own
+        // communication_messaging schema. Deliberately absent since Fase 9,
+        // Checkpoint 1 (CommunicationDbContext's own doc comment: "publishes
+        // no Integration Event of its own... absent a real consumer") — the
+        // AI Agent Bounded Context is now that real consumer.
+        // ConversationMessageReceived (routed below) is Communication's
+        // first, and so far only, published Integration Event.
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("Communication")!,
+            "communication_messaging",
+            typeof(CommunicationDbContext));
+
+        // AI Agent's own durable outbox (Fase 11, Checkpoint 2 — AI Agent
+        // Foundation) — an eleventh "ancillary" store, in its own
+        // ai_agent_messaging schema. Needed so IDbContextOutbox<AIAgentDbContext>
+        // can resolve inside this Worker's Wolverine consumer (the same
+        // empirically-confirmed requirement every other write-capable
+        // Bounded Context needs) — AI Agent publishes no Integration Event
+        // of its own yet (mandate item 29: never fabricated just to justify
+        // this outbox).
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("AIAgent")!,
+            "ai_agent_messaging",
+            typeof(AIAgentDbContext));
+
         // Required in addition to EnrollAncillaryPostgresqlOutbox above —
         // same empirically-confirmed requirement documented in
         // IHostPro.Api's Program.cs for Identity's own outbox: without this,
@@ -414,6 +452,12 @@ try
         // above: PaymentsMessageExecutionScope is the single, deliberately-
         // authorized place in Payments that holds IServiceScopeFactory.
         opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Payments.Application.IPaymentsMessageExecutionScope>();
+
+        // ADR-016, seventh application (Fase 11, Checkpoint 2) — same
+        // rationale as every other Bounded Context's own AlwaysUseServiceLocationFor
+        // above: AIAgentMessageExecutionScope is the single, deliberately-
+        // authorized place in AI Agent that holds IServiceScopeFactory.
+        opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.AIAgent.Application.IAIAgentMessageExecutionScope>();
 
         opts.Policies.AddMiddleware(
             typeof(TenantResolutionMiddleware),
@@ -916,6 +960,15 @@ try
         // handler" default).
         opts.ListenToRabbitQueue("communication.inbound-guest-message-trigger");
 
+        // Fase 11, Checkpoint 2 (AI Agent Foundation) — AI Agent's own,
+        // dedicated queue (mandate item 30) for ConversationMessageReceived,
+        // bound to the EXISTING communication-events exchange (Communication
+        // never needs to know AI Agent is listening, same decoupled pub/sub
+        // pattern as every queue above). No AddStickyHandler needed (ADR-020)
+        // — AI Agent is the sole in-process consumer of this message type.
+        opts.Discovery.IncludeAssembly(typeof(ConversationMessageReceivedHandler).Assembly);
+        opts.ListenToRabbitQueue("aiagent.conversation-message-trigger");
+
         // Real defect found and fixed (Checkpoint 6 homologação, ADR-015
         // spike): IHostPro.Api/Program.cs already routes every real Cleaning
         // lifecycle event except CleaningDelayed (Fase 7, Incremento 1,
@@ -1012,6 +1065,17 @@ try
 
         opts.PublishMessage(typeof(IHostPro.Contexts.Payments.Contracts.PixChargeConfirmed))
             .ToRabbitRoutingKey(paymentsEventsExchange, "pix_charge_confirmed", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
+
+        // Communication's own first Integration Event (Fase 11, Checkpoint 2
+        // — AI Agent Foundation), published by InboundGuestMessageProcessor —
+        // runs in THIS process (Communication has no Api project). A new,
+        // dedicated Topic exchange — see IHostPro.MigrationRunner's own
+        // Program.cs for the queue binding (AI Agent's own consumer).
+        const string communicationEventsExchange = "communication-events";
+        opts.PublishMessage(typeof(IHostPro.Contexts.Communication.Contracts.ConversationMessageReceived))
+            .ToRabbitRoutingKey(communicationEventsExchange, "conversation_message_received", exchange => exchange.ExchangeType = ExchangeType.Topic)
             .UseDurableOutbox()
             .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
     });
