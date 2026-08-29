@@ -210,6 +210,9 @@ AIExecutedWorkflow
 AIDecisionMade
 AIMessageSent
 AIUnableToAnswer
+
+Nota (Fase 11, Checkpoint 2): os sete nomes acima permanecem prospectivos — nenhum foi materializado como evento distinto por este checkpoint. O evento real implementado é `Communication.Contracts.ConversationMessageReceived` (Communication, não AI Agent, é quem publica — ver §48). AI Agent Foundation não publica nenhum Integration Event próprio ainda (`AgentSession`/`AgentInteraction` são persistidos, nunca publicados) — human handoff (`AIEscalatedToHuman`), execução de workflow (`AIExecutedWorkflow`) e as demais permanecem sem data, dependentes de checkpoints futuros (CP3+) que ainda não existem.
+
 9. Eventos Financeiros
 PixPaymentReceived
 PixPaymentConfirmed
@@ -1198,5 +1201,24 @@ Fecha a fundação de recepção identificada no Checkpoint 0 (nenhuma mensagem 
 
 | Evento/Contrato | Exchange | Routing Key | Fila |
 |---|---|---|---|
-| GuestAccessDeliveryRequested | guest-operations-events | guest_access_delivery_requested | communication.guest-access-delivery-trigger |
 | InboundGuestMessageReceived | external-integrations-events | inbound_guest_message_received | communication.inbound-guest-message-trigger |
+
+(Correção de erratum: a versão anterior deste documento repetia por engano a linha da tabela — tanto o nome errado `GuestAccessDeliveryRequested` quanto, num revisão intermediária, uma segunda linha duplicada — corrigido nesta revisão, Fase 11 Checkpoint 2, sem nenhuma mudança de comportamento, apenas erratum documental.)
+
+48. ConversationMessageReceived / IConversationHistoryReader / Exceção Síncrona #14 (Fase 11, Checkpoint 2 — AI Agent Foundation)
+
+Cria o novo Bounded Context AI Agent, torna-o consumidor real do CP1, e fecha o histórico sanitizado de conversa como entrada de contexto — sem Tools de negócio, sem Anthropic real (`AIImplemented=true`, `BusinessToolsImplemented=false`, `AnthropicIntegrated=false`, `ExternalLLMNetworkCalls=0`).
+
+`Communication.Contracts.ConversationMessageReceived` — o primeiro Integration Event que Communication publica (deliberadamente ausente desde a Fase 9, Checkpoint 1 — `CommunicationDbContext`/`ICommunicationTransactionExecutor` documentavam "nenhum evento próprio... sem consumidor real" até este checkpoint). Publicado por `InboundGuestMessageProcessor` (mesma transação atômica do `Message.Add`, CP1) somente quando exatamente 1 candidato resolve. Payload: `TenantId`, `ConversationId`, `ReservationId`, `MessageId`, `OccurredAtUtc` — deliberadamente sem texto da mensagem, sem telefone, sem credencial, sem payload de provider. Exchange nova `communication-events` (Topic), routing key `conversation_message_received`, consumida exclusivamente por AI Agent (`aiagent.conversation-message-trigger`, unconditional — sem distinção fake/real, `FakeModelProvider` é a única implementação de `IModelProvider` deste checkpoint).
+
+`Communication.Contracts.IConversationHistoryReader` (ADR-030; Architecture Principles §14, Exceção 14) — consumida exclusivamente por AI Agent, retornando `IReadOnlyList<ConversationHistoryMessage(MessageId, Direction, Content, OccurredAtUtc)>` em ordem cronológica determinística (`CreatedAtUtc` + `MessageId` como tie-breaker) — nunca o agregado `Message`, nunca referência a `Reservation`, nunca metadado de provider/destino/falha, nunca `GuestPhone`/`AccessCredential`/QR PIX. Conteúdo já marcado `"[SENSITIVE CONTENT REDACTED]"` na escrita (ADR-028, credencial de acesso) é retornado como está; conteúdo de entrega PIX (ADR-025/027, que legitimamente persiste o QR real em `RenderedContent` para o hóspede) é redigido pelo próprio reader antes de retornar — descoberta feita durante este checkpoint, corrigida no boundary de LEITURA sem alterar a persistência já homologada da Fase 10.
+
+`AIAgent.Domain.AgentSession` (novo agregado, schema `ai_agent`) — uma sessão ativa por `(TenantId, ConversationId)` (partial unique index, `Completed` nunca conta), nunca fundida com `Conversation` (Documento 12 §9/§10). `AIAgent.Domain.AgentInteraction` (novo agregado) — um por `(TenantId, InboundMessageId)` (unique index, defesa em profundidade), audita `Intent?`/`Language?`/`Confidence?`/`ModelProvider`/`ModelName`/`InputTokens`/`OutputTokens`/`Outcome` — deliberadamente sem `ResponseText` (Documento 16 §24 audita "resposta enviada"; este checkpoint nunca envia nada ao hóspede, decisão registrada nesta ADR/checkpoint, não CP4). `Confidence` é `decimal?` normalizado `0..1` inclusive quando não nulo — nunca clampado, fora da faixa é uma violação de invariante (`ArgumentOutOfRangeException`).
+
+Fluxo real (`ConversationMessageReceivedProcessor`, AI Agent's own Wolverine consumer, fila própria `aiagent.conversation-message-trigger`, nunca compartilhada com Communication): idempotência por `TenantId`/`InboundMessageId` (lookup antes de qualquer trabalho) → resolve/cria `AgentSession` ativa → lê histórico sanitizado (`IConversationHistoryReader`) → constrói `ModelRequest` mínimo (`AgentContextBuilder`, sem prompt de negócio hardcoded) → chama `IModelProvider` (`FakeModelProvider`, determinístico, zero rede) → persiste `AgentInteraction` (sucesso ou falha controlada). Nenhuma resposta é enviada ao hóspede (`ExternalLLMNetworkCalls=0`, nenhuma ação outbound de Communication).
+
+Outbox próprio (`ai_agent_messaging`, mesmo padrão de todo Bounded Context com escrita transacional) — AI Agent não publica nenhum evento próprio ainda; a infraestrutura existe para que `IDbContextOutbox<AIAgentDbContext>` resolva dentro do consumer Wolverine, nunca para justificar um evento artificial.
+
+| Evento/Contrato | Exchange | Routing Key | Fila |
+|---|---|---|---|
+| ConversationMessageReceived | communication-events | conversation_message_received | aiagent.conversation-message-trigger |
