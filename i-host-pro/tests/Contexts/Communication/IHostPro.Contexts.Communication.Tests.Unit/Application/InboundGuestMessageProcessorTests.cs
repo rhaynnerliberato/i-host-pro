@@ -1,5 +1,6 @@
 using FluentAssertions;
 using IHostPro.Contexts.Communication.Application;
+using IHostPro.Contexts.Communication.Contracts;
 using IHostPro.Contexts.Communication.Domain;
 using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
@@ -42,9 +43,10 @@ public class InboundGuestMessageProcessorTests
     };
 
     private static InboundGuestMessageProcessor CreateProcessor(
-        FakeReservationByGuestPhoneReader reader, FakeMessageRepository repository) =>
+        FakeReservationByGuestPhoneReader reader, FakeMessageRepository repository, FakeIntegrationEventCollector? collector = null) =>
         new(
             reader, FakeConversationResolver.Returning(ConversationId), repository,
+            collector ?? new FakeIntegrationEventCollector(),
             new PassThroughCommunicationTransactionExecutor(), NullLogger<InboundGuestMessageProcessor>.Instance);
 
     [Fact]
@@ -53,7 +55,8 @@ public class InboundGuestMessageProcessorTests
         var repository = FakeMessageRepository.WithExisting(null);
         var reader = FakeReservationByGuestPhoneReader.Returning(
             new ReservationCandidate(ReservationId, PropertyId, Now.AddDays(1), Now.AddDays(3)));
-        var processor = CreateProcessor(reader, repository);
+        var collector = new FakeIntegrationEventCollector();
+        var processor = CreateProcessor(reader, repository, collector);
 
         await processor.HandleAsync(BuildEvent(), CancellationToken.None);
 
@@ -65,6 +68,11 @@ public class InboundGuestMessageProcessorTests
         message.Status.Should().Be(MessageStatus.Received);
         message.RenderedContent.Should().Be("Olá, preciso de ajuda");
         message.ProviderMessageId.Should().Be(ProviderMessageId);
+
+        collector.EnqueuedEvents.Should().ContainSingle()
+            .Which.Should().BeOfType<ConversationMessageReceived>()
+            .Which.Should().Match<ConversationMessageReceived>(e =>
+                e.ConversationId == ConversationId && e.ReservationId == ReservationId && e.MessageId == message.Id);
     }
 
     [Fact]
@@ -72,11 +80,13 @@ public class InboundGuestMessageProcessorTests
     {
         var repository = FakeMessageRepository.WithExisting(null);
         var reader = FakeReservationByGuestPhoneReader.Returning();
-        var processor = CreateProcessor(reader, repository);
+        var collector = new FakeIntegrationEventCollector();
+        var processor = CreateProcessor(reader, repository, collector);
 
         await processor.HandleAsync(BuildEvent(), CancellationToken.None);
 
         repository.AddedMessages.Should().BeEmpty("0-reservation outcomes never create a Conversation/Message (mandate item 16)");
+        collector.EnqueuedEvents.Should().BeEmpty("no Message means no ConversationMessageReceived to publish");
     }
 
     [Fact]

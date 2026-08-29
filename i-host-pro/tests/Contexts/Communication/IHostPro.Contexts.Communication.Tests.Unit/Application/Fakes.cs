@@ -1,3 +1,4 @@
+using IHostPro.BuildingBlocks.Messaging.Abstractions;
 using IHostPro.Contexts.Communication.Application;
 using IHostPro.Contexts.Communication.Domain;
 using IHostPro.Contexts.Configuration.Contracts;
@@ -156,6 +157,21 @@ internal sealed class FakeConversationResolver : IConversationResolver
     public Task<Guid> GetOrCreateActiveConversationIdAsync(
         Guid tenantId, Guid reservationId, string channel, DateTimeOffset occurredAtUtc, CancellationToken cancellationToken) =>
         Task.FromResult(_conversationId);
+}
+
+/// <summary>Fase 11, Checkpoint 2 (AI Agent Foundation) — mirrors <c>Payments.Tests.Unit</c>'s own <c>FakeIntegrationEventCollector</c> exactly.</summary>
+internal sealed class FakeIntegrationEventCollector : IIntegrationEventCollector
+{
+    public List<IntegrationEvent> EnqueuedEvents { get; } = [];
+
+    public void Enqueue(IntegrationEvent @event) => EnqueuedEvents.Add(@event);
+
+    public IReadOnlyList<IntegrationEvent> Drain()
+    {
+        var drained = EnqueuedEvents.ToArray();
+        EnqueuedEvents.Clear();
+        return drained;
+    }
 }
 
 internal sealed class FakeOutboundMessageConnector : IOutboundMessageConnector

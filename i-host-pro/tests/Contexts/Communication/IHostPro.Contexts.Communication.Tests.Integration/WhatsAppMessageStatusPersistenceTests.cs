@@ -1,13 +1,18 @@
 using FluentAssertions;
+using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.Contexts.Communication.Application;
 using IHostPro.Contexts.Communication.Domain;
 using IHostPro.Contexts.Communication.Infrastructure;
 using IHostPro.Contexts.Communication.Infrastructure.Persistence;
 using IHostPro.Contexts.ExternalIntegrations.Contracts;
+using JasperFx;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Wolverine;
+using Wolverine.EntityFrameworkCore;
 
 namespace IHostPro.Contexts.Communication.Tests.Integration;
 
@@ -18,28 +23,40 @@ namespace IHostPro.Contexts.Communication.Tests.Integration;
 /// PostgreSQL instance (mandate §36). Reuses
 /// <see cref="CommunicationMessageExecutionScopeTests.Fixture"/> — same
 /// container, same migrated schema, no new fixture needed.
+///
+/// Fase 11, Checkpoint 2 (AI Agent Foundation): now built atop a real
+/// Wolverine host, same rationale/fix as <see cref="CommunicationMessageExecutionScopeTests.BuildHost"/>.
 /// </summary>
 public class WhatsAppMessageStatusPersistenceTests : IClassFixture<CommunicationMessageExecutionScopeTests.Fixture>
 {
+    private const string MessagingSchema = "communication_messaging";
+
     private readonly CommunicationMessageExecutionScopeTests.Fixture _fixture;
 
     public WhatsAppMessageStatusPersistenceTests(CommunicationMessageExecutionScopeTests.Fixture fixture) => _fixture = fixture;
 
     // ---- Composition root -------------------------------------------------
 
-    private ServiceProvider BuildServiceProvider()
+    private IHost BuildHost()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:Communication"] = _fixture.AppConnectionString })
             .Build();
 
-        var services = new ServiceCollection();
-        services.AddScoped<ITenantContext, TenantContext>();
-        services.AddLogging();
-        services.AddCommunicationModule(configuration);
-        services.AddCommunicationWhatsAppStatusConsumer();
+        var hostBuilder = Host.CreateApplicationBuilder();
+        hostBuilder.Services.AddScoped<ITenantContext, TenantContext>();
+        hostBuilder.Services.AddLogging();
+        hostBuilder.Services.AddCommunicationModule(configuration);
+        hostBuilder.Services.AddCommunicationWhatsAppStatusConsumer();
 
-        return services.BuildServiceProvider();
+        hostBuilder.UseWolverine(opts =>
+        {
+            opts.EnrollAncillaryPostgresqlOutbox(_fixture.AppConnectionString, MessagingSchema, typeof(CommunicationDbContext));
+            opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+            opts.UseEntityFrameworkCoreTransactions();
+        });
+
+        return hostBuilder.Build();
     }
 
     private static WhatsAppMessageStatusChanged NewEvent(
@@ -56,9 +73,9 @@ public class WhatsAppMessageStatusPersistenceTests : IClassFixture<Communication
         ProviderErrorCode = providerErrorCode,
     };
 
-    private static async Task ExecuteAsync(ServiceProvider serviceProvider, WhatsAppMessageStatusChanged @event)
+    private static async Task ExecuteAsync(IHost host, WhatsAppMessageStatusChanged @event)
     {
-        await using var scope = serviceProvider.CreateAsyncScope();
+        await using var scope = host.Services.CreateAsyncScope();
         var executionScope = scope.ServiceProvider.GetRequiredService<ICommunicationMessageExecutionScope>();
         await executionScope.ExecuteAsync(@event, @event.TenantId, Guid.NewGuid(), CancellationToken.None);
     }
@@ -93,9 +110,9 @@ public class WhatsAppMessageStatusPersistenceTests : IClassFixture<Communication
         var providerMessageId = $"wamid.{Guid.NewGuid():N}";
         var sentAt = DateTimeOffset.UtcNow;
         await SeedSentMessageAsync(tenantId, providerMessageId, sentAt);
-        using var serviceProvider = BuildServiceProvider();
+        using var host = BuildHost();
 
-        await ExecuteAsync(serviceProvider, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Delivered, sentAt.AddSeconds(1)));
+        await ExecuteAsync(host, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Delivered, sentAt.AddSeconds(1)));
 
         var message = await ReadMessageAsync(tenantId, providerMessageId);
         message.Should().NotBeNull();
@@ -111,9 +128,9 @@ public class WhatsAppMessageStatusPersistenceTests : IClassFixture<Communication
         var providerMessageId = $"wamid.{Guid.NewGuid():N}";
         var sentAt = DateTimeOffset.UtcNow;
         await SeedSentMessageAsync(tenantA, providerMessageId, sentAt);
-        using var serviceProvider = BuildServiceProvider();
+        using var host = BuildHost();
 
-        await ExecuteAsync(serviceProvider, NewEvent(tenantA, providerMessageId, WhatsAppMessageProviderStatus.Delivered, sentAt.AddSeconds(1)));
+        await ExecuteAsync(host, NewEvent(tenantA, providerMessageId, WhatsAppMessageProviderStatus.Delivered, sentAt.AddSeconds(1)));
 
         (await ReadMessageAsync(tenantB, providerMessageId)).Should().BeNull(
             "a different tenant's RLS-scoped connection must never see this tenant's Message even knowing its ProviderMessageId");
@@ -128,9 +145,9 @@ public class WhatsAppMessageStatusPersistenceTests : IClassFixture<Communication
         var providerMessageId = $"wamid.{Guid.NewGuid():N}";
         var sentAt = DateTimeOffset.UtcNow;
         await SeedSentMessageAsync(tenantId, providerMessageId, sentAt);
-        using var serviceProvider = BuildServiceProvider();
+        using var host = BuildHost();
 
-        await ExecuteAsync(serviceProvider, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Read, sentAt.AddSeconds(2)));
+        await ExecuteAsync(host, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Read, sentAt.AddSeconds(2)));
 
         var message = await ReadMessageAsync(tenantId, providerMessageId);
         message!.Status.Should().Be(MessageStatus.Read);
@@ -144,9 +161,9 @@ public class WhatsAppMessageStatusPersistenceTests : IClassFixture<Communication
         var providerMessageId = $"wamid.{Guid.NewGuid():N}";
         var sentAt = DateTimeOffset.UtcNow;
         await SeedSentMessageAsync(tenantId, providerMessageId, sentAt);
-        using var serviceProvider = BuildServiceProvider();
+        using var host = BuildHost();
 
-        await ExecuteAsync(serviceProvider, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Failed, sentAt.AddSeconds(2), 131026));
+        await ExecuteAsync(host, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Failed, sentAt.AddSeconds(2), 131026));
 
         var message = await ReadMessageAsync(tenantId, providerMessageId);
         message!.Status.Should().Be(MessageStatus.Failed);
@@ -163,11 +180,11 @@ public class WhatsAppMessageStatusPersistenceTests : IClassFixture<Communication
         var providerMessageId = $"wamid.{Guid.NewGuid():N}";
         var sentAt = DateTimeOffset.UtcNow;
         await SeedSentMessageAsync(tenantId, providerMessageId, sentAt);
-        using var serviceProvider = BuildServiceProvider();
-        await ExecuteAsync(serviceProvider, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Delivered, sentAt.AddSeconds(1)));
+        using var host = BuildHost();
+        await ExecuteAsync(host, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Delivered, sentAt.AddSeconds(1)));
         var deliveredAt = (await ReadMessageAsync(tenantId, providerMessageId))!.DeliveredAtUtc;
 
-        await ExecuteAsync(serviceProvider, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Delivered, sentAt.AddSeconds(5)));
+        await ExecuteAsync(host, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Delivered, sentAt.AddSeconds(5)));
 
         var message = await ReadMessageAsync(tenantId, providerMessageId);
         message!.Status.Should().Be(MessageStatus.Delivered);
@@ -181,11 +198,11 @@ public class WhatsAppMessageStatusPersistenceTests : IClassFixture<Communication
         var providerMessageId = $"wamid.{Guid.NewGuid():N}";
         var sentAt = DateTimeOffset.UtcNow;
         await SeedSentMessageAsync(tenantId, providerMessageId, sentAt);
-        using var serviceProvider = BuildServiceProvider();
-        await ExecuteAsync(serviceProvider, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Read, sentAt.AddSeconds(1)));
+        using var host = BuildHost();
+        await ExecuteAsync(host, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Read, sentAt.AddSeconds(1)));
 
         // Read is terminal for Failed purposes — a Regression, never applied.
-        await ExecuteAsync(serviceProvider, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Failed, sentAt.AddSeconds(5)));
+        await ExecuteAsync(host, NewEvent(tenantId, providerMessageId, WhatsAppMessageProviderStatus.Failed, sentAt.AddSeconds(5)));
 
         var message = await ReadMessageAsync(tenantId, providerMessageId);
         message!.Status.Should().Be(MessageStatus.Read);

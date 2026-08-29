@@ -74,6 +74,8 @@
     -->
     <ProjectReference Include="..\..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Domain\IHostPro.Contexts.Communication.Domain.csproj" />
     <ProjectReference Include="..\..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Infrastructure\IHostPro.Contexts.Communication.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Contexts\AIAgent\IHostPro.Contexts.AIAgent.Domain\IHostPro.Contexts.AIAgent.Domain.csproj" />
+    <ProjectReference Include="..\..\..\src\Contexts\AIAgent\IHostPro.Contexts.AIAgent.Infrastructure\IHostPro.Contexts.AIAgent.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

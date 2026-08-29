@@ -1,4 +1,5 @@
 using FluentAssertions;
+using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.Contexts.Communication.Application;
 using IHostPro.Contexts.Communication.Domain;
@@ -6,11 +7,16 @@ using IHostPro.Contexts.Communication.Infrastructure;
 using IHostPro.Contexts.Communication.Infrastructure.Persistence;
 using IHostPro.Contexts.Configuration.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
+using JasperFx;
+using JasperFx.Resources;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Npgsql;
 using Testcontainers.PostgreSql;
+using Wolverine;
+using Wolverine.EntityFrameworkCore;
 
 namespace IHostPro.Contexts.Communication.Tests.Integration;
 
@@ -19,18 +25,27 @@ namespace IHostPro.Contexts.Communication.Tests.Integration;
 /// ADR-016 boundary, resolved exactly as the Wolverine adapter
 /// (<c>ReservationCreatedHandler</c>) would — against a real PostgreSQL
 /// instance (Fase 9, Checkpoint 1). Covers RLS/persistence/state-transition/
-/// redelivery/connector success-failure. Never needs a Wolverine host at
-/// all: <see cref="CommunicationDbContext"/> has no outbox (Communication
-/// publishes no Integration Event this checkpoint), and
-/// <c>CommunicationMessageExecutionScope</c> depends only on
-/// <see cref="IServiceScopeFactory"/>, which any plain <see cref="ServiceProvider"/>
-/// already supplies. Uses fake <see cref="ITemplateReader"/>/
+/// redelivery/connector success-failure. Uses fake <see cref="ITemplateReader"/>/
 /// <see cref="IReservationGuestContactReader"/> — the real cross-context
 /// round trip is the separate real transport gate (task #415).
+///
+/// Fase 11, Checkpoint 2 (AI Agent Foundation): now built atop a real
+/// Wolverine host (<c>Host.CreateApplicationBuilder().UseWolverine(...)</c>,
+/// mirroring <c>PaymentsFoundationTests</c>' own provisioning pattern) rather
+/// than a bare <see cref="ServiceCollection"/> — <see cref="CommunicationOutboxTransactionExecutor"/>
+/// (Communication's first outbox-aware executor, now that
+/// <c>ConversationMessageReceived</c> exists) depends on
+/// <c>IDbContextOutbox&lt;CommunicationDbContext&gt;</c>, which only a real
+/// Wolverine host registers. None of these tests enqueue any event
+/// (<c>ReservationCreatedCommunicationProcessor</c> never calls
+/// <see cref="IIntegrationEventCollector.Enqueue"/>) — draining zero events
+/// is a no-op, so this change is purely a DI-composition-root fix, never a
+/// behavioral one.
 /// </summary>
 public class CommunicationMessageExecutionScopeTests : IClassFixture<CommunicationMessageExecutionScopeTests.Fixture>
 {
     private const string ActiveTemplateContent = "Check-in em {{CheckInDate}}";
+    private const string MessagingSchema = "communication_messaging";
 
     private readonly Fixture _fixture;
 
@@ -78,6 +93,8 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
 
             await using var dbContext = CreateDbContext(MigratorConnectionString);
             await dbContext.Database.MigrateAsync();
+
+            await ProvisionMessagingSchemaAsMigratorAsync();
         }
 
         public async Task DisposeAsync() => await _container.DisposeAsync();
@@ -89,29 +106,67 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
                 .Options;
             return new CommunicationDbContext(options, new TenantContext());
         }
+
+        /// <summary>Mirrors <c>PaymentsFoundationTests</c>' own provisioning pattern exactly — Communication's outbox schema is not part of the EF model, so only Wolverine/Weasel's own resource management (<c>host.SetupResources()</c>) can create it.</summary>
+        private async Task ProvisionMessagingSchemaAsMigratorAsync()
+        {
+            var hostBuilder = Host.CreateApplicationBuilder();
+            hostBuilder.UseWolverine(opts =>
+            {
+                opts.EnrollAncillaryPostgresqlOutbox(MigratorConnectionString, MessagingSchema, typeof(CommunicationDbContext));
+                opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+                opts.UseEntityFrameworkCoreTransactions();
+            });
+
+            using (var outboxHost = hostBuilder.Build())
+            {
+                await outboxHost.SetupResources();
+            }
+
+            await using var connection = new NpgsqlConnection(MigratorConnectionString);
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"""
+                GRANT USAGE ON SCHEMA {MessagingSchema} TO ihostpro_app;
+                GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {MessagingSchema} TO ihostpro_app;
+                GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA {MessagingSchema} TO ihostpro_app;
+                ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA {MessagingSchema}
+                  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ihostpro_app;
+                ALTER DEFAULT PRIVILEGES FOR ROLE ihostpro_migrator IN SCHEMA {MessagingSchema}
+                  GRANT USAGE, SELECT ON SEQUENCES TO ihostpro_app;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
     }
 
     // ---- Composition root -------------------------------------------------
 
-    private ServiceProvider BuildServiceProvider(
+    private IHost BuildHost(
         ActiveTemplate? template, ReservationGuestContact? guestContact, IOutboundMessageConnector? connectorOverride = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:Communication"] = _fixture.AppConnectionString })
             .Build();
 
-        var services = new ServiceCollection();
-        services.AddScoped<ITenantContext, TenantContext>();
-        services.AddLogging();
-        services.AddCommunicationModule(configuration);
-        services.AddCommunicationReservationConsumer();
-        services.AddScoped<ITemplateReader>(_ => FakeTemplateReader.Returning(template));
-        services.AddScoped<IReservationGuestContactReader>(_ => FakeReservationGuestContactReader.Returning(guestContact));
+        var hostBuilder = Host.CreateApplicationBuilder();
+        hostBuilder.Services.AddScoped<ITenantContext, TenantContext>();
+        hostBuilder.Services.AddLogging();
+        hostBuilder.Services.AddCommunicationModule(configuration);
+        hostBuilder.Services.AddCommunicationReservationConsumer();
+        hostBuilder.Services.AddScoped<ITemplateReader>(_ => FakeTemplateReader.Returning(template));
+        hostBuilder.Services.AddScoped<IReservationGuestContactReader>(_ => FakeReservationGuestContactReader.Returning(guestContact));
 
         if (connectorOverride is not null)
-            services.AddScoped(_ => connectorOverride);
+            hostBuilder.Services.AddScoped(_ => connectorOverride);
 
-        return services.BuildServiceProvider();
+        hostBuilder.UseWolverine(opts =>
+        {
+            opts.EnrollAncillaryPostgresqlOutbox(_fixture.AppConnectionString, MessagingSchema, typeof(CommunicationDbContext));
+            opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+            opts.UseEntityFrameworkCoreTransactions();
+        });
+
+        return hostBuilder.Build();
     }
 
     private static ReservationCreated NewEvent(Guid tenantId, Guid reservationId) => new()
@@ -129,9 +184,9 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         Source = "manual",
     };
 
-    private static async Task ExecuteAsync(ServiceProvider serviceProvider, ReservationCreated @event)
+    private static async Task ExecuteAsync(IHost host, ReservationCreated @event)
     {
-        await using var scope = serviceProvider.CreateAsyncScope();
+        await using var scope = host.Services.CreateAsyncScope();
         var executionScope = scope.ServiceProvider.GetRequiredService<ICommunicationMessageExecutionScope>();
         await executionScope.ExecuteAsync(@event, @event.TenantId, Guid.NewGuid(), CancellationToken.None);
     }
@@ -143,11 +198,11 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
     {
         var tenantId = Guid.NewGuid();
         var reservationId = Guid.NewGuid();
-        using var serviceProvider = BuildServiceProvider(
+        using var host = BuildHost(
             new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent),
             new ReservationGuestContact(reservationId, "+5511999998888", "Ana Silva"));
 
-        await ExecuteAsync(serviceProvider, NewEvent(tenantId, reservationId));
+        await ExecuteAsync(host, NewEvent(tenantId, reservationId));
 
         var message = await ReadMessageAsync(tenantId, reservationId);
         message.Should().NotBeNull();
@@ -162,12 +217,12 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         var tenantId = Guid.NewGuid();
         var reservationId = Guid.NewGuid();
         var rejectingConnector = FakeOutboundMessageConnector.Rejecting("provider_unavailable");
-        using var serviceProvider = BuildServiceProvider(
+        using var host = BuildHost(
             new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent),
             new ReservationGuestContact(reservationId, "+5511999998888", "Ana Silva"),
             rejectingConnector);
 
-        await ExecuteAsync(serviceProvider, NewEvent(tenantId, reservationId));
+        await ExecuteAsync(host, NewEvent(tenantId, reservationId));
 
         var message = await ReadMessageAsync(tenantId, reservationId);
         message!.Status.Should().Be(MessageStatus.Failed);
@@ -181,12 +236,12 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         var tenantId = Guid.NewGuid();
         var reservationId = Guid.NewGuid();
         var connector = FakeOutboundMessageConnector.Succeeding();
-        using var serviceProvider = BuildServiceProvider(
+        using var host = BuildHost(
             new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent),
             guestContact: null,
             connector);
 
-        await ExecuteAsync(serviceProvider, NewEvent(tenantId, reservationId));
+        await ExecuteAsync(host, NewEvent(tenantId, reservationId));
 
         var message = await ReadMessageAsync(tenantId, reservationId);
         message!.Status.Should().Be(MessageStatus.Failed);
@@ -200,12 +255,12 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         var tenantId = Guid.NewGuid();
         var reservationId = Guid.NewGuid();
         var connector = FakeOutboundMessageConnector.SucceedingWithProviderMessageId("wamid.HBgL...");
-        using var serviceProvider = BuildServiceProvider(
+        using var host = BuildHost(
             new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent),
             new ReservationGuestContact(reservationId, "+5511999998888", "Ana Silva"),
             connector);
 
-        await ExecuteAsync(serviceProvider, NewEvent(tenantId, reservationId));
+        await ExecuteAsync(host, NewEvent(tenantId, reservationId));
 
         var message = await ReadMessageAsync(tenantId, reservationId);
         message!.Status.Should().Be(MessageStatus.Sent);
@@ -220,14 +275,14 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         var tenantId = Guid.NewGuid();
         var reservationId = Guid.NewGuid();
         var connector = FakeOutboundMessageConnector.Succeeding();
-        using var serviceProvider = BuildServiceProvider(
+        using var host = BuildHost(
             new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent),
             new ReservationGuestContact(reservationId, "+5511999998888", "Ana Silva"),
             connector);
         var @event = NewEvent(tenantId, reservationId);
 
-        await ExecuteAsync(serviceProvider, @event);
-        await ExecuteAsync(serviceProvider, @event);
+        await ExecuteAsync(host, @event);
+        await ExecuteAsync(host, @event);
 
         var count = await CountMessagesAsync(tenantId, reservationId);
         count.Should().Be(1, "a redelivered ReservationCreated must never create a second Message (CP1 idempotency)");
@@ -242,11 +297,11 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         var tenantA = Guid.NewGuid();
         var tenantB = Guid.NewGuid();
         var reservationId = Guid.NewGuid();
-        using var serviceProvider = BuildServiceProvider(
+        using var host = BuildHost(
             new ActiveTemplate("RESERVATION_CONFIRMATION", ActiveTemplateContent),
             new ReservationGuestContact(reservationId, "+5511999998888", "Ana Silva"));
 
-        await ExecuteAsync(serviceProvider, NewEvent(tenantA, reservationId));
+        await ExecuteAsync(host, NewEvent(tenantA, reservationId));
 
         var visibleToOwner = await ReadMessageAsync(tenantA, reservationId);
         var visibleToOther = await ReadMessageAsync(tenantB, reservationId);

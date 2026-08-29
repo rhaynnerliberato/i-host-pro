@@ -10,59 +10,18 @@ namespace IHostPro.ArchitectureTests;
 /// to this checkpoint's own mandate item 34, beyond what
 /// <c>CommunicationDependencyTests</c>/<c>ExternalIntegrationsDependencyTests</c>
 /// already generalize.
+///
+/// Two CP1-only guards originally lived here — <c>No_AIAgent_Bounded_Context_Project_Exists_Yet</c>
+/// and <c>No_AI_Model_Or_Session_Types_Exist_Anywhere_Yet</c> — both retired
+/// in Checkpoint 2 (AI Agent Foundation), which explicitly and permanently
+/// supersedes the "AI Agent BC must not exist yet" constraint they enforced
+/// (Fase 11 CP0's own authorized checkpoint sequence). Their positive
+/// counterparts now live in <c>AIAgentFoundationArchitectureTests</c>.
 /// </summary>
 public class InboundConversationFoundationArchitectureTests
 {
     private static string RepositoryRoot([CallerFilePath] string thisFilePath = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(thisFilePath)!, "..", ".."));
-
-    /// <summary>
-    /// Mandate item 28: CP1 explicitly does NOT create the AI Agent Bounded
-    /// Context — no <c>IHostPro.Contexts.AIAgent.*</c> project may exist yet,
-    /// even though it is already ratified at the platform level (ADR-009,
-    /// Architecture Principles §3) for a FUTURE checkpoint (CP2).
-    /// </summary>
-    [Fact]
-    public void No_AIAgent_Bounded_Context_Project_Exists_Yet()
-    {
-        var contextsDirectory = Path.Combine(RepositoryRoot(), "src", "Contexts");
-        Directory.Exists(contextsDirectory).Should().BeTrue($"expected {contextsDirectory} to exist");
-
-        var aiAgentProjects = Directory.GetDirectories(contextsDirectory)
-            .Where(dir => Path.GetFileName(dir).Contains("AIAgent", StringComparison.OrdinalIgnoreCase) ||
-                          Path.GetFileName(dir).Contains("AI_Agent", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        aiAgentProjects.Should().BeEmpty(
-            "the AI Agent Bounded Context is explicitly CP2's scope (Fase 11 CP0 decision) — " +
-            "CP1 (Inbound Conversation Foundation) must not create it");
-    }
-
-    /// <summary>
-    /// Mandate item 28/29: no <c>IModelProvider</c>/<c>AISession</c>/prompt/
-    /// tools/Anthropic connector/fake LLM type exists anywhere in the
-    /// solution yet — mirrors the project-existence check above at the type
-    /// level, in case someone adds these types to an existing project
-    /// instead of a new one.
-    /// </summary>
-    [Fact]
-    public void No_AI_Model_Or_Session_Types_Exist_Anywhere_Yet()
-    {
-        var srcDirectory = Path.Combine(RepositoryRoot(), "src");
-        var sourceFiles = Directory.GetFiles(srcDirectory, "*.cs", SearchOption.AllDirectories)
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") &&
-                           !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
-            .ToList();
-
-        var forbiddenFileNames = new[] { "IModelProvider.cs", "AISession.cs", "SendAgentResponseCommand.cs" };
-
-        foreach (var forbidden in forbiddenFileNames)
-        {
-            sourceFiles.Should().NotContain(
-                path => Path.GetFileName(path).Equals(forbidden, StringComparison.OrdinalIgnoreCase),
-                $"{forbidden} belongs to a later checkpoint (CP2/CP4) — CP1 is Inbound Conversation Foundation only");
-        }
-    }
 
     /// <summary>
     /// Mandate item 8/34: the provider-neutral inbound event must never
