@@ -36,11 +36,23 @@ namespace IHostPro.Contexts.Reservations.Tests.Integration;
 /// schemas — Create/Update genuinely call
 /// <see cref="Contracts.IPropertyReservationEligibilityReader"/>, mirroring
 /// <c>PropertyOwnerCommandHandlerTests</c>'s structure) — dispatched through
-/// the REAL production composition root via <see cref="ISender"/>. Only this
-/// host's Reservations module registers a Mediator (<c>AddPropertyManagementModule</c>
-/// is called WITHOUT <c>AddPropertyManagementCommandDispatch</c>, so no
-/// second <c>Mediator.Mediator</c> is ever registered here — <c>ISender</c>
-/// resolves unambiguously, exactly like <c>PropertyOwnerCommandHandlerTests</c>).
+/// the REAL production composition root via <see cref="IReservationsRequestDispatcher"/>.
+///
+/// Fase 11, Checkpoint 3 update: this host now composes BOTH
+/// PropertyManagement's AND Reservations' own Mediator (Option A query
+/// wiring — <c>AddPropertyManagementModule</c> itself now also registers
+/// PropertyManagement's own Mediator, for AI Agent's Worker-hosted Read
+/// Tools, not just <c>AddPropertyManagementCommandDispatch</c>). The
+/// pre-CP3 assumption this class's own doc comment used to state — "only
+/// this host's Reservations module registers a Mediator, so the shared,
+/// ambiguous <c>ISender</c> resolves unambiguously" — no longer holds: with
+/// two Bounded Contexts' own <c>Mediator.Mediator</c> both registered here,
+/// <c>ISender</c>/<c>IMediator</c> become genuinely ambiguous (whichever
+/// module's <c>AddMediator()</c> ran first wins the shared interface via
+/// <c>TryAdd</c>) — a real regression found and fixed during CP3
+/// homologation. <see cref="IReservationsRequestDispatcher"/> is exactly the
+/// mechanism that already exists to avoid this (see its own doc comment) —
+/// this test now uses it directly instead of the raw, shared <c>ISender</c>.
 /// </summary>
 public class ReservationCommandHandlerTests : IClassFixture<ReservationCommandHandlerTests.Fixture>
 {
@@ -238,7 +250,7 @@ public class ReservationCommandHandlerTests : IClassFixture<ReservationCommandHa
         var sp = scope.ServiceProvider;
         sp.GetRequiredService<ITenantContext>().SetTenant(tenantId);
 
-        return await sp.GetRequiredService<ISender>().Send(message, CancellationToken.None);
+        return await sp.GetRequiredService<IReservationsRequestDispatcher>().Send(message, CancellationToken.None);
     }
 
     // ---- Seeding: Property Management (direct DbContext, mirrors PropertyManagementFoundationTests) ----
