@@ -86,4 +86,15 @@ public interface ICleaningReader
     /// invented Cleaning is created here).
     /// </summary>
     Task<Guid?> GetAutomatedCleaningIdByReservationIdAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Minimal status projection for a Reservation (Fase 11, Checkpoint 3 —
+    /// AI Agent's own <c>GetCleaningStatus</c> Read Tool). When more than one
+    /// <c>Cleaning</c> exists for <paramref name="reservationId"/> (only the
+    /// automated flow is uniqueness-guarded), picks the most recent by
+    /// <c>CreatedAtUtc DESC</c>, then <c>Id DESC</c> as a deterministic
+    /// tie-breaker — never a status-based priority. <see langword="null"/>
+    /// when no Cleaning exists yet for this Reservation.
+    /// </summary>
+    Task<CleaningStatusResult?> GetStatusByReservationIdAsync(Guid reservationId, CancellationToken cancellationToken);
 }

@@ -17,11 +17,22 @@ namespace IHostPro.Contexts.PropertyManagement.Infrastructure;
 
 /// <summary>
 /// Single composition-root entry point for dispatching Property Management's
-/// Commands/Queries (Checkpoint 2 plan, item 12) — mirrors
-/// <c>IdentityCommandDispatchExtensions</c> exactly. Called ONLY from
-/// <c>IHostPro.Api</c>'s composition root, never from
-/// <c>IHostPro.Worker</c>'s: dispatching a Command/Query is an HTTP-request
-/// concern.
+/// write Commands (plus most read Queries, not yet needed anywhere but Api)
+/// (Checkpoint 2 plan, item 12) — mirrors <c>IdentityCommandDispatchExtensions</c>
+/// exactly. Called ONLY from <c>IHostPro.Api</c>'s composition root: dispatching
+/// a write Command remains an HTTP-request concern.
+///
+/// Fase 11, Checkpoint 3 update: <see cref="GetPropertyDetailQuery"/>/
+/// <see cref="GetPropertyAccessConfigurationQuery"/>'s own Application
+/// Mediator wiring + <c>TenantTransactionBehavior&lt;,&gt;</c> moved to
+/// <see cref="PropertyManagementModuleExtensions.AddPropertyManagementModule"/>
+/// (called by both Api and Worker) so the AI Agent's own Worker-hosted Read
+/// Tools can execute them in-process via <see cref="IPropertyManagementRequestDispatcher"/>
+/// (Exception #3) — this method no longer calls
+/// <c>AddPropertyManagementApplicationMediator</c> itself (Module already
+/// did, earlier in the same container) and no longer re-registers those two
+/// queries' behaviors. Every other Command/Query here stays exactly as it
+/// was — write Commands/validators/write pipeline behaviors remain Api-only.
 ///
 /// <see cref="CreateCondominiumCommand"/>/<see cref="UpdateCondominiumCommand"/>
 /// each get their own CLOSED-generic tenant-aware behavior
@@ -64,7 +75,10 @@ public static class PropertyManagementCommandDispatchExtensions
 {
     public static IServiceCollection AddPropertyManagementCommandDispatch(this IServiceCollection services)
     {
-        services.AddPropertyManagementApplicationMediator();
+        // AddPropertyManagementApplicationMediator() is no longer called
+        // here — AddPropertyManagementModule (called earlier, in the same
+        // Api container) already registers it (Fase 11, Checkpoint 3 — see
+        // this class's own doc comment).
 
         services.AddScoped<IValidator<CreateCondominiumCommand>, CreateCondominiumCommandValidator>();
         services.AddScoped<IValidator<UpdateCondominiumCommand>, UpdateCondominiumCommandValidator>();
@@ -89,9 +103,10 @@ public static class PropertyManagementCommandDispatchExtensions
         services.AddScoped<IRepository<Condominium, Guid>, CondominiumRepository>();
         services.AddScoped<ICondominiumReader, CondominiumReader>();
         services.AddScoped<IFrontDeskContactRepository, FrontDeskContactRepository>();
-        services.AddScoped<IPropertyAccessConfigurationRepository, PropertyAccessConfigurationRepository>();
+        // IPropertyAccessConfigurationRepository/IPropertyReader are
+        // registered by AddPropertyManagementModule (Fase 11, Checkpoint 3)
+        // — no longer duplicated here.
         services.AddScoped<IRepository<Property, Guid>, PropertyRepository>();
-        services.AddScoped<IPropertyReader, PropertyReader>();
         services.AddScoped<IPropertyAuditWriter, PropertyAuditWriter>();
         services.AddScoped<IPropertyOwnerReader, PropertyOwnerReader>();
         services.AddScoped<IPropertyOwnerWriter, PropertyOwnerWriter>();
@@ -143,14 +158,12 @@ public static class PropertyManagementCommandDispatchExtensions
         // Fase 10, Checkpoint 6.2 (Guest Access Secure Delivery Corrective
         // Implementation): SetPropertyAccessConfigurationCommand mirrors
         // SetFrontDeskContactCommand exactly — no Integration Event, its own
-        // closed-generic tenant-aware behavior. GetPropertyAccessConfigurationQuery
-        // is a plain read, using the shared generic behavior.
+        // closed-generic tenant-aware behavior. GetPropertyAccessConfigurationQuery's
+        // own behavior is registered by AddPropertyManagementModule (Fase 11,
+        // Checkpoint 3) — not duplicated here.
         services.AddScoped<
             IPipelineBehavior<SetPropertyAccessConfigurationCommand, Result<PropertyAccessConfigurationResult>>,
             SetPropertyAccessConfigurationTenantAwareBehavior>();
-        services.AddScoped<
-            IPipelineBehavior<GetPropertyAccessConfigurationQuery, Result<PropertyAccessConfigurationResult>>,
-            TenantTransactionBehavior<GetPropertyAccessConfigurationQuery, Result<PropertyAccessConfigurationResult>, PropertyManagementDbContext>>();
 
         services.AddScoped<
             IPipelineBehavior<CreatePropertyCommand, Result<PropertyResult>>,
@@ -159,12 +172,12 @@ public static class PropertyManagementCommandDispatchExtensions
             IPipelineBehavior<UpdatePropertyCommand, Result<PropertyResult>>,
             UpdatePropertyTenantAwareBehavior>();
 
+        // GetPropertyDetailQuery's own behavior is registered by
+        // AddPropertyManagementModule (Fase 11, Checkpoint 3) — not
+        // duplicated here.
         services.AddScoped<
             IPipelineBehavior<ListPropertiesQuery, Result<PagedResult<PropertySummaryResult>>>,
             TenantTransactionBehavior<ListPropertiesQuery, Result<PagedResult<PropertySummaryResult>>, PropertyManagementDbContext>>();
-        services.AddScoped<
-            IPipelineBehavior<GetPropertyDetailQuery, Result<PropertyResult>>,
-            TenantTransactionBehavior<GetPropertyDetailQuery, Result<PropertyResult>, PropertyManagementDbContext>>();
 
         services.AddScoped<
             IPipelineBehavior<ActivatePropertyCommand, Result<PropertyResult>>,

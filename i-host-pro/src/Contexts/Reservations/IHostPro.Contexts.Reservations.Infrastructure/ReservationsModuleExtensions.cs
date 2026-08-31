@@ -1,16 +1,19 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
+using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Reservations.Application;
 using IHostPro.Contexts.Reservations.Application.AirbnbImports;
 using IHostPro.Contexts.Reservations.Application.Reservations;
+using IHostPro.Contexts.Reservations.Application.Schedule;
 using IHostPro.Contexts.Reservations.Contracts;
 using IHostPro.Contexts.Reservations.Domain;
 using IHostPro.Contexts.Reservations.Infrastructure.Communication;
 using IHostPro.Contexts.Reservations.Infrastructure.Messaging;
 using IHostPro.Contexts.Reservations.Infrastructure.Persistence;
 using IHostPro.Contexts.Reservations.Infrastructure.Projections;
+using Mediator;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -61,6 +64,42 @@ public static class ReservationsModuleExtensions
         // placement reasoning as IReservationGuestContactReader above —
         // Communication's own Wolverine consumer runs in IHostPro.Worker.
         services.AddScoped<IReservationByGuestPhoneReader, IHostPro.Contexts.Reservations.Infrastructure.Communication.ReservationByGuestPhoneReader>();
+
+        // Fase 11, Checkpoint 3 — Exception #3 (AI Agent Tools -> Application
+        // Services): the AI Agent's own Wolverine consumer runs in
+        // IHostPro.Worker and needs to execute GetReservationDetailQuery/
+        // ListScheduleQuery in-process via IReservationsRequestDispatcher.
+        // Query-only Application Mediator wiring is promoted here (shared
+        // Module) so both processes get it; write Commands/validators/
+        // pipeline behaviors remain Api-only —
+        // see ReservationsCommandDispatchExtensions' own updated doc comment.
+        // Deliberately no ValidationBehavior<,>/IValidator<ListScheduleQuery>
+        // here — the AI Agent's own GetSchedule Tool is responsible for
+        // bounding its own interval before ever calling this query; Api's
+        // HTTP path keeps its full validation via AddReservationsCommandDispatch.
+        //
+        // AddReservationsApplicationMediator()'s own AddMediator() call
+        // registers EVERY handler in this assembly, including every write
+        // Command handler — whose own dependencies (IReservationConflictGuard/
+        // executors/etc.) are deliberately never registered here. This is
+        // harmless for IHostPro.Api (which also calls
+        // AddReservationsCommandDispatch, registering those dependencies
+        // too) but fails IHostPro.Worker's own ValidateOnBuild at startup (a
+        // real crash found and fixed during CP3 homologation) — Worker's own
+        // Program.cs calls KeepOnlyMediatorHandlers right after this method
+        // returns to trim its OWN composition down to the two approved
+        // read-only query handlers; this shared method must never do that
+        // trimming itself, since IHostPro.Api's real write HTTP endpoints
+        // depend on every handler staying registered here.
+        services.AddReservationsApplicationMediator();
+        services.AddScoped<IReservationReader, ReservationReader>();
+        services.AddScoped<IScheduleReader, ScheduleReader>();
+        services.AddScoped<
+            IPipelineBehavior<GetReservationDetailQuery, Result<ReservationResult>>,
+            TenantTransactionBehavior<GetReservationDetailQuery, Result<ReservationResult>, ReservationsDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<ListScheduleQuery, Result<IReadOnlyList<ScheduleItemResult>>>,
+            TenantTransactionBehavior<ListScheduleQuery, Result<IReadOnlyList<ScheduleItemResult>>, ReservationsDbContext>>();
 
         return services;
     }

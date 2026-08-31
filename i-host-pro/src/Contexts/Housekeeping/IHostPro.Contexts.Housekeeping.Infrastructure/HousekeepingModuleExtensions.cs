@@ -1,5 +1,6 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
+using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Application;
 using IHostPro.Contexts.Housekeeping.Application.Checklist;
 using IHostPro.Contexts.Housekeeping.Application.Cleanings;
@@ -12,6 +13,7 @@ using IHostPro.Contexts.Housekeeping.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Projections;
 using IHostPro.Contexts.PropertyManagement.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
+using Mediator;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -131,6 +133,28 @@ public static class HousekeepingModuleExtensions
         // per-message DI resolution graph. The single class in this module
         // authorized to hold IServiceScopeFactory — see its own doc comment.
         services.AddScoped<IHousekeepingMessageExecutionScope, HousekeepingMessageExecutionScope>();
+
+        // Fase 11, Checkpoint 3 — Exception #3 (AI Agent Tools -> Application
+        // Services): the AI Agent's own Wolverine consumer runs in
+        // IHostPro.Worker and needs to execute GetCleaningStatusByReservationQuery
+        // in-process via IHousekeepingRequestDispatcher. Query-only
+        // Application Mediator wiring is promoted here (shared Module) so
+        // both processes get it; write Commands/validators/write pipeline
+        // behaviors remain Api-only — see
+        // HousekeepingCommandDispatchExtensions' own updated doc comment.
+        // ICleaningReader is already registered above.
+        //
+        // See ReservationsModuleExtensions' own identical comment: this
+        // shared method must never trim Mediator's handler registration —
+        // IHostPro.Api's real write HTTP endpoints depend on every handler
+        // staying registered here. IHostPro.Worker's own Program.cs calls
+        // KeepOnlyMediatorHandlers right after this method returns, to trim
+        // its OWN composition down to the one approved read-only query
+        // handler.
+        services.AddHousekeepingApplicationMediator();
+        services.AddScoped<
+            IPipelineBehavior<GetCleaningStatusByReservationQuery, Result<CleaningStatusResult>>,
+            TenantTransactionBehavior<GetCleaningStatusByReservationQuery, Result<CleaningStatusResult>, HousekeepingDbContext>>();
 
         return services;
     }

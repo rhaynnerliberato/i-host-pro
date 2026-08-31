@@ -12,4 +12,15 @@ public interface IPixChargeReader
 {
     /// <summary>The id of the active (<c>Pending</c>) charge for <paramref name="lateCheckoutRequestId"/>, or <see langword="null"/> if none exists.</summary>
     Task<Guid?> GetActiveIdByLateCheckoutRequestIdAsync(Guid lateCheckoutRequestId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Minimal status projection for a Reservation (Fase 11, Checkpoint 3 —
+    /// AI Agent's own <c>GetPaymentStatus</c> Read Tool). When more than one
+    /// <c>PixCharge</c> exists for <paramref name="reservationId"/>, picks
+    /// the most recent by <c>CreatedAtUtc DESC</c>, then <c>Id DESC</c> as a
+    /// deterministic tie-breaker (mandate item 16) — never a status-based
+    /// priority. <see langword="null"/> when no <c>PixCharge</c> exists yet
+    /// for this Reservation.
+    /// </summary>
+    Task<PaymentStatusResult?> GetStatusByReservationIdAsync(Guid reservationId, CancellationToken cancellationToken);
 }

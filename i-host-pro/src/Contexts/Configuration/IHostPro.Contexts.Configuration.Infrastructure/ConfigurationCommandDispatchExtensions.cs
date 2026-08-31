@@ -14,8 +14,21 @@ namespace IHostPro.Contexts.Configuration.Infrastructure;
 
 /// <summary>
 /// Single composition-root entry point for dispatching Configuration &amp;
-/// Policy's Commands/Queries — mirrors <c>ReservationsCommandDispatchExtensions</c>
-/// exactly. Called ONLY from <c>IHostPro.Api</c>'s composition root.
+/// Policy's write Commands (plus most read Queries, not yet needed anywhere
+/// but Api) — mirrors <c>ReservationsCommandDispatchExtensions</c> exactly.
+/// Called ONLY from <c>IHostPro.Api</c>'s composition root: dispatching a
+/// write Command remains an HTTP-request concern.
+///
+/// Fase 11, Checkpoint 3 update: <see cref="GetEffectivePolicyQuery"/>'s own
+/// Application Mediator wiring now lives in
+/// <c>ConfigurationModuleExtensions.AddConfigurationModule</c> (called by
+/// both Api and Worker) so the AI Agent's own Worker-hosted Read Tool can
+/// execute it in-process via <see cref="IConfigurationRequestDispatcher"/>
+/// (Exception #3) — this method no longer calls
+/// <c>AddConfigurationApplicationMediator</c> itself (Module already did,
+/// earlier in the same container). Every other Command/Query here stays
+/// exactly as it was — write Commands/validators/write pipeline behaviors
+/// remain Api-only.
 ///
 /// <see cref="ListPolicyDefinitionsQuery"/>/<see cref="GetPolicyValueByScopeQuery"/>/
 /// <see cref="GetPolicyHistoryQuery"/> touch <c>ConfigurationDbContext</c>
@@ -41,7 +54,10 @@ public static class ConfigurationCommandDispatchExtensions
 {
     public static IServiceCollection AddConfigurationCommandDispatch(this IServiceCollection services)
     {
-        services.AddConfigurationApplicationMediator();
+        // AddConfigurationApplicationMediator() is no longer called here —
+        // AddConfigurationModule (called earlier, in the same Api container)
+        // already registers it (Fase 11, Checkpoint 3 — see this class's own
+        // doc comment).
 
         services.AddScoped<IValidator<CreatePolicyValueVersionCommand>, CreatePolicyValueVersionCommandValidator>();
 

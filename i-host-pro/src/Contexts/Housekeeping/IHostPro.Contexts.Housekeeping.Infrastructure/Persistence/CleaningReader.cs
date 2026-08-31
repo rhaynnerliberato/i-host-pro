@@ -134,6 +134,22 @@ public sealed class CleaningReader : ICleaningReader
             .Select(c => (Guid?)c.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
+    /// <inheritdoc cref="ICleaningReader.GetStatusByReservationIdAsync"/>
+    public async Task<CleaningStatusResult?> GetStatusByReservationIdAsync(
+        Guid reservationId, CancellationToken cancellationToken)
+    {
+        var cleaning = await _dbContext.Cleanings
+            .AsNoTracking()
+            .Where(c => c.ReservationId == reservationId)
+            .OrderByDescending(c => c.CreatedAtUtc)
+            .ThenByDescending(c => c.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return cleaning is null
+            ? null
+            : new CleaningStatusResult(CleaningStatusCodeMapper.ToCode(cleaning.Status), cleaning.ScheduledAtUtc, cleaning.CompletedAtUtc);
+    }
+
     private static CleaningResult ToResult(Domain.Cleaning cleaning) => new(
         cleaning.Id,
         cleaning.PropertyId,

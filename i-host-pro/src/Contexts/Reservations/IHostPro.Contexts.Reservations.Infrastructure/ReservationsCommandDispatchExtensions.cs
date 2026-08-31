@@ -13,11 +13,28 @@ using Microsoft.Extensions.DependencyInjection;
 namespace IHostPro.Contexts.Reservations.Infrastructure;
 
 /// <summary>
-/// Single composition-root entry point for dispatching Reservations'
-/// Commands/Queries — mirrors <c>PropertyManagementCommandDispatchExtensions</c>
-/// exactly. Called ONLY from <c>IHostPro.Api</c>'s composition root, never
-/// from <c>IHostPro.Worker</c>'s: dispatching a Command/Query is an
-/// HTTP-request concern.
+/// Single composition-root entry point for dispatching Reservations' write
+/// Commands (plus the one read Query — <see cref="ListReservationsQuery"/> —
+/// not yet needed anywhere but Api) — mirrors
+/// <c>PropertyManagementCommandDispatchExtensions</c> exactly. Called ONLY
+/// from <c>IHostPro.Api</c>'s composition root: dispatching a write Command
+/// remains an HTTP-request concern.
+///
+/// Fase 11, Checkpoint 3 update: this is no longer the only place Queries
+/// get dispatched. <see cref="GetReservationDetailQuery"/>/<see cref="ListScheduleQuery"/>'s
+/// own Application Mediator wiring + <c>TenantTransactionBehavior&lt;,&gt;</c>
+/// moved to <see cref="ReservationsModuleExtensions.AddReservationsModule"/>
+/// (called by both Api and Worker) so the AI Agent's own Worker-hosted Read
+/// Tools can execute them in-process via <see cref="IReservationsRequestDispatcher"/>
+/// (Exception #3) — this method no longer calls
+/// <c>AddReservationsApplicationMediator</c> itself (Module already did,
+/// earlier in the same container) and no longer re-registers those two
+/// queries' behaviors. The conceptual boundary going forward: write
+/// Commands/validators/write pipeline behaviors stay Api-only; read Queries
+/// may be promoted to the shared Module when an approved Architecture
+/// Exception authorizes a trusted in-process consumer — see
+/// <c>ReservationsModuleExtensions</c>'s own comment for the specifics of
+/// this promotion.
 ///
 /// <see cref="CreateReservationCommand"/>/<see cref="UpdateReservationCommand"/>/
 /// <see cref="CancelReservationCommand"/> deliberately get NO wrapping
@@ -43,7 +60,10 @@ public static class ReservationsCommandDispatchExtensions
 {
     public static IServiceCollection AddReservationsCommandDispatch(this IServiceCollection services)
     {
-        services.AddReservationsApplicationMediator();
+        // AddReservationsApplicationMediator() is no longer called here —
+        // AddReservationsModule (called earlier, in the same Api container)
+        // already registers it (Fase 11, Checkpoint 3 — see this class's own
+        // doc comment).
 
         services.AddScoped<IValidator<CreateReservationCommand>, CreateReservationCommandValidator>();
         services.AddScoped<IValidator<UpdateReservationCommand>, UpdateReservationCommandValidator>();
@@ -57,13 +77,15 @@ public static class ReservationsCommandDispatchExtensions
         services.AddScoped(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 
         services.AddScoped<IRepository<Reservation, Guid>, ReservationRepository>();
-        services.AddScoped<IReservationReader, ReservationReader>();
+        // IReservationReader is registered by AddReservationsModule (Fase 11,
+        // Checkpoint 3) — no longer duplicated here.
         services.AddScoped<IReservationAuditWriter, ReservationAuditWriter>();
         services.AddScoped<IReservationConflictGuard, ReservationConflictGuard>();
 
-        // Fase 7, Incremento 1 (Agenda Foundation, Checkpoint 1).
+        // Fase 7, Incremento 1 (Agenda Foundation, Checkpoint 1). IScheduleReader
+        // is registered by AddReservationsModule (Fase 11, Checkpoint 3) — no
+        // longer duplicated here; the validator remains Api-only.
         services.AddScoped<IValidator<ListScheduleQuery>, ListScheduleQueryValidator>();
-        services.AddScoped<IScheduleReader, ScheduleReader>();
 
         // Backs every write command's transactional step — see
         // ReservationsOutboxTransactionExecutor's own doc comment.
@@ -80,15 +102,13 @@ public static class ReservationsCommandDispatchExtensions
 
         // Closed to ReservationsDbContext explicitly (Fase 4 homologation
         // fix) — never the ambiguous, unparameterized DbContext base type.
+        // GetReservationDetailQuery/ListScheduleQuery's own behaviors are
+        // registered by AddReservationsModule (Fase 11, Checkpoint 3) — not
+        // duplicated here (double-registering the same closed
+        // IPipelineBehavior<,> would run it twice).
         services.AddScoped<
             IPipelineBehavior<ListReservationsQuery, Result<PagedResult<ReservationSummaryResult>>>,
             TenantTransactionBehavior<ListReservationsQuery, Result<PagedResult<ReservationSummaryResult>>, ReservationsDbContext>>();
-        services.AddScoped<
-            IPipelineBehavior<GetReservationDetailQuery, Result<ReservationResult>>,
-            TenantTransactionBehavior<GetReservationDetailQuery, Result<ReservationResult>, ReservationsDbContext>>();
-        services.AddScoped<
-            IPipelineBehavior<ListScheduleQuery, Result<IReadOnlyList<ScheduleItemResult>>>,
-            TenantTransactionBehavior<ListScheduleQuery, Result<IReadOnlyList<ScheduleItemResult>>, ReservationsDbContext>>();
 
         return services;
     }

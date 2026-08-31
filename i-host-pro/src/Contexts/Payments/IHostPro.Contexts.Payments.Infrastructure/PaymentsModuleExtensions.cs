@@ -1,5 +1,6 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
+using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.GuestOperations.Contracts;
 using IHostPro.Contexts.Payments.Application;
 using IHostPro.Contexts.Payments.Contracts;
@@ -7,6 +8,7 @@ using IHostPro.Contexts.Payments.Domain;
 using IHostPro.Contexts.Payments.Infrastructure.Communication;
 using IHostPro.Contexts.Payments.Infrastructure.Messaging;
 using IHostPro.Contexts.Payments.Infrastructure.Persistence;
+using Mediator;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,6 +45,29 @@ public static class PaymentsModuleExtensions
 
         services.AddScoped<IPixChargeDeliveryReader, PixChargeDeliveryReader>();
 
+        // Fase 11, Checkpoint 3 — Exception #3 (AI Agent Tools -> Application
+        // Services): the AI Agent's own Wolverine consumer runs in
+        // IHostPro.Worker and needs to execute GetPaymentStatusByReservationQuery
+        // in-process via IPaymentsRequestDispatcher — Payments' first-ever
+        // Application Query/Mediator usage. Registered directly here (not a
+        // separate Api-only CommandDispatch extension) because Payments has
+        // no Api project and its only consumer today is the Worker-hosted AI
+        // Agent — see PaymentsApplicationMediatorExtensions' own doc comment.
+        // No Payments.Api exists today, so AddPaymentsModule has only ever
+        // been called by IHostPro.Worker — but see
+        // ReservationsModuleExtensions' own identical comment for why the
+        // trimming still belongs in Worker's own Program.cs, not here: this
+        // shared method must stay generically safe for any future consumer
+        // (an eventual Payments.Api included) to call without silently
+        // losing write-Command handler registrations it might need.
+        // IHostPro.Worker's own Program.cs calls KeepOnlyMediatorHandlers
+        // right after this method returns.
+        services.AddPaymentsApplicationMediator();
+        services.AddScoped<IPixChargeReader, PixChargeReader>();
+        services.AddScoped<
+            IPipelineBehavior<GetPaymentStatusByReservationQuery, Result<PaymentStatusResult>>,
+            TenantTransactionBehavior<GetPaymentStatusByReservationQuery, Result<PaymentStatusResult>, PaymentsDbContext>>();
+
         return services;
     }
 
@@ -58,7 +83,8 @@ public static class PaymentsModuleExtensions
     public static IServiceCollection AddPaymentsLateCheckoutPaymentRequiredConsumer(this IServiceCollection services)
     {
         services.AddScoped<IRepository<PixCharge, Guid>, PixChargeRepository>();
-        services.AddScoped<IPixChargeReader, PixChargeReader>();
+        // IPixChargeReader is registered by AddPaymentsModule (Fase 11,
+        // Checkpoint 3) — no longer duplicated here.
         services.AddScoped<Application.IIntegrationEventCollector, IntegrationEventCollector>();
         services.AddScoped<IPaymentsTransactionExecutor, PaymentsOutboxTransactionExecutor>();
 

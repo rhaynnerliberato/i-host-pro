@@ -17,4 +17,19 @@ public sealed class PixChargeReader : IPixChargeReader
             .Where(c => c.LateCheckoutRequestId == lateCheckoutRequestId && c.Status == PixChargeStatus.Pending)
             .Select(c => (Guid?)c.Id)
             .FirstOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc cref="IPixChargeReader.GetStatusByReservationIdAsync"/>
+    public async Task<PaymentStatusResult?> GetStatusByReservationIdAsync(Guid reservationId, CancellationToken cancellationToken)
+    {
+        var charge = await _dbContext.PixCharges
+            .AsNoTracking()
+            .Where(c => c.ReservationId == reservationId)
+            .OrderByDescending(c => c.CreatedAtUtc)
+            .ThenByDescending(c => c.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return charge is null
+            ? null
+            : new PaymentStatusResult(charge.Status.ToString(), charge.Amount, charge.CurrencyCode, charge.ExpiresAtUtc);
+    }
 }

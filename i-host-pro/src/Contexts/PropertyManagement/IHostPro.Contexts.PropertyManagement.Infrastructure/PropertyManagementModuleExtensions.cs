@@ -1,8 +1,13 @@
+using IHostPro.BuildingBlocks.Domain;
+using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Application;
+using IHostPro.Contexts.PropertyManagement.Application.GuestAccess;
+using IHostPro.Contexts.PropertyManagement.Application.Properties;
 using IHostPro.Contexts.PropertyManagement.Contracts;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Communication;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Persistence;
 using IHostPro.Contexts.PropertyManagement.Infrastructure.Reservations;
+using Mediator;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -72,6 +77,34 @@ public static class PropertyManagementModuleExtensions
 
         if (isDevelopmentEnvironment)
             services.AddScoped<IPropertyAccessCredentialProvider, DevelopmentPropertyAccessCredentialProvider>();
+
+        // Fase 11, Checkpoint 3 — Exception #3 (AI Agent Tools -> Application
+        // Services): the AI Agent's own Wolverine consumer runs in
+        // IHostPro.Worker and needs to execute GetPropertyDetailQuery/
+        // GetPropertyAccessConfigurationQuery in-process via
+        // IPropertyManagementRequestDispatcher — never via
+        // IPropertyGuestAccessReader above, which stays purpose-limited to
+        // Communication only (ADR-028). Query-only Application Mediator
+        // wiring is promoted here (shared Module) so both processes get it;
+        // write Commands/validators/write pipeline behaviors remain Api-only
+        // — see PropertyManagementCommandDispatchExtensions' own updated doc
+        // comment.
+        // See ReservationsModuleExtensions' own identical comment: this
+        // shared method must never trim Mediator's handler registration —
+        // IHostPro.Api's real write HTTP endpoints depend on every handler
+        // staying registered here. IHostPro.Worker's own Program.cs calls
+        // KeepOnlyMediatorHandlers right after this method returns, to trim
+        // its OWN composition down to the two approved read-only query
+        // handlers.
+        services.AddPropertyManagementApplicationMediator();
+        services.AddScoped<IPropertyReader, PropertyReader>();
+        services.AddScoped<IPropertyAccessConfigurationRepository, PropertyAccessConfigurationRepository>();
+        services.AddScoped<
+            IPipelineBehavior<GetPropertyDetailQuery, Result<PropertyResult>>,
+            TenantTransactionBehavior<GetPropertyDetailQuery, Result<PropertyResult>, PropertyManagementDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<GetPropertyAccessConfigurationQuery, Result<PropertyAccessConfigurationResult>>,
+            TenantTransactionBehavior<GetPropertyAccessConfigurationQuery, Result<PropertyAccessConfigurationResult>, PropertyManagementDbContext>>();
 
         return services;
     }

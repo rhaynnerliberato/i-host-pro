@@ -1,3 +1,4 @@
+using IHostPro.Contexts.Configuration.Application;
 using IHostPro.Contexts.Configuration.Contracts;
 using IHostPro.Contexts.Configuration.Infrastructure.Caching;
 using IHostPro.Contexts.Configuration.Infrastructure.Persistence;
@@ -56,6 +57,29 @@ public static class ConfigurationModuleExtensions
         services.AddScoped<ITemplateReader, TemplateReader>();
 
         services.AddConfigurationPolicyCache(configuration);
+
+        // Fase 11, Checkpoint 3 — Exception #3 (AI Agent Tools -> Application
+        // Services): the AI Agent's own Wolverine consumer runs in
+        // IHostPro.Worker and needs to execute GetEffectivePolicyQuery
+        // in-process via IConfigurationRequestDispatcher. Query-only
+        // Application Mediator wiring is promoted here (shared Module) so
+        // both processes get it — GetEffectivePolicyQueryHandler needs
+        // nothing beyond IEarlyCheckInPolicyReader/ILateCheckoutPolicyReader,
+        // already registered above, and deliberately gets no
+        // TenantTransactionBehavior (see GetEffectivePolicyQuery's own doc
+        // comment). Write Commands/validators/write pipeline behaviors
+        // remain Api-only — see ConfigurationCommandDispatchExtensions'
+        // own updated doc comment.
+        //
+        // This shared method must never trim Mediator's handler
+        // registration (see ReservationsModuleExtensions' own identical
+        // comment) — IHostPro.Api's real write HTTP endpoints depend on
+        // every handler staying registered here. IHostPro.Worker's own
+        // Program.cs calls KeepOnlyMediatorHandlers right after this method
+        // returns, to trim its OWN composition down to the one approved
+        // read-only query handler (a real Worker ValidateOnBuild startup
+        // crash found and fixed during CP3 homologation).
+        services.AddConfigurationApplicationMediator();
 
         return services;
     }

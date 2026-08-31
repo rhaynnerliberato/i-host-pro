@@ -13,12 +13,22 @@ using Microsoft.Extensions.DependencyInjection;
 namespace IHostPro.Contexts.Housekeeping.Infrastructure;
 
 /// <summary>
-/// Single composition-root entry point for dispatching Housekeeping's
-/// Commands/Queries (Fase 6, Incremento 1) — mirrors
-/// <c>ReservationsCommandDispatchExtensions</c> exactly. Called ONLY from
-/// <c>IHostPro.Api</c>'s composition root, never <c>IHostPro.Worker</c>'s —
-/// dispatching a Command/Query is an HTTP-request concern; the Worker's own
-/// needs are entirely covered by <see cref="HousekeepingModuleExtensions.AddHousekeepingModule"/>.
+/// Single composition-root entry point for dispatching Housekeeping's write
+/// Commands (plus most read Queries, not yet needed anywhere but Api) (Fase
+/// 6, Incremento 1) — mirrors <c>ReservationsCommandDispatchExtensions</c>
+/// exactly. Called ONLY from <c>IHostPro.Api</c>'s composition root:
+/// dispatching a write Command remains an HTTP-request concern.
+///
+/// Fase 11, Checkpoint 3 update: <see cref="GetCleaningStatusByReservationQuery"/>'s
+/// own Application Mediator wiring + <c>TenantTransactionBehavior&lt;,&gt;</c>
+/// live in <see cref="HousekeepingModuleExtensions.AddHousekeepingModule"/>
+/// (called by both Api and Worker) so the AI Agent's own Worker-hosted Read
+/// Tool can execute it in-process via <c>IHousekeepingRequestDispatcher</c>
+/// (Exception #3) — this method no longer calls
+/// <c>AddHousekeepingApplicationMediator</c> itself (Module already did,
+/// earlier in the same container). Every other Command/Query here stays
+/// exactly as it was — write Commands/validators/write pipeline behaviors
+/// remain Api-only.
 ///
 /// Every write command
 /// (Create/Assign/Start/StartInspection/Complete/Cancel/MarkInterrupted/
@@ -39,7 +49,10 @@ public static class HousekeepingCommandDispatchExtensions
 {
     public static IServiceCollection AddHousekeepingCommandDispatch(this IServiceCollection services)
     {
-        services.AddHousekeepingApplicationMediator();
+        // AddHousekeepingApplicationMediator() is no longer called here —
+        // AddHousekeepingModule (called earlier, in the same Api container)
+        // already registers it (Fase 11, Checkpoint 3 — see this class's own
+        // doc comment).
 
         services.AddScoped<IValidator<CreateCleaningCommand>, CreateCleaningCommandValidator>();
         services.AddScoped<IValidator<ListCleaningsQuery>, ListCleaningsQueryValidator>();
