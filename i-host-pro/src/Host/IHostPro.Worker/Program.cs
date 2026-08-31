@@ -3,6 +3,7 @@ using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
+using IHostPro.Contexts.Configuration.Application.Policies;
 using IHostPro.Contexts.Configuration.Contracts;
 using IHostPro.Contexts.Configuration.Infrastructure;
 using IHostPro.Contexts.Configuration.Infrastructure.Caching;
@@ -17,13 +18,19 @@ using IHostPro.Contexts.ExternalIntegrations.Infrastructure;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
 using IHostPro.Contexts.GuestOperations.Infrastructure;
 using IHostPro.Contexts.GuestOperations.Infrastructure.Persistence;
+using IHostPro.Contexts.Housekeeping.Application.Cleanings;
 using IHostPro.Contexts.Housekeeping.Contracts;
 using IHostPro.Contexts.Housekeeping.Infrastructure;
 using IHostPro.Contexts.Housekeeping.Infrastructure.Messaging;
 using IHostPro.Contexts.Identity.Infrastructure;
+using IHostPro.Contexts.Payments.Application;
 using IHostPro.Contexts.Payments.Infrastructure;
 using IHostPro.Contexts.Payments.Infrastructure.Persistence;
+using IHostPro.Contexts.PropertyManagement.Application.GuestAccess;
+using IHostPro.Contexts.PropertyManagement.Application.Properties;
 using IHostPro.Contexts.PropertyManagement.Infrastructure;
+using IHostPro.Contexts.Reservations.Application.Reservations;
+using IHostPro.Contexts.Reservations.Application.Schedule;
 using IHostPro.Contexts.Reservations.Contracts;
 using IHostPro.Contexts.Reservations.Infrastructure;
 using IHostPro.Contexts.Reservations.Infrastructure.Messaging;
@@ -92,6 +99,19 @@ try
     builder.Services.AddConfigurationModule(builder.Configuration);
     builder.Services.AddScoped<IIntegrationEventHandler<PolicyUpdated>, PolicyUpdatedCacheInvalidation>();
 
+    // Fase 11, Checkpoint 3 (Read Tools & Context Builder) — Exception #3:
+    // AddConfigurationModule's own AddMediator() call registers EVERY
+    // handler in Configuration.Application (Policies AND Templates, write
+    // Commands included), whose own dependencies are never registered in
+    // this Worker composition. Left unfiltered this fails
+    // Host.CreateApplicationBuilder's default ValidateOnBuild=true here (a
+    // real Worker startup crash found and fixed during CP3 homologation) —
+    // trim down to exactly the one read-only query handler the AI Agent's
+    // own GetRelevantPolicies Tool needs. Never call this from
+    // ConfigurationModuleExtensions itself — IHostPro.Api's real write HTTP
+    // endpoints depend on every handler staying registered there.
+    builder.Services.KeepOnlyMediatorHandlers(typeof(GetEffectivePolicyQueryHandler));
+
     // Housekeeping module (Fase 6, Incremento 1) — unlike Configuration &
     // Policy, Worker DOES need the full module here: its own local
     // Property/Reservation projections and the automatic
@@ -99,6 +119,11 @@ try
     // writes to HousekeepingDbContext, consumed exclusively in this process
     // — see HousekeepingModuleExtensions' own doc comment.
     builder.Services.AddHousekeepingModule(builder.Configuration);
+
+    // Fase 11, Checkpoint 3 — see the identical Configuration comment above:
+    // trim Housekeeping.Application's own AddMediator() handler set down to
+    // the one read-only query handler GetCleaningStatus needs.
+    builder.Services.KeepOnlyMediatorHandlers(typeof(GetCleaningStatusByReservationQueryHandler));
 
     // Reservations module — Agenda Foundation slice only (Fase 7, Incremento
     // 1, Checkpoint 1): Worker needs ReservationsDbContext + the minimal
@@ -108,6 +133,13 @@ try
     // by that method's own design) — see ReservationsModuleExtensions'
     // AddReservationsScheduleProjectionConsumer doc comment.
     builder.Services.AddReservationsModule(builder.Configuration);
+
+    // Fase 11, Checkpoint 3 — see the identical Configuration comment above:
+    // trim Reservations.Application's own AddMediator() handler set down to
+    // the two read-only query handlers GetReservationSummary/GetSchedule/
+    // GetAvailability need.
+    builder.Services.KeepOnlyMediatorHandlers(typeof(GetReservationDetailQueryHandler), typeof(ListScheduleQueryHandler));
+
     builder.Services.AddReservationsScheduleProjectionConsumer();
 
     // Fase 9, Checkpoint 3.2 ("Airbnb Deterministic Foundation"): the
@@ -152,6 +184,12 @@ try
     // EnrollAncillaryPostgresqlOutbox call is needed for
     // property_management_messaging here.
     builder.Services.AddPropertyManagementModule(builder.Configuration, builder.Environment.IsDevelopment());
+
+    // Fase 11, Checkpoint 3 — see the identical Configuration comment above:
+    // trim PropertyManagement.Application's own AddMediator() handler set
+    // down to the two read-only query handlers GetPropertyInformation/
+    // GetAccessInstructions need.
+    builder.Services.KeepOnlyMediatorHandlers(typeof(GetPropertyDetailQueryHandler), typeof(GetPropertyAccessConfigurationQueryHandler));
 
     // Communication module (Fase 9, Checkpoint 1): CommunicationDbContext +
     // its shared execution-scope/repository/transaction-executor DI graph
@@ -256,6 +294,12 @@ try
     // environment (mirrors Guest Operations' own ReservationCreated
     // consumer reasoning above).
     builder.Services.AddPaymentsModule(builder.Configuration);
+
+    // Fase 11, Checkpoint 3 — see the identical Configuration comment above:
+    // trim Payments.Application's own AddMediator() handler set down to the
+    // one read-only query handler GetPaymentStatus needs.
+    builder.Services.KeepOnlyMediatorHandlers(typeof(GetPaymentStatusByReservationQueryHandler));
+
     builder.Services.AddPaymentsLateCheckoutPaymentRequiredConsumer();
 
     // FakePixProvider (Fase 10, Checkpoint 5 — ADR-025, synchronous
