@@ -76,6 +76,14 @@
     <ProjectReference Include="..\..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Infrastructure\IHostPro.Contexts.Communication.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\src\Contexts\AIAgent\IHostPro.Contexts.AIAgent.Domain\IHostPro.Contexts.AIAgent.Domain.csproj" />
     <ProjectReference Include="..\..\..\src\Contexts\AIAgent\IHostPro.Contexts.AIAgent.Infrastructure\IHostPro.Contexts.AIAgent.Infrastructure.csproj" />
+    <!--
+      Fase 11, Checkpoint 3 — AIAgentReadToolsWorkflowRoundTripTests needs
+      direct-EF seeding for PixCharge/Cleaning (IHostPro.Api itself never
+      references Payments/Housekeeping.Infrastructure directly — mirrors the
+      PropertyManagement.Infrastructure reference above for the same reason).
+    -->
+    <ProjectReference Include="..\..\..\src\Contexts\Payments\IHostPro.Contexts.Payments.Infrastructure\IHostPro.Contexts.Payments.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Infrastructure\IHostPro.Contexts.Housekeeping.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

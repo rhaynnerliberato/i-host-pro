@@ -71,4 +71,9 @@ internal sealed class FakeCleaningReader : ICleaningReader
 
     public Task<Guid?> GetAutomatedCleaningIdByReservationIdAsync(Guid tenantId, Guid reservationId, CancellationToken cancellationToken) =>
         Task.FromResult(AutomatedCleaningId);
+
+    public CleaningStatusResult? StatusResult { get; set; }
+
+    public Task<CleaningStatusResult?> GetStatusByReservationIdAsync(Guid reservationId, CancellationToken cancellationToken) =>
+        Task.FromResult(StatusResult);
 }

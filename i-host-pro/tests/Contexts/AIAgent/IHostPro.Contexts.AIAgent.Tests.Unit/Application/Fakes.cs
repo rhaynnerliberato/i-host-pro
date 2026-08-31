@@ -1,4 +1,5 @@
 using IHostPro.Contexts.AIAgent.Application;
+using IHostPro.Contexts.AIAgent.Application.Tools;
 using IHostPro.Contexts.AIAgent.Domain;
 
 namespace IHostPro.Contexts.AIAgent.Tests.Unit.Application;
@@ -77,6 +78,26 @@ internal sealed class FakeAgentInteractionRepository : IAgentInteractionReposito
     public void Remove(AgentInteraction aggregate) => _byId.Remove(aggregate.Id);
 }
 
+internal sealed class FakeAgentToolExecutionRepository : IAgentToolExecutionRepository
+{
+    private readonly Dictionary<Guid, AgentToolExecution> _byId = new();
+
+    public List<AgentToolExecution> AddedExecutions { get; } = [];
+
+    public Task<AgentToolExecution?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_byId.GetValueOrDefault(id));
+
+    public void Add(AgentToolExecution aggregate)
+    {
+        _byId[aggregate.Id] = aggregate;
+        AddedExecutions.Add(aggregate);
+    }
+
+    public void Update(AgentToolExecution aggregate) => _byId[aggregate.Id] = aggregate;
+
+    public void Remove(AgentToolExecution aggregate) => _byId.Remove(aggregate.Id);
+}
+
 internal sealed class FakeAgentContextBuilder : IAgentContextBuilder
 {
     private readonly ModelRequest _request;
@@ -94,4 +115,44 @@ internal sealed class PassThroughAIAgentTransactionExecutor : IAIAgentTransactio
 {
     public Task<TResponse> ExecuteAsync<TResponse>(Func<Task<TResponse>> operation, CancellationToken cancellationToken) =>
         operation();
+}
+
+/// <summary>Deterministic test double for the orchestrator's tool-calling loop (Fase 11, Checkpoint 3).</summary>
+internal sealed class FakeAgentTool : IAgentTool
+{
+    private readonly AgentToolResult _result;
+    private readonly Exception? _throws;
+
+    private FakeAgentTool(string name, AgentToolResult result, Exception? throws)
+    {
+        Descriptor = new AgentToolDescriptor(name, "Fake tool for orchestrator tests.");
+        _result = result;
+        _throws = throws;
+    }
+
+    public static FakeAgentTool Succeeding(string name, string content) =>
+        new(name, AgentToolResult.Success(content), null);
+
+    public static FakeAgentTool Failing(string name, string failureCode) =>
+        new(name, AgentToolResult.Failure(failureCode), null);
+
+    public static FakeAgentTool Throwing(string name, Exception exception) =>
+        new(name, AgentToolResult.Failure("unused"), exception);
+
+    public AgentToolDescriptor Descriptor { get; }
+
+    public AgentToolContext? LastContext { get; private set; }
+    public IReadOnlyDictionary<string, string>? LastArguments { get; private set; }
+
+    public Task<AgentToolResult> ExecuteAsync(
+        AgentToolContext context, IReadOnlyDictionary<string, string>? arguments, CancellationToken cancellationToken)
+    {
+        LastContext = context;
+        LastArguments = arguments;
+
+        if (_throws is not null)
+            throw _throws;
+
+        return Task.FromResult(_result);
+    }
 }

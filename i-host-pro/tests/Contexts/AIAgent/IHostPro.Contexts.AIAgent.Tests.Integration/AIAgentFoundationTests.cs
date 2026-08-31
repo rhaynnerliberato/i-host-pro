@@ -125,6 +125,7 @@ public class AIAgentFoundationTests : IClassFixture<AIAgentFoundationTests.Fixtu
 
         (await TableExistsAsync(dbContext, "ai_agent", "agent_sessions")).Should().BeTrue();
         (await TableExistsAsync(dbContext, "ai_agent", "agent_interactions")).Should().BeTrue();
+        (await TableExistsAsync(dbContext, "ai_agent", "agent_tool_executions")).Should().BeTrue();
     }
 
     [Fact]
@@ -268,6 +269,118 @@ public class AIAgentFoundationTests : IClassFixture<AIAgentFoundationTests.Fixtu
         await act.Should().ThrowAsync<DbUpdateException>("the same ConversationMessageReceived/MessageId must never produce two AgentInteractions");
     }
 
+    // ---- AgentToolExecution: real persistence + FK + RLS (Fase 11, Checkpoint 3) ----
+
+    [Fact]
+    public async Task AgentToolExecution_round_trips_ToolName_StartedAtUtc_CompletedAtUtc_and_Outcome()
+    {
+        var tenantId = Guid.NewGuid();
+        var agentInteractionId = Guid.NewGuid();
+        var inboundMessageId = Guid.NewGuid();
+        var startedAt = DateTimeOffset.UtcNow;
+        var completedAt = startedAt.AddMilliseconds(180);
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using (var writeDbContext = CreateDbContext(_migratorConnectionString, tenantContext))
+        await using (var writeTransaction = await writeDbContext.Database.BeginTransactionAsync())
+        {
+            await SetTenantAsync(writeDbContext, tenantId);
+
+            var interaction = AgentInteraction.Start(agentInteractionId, tenantId, Guid.NewGuid(), inboundMessageId, "Fake", "fake-model-v1", startedAt);
+            writeDbContext.AgentInteractions.Add(interaction);
+
+            var execution = AgentToolExecution.Start(Guid.NewGuid(), tenantId, agentInteractionId, "GetReservationSummary", startedAt);
+            execution.CompleteSuccessfully(completedAt);
+            writeDbContext.AgentToolExecutions.Add(execution);
+
+            await writeDbContext.SaveChangesAsync();
+            await writeTransaction.CommitAsync();
+        }
+
+        await using var readDbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var readTransaction = await readDbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(readDbContext, tenantId);
+
+        var persisted = await readDbContext.AgentToolExecutions.AsNoTracking()
+            .SingleAsync(e => e.TenantId == tenantId && e.AgentInteractionId == agentInteractionId);
+
+        persisted.ToolName.Should().Be("GetReservationSummary");
+        // BeCloseTo, not Be: Postgres timestamptz truncates to microsecond
+        // precision, coarser than DateTimeOffset.UtcNow's own tick resolution.
+        persisted.StartedAtUtc.Should().BeCloseTo(startedAt, TimeSpan.FromMilliseconds(1));
+        persisted.CompletedAtUtc.Should().BeCloseTo(completedAt, TimeSpan.FromMilliseconds(1));
+        persisted.Outcome.Should().Be(AgentToolExecutionOutcome.Success);
+        persisted.DurationMs.Should().Be(180);
+    }
+
+    [Fact]
+    public async Task AgentToolExecution_rejects_a_reference_to_a_nonexistent_AgentInteraction()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var execution = AgentToolExecution.Start(Guid.NewGuid(), tenantId, Guid.NewGuid(), "GetReservationSummary", DateTimeOffset.UtcNow);
+        dbContext.AgentToolExecutions.Add(execution);
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>(
+            "agent_tool_executions.agent_interaction_id carries a real database foreign key — the parent AgentInteraction row must already exist");
+    }
+
+    [Fact]
+    public async Task App_role_sees_only_its_own_tenant_AgentToolExecution_rows()
+    {
+        var (tenantId, agentInteractionId) = await SeedToolExecutionAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var visible = await dbContext.AgentToolExecutions.Where(e => e.AgentInteractionId == agentInteractionId).ToListAsync();
+
+        visible.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Wrong_tenant_sees_zero_AgentToolExecution_rows()
+    {
+        var (_, agentInteractionId) = await SeedToolExecutionAsync();
+        var unrelatedTenantId = Guid.NewGuid();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(unrelatedTenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, unrelatedTenantId);
+
+        var visible = await dbContext.AgentToolExecutions.Where(e => e.AgentInteractionId == agentInteractionId).ToListAsync();
+
+        visible.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Absent_tenant_setting_fails_closed_to_zero_AgentToolExecution_rows_even_for_the_migrator_role()
+    {
+        await SeedToolExecutionAsync();
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, new TenantContext());
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        // Deliberately no set_config('app.tenant_id', ...) call — RLS must fail closed.
+
+        var visible = await dbContext.AgentToolExecutions.IgnoreQueryFilters().ToListAsync();
+
+        visible.Should().BeEmpty();
+    }
+
     // ---- Confidence persistence round-trip (mandate item 35) ----
 
     [Fact]
@@ -337,6 +450,30 @@ public class AIAgentFoundationTests : IClassFixture<AIAgentFoundationTests.Fixtu
 
         await dbContext.SaveChangesAsync();
         await transaction.CommitAsync();
+    }
+
+    private async Task<(Guid TenantId, Guid AgentInteractionId)> SeedToolExecutionAsync()
+    {
+        var tenantId = Guid.NewGuid();
+        var agentInteractionId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var interaction = AgentInteraction.Start(agentInteractionId, tenantId, Guid.NewGuid(), Guid.NewGuid(), "Fake", "fake-model-v1", DateTimeOffset.UtcNow);
+        dbContext.AgentInteractions.Add(interaction);
+
+        var execution = AgentToolExecution.Start(Guid.NewGuid(), tenantId, agentInteractionId, "GetReservationSummary", DateTimeOffset.UtcNow);
+        execution.CompleteSuccessfully(DateTimeOffset.UtcNow);
+        dbContext.AgentToolExecutions.Add(execution);
+
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return (tenantId, agentInteractionId);
     }
 
     private static async Task SetTenantAsync(AIAgentDbContext dbContext, Guid tenantId) =>

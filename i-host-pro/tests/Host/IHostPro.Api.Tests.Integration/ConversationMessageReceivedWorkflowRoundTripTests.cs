@@ -337,7 +337,15 @@ public sealed class ConversationMessageReceivedWorkflowRoundTripTests : IClassFi
     // Every scenario in this class shares one tenant/one WhatsAppTenantRoute
     // (seeded once by the Fixture) — each [Fact] uses its own phone number so
     // Reservation-resolution candidates never leak across scenarios.
-    private static readonly Guid GlobalTenantId = Guid.NewGuid();
+    //
+    // Internal (not private): Fixture.SeedTenantRouteAsync() below always
+    // seeds the WhatsAppTenantRoute for THIS exact field (nested-class
+    // access to the outer type's own static member) — any other test class
+    // reusing this same Fixture type (e.g. AIAgentReadToolsWorkflowRoundTripTests,
+    // Fase 11 Checkpoint 3) must send its inbound webhooks under this SAME
+    // tenant id, never a freshly-generated one of its own, or the phone
+    // number → tenant resolution silently never matches.
+    internal static readonly Guid GlobalTenantId = Guid.NewGuid();
 
     [Fact]
     public async Task A_single_inbound_message_creates_one_AgentSession_and_one_successful_AgentInteraction()

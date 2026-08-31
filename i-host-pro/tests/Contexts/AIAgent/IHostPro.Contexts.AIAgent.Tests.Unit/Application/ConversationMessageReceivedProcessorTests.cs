@@ -1,5 +1,6 @@
 using FluentAssertions;
 using IHostPro.Contexts.AIAgent.Application;
+using IHostPro.Contexts.AIAgent.Application.Tools;
 using IHostPro.Contexts.AIAgent.Domain;
 using IHostPro.Contexts.AIAgent.Infrastructure.ModelProviders;
 using IHostPro.Contexts.Communication.Contracts;
@@ -41,11 +42,14 @@ public class ConversationMessageReceivedProcessorTests
 
     private static ConversationMessageReceivedProcessor CreateProcessor(
         FakeAgentInteractionRepository interactionRepository, FakeAgentSessionRepository sessionRepository,
-        ModelRequest? request = null) =>
+        ModelRequest? request = null, FakeAgentToolExecutionRepository? toolExecutionRepository = null,
+        IEnumerable<IAgentTool>? tools = null) =>
         new(
             FakeAgentSessionResolver.Returning(SessionId), sessionRepository, interactionRepository,
+            toolExecutionRepository ?? new FakeAgentToolExecutionRepository(),
             FakeAgentContextBuilder.Returning(request ?? new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, "Olá")])),
             new FakeModelProvider(NullLogger<FakeModelProvider>.Instance),
+            tools ?? [],
             new PassThroughAIAgentTransactionExecutor(), TimeProvider.System,
             NullLogger<ConversationMessageReceivedProcessor>.Instance);
 
@@ -111,6 +115,96 @@ public class ConversationMessageReceivedProcessorTests
 
         sessionRepository.UpdatedSessions.Should().BeEmpty(
             "a failed interaction has no confirmed language/intent/confidence to record — the session remains consistent, untouched");
+    }
+
+    [Fact]
+    public async Task HandleAsync_tool_call_executes_the_tool_once_and_completes_the_interaction_via_a_second_model_call()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var toolExecutionRepository = new FakeAgentToolExecutionRepository();
+        var tool = FakeAgentTool.Succeeding("MyTool", "tool result content");
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"Olá {FakeModelProvider.ToolCallTriggerPrefix}MyTool]")]);
+        var processor = CreateProcessor(interactionRepository, sessionRepository, request, toolExecutionRepository, [tool]);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        interactionRepository.AddedInteractions.Should().ContainSingle("the interaction is persisted once, before the tool runs, then completed in place");
+        var interaction = interactionRepository.AddedInteractions[0];
+        interaction.Outcome.Should().Be(AgentInteractionOutcome.Success);
+
+        toolExecutionRepository.AddedExecutions.Should().ContainSingle();
+        var toolExecution = toolExecutionRepository.AddedExecutions[0];
+        toolExecution.ToolName.Should().Be("MyTool");
+        toolExecution.AgentInteractionId.Should().Be(interaction.Id);
+        toolExecution.Outcome.Should().Be(AgentToolExecutionOutcome.Success);
+
+        tool.LastContext.Should().NotBeNull();
+        tool.LastContext!.TenantId.Should().Be(TenantId);
+        tool.LastContext.ReservationId.Should().Be(ReservationId);
+        tool.LastContext.AgentSessionId.Should().Be(SessionId);
+        tool.LastContext.AgentInteractionId.Should().Be(interaction.Id);
+
+        sessionRepository.UpdatedSessions.Should().ContainSingle("the tool result fed a real second model call, which completed the interaction successfully");
+    }
+
+    [Fact]
+    public async Task HandleAsync_tool_business_failure_fails_the_interaction_and_leaves_the_session_untouched()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var toolExecutionRepository = new FakeAgentToolExecutionRepository();
+        var tool = FakeAgentTool.Failing("MyTool", "some_business_failure");
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"Olá {FakeModelProvider.ToolCallTriggerPrefix}MyTool]")]);
+        var processor = CreateProcessor(interactionRepository, sessionRepository, request, toolExecutionRepository, [tool]);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        interactionRepository.AddedInteractions.Should().ContainSingle();
+        interactionRepository.AddedInteractions[0].Outcome.Should().Be(AgentInteractionOutcome.Failure);
+
+        toolExecutionRepository.AddedExecutions.Should().ContainSingle();
+        toolExecutionRepository.AddedExecutions[0].Outcome.Should().Be(AgentToolExecutionOutcome.Failure);
+        toolExecutionRepository.AddedExecutions[0].FailureCode.Should().Be("some_business_failure");
+
+        sessionRepository.UpdatedSessions.Should().BeEmpty("a tool failure fails the whole interaction — no second model call, session left untouched");
+    }
+
+    [Fact]
+    public async Task HandleAsync_unknown_tool_name_fails_the_interaction_with_a_sanitized_failure_code()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var toolExecutionRepository = new FakeAgentToolExecutionRepository();
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"Olá {FakeModelProvider.ToolCallTriggerPrefix}NoSuchTool]")]);
+        var processor = CreateProcessor(interactionRepository, sessionRepository, request, toolExecutionRepository, []);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        interactionRepository.AddedInteractions[0].Outcome.Should().Be(AgentInteractionOutcome.Failure);
+        toolExecutionRepository.AddedExecutions[0].FailureCode.Should().Be("unknown_tool");
+        sessionRepository.UpdatedSessions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task HandleAsync_tool_throwing_fails_the_interaction_with_the_exception_type_name_as_FailureCode()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var toolExecutionRepository = new FakeAgentToolExecutionRepository();
+        var tool = FakeAgentTool.Throwing("MyTool", new InvalidOperationException("boom"));
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"Olá {FakeModelProvider.ToolCallTriggerPrefix}MyTool]")]);
+        var processor = CreateProcessor(interactionRepository, sessionRepository, request, toolExecutionRepository, [tool]);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        interactionRepository.AddedInteractions[0].Outcome.Should().Be(AgentInteractionOutcome.Failure);
+        toolExecutionRepository.AddedExecutions[0].FailureCode.Should().Be(nameof(InvalidOperationException), "the raw exception message is never persisted, only the sanitized type name");
+        sessionRepository.UpdatedSessions.Should().BeEmpty();
     }
 
     [Fact]

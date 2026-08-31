@@ -32,6 +32,11 @@ internal sealed class FakePixChargeReader : IPixChargeReader
 
     public Task<Guid?> GetActiveIdByLateCheckoutRequestIdAsync(Guid lateCheckoutRequestId, CancellationToken cancellationToken) =>
         Task.FromResult(_activeChargeId);
+
+    public PaymentStatusResult? StatusResult { get; set; }
+
+    public Task<PaymentStatusResult?> GetStatusByReservationIdAsync(Guid reservationId, CancellationToken cancellationToken) =>
+        Task.FromResult(StatusResult);
 }
 
 internal sealed class FakeIntegrationEventCollector : IIntegrationEventCollector
