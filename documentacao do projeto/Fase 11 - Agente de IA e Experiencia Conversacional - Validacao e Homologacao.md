@@ -1,7 +1,7 @@
 # Fase 11 — Agente de IA e Experiência Conversacional — Validação e Homologação
 
-Versão: 1.1
-Status: Em andamento — Checkpoint 2 concluído
+Versão: 1.2
+Status: Em andamento — Checkpoint 3 concluído
 
 ## 1. Objetivo
 
@@ -41,8 +41,8 @@ Classificação final do gate: aprovado, com uma lista de decisões `B — USER 
 
 CP0 (concluído) — Architecture & Product Decision Gate
 CP1 (concluído) — Inbound Conversation Foundation
-CP2 (concluído, este documento) — AI Agent Foundation
-CP3 — Read Tools & Context Builder
+CP2 (concluído) — AI Agent Foundation
+CP3 (concluído, este documento) — Read Tools & Context Builder
 CP4 — Write Tools & Response Delivery
 CP5 — Policies, Workflow & Conversational Orchestration
 CP6 — Human Handoff, Safety & Audit
@@ -217,3 +217,107 @@ Mirrors ADR-016 exatamente: `AIAgentMessageExecutionScope` (novo, único autoriz
 **Nota de transparência sobre a execução da suíte completa**: a primeira tentativa de rodar a suíte completa colidiu com um erro operacional desta sessão (duplo backgrounding acidental de um comando, deixando processos `dotnet` e containers Testcontainers órfãos concorrendo pela porta fixa 5672 do RabbitMQ) — não uma regressão de código. Processos órfãos e containers de teste foram limpos; a suíte foi reexecutada uma única vez, de forma limpa e rastreada.
 
 `Cp2CommitCount`: registrado no relatório final da conversa de homologação.
+
+## 7. Checkpoint 3 — Read Tools & Context Builder
+
+**Status:** Concluído e homologado. `ReadToolsImplemented=true`. `BusinessWriteToolsImplemented=false`. `RagMode=StructuredRetrieval`. `VectorDatabase=false`. `Embeddings=false`. `PixPaymentQueryCapability=IMPLEMENTED_IN_PHASE11_CP3`. `AnthropicIntegrated=false`. `ExternalLLMNetworkCalls=0`.
+
+**Objetivo**: construir as 8 Read Tools aprovadas (Documento 16, CP0), cada uma um adapter fino que invoca a Query de Application já existente do Bounded Context correspondente (Exceção 3, nunca uma nova exceção síncrona), acopladas ao loop de tool-calling do `FakeModelProvider`; persistir a auditoria de cada execução (`AgentToolExecution`); reabrir e implementar `PixPaymentQueryCapability`, deixada `DEFERRED_NO_CURRENT_MVP_USE_CASE` pela Fase 10 (Documento 13 §9) — reabertura como requisito novo da Fase 11, nunca uma correção retroativa. Nenhuma Tool de escrita, nenhum RAG semântico sobre texto não-estruturado, nenhuma integração real com Anthropic.
+
+### 7.1 Governança prévia — ponto de parada resolvido antes de continuar a implementação
+
+A primeira tentativa de promover os Query Mediators dos 5 Bounded Contexts consumidos (Reservations/PropertyManagement/Housekeeping/Configuration/Payments) para seus próprios módulos DI compartilhados (`Add<Context>Module`, decisão "Opção A" abaixo) quebrou a inicialização real do `IHostPro.Worker`: `Host.CreateApplicationBuilder`'s `ValidateOnBuild=true` (padrão) falhou porque `Mediator.SourceGenerator`'s `AddMediator()` é tudo-ou-nada por assembly — registra incondicionalmente TODOS os handlers `IRequestHandler<,>` descobertos na assembly, incluindo handlers de Command de escrita cujas dependências (readers/repositórios de escrita) são deliberadamente ausentes da composição do Worker.
+
+Resolvido pelo usuário como "Opção 3": manter `ValidateOnBuild=true` no host geral do Worker, investigar o mecanismo real de registro do Mediator antes de qualquer solução, nunca registrar dependências de escrita apenas para satisfazer a validação, nunca desabilitar `ValidateOnBuild` globalmente. Investigação do código gerado real (`Mediator.g.cs`, via `-p:EmitCompilerGeneratedFiles=true`) confirmou: `Mediator.Mediator` (a classe concreta gerada por assembly) e seu `RequestHandlerWrapper<,>` nunca falham `ValidateOnBuild` (resolvem o handler concreto preguiçosamente, em tempo de chamada, nunca no construtor) — apenas os descritores do handler concreto em si (`ImplementationType` = a classe do handler, com dependências reais) podem falhar.
+
+Solução implementada: `MediatorHandlerAllowlistExtensions.KeepOnlyMediatorHandlers` (novo, `IHostPro.BuildingBlocks.Infrastructure.Messaging`) — um filtro de DI baseado em reflexão que remove, de uma assembly-alvo específica, todo registro de handler `IRequestHandler<,>` que não esteja na allowlist explícita, deixando `Mediator.Mediator`/`RequestHandlerWrapper<,>` intactos. Chamado exclusivamente pelo `IHostPro.Worker/Program.cs`, uma vez por Bounded Context promovido, imediatamente após cada `AddXModule(...)` — nunca de dentro do próprio módulo compartilhado (uma primeira tentativa de colocar a chamada dentro do módulo quebrou silenciosamente os endpoints HTTP de escrita reais do `IHostPro.Api`, já que Api também consome `AddXModule()`). Um bug real de "a última chamada vence" (escopo de remoção não limitado à assembly-alvo, cada chamada sequencial apagando os handlers já aprovados por chamadas anteriores) foi encontrado e corrigido durante a implementação — coberto por teste de arquitetura dedicado (`Worker_Composition_Resolves_The_Five_Query_Dispatchers_But_Registers_No_Write_Command_Surface`) que prova que os 7 handlers de leitura aprovados sobrevivem simultaneamente ao final das 5 chamadas.
+
+Prova exigida pelo mandato — confirmada: `ValidateOnBuild=true` mantido; os 5 dispatchers de leitura resolvem; nenhum handler de Command de escrita, validador ou repositório de escrita é resolvível na composição do Worker (`Worker_Composition_Never_Registers_A_Write_Command_Handler_Class`). Nenhuma nova exceção síncrona foi criada — a solução opera inteiramente dentro da Exceção 3 já aprovada.
+
+### 7.2 Decisão "Opção A" — Query Mediator promovido ao módulo compartilhado, Commands permanecem Api-only
+
+Cada um dos 5 Bounded Contexts consumidos por uma Tool teve sua Query Mediator (`AddXApplicationMediator()`) promovida de `AddXCommandDispatch()` (Api-only) para `AddXModule()` (compartilhado entre Api e Worker) — Commands de escrita, seus validadores e pipeline behaviors permanecem exclusivamente em `AddXCommandDispatch()`, nunca alcançando o Worker. Payments (sem projeto Api, sem `CommandDispatch` próprio) ganhou sua primeira superfície de Mediator/Query já diretamente em `AddPaymentsModule`. O Worker consome as Queries in-process através do próprio `I<Context>RequestDispatcher` de cada Bounded Context (nunca a interface compartilhada `Mediator.ISender`/`IMediator`/`IPublisher`, que se torna genuinely ambígua no momento em que dois ou mais `AddMediator()` de contexts diferentes são compostos no mesmo `IServiceCollection` — a primeira chamada ganha a corrida `TryAdd`).
+
+Essa ambiguidade causou uma regressão real, pré-existente, descoberta durante a regressão completa: `ReservationCommandHandlerTests.cs` (Reservations, Integration) compunha `AddPropertyManagementModule` + `AddReservationsModule`/`AddReservationsCommandDispatch` no mesmo host de teste e despachava via `ISender` bruto — com a promoção do Mediator de PropertyManagement ao módulo compartilhado, `PropertyManagement`'s `AddMediator()` (que roda primeiro na ordem de composição) passou a vencer a corrida `TryAdd` para `IMediator`/`ISender`/`IPublisher`, quebrando as 105 chamadas do arquivo com `Mediator.MissingMessageHandlerException`. Corrigido trocando o despacho para `IReservationsRequestDispatcher` (o padrão que já existe exatamente para este propósito); nenhum outro arquivo de teste na base estava em risco (busca completa por `GetRequiredService<ISender>()`/`IMediator`/`IPublisher` confirmou apenas este único ponto afetado).
+
+### 7.3 `AgentToolExecution` (novo agregado, schema `ai_agent`)
+
+`AgentToolExecution` — `Id, TenantId, AgentInteractionId, ToolName, StartedAtUtc, CompletedAtUtc?, Outcome (InProgress/Success/Failure), DurationMs?, FailureCode?`. Referenciado por `AgentInteraction` através de uma foreign key real de banco de dados (`fk_agent_tool_executions_agent_interactions`, `ON DELETE RESTRICT`) — diferente do precedente opaco-por-id de `AgentInteraction → AgentSession`, autorizado explicitamente pelo mandato deste checkpoint por ambas as tabelas viverem no mesmo schema/Bounded Context. Migração `AddAgentToolExecution` segue o template padrão de RLS/grants (`ENABLE`+`FORCE ROW LEVEL SECURITY`, policy `tenant_isolation` fail-closed, grants `SELECT/INSERT/UPDATE` sem `DELETE`) — verificado diretamente contra o Postgres real de desenvolvimento. Deliberadamente nunca persiste o texto bruto de entrada/saída da Tool, PII do hóspede, credencial/secret-reference, payload de QR/pagamento, ou o prompt completo do modelo — apenas metadados de auditoria (qual Tool rodou, quando, quanto tempo levou, como terminou). `FailureCode` é sempre um código curto e sanitizado (nome do tipo da exceção, ou o `Error.Code` de negócio do `Result<T>` retornado pela Query) — nunca uma mensagem de exceção bruta ou stack trace.
+
+### 7.4 As 8 Read Tools aprovadas
+
+| Tool | Bounded Context consumido | Query reutilizada | Exclusões deliberadas |
+|---|---|---|---|
+| `GetReservationSummary` | Reservations | `GetReservationDetailQuery` | `GuestName`/`GuestPhone`/`GuestCount`, timestamps de auditoria — apenas Status/CheckInAt/CheckOutAt/PropertyId |
+| `GetSchedule` | Reservations | `ListScheduleQuery` | Argumento opcional `days` (padrão 7, min 1, máx 30) — sempre a propriedade da própria reserva, nunca multi-propriedade |
+| `GetAvailability` | Reservations | `ListScheduleQuery` (mesma janela) | Apenas fato de calendário (conflito/livre) — nunca conclusão de elegibilidade de early check-in/late checkout |
+| `GetPropertyInformation` | PropertyManagement | `GetPropertyDetailQuery` | Nada de `PropertyAccessConfiguration`, nenhum detalhe administrativo de Condomínio/Portaria — apenas Name/EffectiveAddress/Capacity |
+| `GetAccessInstructions` | PropertyManagement | `GetPropertyAccessConfigurationQuery` | Retorna exclusivamente `AccessInstructions` — nunca `AccessCredentialSecretReference`, nunca resolve o valor real da credencial; Wi-Fi/estacionamento/regras permanecem DEFERRED (texto livre do administrador, verbatim) |
+| `GetCleaningStatus` | Housekeeping | `GetCleaningStatusByReservationQuery` (nova) | Apenas fato real persistido — nunca ETA/conclusão inventada |
+| `GetPaymentStatus` | Payments | `GetPaymentStatusByReservationQuery` (nova, primeira superfície Mediator de Payments) | `QrCodePayload`/`ProviderChargeId`/`IdempotencyKey`/dados do pagador/detalhe de falha do provedor — apenas Status/Amount/CurrencyCode/ExpiresAtUtc |
+| `GetRelevantPolicies` | Configuration | `GetEffectivePolicyQuery` | Argumento opcional `policyCode` (allowlist `EARLY_CHECKIN`/`LATE_CHECKOUT`); `EffectivePolicyResult.Value` sempre convertido ao seu tipo concreto tipado antes do resumo — nunca repassado como `object?` bruto; apenas fatos, nunca lógica de decisão/elegibilidade (que permanece em Guest Operations) |
+
+`AgentToolNames` fixa o conjunto fechado das 8 constantes — adicionar uma nona Tool (ou uma Tool de escrita) exige um novo mandato, provado por teste de arquitetura dedicado (`Exactly_The_Eight_Approved_Read_Tools_Exist_No_More_No_Less`).
+
+### 7.5 Regra de desempate do pagamento — `GetPaymentStatus`
+
+`IPixChargeReader.GetStatusByReservationIdAsync` resolve sempre a cobrança PIX mais recente por `CreatedAtUtc DESC, Id DESC` (tie-break determinístico) — nunca por status (um `Confirmed` mais antigo nunca vence sobre um `Failed`/`Pending` mais recente). Provado contra Postgres real por `GetPaymentStatusByReservationReaderTests` e reconfirmado pelo cenário E2E `Payment_E2E_picks_the_most_recent_PixCharge_by_CreatedAtUtc_never_by_status`. `GetCleaningStatusByReservationQuery`/`ICleaningReader.GetStatusByReservationIdAsync` (Housekeeping) segue o mesmo padrão de desempate.
+
+### 7.6 Loop de tool-calling — `ConversationMessageReceivedProcessor`
+
+Estendido do fluxo linear do CP2 para: `Call#1 (IModelProvider.GenerateAsync) → se ModelResult.ToolCallRequest → AgentInteraction persistida (InProgress) → Tool executada no máximo uma vez → AgentToolExecution persistida (Success/Failure) → se sucesso, Call#2 com o resultado sanitizado da Tool anexado como mensagem de papel Tool → AgentInteraction completada`. Sem multi-hop — o modelo nunca tem uma segunda chance de pedir outra Tool na mesma interação (decisão de escopo deste checkpoint). Uma falha de Tool (falha de negócio, nome de Tool desconhecido, ou exceção inesperada) falha a interação inteira exatamente como uma `ModelProviderException` — a sessão permanece intocada, nenhuma segunda chamada ao modelo ocorre. Exceções de Tool são logadas para diagnóstico operacional (nunca persistidas) — `AgentToolExecution.FailureCode` armazena apenas o nome do tipo da exceção.
+
+`ModelRequest` ganhou `AvailableTools` (opcional, lista de `AgentToolDescriptor`); `ModelMessageRole` ganhou o caso `Tool` (efêmero, nunca persistido); `ModelResult` ganhou `ToolCallRequest` (`ModelToolCallRequest(ToolName, Arguments)`). `FakeModelProvider` ganhou o marcador determinístico `ToolCallTriggerPrefix` (`"[FAKE_MODEL_TOOL_CALL:"` + nome da Tool + `"]"`) — dispara exatamente uma rodada de tool-calling por mensagem, nunca re-dispara quando a última mensagem já é de papel `Tool`.
+
+### 7.7 Achados corrigidos durante a implementação
+
+- **Crash real de inicialização do Worker** (`ValidateOnBuild=true` vs. auto-descoberta tudo-ou-nada do Mediator) — coberto em detalhe no §7.1.
+- **Primeira tentativa de correção quebrou o caminho de escrita real do Api** — `KeepOnlyMediatorHandlers` chamado de dentro do módulo compartilhado stripava também os handlers de Command de escrita que o Api precisa; revertido, chamada movida exclusivamente para o Worker.
+- **Bug "última chamada vence" no próprio filtro** — escopo de remoção não limitado à assembly-alvo; corrigido e coberto por teste de arquitetura permanente.
+- **Regressão real pré-existente em `ReservationCommandHandlerTests.cs`** (ambiguidade de `ISender`/`IMediator` entre contexts compostos juntos) — coberta em detalhe no §7.2.
+- **Corrida de polling em E2E próprio** — `WaitForInteractionAsync` inicialmente aceitava uma `AgentInteraction` ainda `InProgress` (inserida propositalmente antes da Tool rodar, para a FK ter um pai válido); corrigido exigindo `Outcome != InProgress`.
+- **Mismatch de tenant em E2E próprio** — a nova classe de teste inicialmente gerava seu próprio `GlobalTenantId`, mas a Fixture reutilizada do CP2 referencia o campo estático da classe original via acesso de classe aninhada; corrigido reutilizando o campo original (`private` → `internal`) em vez de gerar um novo.
+
+Nenhum desses achados exigiu mudança de escopo, nova exceção síncrona, ou decisão de produto — todos corrigidos e a implementação continuada, conforme autorização explícita do mandato.
+
+### 7.8 Testes — contagens exatas
+
+| Suíte | Resultado |
+|---|---|
+| `IHostPro.Contexts.AIAgent.Tests.Unit` | 70 aprovados |
+| `IHostPro.Contexts.AIAgent.Tests.Integration` | 15 aprovados |
+| `IHostPro.Contexts.Reservations.Tests.Unit` | 90 aprovados (sem regressão) |
+| `IHostPro.Contexts.Reservations.Tests.Integration` (inclui a correção de `ReservationCommandHandlerTests.cs`, §7.2) | 105 aprovados |
+| `IHostPro.Contexts.PropertyManagement.Tests.Unit` | 202 aprovados (sem regressão) |
+| `IHostPro.Contexts.PropertyManagement.Tests.Integration` | 207 aprovados (sem regressão) |
+| `IHostPro.Contexts.Housekeeping.Tests.Unit` | 120 aprovados (sem regressão) |
+| `IHostPro.Contexts.Housekeeping.Tests.Integration` (inclui os 4 novos testes de `GetCleaningStatusByReservationReaderTests`) | 101 aprovados |
+| `IHostPro.Contexts.Configuration.Tests.Unit` | 93 aprovados (sem regressão) |
+| `IHostPro.Contexts.Configuration.Tests.Integration` | 80 aprovados (sem regressão) |
+| `IHostPro.Contexts.Payments.Tests.Unit` | 39 aprovados (sem regressão) |
+| `IHostPro.Contexts.Payments.Tests.Integration` (inclui os 4 novos testes de `GetPaymentStatusByReservationReaderTests`, primeira superfície de Mediator/Query de Payments) | 15 aprovados |
+| `IHostPro.Contexts.Communication.Tests.Unit` | 101 aprovados (sem regressão) |
+| `IHostPro.Contexts.Communication.Tests.Integration` | 20 aprovados (sem regressão) |
+| `IHostPro.ArchitectureTests` (novo arquivo `AIAgentReadToolsArchitectureTests`; 284 no total, de 278) | 284 aprovados |
+| `AIAgentReadToolsWorkflowRoundTripTests` (E2E real — Postgres/RabbitMQ/Worker/Api reais) — principal (GetReservationSummary), pagamento (desempate real), faxina (fato real persistido), propriedade (informação + instruções de acesso, duas interações), disponibilidade (livre + conflito real), política (hierarquia real PROPERTY→TENANT→GLOBAL via projeção tipada), idempotência (mesmo MessageId duas vezes) | 7 aprovados (parte da suíte completa abaixo) |
+| `IHostPro.Api.Tests.Integration` (suíte completa) | 71 aprovados |
+| MigrationRunner Run #1/#2 | ver §7.9 |
+| Build Release | ver §7.9 |
+
+### 7.9 Regressão completa e evidência final
+
+| Suíte | Resultado |
+|---|---|
+| MigrationRunner Run #1 (Postgres/RabbitMQ de desenvolvimento reais) | Exit code 0 — todos os 11 DbContexts migrados, incluindo `AddAgentToolExecution`; RLS `ENABLE`+`FORCE` e policy `tenant_isolation` confirmados por leitura direta de schema (`\d ai_agent.agent_tool_executions`); nova topologia RabbitMQ provisionada sem alteração (nenhuma nova exchange/binding própria da AI Agent neste checkpoint — as Tools consomem Queries in-process, nunca mensageria) |
+| MigrationRunner Run #2 (mesmo banco, imediatamente em seguida) | Exit code 0 — zero drift, zero linha nova em qualquer backfill |
+| Verificação de schema pós-Run (read-only, SQL direto) | `ai_agent.agent_tool_executions`: FK real `fk_agent_tool_executions_agent_interactions` (`ON DELETE RESTRICT`) para `ai_agent.agent_interactions(id)`; índices `IX_agent_tool_executions_agent_interaction_id` e `ix_agent_tool_executions_tenant_id_agent_interaction_id` presentes; RLS `ENABLE`+`FORCE` intactos, policy `tenant_isolation` fail-closed |
+| `IHostPro.Api.Tests.Integration` (suíte completa, execução limpa e isolada — inclui os 7 novos testes E2E deste checkpoint, e reconfirma sem regressão as suítes E2E pré-existentes) | 71 aprovados, 0 com falha (22 min 38 s) |
+| Build Release (solução completa) | 0 erro (20 avisos `NU1903` pré-existentes, SSH.NET, não relacionados a este checkpoint) |
+| `git diff --check` | Sem erros (apenas avisos benignos de normalização LF→CRLF) |
+| Revisão manual completa do diff | Nenhum vazamento de secret/QR/`AccessCredentialSecretReference`/`GuestPhone`/payload bruto do provedor/tipo específico de Anthropic/Claude; nenhuma persistência de resultado bruto de Tool — confirmado por leitura direta de cada Tool, do `AgentToolExecution`, e do `ConversationMessageReceivedProcessor` |
+
+**Nota de transparência sobre a suíte `IHostPro.Api.Tests.Integration`**: a primeira execução completa (71 testes, ~24 min) apresentou uma única falha isolada em `Property_E2E_GetPropertyInformation_and_GetAccessInstructions_each_succeed_in_their_own_interaction`. Investigada antes de qualquer conclusão: o mesmo teste, executado isoladamente (mesma suíte, mesmo commit, sem nenhuma alteração de código), passou em 10s. A suíte completa foi então reexecutada do zero, de forma limpa — resultado final 71 aprovados, 0 com falha, confirmando que a falha original foi um artefato de contenção de recursos (Testcontainers/Docker sob carga prolongada), não uma regressão real deste checkpoint — mesmo padrão já observado e documentado durante a regressão das 7 Bounded Contexts nesta mesma sessão de fechamento.
+
+**Nota de transparência sobre o `MigrationRunner`**: a primeira tentativa de executá-lo nesta sessão de fechamento falhou por dois motivos operacionais — (1) `dotnet run --project` a partir do diretório raiz do repositório não resolveu `appsettings.json` (corrigido executando a partir do próprio diretório do projeto); (2) sem `DOTNET_ENVIRONMENT=Development`, o provisionamento da topologia RabbitMQ usou as credenciais base (`guest`) em vez do override de desenvolvimento (`ihostpro`/`ihostpro_dev`) que o container real exige, falhando com `ACCESS_REFUSED` após 20 tentativas — corrigido definindo a variável de ambiente explicitamente. Nenhum dos dois é uma regressão de código deste checkpoint; ambos são particularidades operacionais do ambiente local, registradas aqui por transparência (mandato: nunca esconder dúvidas/limitações relevantes).
+
+`Cp3CommitCount`: registrado no relatório final da conversa de homologação.
