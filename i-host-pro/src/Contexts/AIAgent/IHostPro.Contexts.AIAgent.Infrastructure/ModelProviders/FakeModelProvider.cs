@@ -34,15 +34,31 @@ namespace IHostPro.Contexts.AIAgent.Infrastructure.ModelProviders;
 /// acceptable deterministic test value) and <see cref="ModelResult.Intent"/>
 /// is deliberately <see langword="null"/> — CP2 defines no intent catalog
 /// (mandate item 22/32) to populate it with.
+///
+/// Fase 11, Checkpoint 3 extends this with a deterministic two-call tool
+/// loop, mirroring <see cref="FailureTriggerMarker"/>/<see cref="ConfidenceMarkerPrefix"/>'s
+/// own marker convention: a message containing <see cref="ToolCallTriggerPrefix"/>
+/// followed by a tool name and <c>]</c> — as long as it is not itself a
+/// <see cref="ModelMessageRole.Tool"/> turn — deterministically returns a
+/// <see cref="ModelResult.ToolCallRequest"/> instead of final text. Once the
+/// orchestrator appends the executed tool's sanitized result as the new last
+/// message (<see cref="ModelMessageRole.Tool"/>), that same marker is no
+/// longer the last message's content, so the next call falls through to a
+/// final deterministic answer that echoes the tool result back — proving the
+/// full loop end-to-end without ever re-triggering the same tool call.
 /// </remarks>
 public sealed class FakeModelProvider : IModelProvider
 {
     public const string FailureTriggerMarker = "[FAKE_MODEL_FAILURE]";
     public const string ConfidenceMarkerPrefix = "[FAKE_MODEL_CONFIDENCE:";
+    public const string ToolCallTriggerPrefix = "[FAKE_MODEL_TOOL_CALL:";
     private const string ModelNameValue = "fake-model-v1";
 
     private static readonly Regex ConfidenceMarkerPattern = new(
         @"\[FAKE_MODEL_CONFIDENCE:(?<value>[0-9]*\.?[0-9]+)\]", RegexOptions.Compiled);
+
+    private static readonly Regex ToolCallMarkerPattern = new(
+        @"\[FAKE_MODEL_TOOL_CALL:(?<name>[A-Za-z0-9_]+)\]", RegexOptions.Compiled);
 
     private readonly ILogger<FakeModelProvider> _logger;
 
@@ -54,17 +70,45 @@ public sealed class FakeModelProvider : IModelProvider
 
     public Task<ModelResult> GenerateAsync(ModelRequest request, CancellationToken cancellationToken)
     {
-        var lastGuestMessage = request.Messages.Count > 0 ? request.Messages[^1].Content : string.Empty;
+        var lastMessage = request.Messages.Count > 0 ? request.Messages[^1] : null;
+        var lastContent = lastMessage?.Content ?? string.Empty;
 
-        if (lastGuestMessage.Contains(FailureTriggerMarker, StringComparison.Ordinal))
+        if (lastContent.Contains(FailureTriggerMarker, StringComparison.Ordinal))
         {
             _logger.LogInformation("[FAKE Model Provider — Development/Test only, no real model called] deterministic controlled failure triggered");
             throw new ModelProviderException("FakeModelProvider: deterministic controlled failure triggered by FailureTriggerMarker.");
         }
 
         var inputTokens = request.Messages.Sum(m => m.Content.Length);
-        var responseText = $"[FAKE MODEL RESPONSE] {request.Messages.Count} message(s) considered.";
-        var confidence = ExtractConfidenceMarker(lastGuestMessage);
+        var confidence = ExtractConfidenceMarker(lastContent);
+
+        if (lastMessage?.Role != ModelMessageRole.Tool)
+        {
+            var toolCallMatch = ToolCallMarkerPattern.Match(lastContent);
+            if (toolCallMatch.Success)
+            {
+                var toolName = toolCallMatch.Groups["name"].Value;
+
+                _logger.LogInformation(
+                    "[FAKE Model Provider — Development/Test only, no real model called] deterministic tool call requested: {ToolName}",
+                    toolName);
+
+                return Task.FromResult(new ModelResult(
+                    Text: string.Empty,
+                    DetectedLanguage: "pt-BR",
+                    Intent: null,
+                    Confidence: confidence,
+                    InputTokens: inputTokens,
+                    OutputTokens: 0,
+                    ModelName: ModelNameValue,
+                    FinishReason: "tool_call",
+                    ToolCallRequest: new ModelToolCallRequest(toolName, null)));
+            }
+        }
+
+        var responseText = lastMessage?.Role == ModelMessageRole.Tool
+            ? $"[FAKE MODEL RESPONSE] tool result considered: {lastMessage.Content}"
+            : $"[FAKE MODEL RESPONSE] {request.Messages.Count} message(s) considered.";
 
         // Never logs request.Messages content — only counts, mirroring
         // FakeWhatsAppConnector/FakePixProvider's own "never log

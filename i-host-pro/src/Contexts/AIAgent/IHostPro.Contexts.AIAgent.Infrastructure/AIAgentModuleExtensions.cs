@@ -1,8 +1,10 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.Contexts.AIAgent.Application;
+using IHostPro.Contexts.AIAgent.Application.Tools;
 using IHostPro.Contexts.AIAgent.Infrastructure.Messaging;
 using IHostPro.Contexts.AIAgent.Infrastructure.ModelProviders;
 using IHostPro.Contexts.AIAgent.Infrastructure.Persistence;
+using IHostPro.Contexts.AIAgent.Infrastructure.Tools;
 using IHostPro.Contexts.Communication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -29,6 +31,7 @@ public static class AIAgentModuleExtensions
 
         services.AddScoped<IAgentSessionRepository, AgentSessionRepository>();
         services.AddScoped<IAgentInteractionRepository, AgentInteractionRepository>();
+        services.AddScoped<IAgentToolExecutionRepository, AgentToolExecutionRepository>();
         services.AddScoped<IAIAgentTransactionExecutor, AIAgentTransactionExecutor>();
         services.AddScoped<IAgentSessionResolver, AgentSessionResolver>();
         services.AddScoped<IAgentContextBuilder, AgentContextBuilder>();
@@ -41,6 +44,22 @@ public static class AIAgentModuleExtensions
         // ADR-016 — the single, deliberately-authorized holder of
         // IServiceScopeFactory in AI Agent (mirrors CommunicationMessageExecutionScope).
         services.AddScoped<IAIAgentMessageExecutionScope, AIAgentMessageExecutionScope>();
+
+        // Fase 11, Checkpoint 3 — the exact, closed set of 8 approved Read
+        // Tools (AgentToolNames) — each calls its owning Bounded Context's
+        // own Application Query via that context's I<Context>RequestDispatcher
+        // (Exception #3). The dispatchers themselves are already registered
+        // by AddReservationsModule/AddPropertyManagementModule/
+        // AddHousekeepingModule/AddConfigurationModule/AddPaymentsModule,
+        // all of which IHostPro.Worker already calls before this method.
+        services.AddScoped<IAgentTool, GetReservationSummaryTool>();
+        services.AddScoped<IAgentTool, GetScheduleTool>();
+        services.AddScoped<IAgentTool, GetAvailabilityTool>();
+        services.AddScoped<IAgentTool, GetPropertyInformationTool>();
+        services.AddScoped<IAgentTool, GetAccessInstructionsTool>();
+        services.AddScoped<IAgentTool, GetCleaningStatusTool>();
+        services.AddScoped<IAgentTool, GetPaymentStatusTool>();
+        services.AddScoped<IAgentTool, GetRelevantPoliciesTool>();
 
         return services;
     }

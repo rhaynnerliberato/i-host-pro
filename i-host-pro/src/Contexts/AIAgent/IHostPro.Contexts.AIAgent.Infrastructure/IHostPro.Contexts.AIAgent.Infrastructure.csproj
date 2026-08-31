@@ -8,6 +8,20 @@
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
     <!-- ConversationMessageReceivedHandler (the thin Wolverine adapter) needs the ConversationMessageReceived type. -->
     <ProjectReference Include="..\..\Communication\IHostPro.Contexts.Communication.Contracts\IHostPro.Contexts.Communication.Contracts.csproj" />
+    <!--
+      Fase 11, Checkpoint 3 — Read Tools & Context Builder. Exception #3 (AI
+      Agent Tools -> Application Services): each Read Tool calls its owning
+      Bounded Context's own EXISTING Application Query through that
+      context's I<Context>RequestDispatcher — never a new Contracts-tier
+      reader/exception. Referencing these five .Application projects
+      directly (never their .Domain/.Infrastructure/.Api) is the concrete,
+      approved mechanism of Exception #3.
+    -->
+    <ProjectReference Include="..\..\Reservations\IHostPro.Contexts.Reservations.Application\IHostPro.Contexts.Reservations.Application.csproj" />
+    <ProjectReference Include="..\..\PropertyManagement\IHostPro.Contexts.PropertyManagement.Application\IHostPro.Contexts.PropertyManagement.Application.csproj" />
+    <ProjectReference Include="..\..\Housekeeping\IHostPro.Contexts.Housekeeping.Application\IHostPro.Contexts.Housekeeping.Application.csproj" />
+    <ProjectReference Include="..\..\Configuration\IHostPro.Contexts.Configuration.Application\IHostPro.Contexts.Configuration.Application.csproj" />
+    <ProjectReference Include="..\..\Payments\IHostPro.Contexts.Payments.Application\IHostPro.Contexts.Payments.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
