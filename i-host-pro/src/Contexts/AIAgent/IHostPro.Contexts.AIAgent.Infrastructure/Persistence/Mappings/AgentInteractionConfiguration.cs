@@ -29,6 +29,13 @@ public sealed class AgentInteractionConfiguration : IEntityTypeConfiguration<Age
         builder.Property(i => i.ModelName).HasColumnName("model_name").HasMaxLength(100).IsRequired();
         builder.Property(i => i.InputTokens).HasColumnName("input_tokens").IsRequired();
         builder.Property(i => i.OutputTokens).HasColumnName("output_tokens").IsRequired();
+
+        // Fase 11, Checkpoint 7 (MonetaryCostTracking=IMPLEMENT_NOW) — both
+        // null for FakeModelProvider (never priced); a real provider's own
+        // configured pricing computes both together.
+        builder.Property(i => i.EstimatedCostUsd).HasColumnName("estimated_cost_usd").HasColumnType("numeric(12,6)");
+        builder.Property(i => i.CostPricingReference).HasColumnName("cost_pricing_reference").HasMaxLength(100);
+
         builder.Property(i => i.StartedAtUtc).HasColumnName("started_at_utc").IsRequired();
         builder.Property(i => i.CompletedAtUtc).HasColumnName("completed_at_utc");
         builder.Property(i => i.Outcome).HasColumnName("outcome").HasConversion<string>().HasMaxLength(20).IsRequired();

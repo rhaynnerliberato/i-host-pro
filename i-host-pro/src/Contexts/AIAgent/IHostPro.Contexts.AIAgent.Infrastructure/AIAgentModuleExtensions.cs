@@ -1,8 +1,10 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.Contexts.AIAgent.Application;
 using IHostPro.Contexts.AIAgent.Application.Tools;
+using IHostPro.Contexts.AIAgent.Infrastructure.Context;
 using IHostPro.Contexts.AIAgent.Infrastructure.Messaging;
 using IHostPro.Contexts.AIAgent.Infrastructure.ModelProviders;
+using IHostPro.Contexts.AIAgent.Infrastructure.ModelProviders.Anthropic;
 using IHostPro.Contexts.AIAgent.Infrastructure.Persistence;
 using IHostPro.Contexts.AIAgent.Infrastructure.ResponseDelivery;
 using IHostPro.Contexts.AIAgent.Infrastructure.Tools;
@@ -21,7 +23,22 @@ namespace IHostPro.Contexts.AIAgent.Infrastructure;
 /// </summary>
 public static class AIAgentModuleExtensions
 {
-    public static IServiceCollection AddAIAgentModule(this IServiceCollection services, IConfiguration configuration)
+    /// <param name="isDevelopmentEnvironment">
+    /// Whether the calling host is running in the Development environment
+    /// (Fase 11, Checkpoint 7) — passed explicitly, never resolved via
+    /// <c>IHostEnvironment</c> inside this method, mirroring
+    /// <c>AddExternalIntegrationsModule</c>'s own precedent exactly. Gates
+    /// registration of <see cref="DevelopmentAnthropicCredentialProvider"/>
+    /// only: outside Development, no <see cref="IAnthropicCredentialProvider"/>
+    /// implementation is registered at all, so selecting
+    /// <c>AIAgent:ModelProvider=Anthropic</c> there fails DI resolution at
+    /// startup — the mandate's own fail-closed requirement (item 9/46),
+    /// never a silent fallback to <c>FakeModelProvider</c>.
+    /// <c>ProductionAnthropicSecretBackend=false</c> — no real secret store
+    /// exists yet for any provider in this codebase.
+    /// </param>
+    public static IServiceCollection AddAIAgentModule(
+        this IServiceCollection services, IConfiguration configuration, bool isDevelopmentEnvironment)
     {
         services.AddDbContext<AIAgentDbContext>(options =>
             options.UseNpgsql(
@@ -39,10 +56,43 @@ public static class AIAgentModuleExtensions
         services.AddScoped<IAgentSessionResolver, AgentSessionResolver>();
         services.AddScoped<IAgentContextBuilder, AgentContextBuilder>();
 
-        // Fase 11, Checkpoint 2's ONLY implementation of IModelProvider — a
-        // deterministic fake, never a real Anthropic client (real Anthropic
-        // integration is Checkpoint 7's scope, mandate item 17/25).
-        services.AddScoped<IModelProvider, FakeModelProvider>();
+        // Fase 11, Checkpoint 7 — reuses the same Reservations/PropertyManagement
+        // dispatchers GetPropertyInformationTool already depends on.
+        services.AddScoped<IPropertyLocalTimeContextReader, PropertyLocalTimeContextReader>();
+
+        // Fase 11, Checkpoint 7 — explicit provider selection (mandate item
+        // 9/29/45): AIAgent:ModelProvider = "Fake" (default — deterministic,
+        // zero network, every automated test suite) or "Anthropic" (real
+        // REST client, ADR-009). An unrecognized, explicitly-set value fails
+        // loudly at startup rather than silently defaulting to Fake — never
+        // let a typo quietly downgrade a real deployment to Fake responses.
+        var modelProviderName = configuration["AIAgent:ModelProvider"];
+        if (string.IsNullOrWhiteSpace(modelProviderName) || string.Equals(modelProviderName, "Fake", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<IModelProvider, FakeModelProvider>();
+        }
+        else if (string.Equals(modelProviderName, "Anthropic", StringComparison.OrdinalIgnoreCase))
+        {
+            services.Configure<AnthropicOptions>(configuration.GetSection("AIAgent:Anthropic"));
+
+            services.AddHttpClient(AnthropicModelProvider.HttpClientName, (serviceProvider, client) =>
+            {
+                var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AnthropicOptions>>().Value;
+                var baseUrl = options.BaseUrl.EndsWith('/') ? options.BaseUrl : options.BaseUrl + "/";
+                client.BaseAddress = new Uri(baseUrl);
+                client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+            });
+
+            services.AddScoped<IModelProvider, AnthropicModelProvider>();
+
+            if (isDevelopmentEnvironment)
+                services.AddScoped<IAnthropicCredentialProvider, DevelopmentAnthropicCredentialProvider>();
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Unknown AIAgent:ModelProvider '{modelProviderName}'. Valid values: 'Fake', 'Anthropic'.");
+        }
 
         // ADR-016 — the single, deliberately-authorized holder of
         // IServiceScopeFactory in AI Agent (mirrors CommunicationMessageExecutionScope).

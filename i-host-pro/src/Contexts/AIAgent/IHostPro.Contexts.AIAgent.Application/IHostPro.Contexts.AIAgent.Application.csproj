@@ -4,12 +4,17 @@
     Fase 11, Checkpoint 2 — AI Agent Foundation. Communication.Contracts
     referenced solely for ConversationMessageReceived (the trigger this
     context consumes) — never Communication.Domain/Application/Infrastructure.
+    Fase 11, Checkpoint 7 — Configuration.Contracts referenced solely for
+    IAiAgentBehaviorPolicyReader/AiAgentBehaviorPolicy (Architecture
+    Principles Exceção 1, synchronous Configuration & Policy consultation) —
+    never Configuration.Domain/Application/Infrastructure.
   -->
   <ItemGroup>
     <ProjectReference Include="..\IHostPro.Contexts.AIAgent.Domain\IHostPro.Contexts.AIAgent.Domain.csproj" />
     <ProjectReference Include="..\IHostPro.Contexts.AIAgent.Contracts\IHostPro.Contexts.AIAgent.Contracts.csproj" />
     <ProjectReference Include="..\..\..\BuildingBlocks\IHostPro.BuildingBlocks.Application\IHostPro.BuildingBlocks.Application.csproj" />
     <ProjectReference Include="..\..\Communication\IHostPro.Contexts.Communication.Contracts\IHostPro.Contexts.Communication.Contracts.csproj" />
+    <ProjectReference Include="..\..\Configuration\IHostPro.Contexts.Configuration.Contracts\IHostPro.Contexts.Configuration.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

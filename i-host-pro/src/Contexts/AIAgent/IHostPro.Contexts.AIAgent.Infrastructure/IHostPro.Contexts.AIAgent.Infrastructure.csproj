@@ -42,6 +42,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!-- Fase 11, Checkpoint 7 — real Anthropic Messages API client, mirroring
+         ExternalIntegrations.Infrastructure's own precedent exactly: named/typed
+         IHttpClientFactory client, never `new HttpClient()` per call, no
+         Polly/Microsoft.Extensions.Http.Resilience package (zero automatic
+         retry framework is deliberate — CP5's own single-retry policy is
+         reused instead, never a new framework). -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
   </ItemGroup>
 
   <PropertyGroup>

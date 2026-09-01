@@ -21,7 +21,7 @@ public class GetPropertyInformationToolTests
     private static PropertyResult BuildProperty()
     {
         var address = new AddressResult("00000-000", "Rua A", "100", null, "Centro", "São Paulo", "SP", "BR");
-        return new PropertyResult(PropertyId, "COD1", "Casa da Praia", 6, null, null, address, "property", "Active", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+        return new PropertyResult(PropertyId, "COD1", "Casa da Praia", 6, null, null, address, "property", null, "Active", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
     }
 
     [Fact]

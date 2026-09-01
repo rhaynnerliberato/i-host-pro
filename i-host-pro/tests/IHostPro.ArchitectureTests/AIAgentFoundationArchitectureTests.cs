@@ -47,8 +47,12 @@ public class AIAgentFoundationArchitectureTests
     /// <summary>
     /// Mandate item 44: AIAgent.Application may reference other Bounded
     /// Contexts EXCLUSIVELY through Communication.Contracts (the trigger
-    /// event, <c>ConversationMessageReceived</c>) — never any Domain/
-    /// Application/Infrastructure/Api layer of any other context.
+    /// event, <c>ConversationMessageReceived</c>) and, since Fase 11
+    /// Checkpoint 7, Configuration.Contracts (<c>IAiAgentBehaviorPolicyReader</c>/
+    /// <c>AiAgentBehaviorPolicy</c> — Architecture Principles Exceção 1,
+    /// synchronous Configuration &amp; Policy consultation, already
+    /// authorized to any context, no new exception needed) — never any
+    /// Domain/Application/Infrastructure/Api layer of any other context.
     /// </summary>
     [Fact]
     public void Application_Only_References_Communication_Contracts_Among_Other_Bounded_Contexts()
@@ -67,7 +71,10 @@ public class AIAgentFoundationArchitectureTests
             "IHostPro.Contexts.Dashboard",
             "IHostPro.Contexts.Workflow",
             "IHostPro.Contexts.Housekeeping",
-            "IHostPro.Contexts.Configuration",
+            "IHostPro.Contexts.Configuration.Domain",
+            "IHostPro.Contexts.Configuration.Application",
+            "IHostPro.Contexts.Configuration.Infrastructure",
+            "IHostPro.Contexts.Configuration.Api",
             "IHostPro.Contexts.ExternalIntegrations",
         };
 

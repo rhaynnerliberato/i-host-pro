@@ -106,7 +106,8 @@ internal sealed class FakeAgentContextBuilder : IAgentContextBuilder
 
     public static FakeAgentContextBuilder Returning(ModelRequest request) => new(request);
 
-    public Task<ModelRequest> BuildAsync(Guid tenantId, Guid conversationId, Guid triggeringInboundMessageId, CancellationToken cancellationToken) =>
+    public Task<ModelRequest> BuildAsync(
+        Guid tenantId, Guid conversationId, Guid triggeringInboundMessageId, Guid reservationId, CancellationToken cancellationToken) =>
         Task.FromResult(_request);
 }
 

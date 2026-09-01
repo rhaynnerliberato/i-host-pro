@@ -190,7 +190,8 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
             return;
         }
 
-        var baseRequest = await _contextBuilder.BuildAsync(@event.TenantId, @event.ConversationId, @event.MessageId, cancellationToken);
+        var baseRequest = await _contextBuilder.BuildAsync(
+            @event.TenantId, @event.ConversationId, @event.MessageId, @event.ReservationId, cancellationToken);
         var request = baseRequest with { AvailableTools = _tools.Select(t => t.Descriptor).ToArray() };
 
         var interactionId = Guid.NewGuid();
@@ -249,14 +250,22 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
         }
     }
 
-    /// <summary>Calls <see cref="IModelProvider.GenerateAsync"/> with exactly one controlled retry on <see cref="ModelProviderException"/> (Checkpoint 5, mandate item 26) — 2 attempts total, never more; the second failure propagates to the caller.</summary>
+    /// <summary>
+    /// Calls <see cref="IModelProvider.GenerateAsync"/> with exactly one
+    /// controlled retry on a transient <see cref="ModelProviderException"/>
+    /// (Checkpoint 5, mandate item 26) — 2 attempts total, never more; the
+    /// second failure propagates to the caller. Checkpoint 7 (mandate item
+    /// 44/47): a <see cref="ModelProviderException.IsPermanent"/> failure
+    /// (e.g. invalid credentials, a malformed request) skips the retry
+    /// entirely and propagates immediately — a retry cannot possibly fix it.
+    /// </summary>
     private async Task<ModelResult> GenerateWithRetryAsync(ModelRequest request, CancellationToken cancellationToken)
     {
         try
         {
             return await _modelProvider.GenerateAsync(request, cancellationToken);
         }
-        catch (ModelProviderException)
+        catch (ModelProviderException ex) when (!ex.IsPermanent)
         {
             _logger.LogWarning(
                 "AIAgent {Trigger}: model provider call failed, retrying once", nameof(ConversationMessageReceived));
@@ -527,7 +536,7 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
             var interaction = (await _interactionRepository.GetByIdAsync(interactionId, cancellationToken))!;
             interaction.CompleteSuccessfully(
                 _timeProvider.GetUtcNow(), finalResult.Intent, finalResult.DetectedLanguage, finalResult.Confidence,
-                finalResult.InputTokens, finalResult.OutputTokens);
+                finalResult.InputTokens, finalResult.OutputTokens, finalResult.EstimatedCostUsd, finalResult.CostPricingReference);
             _interactionRepository.Update(interaction);
 
             var session = (await _sessionRepository.GetByIdAsync(sessionId, cancellationToken))!;
@@ -657,7 +666,8 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
             var interaction = (await _interactionRepository.GetByIdAsync(interactionId, cancellationToken))!;
             interaction.CompleteSuccessfully(
                 now, classifyingResult.Intent, classifyingResult.DetectedLanguage, classifyingResult.Confidence,
-                classifyingResult.InputTokens, classifyingResult.OutputTokens);
+                classifyingResult.InputTokens, classifyingResult.OutputTokens,
+                classifyingResult.EstimatedCostUsd, classifyingResult.CostPricingReference);
             _interactionRepository.Update(interaction);
 
             return true;

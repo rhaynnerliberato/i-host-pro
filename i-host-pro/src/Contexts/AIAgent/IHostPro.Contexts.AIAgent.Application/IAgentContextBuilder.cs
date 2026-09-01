@@ -19,8 +19,16 @@ namespace IHostPro.Contexts.AIAgent.Application;
 /// entry in <see cref="ModelRequest.Messages"/>, regardless of how the
 /// reader itself ordered it — <see cref="IModelProvider"/>'s own marker/
 /// intent detection always inspects only the last message.
+///
+/// <paramref name="reservationId"/> (Fase 11, Checkpoint 7): resolves the
+/// Reservation's own Property, whose <c>AI_AGENT_BEHAVIOR</c> effective
+/// policy (Configuration, GLOBAL → TENANT → PROPERTY) and configured IANA
+/// time zone (nullable) compose <see cref="ModelRequest.SystemPrompt"/> —
+/// never a hardcoded business prompt (Documento 16 §20), only a minimal safe
+/// technical fallback plus whatever Configuration actually resolves.
 /// </summary>
 public interface IAgentContextBuilder
 {
-    Task<ModelRequest> BuildAsync(Guid tenantId, Guid conversationId, Guid triggeringInboundMessageId, CancellationToken cancellationToken);
+    Task<ModelRequest> BuildAsync(
+        Guid tenantId, Guid conversationId, Guid triggeringInboundMessageId, Guid reservationId, CancellationToken cancellationToken);
 }

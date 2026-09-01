@@ -233,12 +233,12 @@ try
     // connector distinction of its own.
     builder.Services.AddCommunicationInboundMessageConsumer();
 
-    // Fase 11, Checkpoint 2 (AI Agent Foundation) — unconditional, same
-    // rationale as Communication's own consumers above: FakeModelProvider is
-    // the ONLY IModelProvider implementation this checkpoint (zero network,
-    // zero real credentials), so there is no fake/real gate to apply — real
-    // Anthropic integration is Checkpoint 7's scope.
-    builder.Services.AddAIAgentModule(builder.Configuration);
+    // Fase 11, Checkpoint 7 — AIAgent:ModelProvider selects Fake (default,
+    // deterministic) or Anthropic (real REST client); the Development gate
+    // below applies only to AnthropicModelProvider's own credential
+    // provider (see AddAIAgentModule's own doc comment) — mirrors
+    // AddExternalIntegrationsModule's own call site exactly.
+    builder.Services.AddAIAgentModule(builder.Configuration, builder.Environment.IsDevelopment());
     builder.Services.AddAIAgentConversationMessageConsumer();
 
     // Gated to Development ONLY (CP1 closure — corrective homologation):

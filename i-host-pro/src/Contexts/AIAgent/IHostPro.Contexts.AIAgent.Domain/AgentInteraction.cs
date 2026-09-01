@@ -48,6 +48,8 @@ public sealed class AgentInteraction : AggregateRoot<Guid>, ITenantOwned
     public string ModelName { get; private set; } = null!;
     public int InputTokens { get; private set; }
     public int OutputTokens { get; private set; }
+    public decimal? EstimatedCostUsd { get; private set; }
+    public string? CostPricingReference { get; private set; }
     public DateTimeOffset StartedAtUtc { get; private set; }
     public DateTimeOffset? CompletedAtUtc { get; private set; }
     public AgentInteractionOutcome Outcome { get; private set; }
@@ -91,9 +93,19 @@ public sealed class AgentInteraction : AggregateRoot<Guid>, ITenantOwned
         return new AgentInteraction(id, tenantId, agentSessionId, inboundMessageId, modelProvider, modelName, startedAtUtc);
     }
 
+    /// <summary>
+    /// <paramref name="estimatedCostUsd"/>/<paramref name="costPricingReference"/>
+    /// (Fase 11, Checkpoint 7, <c>MonetaryCostTracking=IMPLEMENT_NOW</c>):
+    /// both default to <see langword="null"/> — the deterministic
+    /// <c>FakeModelProvider</c> is never priced (mandate item 42:
+    /// "null = not applicable/not priced"); a real provider call supplies
+    /// both together, computed by the caller from real token usage and its
+    /// own configured pricing (never fabricated here — this method only
+    /// stores what it is given).
+    /// </summary>
     public void CompleteSuccessfully(
         DateTimeOffset completedAtUtc, string? intent, string? language, decimal? confidence,
-        int inputTokens, int outputTokens)
+        int inputTokens, int outputTokens, decimal? estimatedCostUsd = null, string? costPricingReference = null)
     {
         if (Outcome != AgentInteractionOutcome.InProgress)
             throw new InvalidOperationException($"Cannot complete an interaction already in outcome '{Outcome}'.");
@@ -105,6 +117,8 @@ public sealed class AgentInteraction : AggregateRoot<Guid>, ITenantOwned
         Confidence = confidence;
         InputTokens = inputTokens;
         OutputTokens = outputTokens;
+        EstimatedCostUsd = estimatedCostUsd;
+        CostPricingReference = costPricingReference;
         CompletedAtUtc = completedAtUtc;
         Outcome = AgentInteractionOutcome.Success;
     }

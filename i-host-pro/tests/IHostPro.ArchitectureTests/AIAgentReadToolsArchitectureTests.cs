@@ -131,14 +131,25 @@ public class AIAgentReadToolsArchitectureTests
             string.Join(", ", result.FailingTypes?.Select(t => t.FullName) ?? []));
     }
 
+    /// <summary>
+    /// Updated for Fase 11, Checkpoint 7 (mandate item 6): real Anthropic
+    /// integration now genuinely exists, but exclusively in AIAgent.Infrastructure
+    /// (<c>AnthropicModelProvider</c>/<c>AnthropicOptions</c>/the Anthropic
+    /// DTOs) — <c>IModelProvider</c>/<c>ModelRequest</c>/<c>ModelResult</c>/
+    /// <c>AvailableTools</c>/<c>ToolCallRequest</c> remain provider-neutral by
+    /// design. This test now proves the real, still-load-bearing invariant:
+    /// no Anthropic/Claude-specific type may ever leak into Domain or
+    /// Application (the provider-neutral public contract layers) — the
+    /// original "no Anthropic type may exist yet" premise predates this
+    /// checkpoint and is no longer the rule.
+    /// </summary>
     [Fact]
-    public void No_Anthropic_Or_Claude_Specific_Type_Exists_Anywhere_In_AIAgent()
+    public void No_Anthropic_Or_Claude_Specific_Type_Exists_In_AIAgent_Domain_Or_Application()
     {
         var assemblies = new[]
         {
             typeof(IHostPro.Contexts.AIAgent.Domain.AgentSession).Assembly,
             typeof(IHostPro.Contexts.AIAgent.Application.ModelRequest).Assembly,
-            typeof(GetReservationSummaryTool).Assembly,
         };
 
         var offenders = assemblies
@@ -149,7 +160,9 @@ public class AIAgentReadToolsArchitectureTests
             .ToList();
 
         offenders.Should().BeEmpty(
-            "IModelProvider/AvailableTools/ToolCallRequest are all provider-neutral by design — no Anthropic/Claude-specific type may exist yet (real integration is a future checkpoint's scope)");
+            "IModelProvider/AvailableTools/ToolCallRequest are all provider-neutral by design — an Anthropic/Claude-specific " +
+            "type may exist in AIAgent.Infrastructure only (AnthropicModelProviderArchitectureTests proves that boundary), " +
+            "never in Domain/Application");
     }
 
     /// <summary>

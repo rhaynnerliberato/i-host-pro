@@ -42,7 +42,9 @@ public sealed record ModelResult(
     string ModelName,
     string? FinishReason,
     ModelToolCallRequest? ToolCallRequest = null,
-    bool? ConfirmationIntent = null);
+    bool? ConfirmationIntent = null,
+    decimal? EstimatedCostUsd = null,
+    string? CostPricingReference = null);
 
 /// <summary>Provider-neutral tool-call request (Fase 11, Checkpoint 3) — Name + minimal Arguments only, never a provider-specific tool-call schema.</summary>
 public sealed record ModelToolCallRequest(string ToolName, IReadOnlyDictionary<string, string>? Arguments);
