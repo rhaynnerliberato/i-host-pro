@@ -204,14 +204,20 @@ try
     // real, always-on work to do, not just the CP1 fake-connector demo.
     builder.Services.AddCommunicationModule(builder.Configuration);
 
-    // Fase 11, Checkpoint 4: AddCommunicationModule now also registers
-    // Communication's own Mediator (SendAgentResponseCommand, its first)
-    // unconditionally — Mediator.SourceGenerator's all-or-nothing per-
-    // assembly discovery is a non-issue here in practice (Communication has
-    // exactly one handler today), but this call is kept for the same
-    // defense-in-depth/consistency reason every other promoted context gets
-    // it (see MediatorHandlerAllowlistExtensions' own doc comment).
-    builder.Services.KeepOnlyMediatorHandlers(typeof(SendAgentResponseCommandHandler));
+    // Fase 11, Checkpoint 4/6: AddCommunicationModule now also registers
+    // Communication's own Mediator unconditionally — SendAgentResponseCommand
+    // (CP4) and SendHumanHandoffNotificationCommand (CP6) are the only two
+    // handlers the Worker-hosted AI Agent orchestrator actually calls; both
+    // need IOutboundMessageConnector, resolved only where
+    // AddCommunicationReservationConsumer (Development-only) has also been
+    // called. UpsertAdministratorNotificationContactCommandHandler/
+    // GetAdministratorNotificationContactQueryHandler (CP6, Api-only —
+    // administrator contact management) are deliberately excluded from the
+    // Worker's own composition, mirroring every other promoted context's
+    // "commands stay scoped to the host that actually needs them" discipline
+    // (see MediatorHandlerAllowlistExtensions' own doc comment).
+    builder.Services.KeepOnlyMediatorHandlers(
+        typeof(SendAgentResponseCommandHandler), typeof(SendHumanHandoffNotificationCommandHandler));
 
     // Fase 9, Checkpoint 2.3.3 (ADR-022 item 14): WhatsAppMessageStatusChanged
     // consumer — unconditional, unlike AddCommunicationReservationConsumer

@@ -31,6 +31,12 @@ using IHostPro.Contexts.GuestOperations.Application;
 using IHostPro.Contexts.GuestOperations.Contracts;
 using IHostPro.Contexts.GuestOperations.Infrastructure;
 using IHostPro.Contexts.GuestOperations.Infrastructure.Persistence;
+using IHostPro.Contexts.AIAgent.Application;
+using IHostPro.Contexts.AIAgent.Infrastructure;
+using IHostPro.Contexts.AIAgent.Infrastructure.Persistence;
+using IHostPro.Contexts.Communication.Application;
+using IHostPro.Contexts.Communication.Infrastructure;
+using IHostPro.Contexts.Communication.Infrastructure.Persistence;
 using JasperFx;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -257,6 +263,32 @@ try
     // above exactly.
     builder.Services.AddReservationsRescheduleCommands();
 
+    // AI Agent's own write-Command surface (Fase 11, Checkpoint 6 — Human
+    // Handoff, Safety & Audit). ResumeAgentSessionCommand is AIAgent's first
+    // HTTP-triggered write and this process's first ever reference to the
+    // AI Agent Bounded Context — IHostPro.Worker never calls this method
+    // (Resume has no in-process consumer there). Deliberately NOT
+    // AddAIAgentModule: that method also registers every Read/Write Tool,
+    // each needing another Bounded Context's own request dispatcher this
+    // process does not uniformly compose (Payments/Communication have no
+    // Api-hosted module here) — see AIAgentCommandDispatchExtensions' own
+    // doc comment.
+    builder.Services.AddAIAgentCommandDispatch(builder.Configuration);
+
+    // Communication module (Fase 11, Checkpoint 6) — this process's first
+    // ever reference to Communication, needed only for the new
+    // administrator-notification-contact management endpoints
+    // (Get/UpsertAdministratorNotificationContact). AddCommunicationModule
+    // also registers Communication's own Mediator unconditionally
+    // (SendAgentResponseCommand/SendHumanHandoffNotificationCommand, both
+    // needing IOutboundMessageConnector, which this process never
+    // registers) — KeepOnlyMediatorHandlers keeps only the two handlers this
+    // host actually calls, mirroring the exact same discipline
+    // IHostPro.Worker applies in reverse.
+    builder.Services.AddCommunicationModule(builder.Configuration);
+    builder.Services.KeepOnlyMediatorHandlers(
+        typeof(UpsertAdministratorNotificationContactCommandHandler), typeof(GetAdministratorNotificationContactQueryHandler));
+
     // Wolverine's own Main message store (Fase 2, Incremento 1, Checkpoint 6
     // homologação — found and fixed during real-host startup validation):
     // Identity's and Property Management's outboxes are both registered as
@@ -381,6 +413,35 @@ try
             builder.Configuration.GetConnectionString("GuestOperations")!,
             "guest_operations_messaging",
             typeof(GuestOperationsDbContext));
+
+        // AI Agent's own durable outbox (Fase 11, Checkpoint 6 — Human
+        // Handoff, Safety & Audit) — an eighth "ancillary" store, in its own
+        // ai_agent_messaging schema, never shared with any other context's.
+        // Enrolled here for the first time because ResumeAgentSessionCommand
+        // is AIAgent's first HTTP-triggered write — its own
+        // IAIAgentTransactionExecutor resolves IDbContextOutbox<AIAgentDbContext>
+        // the same empirically-confirmed way every other write-capable
+        // Bounded Context needs, mirroring GuestOperations' own precedent
+        // immediately above. AI Agent publishes no Integration Event of its
+        // own (mandate item 29 from Checkpoint 2, still true), so no route is
+        // ever registered against this store — it exists purely so the
+        // outbox type resolves inside this process's own DI container.
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("AIAgent")!,
+            "ai_agent_messaging",
+            typeof(AIAgentDbContext));
+
+        // Communication's own durable outbox (Fase 9, Checkpoint 1) — a
+        // ninth "ancillary" store, in its own communication_messaging
+        // schema. Enrolled here for the first time (Fase 11, Checkpoint 6)
+        // because the new administrator-notification-contact management
+        // endpoints are this process's first reference to Communication —
+        // ICommunicationTransactionExecutor resolves IDbContextOutbox<CommunicationDbContext>
+        // the same way every other write-capable Bounded Context needs.
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("Communication")!,
+            "communication_messaging",
+            typeof(CommunicationDbContext));
 
         // Identity & Access's first six Integration Events (Incremento 2 plan,
         // Etapa 15; Documento 07 §13.2; ADR-013): one topic exchange per

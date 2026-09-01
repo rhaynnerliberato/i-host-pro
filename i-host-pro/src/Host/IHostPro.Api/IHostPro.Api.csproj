@@ -64,6 +64,16 @@
          two public endpoints, GuestStayOperationsController). -->
     <ProjectReference Include="..\..\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Api\IHostPro.Contexts.GuestOperations.Api.csproj" />
     <ProjectReference Include="..\..\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Infrastructure\IHostPro.Contexts.GuestOperations.Infrastructure.csproj" />
+    <!-- Fase 11, Checkpoint 6 — ResumeAgentSessionCommand is AIAgent's first
+         HTTP-triggered write; no separate AIAgent.Api project exists (CP6
+         mandate: CreateAIAgentApiProject=false), so the controller lives
+         directly in this host, referencing Application/Infrastructure only. -->
+    <ProjectReference Include="..\..\Contexts\AIAgent\IHostPro.Contexts.AIAgent.Application\IHostPro.Contexts.AIAgent.Application.csproj" />
+    <ProjectReference Include="..\..\Contexts\AIAgent\IHostPro.Contexts.AIAgent.Infrastructure\IHostPro.Contexts.AIAgent.Infrastructure.csproj" />
+    <!-- Fase 11, Checkpoint 6 — administrator-notification-contact
+         management endpoints; no separate Communication.Api project exists. -->
+    <ProjectReference Include="..\..\Contexts\Communication\IHostPro.Contexts.Communication.Application\IHostPro.Contexts.Communication.Application.csproj" />
+    <ProjectReference Include="..\..\Contexts\Communication\IHostPro.Contexts.Communication.Infrastructure\IHostPro.Contexts.Communication.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
