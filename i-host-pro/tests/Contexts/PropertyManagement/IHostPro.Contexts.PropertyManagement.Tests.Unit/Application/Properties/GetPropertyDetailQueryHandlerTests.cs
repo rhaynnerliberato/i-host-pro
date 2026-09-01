@@ -15,7 +15,7 @@ public class GetPropertyDetailQueryHandlerTests
     {
         var propertyId = Guid.NewGuid();
         var expected = new PropertyResult(
-            propertyId, "STUDIO-1", "Studio 1", 2, null, SomeAddress, SomeAddress, "property", "draft",
+            propertyId, "STUDIO-1", "Studio 1", 2, null, SomeAddress, SomeAddress, "property", null, "draft",
             DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
         var reader = FakePropertyReader.WithDetail(expected);
         var handler = new GetPropertyDetailQueryHandler(reader);

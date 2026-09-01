@@ -16,6 +16,7 @@ public sealed record PropertyDetailResponse(
     AddressResponse? Address,
     AddressResponse EffectiveAddress,
     string EffectiveAddressSource,
+    string? TimeZoneId,
     string Status,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);

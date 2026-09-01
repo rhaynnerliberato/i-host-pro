@@ -134,7 +134,8 @@ public sealed class PropertiesController : ControllerBase
             request.Name,
             request.Capacity,
             request.CondominiumId,
-            ToAddressInputOptional(request.Address));
+            ToAddressInputOptional(request.Address),
+            request.TimeZoneId);
 
         var result = await _sender.Send(command, cancellationToken);
 
@@ -300,6 +301,7 @@ public sealed class PropertiesController : ControllerBase
         result.Address is null ? null : ToAddressResponse(result.Address),
         ToAddressResponse(result.EffectiveAddress),
         result.EffectiveAddressSource,
+        result.TimeZoneId,
         result.Status,
         result.CreatedAt,
         result.UpdatedAt);

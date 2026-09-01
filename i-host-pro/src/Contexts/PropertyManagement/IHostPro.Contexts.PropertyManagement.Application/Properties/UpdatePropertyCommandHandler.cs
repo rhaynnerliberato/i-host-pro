@@ -23,7 +23,8 @@ namespace IHostPro.Contexts.PropertyManagement.Application.Properties;
 /// value — only fields that genuinely change are applied, recorded in
 /// <see cref="PropertyUpdated.ChangedFields"/> (fixed order: <c>"code"</c>,
 /// <c>"name"</c>, <c>"capacity"</c>, <c>"condominium_id"</c>,
-/// <c>"address"</c>), and cause an audit entry/event to be emitted at all —
+/// <c>"address"</c>, <c>"time_zone_id"</c> — the last added by Fase 11,
+/// Checkpoint 7), and cause an audit entry/event to be emitted at all —
 /// a no-op request still returns <c>200</c> with the current state, but
 /// stages no mutation.
 ///
@@ -44,6 +45,7 @@ public sealed class UpdatePropertyCommandHandler : ICommandHandler<UpdatePropert
         PropertyManagementErrorCodes.CondominiumNotFound, PropertyManagementErrorCodes.CondominiumNotFound);
     private static readonly Error AddressInvalidError = new("property_address_invalid", "property_address_invalid");
     private static readonly Error CodeInvalidError = new("property_code_invalid", "property_code_invalid");
+    private static readonly Error TimeZoneInvalidError = new("property_timezone_invalid", "property_timezone_invalid");
     private static readonly Error ArchivedPropertyCannotBeModifiedError = new(
         PropertyManagementErrorCodes.ArchivedPropertyCannotBeModified, PropertyManagementErrorCodes.ArchivedPropertyCannotBeModified);
 
@@ -70,7 +72,7 @@ public sealed class UpdatePropertyCommandHandler : ICommandHandler<UpdatePropert
     public async ValueTask<Result<PropertyResult>> Handle(UpdatePropertyCommand command, CancellationToken cancellationToken)
     {
         if (!command.Code.IsSet && !command.Name.IsSet && !command.Capacity.IsSet &&
-            !command.CondominiumId.IsSet && !command.Address.IsSet)
+            !command.CondominiumId.IsSet && !command.Address.IsSet && !command.TimeZoneId.IsSet)
         {
             return Result.Failure<PropertyResult>(NoChangesProvidedError);
         }
@@ -152,6 +154,17 @@ public sealed class UpdatePropertyCommandHandler : ICommandHandler<UpdatePropert
             }
         }
 
+        // Fase 11, Checkpoint 7 (mandate item 32) — validated via the
+        // runtime's own ICU-backed IANA database (TimeZoneInfo), never a
+        // manually maintained list of ids. A supplied null removes the
+        // configured value; a supplied non-null value must resolve to a
+        // real IANA time zone.
+        if (command.TimeZoneId.IsSet && command.TimeZoneId.Value is not null &&
+            !TimeZoneInfo.TryFindSystemTimeZoneById(command.TimeZoneId.Value, out _))
+        {
+            return Result.Failure<PropertyResult>(TimeZoneInvalidError);
+        }
+
         var now = _timeProvider.GetUtcNow();
         var changedFields = new List<string>();
 
@@ -183,6 +196,12 @@ public sealed class UpdatePropertyCommandHandler : ICommandHandler<UpdatePropert
         {
             property.ChangeAddress(finalAddress, now);
             changedFields.Add("address");
+        }
+
+        if (command.TimeZoneId.IsSet && !string.Equals(command.TimeZoneId.Value, property.TimeZoneId, StringComparison.Ordinal))
+        {
+            property.ChangeTimeZone(command.TimeZoneId.Value, now);
+            changedFields.Add("time_zone_id");
         }
 
         if (changedFields.Count > 0)
@@ -219,6 +238,7 @@ public sealed class UpdatePropertyCommandHandler : ICommandHandler<UpdatePropert
             ownAddressResult,
             effectiveAddress,
             effectiveAddressSource,
+            property.TimeZoneId,
             PropertyStatusCodeMapper.ToCode(property.Status),
             property.CreatedAt,
             property.UpdatedAt);

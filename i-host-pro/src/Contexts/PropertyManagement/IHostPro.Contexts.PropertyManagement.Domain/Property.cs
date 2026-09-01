@@ -28,6 +28,7 @@ public sealed class Property : AggregateRoot<Guid>, ITenantOwned
     public int Capacity { get; private set; }
     public Guid? CondominiumId { get; private set; }
     public Address? Address { get; private set; }
+    public string? TimeZoneId { get; private set; }
     public PropertyStatus Status { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -131,6 +132,25 @@ public sealed class Property : AggregateRoot<Guid>, ITenantOwned
     public void ChangeAddress(Address? newAddress, DateTimeOffset now)
     {
         Address = newAddress;
+        Touch(now);
+    }
+
+    /// <summary>
+    /// Sets or removes this property's IANA time zone identifier (Fase 11,
+    /// Checkpoint 7 — <c>TimezoneOwner=Property</c>). <c>null</c> removes it;
+    /// the caller (<c>UpdatePropertyCommandHandler</c>) is responsible for
+    /// validating the supplied id is a genuine IANA identifier BEFORE calling
+    /// this — this method only enforces that a non-null value is not blank.
+    /// Deliberately never set by <see cref="Create"/>/never backfilled for
+    /// existing properties (mandate item 31) — nullable until an
+    /// administrator configures it explicitly for each property.
+    /// </summary>
+    public void ChangeTimeZone(string? newTimeZoneId, DateTimeOffset now)
+    {
+        if (newTimeZoneId is not null && string.IsNullOrWhiteSpace(newTimeZoneId))
+            throw new ArgumentException("Time zone id cannot be blank.", nameof(newTimeZoneId));
+
+        TimeZoneId = newTimeZoneId;
         Touch(now);
     }
 

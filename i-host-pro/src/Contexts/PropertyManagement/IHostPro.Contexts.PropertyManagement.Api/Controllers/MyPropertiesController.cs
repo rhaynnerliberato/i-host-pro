@@ -73,6 +73,7 @@ public sealed class MyPropertiesController : ControllerBase
         result.Address is null ? null : ToAddressResponse(result.Address),
         ToAddressResponse(result.EffectiveAddress),
         result.EffectiveAddressSource,
+        result.TimeZoneId,
         result.Status,
         result.CreatedAt,
         result.UpdatedAt);

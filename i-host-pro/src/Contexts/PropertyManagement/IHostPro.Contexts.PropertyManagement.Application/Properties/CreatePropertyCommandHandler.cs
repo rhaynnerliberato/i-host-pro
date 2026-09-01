@@ -141,6 +141,7 @@ public sealed class CreatePropertyCommandHandler : ICommandHandler<CreatePropert
             ownAddressResult,
             effectiveAddress,
             effectiveAddressSource,
+            property.TimeZoneId,
             PropertyStatusCodeMapper.ToCode(property.Status),
             property.CreatedAt,
             property.UpdatedAt);

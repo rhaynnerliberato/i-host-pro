@@ -20,7 +20,7 @@ public class SetPropertyAccessConfigurationCommandHandlerTests
         "59090000", "Rua Exemplo", "100", null, "Ponta Negra", "Natal", "RN", "BR");
 
     private static PropertyResult SomeProperty() => new(
-        PropertyId, "STUDIO-1", "Studio 1", 2, null, SomeAddress, SomeAddress, "property", "active", Now, Now);
+        PropertyId, "STUDIO-1", "Studio 1", 2, null, SomeAddress, SomeAddress, "property", null, "active", Now, Now);
 
     [Fact]
     public async Task Handle_fails_when_property_does_not_exist()

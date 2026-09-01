@@ -100,6 +100,7 @@ public sealed class DeactivatePropertyCommandHandler : ICommandHandler<Deactivat
             ownAddress,
             effectiveAddress,
             effectiveAddressSource,
+            property.TimeZoneId,
             PropertyStatusCodeMapper.ToCode(property.Status),
             property.CreatedAt,
             property.UpdatedAt);

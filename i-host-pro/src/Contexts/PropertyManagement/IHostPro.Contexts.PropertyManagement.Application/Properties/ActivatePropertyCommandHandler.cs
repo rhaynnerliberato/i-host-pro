@@ -99,6 +99,7 @@ public sealed class ActivatePropertyCommandHandler : ICommandHandler<ActivatePro
             ownAddress,
             effectiveAddress,
             effectiveAddressSource,
+            property.TimeZoneId,
             PropertyStatusCodeMapper.ToCode(property.Status),
             property.CreatedAt,
             property.UpdatedAt);

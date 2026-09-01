@@ -78,6 +78,12 @@ public sealed class PropertyConfiguration : IEntityTypeConfiguration<Property>
             address.Property(a => a.Country).HasColumnName("address_country").HasMaxLength(2);
         });
 
+        // Fase 11, Checkpoint 7 — nullable IANA time zone id (mandate item
+        // 30/31): no backfill, each Property needs real administrator
+        // configuration before natural-language local time resolution can
+        // ever be enabled for it.
+        builder.Property(p => p.TimeZoneId).HasColumnName("time_zone_id").HasMaxLength(64);
+
         builder.Property(p => p.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20).IsRequired();
 
         builder.Property(p => p.CreatedAt).HasColumnName("created_at").IsRequired();

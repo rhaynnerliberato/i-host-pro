@@ -56,8 +56,9 @@ public class UpdatePropertyCommandHandlerTests
         Optional<string> name = default,
         Optional<int> capacity = default,
         Optional<Guid?> condominiumId = default,
-        Optional<PropertyAddressInput?> address = default) =>
-        new(TenantId, ActorId, propertyId, code, name, capacity, condominiumId, address);
+        Optional<PropertyAddressInput?> address = default,
+        Optional<string?> timeZoneId = default) =>
+        new(TenantId, ActorId, propertyId, code, name, capacity, condominiumId, address, timeZoneId);
 
     // ---- Happy path: single-field changes ----------------------------------------
 
@@ -161,6 +162,82 @@ public class UpdatePropertyCommandHandlerTests
         events.Should().ContainSingle();
         events[0].ChangedFields.Should().Equal("code", "name", "capacity", "condominium_id", "address");
         fixture.AuditWriter.RecordedEntries.Should().ContainSingle();
+    }
+
+    // ---- Time zone (Fase 11, Checkpoint 7) ----------------------------------------
+
+    [Fact]
+    public async Task Changing_only_the_time_zone_id_to_a_valid_IANA_id_updates_it_and_enqueues_ChangedFields_time_zone_id_only()
+    {
+        var property = CreatePropertyWithOwnAddress();
+        var fixture = CreateFixture(property);
+
+        var result = await fixture.Handler.Handle(
+            Command(property.Id, timeZoneId: Optional<string?>.Of("America/Sao_Paulo")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TimeZoneId.Should().Be("America/Sao_Paulo");
+        var events = fixture.EventCollector.EnqueuedEvents.OfType<PropertyUpdated>().ToArray();
+        events.Should().ContainSingle();
+        events[0].ChangedFields.Should().Equal("time_zone_id");
+    }
+
+    [Fact]
+    public async Task An_invalid_IANA_time_zone_id_fails_with_property_timezone_invalid_and_performs_no_side_effect()
+    {
+        var property = CreatePropertyWithOwnAddress();
+        var fixture = CreateFixture(property);
+
+        var result = await fixture.Handler.Handle(
+            Command(property.Id, timeZoneId: Optional<string?>.Of("Not/A_Real_Zone")), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("property_timezone_invalid");
+        AssertNoSideEffect(fixture);
+    }
+
+    [Fact]
+    public async Task Explicitly_clearing_an_already_configured_time_zone_id_updates_it_to_null_and_enqueues_ChangedFields_time_zone_id_only()
+    {
+        var property = CreatePropertyWithOwnAddress();
+        property.ChangeTimeZone("America/Sao_Paulo", Now);
+        var fixture = CreateFixture(property);
+
+        var result = await fixture.Handler.Handle(
+            Command(property.Id, timeZoneId: Optional<string?>.Of(null)), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TimeZoneId.Should().BeNull();
+        var events = fixture.EventCollector.EnqueuedEvents.OfType<PropertyUpdated>().ToArray();
+        events.Should().ContainSingle();
+        events[0].ChangedFields.Should().Equal("time_zone_id");
+    }
+
+    [Fact]
+    public async Task Omitting_the_time_zone_id_leaves_the_current_value_unchanged()
+    {
+        var property = CreatePropertyWithOwnAddress();
+        property.ChangeTimeZone("America/Sao_Paulo", Now);
+        var fixture = CreateFixture(property);
+
+        var result = await fixture.Handler.Handle(Command(property.Id, name: Optional<string>.Of("New Name")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TimeZoneId.Should().Be("America/Sao_Paulo");
+    }
+
+    [Fact]
+    public async Task Supplying_the_same_time_zone_id_is_a_no_op()
+    {
+        var property = CreatePropertyWithOwnAddress();
+        property.ChangeTimeZone("America/Sao_Paulo", Now);
+        var fixture = CreateFixture(property);
+
+        var result = await fixture.Handler.Handle(
+            Command(property.Id, timeZoneId: Optional<string?>.Of("America/Sao_Paulo")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        AssertNoSideEffect(fixture);
     }
 
     // ---- Condominium/address final-state rules -----------------------------------
@@ -458,6 +535,20 @@ public class UpdatePropertyCommandHandlerTests
 
         var result = await fixture.Handler.Handle(
             Command(property.Id, address: Optional<PropertyAddressInput?>.Of(NewAddressInput)), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be(PropertyManagementErrorCodes.ArchivedPropertyCannotBeModified);
+        AssertNoSideEffect(fixture);
+    }
+
+    [Fact]
+    public async Task An_archived_property_rejects_a_time_zone_id_change_with_ArchivedPropertyCannotBeModified()
+    {
+        var property = CreateArchivedPropertyWithOwnAddress();
+        var fixture = CreateFixture(property);
+
+        var result = await fixture.Handler.Handle(
+            Command(property.Id, timeZoneId: Optional<string?>.Of("America/Sao_Paulo")), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be(PropertyManagementErrorCodes.ArchivedPropertyCannotBeModified);

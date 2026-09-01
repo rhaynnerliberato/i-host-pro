@@ -97,6 +97,7 @@ public sealed class ArchivePropertyCommandHandler : ICommandHandler<ArchivePrope
             ownAddress,
             effectiveAddress,
             effectiveAddressSource,
+            property.TimeZoneId,
             PropertyStatusCodeMapper.ToCode(property.Status),
             property.CreatedAt,
             property.UpdatedAt);

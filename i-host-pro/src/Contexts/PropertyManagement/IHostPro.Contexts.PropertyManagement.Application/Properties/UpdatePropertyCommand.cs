@@ -18,6 +18,11 @@ namespace IHostPro.Contexts.PropertyManagement.Application.Properties;
 /// address; an explicit <c>null</c> value removes it; a supplied object
 /// replaces it wholesale, never a partial/field-level patch (Checkpoint 3
 /// plan, item 4).
+///
+/// <see cref="TimeZoneId"/> (Fase 11, Checkpoint 7): omitted keeps the
+/// current value; an explicit <c>null</c> removes it; a supplied value must
+/// be a genuine IANA time zone id (validated by the handler) and replaces it
+/// wholesale.
 /// </summary>
 public sealed record UpdatePropertyCommand(
     Guid TenantId,
@@ -27,4 +32,5 @@ public sealed record UpdatePropertyCommand(
     Optional<string> Name,
     Optional<int> Capacity,
     Optional<Guid?> CondominiumId,
-    Optional<PropertyAddressInput?> Address) : ICommand<PropertyResult>;
+    Optional<PropertyAddressInput?> Address,
+    Optional<string?> TimeZoneId = default) : ICommand<PropertyResult>;

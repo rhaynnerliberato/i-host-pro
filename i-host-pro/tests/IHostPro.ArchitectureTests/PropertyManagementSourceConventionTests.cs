@@ -184,8 +184,12 @@ public class PropertyManagementSourceConventionTests
             .ToArray();
 
         migrationFiles.Should().BeEquivalentTo(
-            ["20260730024157_InitialCreate", "20260827202539_AddFrontDeskContact", "20260828185321_AddPropertyAccessConfiguration"],
-            "only the Checkpoint 1 InitialCreate migration, Checkpoint 4's AddFrontDeskContact migration, and " +
-            "Checkpoint 6.2's AddPropertyAccessConfiguration migration may exist");
+            [
+                "20260730024157_InitialCreate", "20260827202539_AddFrontDeskContact",
+                "20260828185321_AddPropertyAccessConfiguration", "20260901144646_AddPropertyTimeZoneId",
+            ],
+            "only the Checkpoint 1 InitialCreate migration, Checkpoint 4's AddFrontDeskContact migration, " +
+            "Checkpoint 6.2's AddPropertyAccessConfiguration migration, and Fase 11 Checkpoint 7's " +
+            "AddPropertyTimeZoneId migration (TimezoneOwner=Property) may exist");
     }
 }
