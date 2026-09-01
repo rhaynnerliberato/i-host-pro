@@ -60,15 +60,43 @@ namespace IHostPro.Contexts.AIAgent.Infrastructure.ModelProviders;
 /// orchestrator alone decides what to do with a confirm/cancel classification
 /// — this class only classifies the guest's own message, never authorizes
 /// anything).
+///
+/// Fase 11, Checkpoint 5 adds three more deterministic markers:
+/// <see cref="TransientFailureTriggerMarker"/> throws
+/// <see cref="ModelProviderException"/> only the FIRST time a given message
+/// content is seen by THIS instance, then falls through to a normal response
+/// on every subsequent call with the identical content — proving the
+/// orchestrator's one-controlled-retry policy end-to-end without any DI
+/// reconfiguration (mirrors <see cref="FailureTriggerMarker"/>'s own
+/// always-throws convention, but bounded). This relies on
+/// <see cref="FakeModelProvider"/> being registered <c>Scoped</c> (one
+/// instance per inbound message's own processing scope) — the attempt
+/// counter is instance-level and keyed by the exact message content, so it
+/// never leaks across different inbound messages or different Call#1/Call#2
+/// contents within the same interaction. <see cref="UnsupportedRequestTriggerMarker"/>/
+/// <see cref="HumanHandoffTriggerMarker"/> classify the guest's message via
+/// <see cref="ModelResult.Intent"/> (never a Tool call) — the orchestrator
+/// itself does nothing special with these; they are ordinary final answers
+/// whose <c>Intent</c> is simply auditable in <c>AgentInteraction.Intent</c>.
 /// </remarks>
 public sealed class FakeModelProvider : IModelProvider
 {
     public const string FailureTriggerMarker = "[FAKE_MODEL_FAILURE]";
+    public const string TransientFailureTriggerMarker = "[FAKE_MODEL_TRANSIENT_FAILURE]";
     public const string ConfidenceMarkerPrefix = "[FAKE_MODEL_CONFIDENCE:";
     public const string ToolCallTriggerPrefix = "[FAKE_MODEL_TOOL_CALL:";
     public const string ConfirmTriggerMarker = "[FAKE_MODEL_CONFIRM]";
     public const string CancelTriggerMarker = "[FAKE_MODEL_CANCEL]";
+    public const string UnsupportedRequestTriggerMarker = "[FAKE_MODEL_UNSUPPORTED]";
+    public const string HumanHandoffTriggerMarker = "[FAKE_MODEL_HUMAN_HANDOFF]";
+
     private const string ModelNameValue = "fake-model-v1";
+    private const string UnsupportedRequestIntent = "unsupported_request";
+    private const string HumanHandoffRequestedIntent = "human_handoff_requested";
+    private const string UnsupportedRequestResponseText =
+        "No momento não consigo ajudar com esse tipo de solicitação. Posso encaminhar para nossa equipe, se preferir.";
+    private const string HumanHandoffResponseText =
+        "Identifiquei seu pedido para falar com uma pessoa da nossa equipe. Assim que possível, alguém dará continuidade ao seu atendimento.";
 
     private static readonly Regex ConfidenceMarkerPattern = new(
         @"\[FAKE_MODEL_CONFIDENCE:(?<value>[0-9]*\.?[0-9]+)\]", RegexOptions.Compiled);
@@ -77,6 +105,7 @@ public sealed class FakeModelProvider : IModelProvider
         @"\[FAKE_MODEL_TOOL_CALL:(?<name>[A-Za-z0-9_]+)(?::(?<args>[^\]]+))?\]", RegexOptions.Compiled);
 
     private readonly ILogger<FakeModelProvider> _logger;
+    private readonly Dictionary<string, int> _transientFailureAttemptsByContent = new();
 
     public string ProviderName => "Fake";
 
@@ -95,11 +124,59 @@ public sealed class FakeModelProvider : IModelProvider
             throw new ModelProviderException("FakeModelProvider: deterministic controlled failure triggered by FailureTriggerMarker.");
         }
 
+        if (lastContent.Contains(TransientFailureTriggerMarker, StringComparison.Ordinal))
+        {
+            var attempts = _transientFailureAttemptsByContent.GetValueOrDefault(lastContent) + 1;
+            _transientFailureAttemptsByContent[lastContent] = attempts;
+
+            if (attempts == 1)
+            {
+                _logger.LogInformation(
+                    "[FAKE Model Provider — Development/Test only, no real model called] deterministic TRANSIENT controlled failure triggered (attempt {Attempt})", attempts);
+                throw new ModelProviderException("FakeModelProvider: deterministic transient failure triggered by TransientFailureTriggerMarker (attempt 1).");
+            }
+
+            _logger.LogInformation(
+                "[FAKE Model Provider — Development/Test only, no real model called] TransientFailureTriggerMarker already failed once for this content — succeeding (attempt {Attempt})", attempts);
+        }
+
         var inputTokens = request.Messages.Sum(m => m.Content.Length);
         var confidence = ExtractConfidenceMarker(lastContent);
 
         if (lastMessage?.Role != ModelMessageRole.Tool)
         {
+            if (lastContent.Contains(UnsupportedRequestTriggerMarker, StringComparison.Ordinal))
+            {
+                _logger.LogInformation(
+                    "[FAKE Model Provider — Development/Test only, no real model called] deterministic unsupported-request intent classified");
+
+                return Task.FromResult(new ModelResult(
+                    Text: UnsupportedRequestResponseText,
+                    DetectedLanguage: "pt-BR",
+                    Intent: UnsupportedRequestIntent,
+                    Confidence: confidence,
+                    InputTokens: inputTokens,
+                    OutputTokens: UnsupportedRequestResponseText.Length,
+                    ModelName: ModelNameValue,
+                    FinishReason: "stop"));
+            }
+
+            if (lastContent.Contains(HumanHandoffTriggerMarker, StringComparison.Ordinal))
+            {
+                _logger.LogInformation(
+                    "[FAKE Model Provider — Development/Test only, no real model called] deterministic human-handoff-requested intent classified");
+
+                return Task.FromResult(new ModelResult(
+                    Text: HumanHandoffResponseText,
+                    DetectedLanguage: "pt-BR",
+                    Intent: HumanHandoffRequestedIntent,
+                    Confidence: confidence,
+                    InputTokens: inputTokens,
+                    OutputTokens: HumanHandoffResponseText.Length,
+                    ModelName: ModelNameValue,
+                    FinishReason: "stop"));
+            }
+
             if (lastContent.Contains(ConfirmTriggerMarker, StringComparison.Ordinal)
                 || lastContent.Contains(CancelTriggerMarker, StringComparison.Ordinal))
             {
