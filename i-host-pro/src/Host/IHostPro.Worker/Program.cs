@@ -11,11 +11,13 @@ using IHostPro.Contexts.Configuration.Infrastructure.Messaging;
 using IHostPro.Contexts.AIAgent.Infrastructure;
 using IHostPro.Contexts.AIAgent.Infrastructure.Messaging;
 using IHostPro.Contexts.AIAgent.Infrastructure.Persistence;
+using IHostPro.Contexts.Communication.Application;
 using IHostPro.Contexts.Communication.Infrastructure;
 using IHostPro.Contexts.Communication.Infrastructure.Persistence;
 using IHostPro.Contexts.Dashboard.Infrastructure;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
+using IHostPro.Contexts.GuestOperations.Application;
 using IHostPro.Contexts.GuestOperations.Infrastructure;
 using IHostPro.Contexts.GuestOperations.Infrastructure.Persistence;
 using IHostPro.Contexts.Housekeeping.Application.Cleanings;
@@ -202,6 +204,15 @@ try
     // real, always-on work to do, not just the CP1 fake-connector demo.
     builder.Services.AddCommunicationModule(builder.Configuration);
 
+    // Fase 11, Checkpoint 4: AddCommunicationModule now also registers
+    // Communication's own Mediator (SendAgentResponseCommand, its first)
+    // unconditionally — Mediator.SourceGenerator's all-or-nothing per-
+    // assembly discovery is a non-issue here in practice (Communication has
+    // exactly one handler today), but this call is kept for the same
+    // defense-in-depth/consistency reason every other promoted context gets
+    // it (see MediatorHandlerAllowlistExtensions' own doc comment).
+    builder.Services.KeepOnlyMediatorHandlers(typeof(SendAgentResponseCommandHandler));
+
     // Fase 9, Checkpoint 2.3.3 (ADR-022 item 14): WhatsAppMessageStatusChanged
     // consumer — unconditional, unlike AddCommunicationReservationConsumer
     // below. The inbound webhook status path has no fake/real connector
@@ -276,6 +287,18 @@ try
     // two-call split immediately above. Unlike CP1 (zero Wolverine
     // consumers), Worker now touches GuestOperationsDbContext directly.
     builder.Services.AddGuestOperationsModule(builder.Configuration);
+
+    // Fase 11, Checkpoint 4: AddGuestOperationsModule now also registers
+    // Guest Operations' own Mediator (previously Api-only) — Mediator's
+    // all-or-nothing per-assembly discovery would otherwise also expose
+    // RecordGuestCheckedInCommandHandler/RecordGuestCheckedOutCommandHandler
+    // (NOT among the 3 approved CP4 write Tools) to the Worker. Allowlisting
+    // exactly the three approved handler types keeps them genuinely
+    // unreachable here, even though their own dependencies stay registered
+    // (CP4 mandate item 42/43).
+    builder.Services.KeepOnlyMediatorHandlers(
+        typeof(RequestEarlyCheckInCommandHandler), typeof(RequestLateCheckoutCommandHandler), typeof(RequestGuestAccessDeliveryCommandHandler));
+
     builder.Services.AddGuestOperationsReservationCreatedConsumer();
 
     // Fase 10, Checkpoint 5 (PIX/Payment Deterministic Foundation): Guest

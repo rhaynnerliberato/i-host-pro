@@ -18,18 +18,33 @@ namespace IHostPro.Contexts.GuestOperations.Infrastructure;
 /// Check-in/Checkout Core) — mirrors <c>ReservationsModuleExtensions</c>'
 /// own split: a base module registration (DbContext, needed everywhere this
 /// context's schema is touched) and a Worker-only consumer registration (the
-/// new <c>ReservationCreated</c> choreography, Checkpoint 2). The Api-only
-/// command-dispatch registration lives separately in
-/// <c>GuestOperationsCommandDispatchExtensions</c> (mirrors
-/// <c>ReservationsCommandDispatchExtensions</c>'s own separate placement).
+/// new <c>ReservationCreated</c> choreography, Checkpoint 2).
+///
+/// Fase 11, Checkpoint 4 update: the Command Mediator wiring (previously
+/// Api-only, in <c>GuestOperationsCommandDispatchExtensions</c>) moved here
+/// so the AI Agent's own Worker-hosted write Tools can execute
+/// <c>RequestEarlyCheckInCommand</c>/<c>RequestLateCheckoutCommand</c>/
+/// <c>RequestGuestAccessDeliveryCommand</c> in-process via
+/// <see cref="IGuestOperationsRequestDispatcher"/> (Exception #3) — mirrors
+/// the exact "Option A" wiring CP3 already applied to Reservations/
+/// PropertyManagement/Housekeeping/Configuration/Payments, just for a write
+/// surface instead of a read one this time. The Worker still allowlists
+/// exactly these three handler types via <c>KeepOnlyMediatorHandlers</c>
+/// right after this method (see <c>IHostPro.Worker/Program.cs</c>) —
+/// <c>RecordGuestCheckedInCommandHandler</c>/<c>RecordGuestCheckedOutCommandHandler</c>
+/// stay registered here too (Mediator's own all-or-nothing per-assembly
+/// discovery, unavoidable), but never survive that allowlist, so they remain
+/// genuinely unreachable from the Worker (CP4 mandate item 42/43).
+/// <c>GuestOperationsCommandDispatchExtensions</c> no longer exists — every
+/// GuestOperations Command's dependency graph (Mediator + all four repos/
+/// readers) is needed by at least one of the three approved write Tools, so
+/// nothing Api-only remained to keep separate.
 /// </summary>
 public static class GuestOperationsModuleExtensions
 {
     /// <summary>
     /// The base registration every process touching this context's schema
-    /// needs — called by both <c>IHostPro.Api</c> (check-in/checkout
-    /// commands) and, since Checkpoint 2, <c>IHostPro.Worker</c> (the new
-    /// <c>ReservationCreated</c> consumer writes to the same DbContext).
+    /// needs — called by both <c>IHostPro.Api</c> and <c>IHostPro.Worker</c>.
     /// </summary>
     public static IServiceCollection AddGuestOperationsModule(
         this IServiceCollection services, IConfiguration configuration)
@@ -43,6 +58,18 @@ public static class GuestOperationsModuleExtensions
                 npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "guest_operations")));
 
         services.AddSingleton(TimeProvider.System);
+
+        services.AddGuestOperationsApplicationMediator();
+
+        services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
+        services.AddScoped<IGuestOperationsTransactionExecutor, GuestOperationsOutboxTransactionExecutor>();
+        services.AddScoped<IRepository<GuestStayOperation, Guid>, GuestStayOperationRepository>();
+        services.AddScoped<IGuestStayOperationReader, GuestStayOperationReader>();
+
+        services.AddScoped<IRepository<EarlyCheckInRequest, Guid>, EarlyCheckInRequestRepository>();
+        services.AddScoped<IEarlyCheckInRequestReader, EarlyCheckInRequestReader>();
+        services.AddScoped<IRepository<LateCheckoutRequest, Guid>, LateCheckoutRequestRepository>();
+        services.AddScoped<ILateCheckoutRequestReader, LateCheckoutRequestReader>();
 
         return services;
     }

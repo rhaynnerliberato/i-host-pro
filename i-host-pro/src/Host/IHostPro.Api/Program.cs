@@ -231,13 +231,17 @@ try
 
     // Guest Operations module (Fase 10, Checkpoint 1 — Guest Operations
     // Foundation; Checkpoint 2 — Check-in/Checkout Core). DbContext +
-    // Mediator-dispatched check-in/checkout commands, mirroring
-    // AddReservationsCommandDispatch's own Api-only placement — dispatching
-    // a command is an HTTP-request concern. GuestStayOperationsController's
+    // Mediator-dispatched check-in/checkout commands. GuestStayOperationsController's
     // two endpoints are this module's first real HTTP surface (CP1 shipped
     // zero endpoints).
+    //
+    // Fase 11, Checkpoint 4: the Command Mediator wiring (previously a
+    // separate Api-only AddGuestOperationsCommandDispatch call) moved inside
+    // AddGuestOperationsModule itself, so the AI Agent's own Worker-hosted
+    // write Tools can reach it too (Exception #3) — see
+    // GuestOperationsModuleExtensions' own doc comment. Nothing Api-only was
+    // left to keep in a separate method.
     builder.Services.AddGuestOperationsModule(builder.Configuration);
-    builder.Services.AddGuestOperationsCommandDispatch();
 
     // Fase 10, Checkpoint 1: ICloseReservationHandler is also resolved
     // directly from this host by the deterministic E2E test's own
