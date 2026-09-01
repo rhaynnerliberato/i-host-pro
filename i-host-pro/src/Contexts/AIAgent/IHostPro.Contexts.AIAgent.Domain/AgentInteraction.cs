@@ -20,10 +20,18 @@ namespace IHostPro.Contexts.AIAgent.Domain;
 /// Deliberately does NOT persist a full response/prompt text field
 /// (governance decision, Fase 11 CP2 §10: Documento 16 §24 audits "resposta
 /// enviada" — CP2 never sends anything to the guest, so a model output is
-/// not yet a "resposta enviada"; CP4, once real delivery exists, will link
-/// to Communication's own <c>Message</c> rather than duplicate its body
-/// here) — only the audit metadata Documento 16 §24 requires without
-/// ambiguity (intent, language, confidence, model, token counts, outcome).
+/// not yet a "resposta enviada"; CP4, now that real delivery exists, links
+/// to Communication's own <c>Message</c> via <see cref="OutboundMessageId"/>
+/// rather than duplicate its body here) — only the audit metadata Documento
+/// 16 §24 requires without ambiguity (intent, language, confidence, model,
+/// token counts, outcome).
+///
+/// <see cref="OutboundMessageId"/> (Fase 11, Checkpoint 4): the opaque id of
+/// the <c>Communication.Message</c> this interaction's own response was
+/// delivered as, set only after <c>SendAgentResponseCommand</c> returns
+/// successfully — <see langword="null"/> for every interaction that never
+/// produced a response (a failed call) or whose delivery itself failed
+/// (never marked as sent artificially, CP4 mandate item 30).
 ///
 /// Confidence: normalized <c>decimal?</c>, <c>0..1</c> inclusive when
 /// non-null — see <see cref="AgentSession"/>'s own doc comment.
@@ -43,6 +51,7 @@ public sealed class AgentInteraction : AggregateRoot<Guid>, ITenantOwned
     public DateTimeOffset StartedAtUtc { get; private set; }
     public DateTimeOffset? CompletedAtUtc { get; private set; }
     public AgentInteractionOutcome Outcome { get; private set; }
+    public Guid? OutboundMessageId { get; private set; }
 
     private AgentInteraction()
     {
@@ -107,6 +116,23 @@ public sealed class AgentInteraction : AggregateRoot<Guid>, ITenantOwned
 
         CompletedAtUtc = completedAtUtc;
         Outcome = AgentInteractionOutcome.Failure;
+    }
+
+    /// <summary>
+    /// Records the <c>Communication.Message</c> this interaction's response
+    /// was delivered as (Fase 11, Checkpoint 4) — at most once per
+    /// interaction (CP4 mandate item 27), regardless of outcome, since even
+    /// a business-denial response is still a real outbound Message.
+    /// </summary>
+    public void RecordOutboundMessage(Guid messageId)
+    {
+        if (messageId == Guid.Empty)
+            throw new ArgumentException("Outbound message id cannot be empty.", nameof(messageId));
+
+        if (OutboundMessageId is not null)
+            throw new InvalidOperationException("This interaction already has an outbound message recorded.");
+
+        OutboundMessageId = messageId;
     }
 }
 
