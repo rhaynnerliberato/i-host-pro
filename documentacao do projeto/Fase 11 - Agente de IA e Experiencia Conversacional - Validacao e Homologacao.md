@@ -1,7 +1,7 @@
 # Fase 11 — Agente de IA e Experiência Conversacional — Validação e Homologação
 
-Versão: 1.2
-Status: Em andamento — Checkpoint 3 concluído
+Versão: 1.3
+Status: Em andamento — Checkpoint 4 concluído
 
 ## 1. Objetivo
 
@@ -42,8 +42,8 @@ Classificação final do gate: aprovado, com uma lista de decisões `B — USER 
 CP0 (concluído) — Architecture & Product Decision Gate
 CP1 (concluído) — Inbound Conversation Foundation
 CP2 (concluído) — AI Agent Foundation
-CP3 (concluído, este documento) — Read Tools & Context Builder
-CP4 — Write Tools & Response Delivery
+CP3 (concluído) — Read Tools & Context Builder
+CP4 (concluído, este documento) — Write Tools & Response Delivery
 CP5 — Policies, Workflow & Conversational Orchestration
 CP6 — Human Handoff, Safety & Audit
 CP7 — Anthropic Claude Real Proof
@@ -321,3 +321,129 @@ Nenhum desses achados exigiu mudança de escopo, nova exceção síncrona, ou de
 **Nota de transparência sobre o `MigrationRunner`**: a primeira tentativa de executá-lo nesta sessão de fechamento falhou por dois motivos operacionais — (1) `dotnet run --project` a partir do diretório raiz do repositório não resolveu `appsettings.json` (corrigido executando a partir do próprio diretório do projeto); (2) sem `DOTNET_ENVIRONMENT=Development`, o provisionamento da topologia RabbitMQ usou as credenciais base (`guest`) em vez do override de desenvolvimento (`ihostpro`/`ihostpro_dev`) que o container real exige, falhando com `ACCESS_REFUSED` após 20 tentativas — corrigido definindo a variável de ambiente explicitamente. Nenhum dos dois é uma regressão de código deste checkpoint; ambos são particularidades operacionais do ambiente local, registradas aqui por transparência (mandato: nunca esconder dúvidas/limitações relevantes).
 
 `Cp3CommitCount`: registrado no relatório final da conversa de homologação.
+
+## 8. Checkpoint 4 — Write Tools & Response Delivery
+
+**Status:** Concluído e homologado. `WriteToolsImplemented=true`. `WriteConfirmationImplemented=true`. `BusinessWriteToolsImplemented=true`. `PendingActionModel=AgentPendingAction`. `PendingActionTtl=false`. `MaxPendingActionsPerSession=1`. `ResponseDeliveryImplemented=true`. `AgentResponsePersistence=CommunicationMessage`. `AgentInteractionResponseTextPersistence=false`. `AnthropicIntegrated=false`. `ExternalLLMNetworkCalls=0`.
+
+**Objetivo**: construir as 3 Write Tools de negócio aprovadas (`RequestEarlyCheckIn`, `RequestLateCheckout`, `RequestGuestAccessDelivery`), cada uma um adapter fino que invoca o Application Command já existente do Bounded Context correspondente (Exceção 3, nunca uma nova exceção síncrona); introduzir um modelo de confirmação server-side para ações state-changing/financeiras (`AgentPendingAction`), com a regra explícita de que o modelo de linguagem nunca decide se uma Tool exige confirmação; e implementar a primeira entrega real de resposta ao hóspede (`SendAgentResponseCommand`, o primeiro Application Command síncrono de Communication), fazendo com que toda interação bem-sucedida — leitura ou escrita — finalmente produza uma resposta real. Nenhuma outra Write Tool além das 3 aprovadas, nenhum RAG semântico, nenhuma integração real com Anthropic.
+
+### 8.1 Governança prévia — CP4 Decision/Contract Gate (read-only)
+
+Antes de qualquer código, o usuário exigiu um Decision/Contract Gate exclusivamente de leitura, cobrindo: releitura de Documento 16 §12/15/16/21/22, Documento 17 Workflows 05/06/07/08/11/13/14/16, Documento 06 (máquina de estados e Regras para IA), Documento 13 §30, ADR-009, Architecture Principles (14 exceções nomeadas) e a homologação da Fase 11 CP3; classificação de 11 candidatos a Write Tool; e um relatório de governança de 39 itens. Classificação final, aprovada pelo usuário sem alteração:
+
+| Candidato | Classificação | Motivo |
+|---|---|---|
+| `RequestEarlyCheckIn` | `REQUIRED_CP4`, `CONFIRMATION_REQUIRED` | Ação state-changing sobre a Reservation, decisão automática de negócio já existente (`RequestEarlyCheckInCommand`) |
+| `RequestLateCheckout` | `REQUIRED_CP4`, `CONFIRMATION_REQUIRED` | Idem, pode disparar cobrança PIX (`LateCheckoutPaymentRequired`) |
+| `RequestGuestAccessDelivery` | `REQUIRED_CP4`, `EXPLICIT_REQUEST_IS_CONFIRMATION` | O próprio pedido do hóspede já é a confirmação; entrega seletiva de instrução, nunca a credencial real (ADR-028) |
+| `RecordGuestCheckedIn` | `NOT_MODEL_TOOL` | Comando HTTP-only, gated por permissão de staff `GUEST_OPERATIONS:MANAGE`, nunca automaticamente disparado |
+| `RecordGuestCheckedOut` | `NOT_MODEL_TOOL` | Idem |
+| `CancelReservation` | `FORBIDDEN` | Exige `ActorId` de staff real (`CancelReservationCommand(TenantId, ActorId, ReservationId)`), estruturalmente incompatível com um chamador autônomo de IA; ausente das listas autorizadas de Documento 16 §12/§15 |
+| `CreatePix`/`GeneratePix` | `ALREADY_INDIRECT` | Único ponto de criação é reativo a evento (`LateCheckoutPaymentRequiredChargeInitializer`); nenhum Command standalone existe; Payments não possui `.Api` |
+| `SendAgentResponse` | `REQUIRED_CP4` (não uma Tool de negócio — capability de entrega) | Primeiro Command síncrono de Communication, aprovado explicitamente como mudança de padrão arquitetural intencional |
+| `CreateWorkflow` | `NOT_MODEL_TOOL` | Orquestração interna de Workflow, nunca disparada por um agente conversacional |
+| `NotifyFrontDesk` | `ALREADY_INDIRECT` | Já disparado por coreografia de evento (Fase 10 CP4), nenhum Command standalone para o modelo invocar |
+| `RegisterIncident` | `DEFERRED_TO_CP6` | Nenhum agregado/BC de "incidente reportado pelo hóspede" existe; `CleaningOccurrence` é conceito distinto (self-service do housekeeper sobre a própria Cleaning) |
+
+Nenhuma nova exceção síncrona foi necessária — as 3 Write Tools e `SendAgentResponseCommand` operam inteiramente dentro da Exceção 3 já aprovada, reutilizando `IReservationGuestContactReader`/Exceção 5 (ADR-019) para resolução de destinatário.
+
+### 8.2 As 3 Write Tools aprovadas
+
+| Tool | Bounded Context consumido | Command reutilizado | Confirmação | Campos backend-derived | Campos model-derived |
+|---|---|---|---|---|---|
+| `RequestEarlyCheckIn` | GuestOperations | `RequestEarlyCheckInCommand` | Obrigatória | `TenantId`, `ReservationId` | `RequestedCheckInAt` |
+| `RequestLateCheckout` | GuestOperations | `RequestLateCheckoutCommand` | Obrigatória | `TenantId`, `ReservationId` | `RequestedCheckOutAt` |
+| `RequestGuestAccessDelivery` | GuestOperations | `RequestGuestAccessDeliveryCommand` | Nenhuma (o próprio pedido já é a confirmação) | `TenantId`, `ReservationId` | — (zero argumentos) |
+
+`AgentToolNames` (Application) fixa agora um conjunto fechado de 11 constantes (8 Read + 3 Write) — adicionar uma décima segunda Tool exige um novo mandato, provado por teste de arquitetura dedicado (`Exactly_The_Eleven_Approved_Tools_Exist_No_More_No_Less`, sucessor renomeado do teste equivalente do CP3). `EarlyCheckInRequestResult`/`LateCheckoutRequestResult` carregam `Status` (`"approved"`/`"denied"`/`"pending_payment"`) e `DenialReasonCode` — uma negação de negócio é sempre `AgentToolExecutionOutcome.Success` (o Tool executou corretamente e obteve uma decisão real); apenas falha técnica/infraestrutura é `Failure`. Cada Tool executa no máximo um Command por interação — sem cadeias multi-hop de escrita.
+
+### 8.3 `AgentPendingAction` (novo agregado, schema `ai_agent`) — modelo de confirmação
+
+`AgentPendingAction` — `Id, TenantId, AgentSessionId, ProposedByInteractionId, ToolName, SanitizedArguments (texto opaco), Status, CreatedAtUtc, ConfirmedAtUtc?, ExecutedAtUtc?, CancelledAtUtc?`. Estados: `Proposed → Confirmed → Executed`, ou `Proposed/Confirmed → Cancelled` — deliberadamente **sem** estado `Expired` (nenhum TTL documentado; `PendingActionTtl=false` é uma decisão oficial do mandato, não uma lacuna). No máximo 1 ação ativa (`Proposed`/`Confirmed`) por `AgentSessionId`, garantido por índice único parcial (`ix_agent_pending_actions_active_per_session`, defesa em profundidade atrás da checagem em nível de Application). Uma segunda proposta de Write Tool enquanto uma já está ativa é **bloqueada** — nunca substituída, cancelada ou auto-executada; o agente responde explicando a situação ao hóspede. Cancelar uma ação pendente nunca invoca nenhum Command de negócio — apenas marca a proposta como `Cancelled`. `SanitizedArguments` nunca armazena o prompt bruto, `GuestPhone`, credencial/secret-reference, payload de QR/provider, ou o agregado de domínio — apenas os argumentos já validados/estreitados pela própria Tool. Referenciado por `AgentInteraction` através de uma foreign key real (`fk_agent_pending_actions_agent_interactions`, `ON DELETE RESTRICT`), mesmo precedente de `AgentToolExecution` (CP3, §7.3).
+
+**Separação proposta/execução — `IConfirmableAgentTool`**: uma nova interface (`IConfirmableAgentTool : IAgentTool`) acrescenta `BuildSanitizedArguments(arguments) → AgentPendingActionProposalResult`, chamada no turno da proposta (valida/estreita os argumentos do modelo, sem executar nada). O mesmo `ExecuteAsync` herdado de `IAgentTool` é reutilizado tanto para Tools sem confirmação (execução imediata) quanto para a execução pós-confirmação de uma Tool confirmável — os argumentos são reconstituídos a partir de `AgentPendingAction.SanitizedArguments` via round-trip JSON.
+
+### 8.4 `IAgentToolConfirmationPolicy` — o modelo nunca decide se uma Tool exige confirmação
+
+Por exigência explícita do mandato ("NÃO adicionar `RequiresConfirmation` a `ModelToolCallRequest`. O MODEL NÃO decide se uma Tool exige confirmação"), a política é uma allowlist fixa server-side (`AgentToolConfirmationPolicy`, `HashSet<string>` estático): `RequestEarlyCheckIn`/`RequestLateCheckout` → exige confirmação; qualquer nome fora do conjunto (incluindo `RequestGuestAccessDelivery`) → não exige. `ModelResult` ganhou `ConfirmationIntent` (`bool?`) — usado apenas para classificar a intenção do turno seguinte (confirmar/cancelar/nenhum) via os novos marcadores determinísticos do `FakeModelProvider` (`[FAKE_MODEL_CONFIRM]`/`[FAKE_MODEL_CANCEL]`), nunca para decidir se a Tool original exigia confirmação.
+
+### 8.5 `SendAgentResponseCommand` — primeiro Application Command síncrono de Communication
+
+Aprovado explicitamente como mudança de padrão arquitetural intencional (mandato item 26: "uma mudança intencional e aprovada"). Contrato: `TenantId, ConversationId, ReservationId, AgentInteractionId, Content` — nunca `GuestPhone`/telefone de destino/id de provider/override de canal/token de acesso/secret. `Channel` é sempre `Conversation.Channel` (nunca escolhido pelo modelo). Recipiente resolvido via `IReservationGuestContactReader` (ADR-019/Exceção 5, já aprovada — nenhuma nova exceção síncrona). `TemplateKey = "AI_AGENT_RESPONSE"`. Idempotência determinística por `TenantId`/`AgentInteractionId`/`AI_AGENT_RESPONSE`/`Channel` — uma redelivery com o mesmo `AgentInteractionId` retorna o mesmo `MessageId`, nunca cria uma segunda linha. `GuestPhone` é usado exclusivamente em memória (checagem de nulidade, mascaramento antes de persistir em `Message.DestinationMasked`, e repasse ao `IOutboundMessageConnector` para o envio real) — nunca logado, nunca persistido em claro; mesmo padrão já aprovado de `GuestAccessDeliveryProcessor`/`ReservationCreatedCommunicationProcessor`/`PixChargeCreatedDeliveryProcessor` (Fase 9/10). Falha de entrega nunca marca a mensagem como enviada artificialmente; nenhum handoff automático ainda existe.
+
+**Wiring**: `ICommunicationRequestDispatcher`/`CommunicationRequestDispatcher`/`CommunicationApplicationMediatorExtensions` (novo, espelha exatamente o precedente de `PaymentsApplicationMediatorExtensions` do CP3, incluindo `ServiceLifetime.Scoped`). `AddCommunicationModule` agora chama `AddCommunicationApplicationMediator()` incondicionalmente; `IHostPro.Worker/Program.cs` chama `KeepOnlyMediatorHandlers(typeof(SendAgentResponseCommandHandler))` imediatamente após — a própria dependência do handler (`IOutboundMessageConnector`) só resolve efetivamente onde `AddCommunicationReservationConsumer` (gate Development-only) também foi chamado, preservando o mesmo boundary fail-safe de toda capability de envio outbound de Communication.
+
+**`AgentInteraction.OutboundMessageId`** (novo, nullable) — referencia o `Message` real criado por `SendAgentResponseCommand`; `ResponseText` nunca é persistido em `AgentInteraction` — `Communication.Message` permanece a única fonte de verdade do conteúdo enviado (decisão já estabelecida no CP2, §6.3, agora com uma referência real por id opaco).
+
+### 8.6 Loop estendido do `ConversationMessageReceivedProcessor`
+
+O construtor ganhou `IAgentPendingActionRepository`, `IAgentToolConfirmationPolicy` e `IAgentResponseDeliveryService`. Fluxo por tipo de turno:
+
+- **Tool sem confirmação** (`RequestGuestAccessDelivery`, ou qualquer Read Tool): comportamento do CP3 preservado — executa imediatamente, sem `AgentPendingAction`.
+- **Tool com confirmação** (`RequestEarlyCheckIn`/`RequestLateCheckout`): `BuildSanitizedArguments` é chamado; se aceito, cria `AgentPendingAction(Proposed)` e responde ao hóspede pedindo confirmação — o Command de negócio real **nunca** é chamado neste turno. Rejeição da proposta pela própria Tool falha a interação (mesma semântica de falha de Tool do CP3).
+- **Turno de confirmação** (`ConfirmationIntent=true`): busca a `AgentPendingAction` ativa da sessão; se existir, marca `Confirmed`, reconstitui os argumentos e chama `ExecuteAsync` do Command real; sucesso marca `Executed`; falha técnica deixa a ação em `Confirmed` (nunca `Executed`) e falha a interação. Se não houver ação ativa, a interação é bem-sucedida com uma resposta genérica, sem chamar nenhuma Tool.
+- **Turno de cancelamento** (`ConfirmationIntent=false`): marca a ação ativa (se houver) como `Cancelled` — nenhum Command de negócio é chamado.
+- **Segunda proposta com uma ação já ativa**: rejeitada sem criar uma segunda linha em `agent_pending_actions`.
+
+Toda interação bem-sucedida (leitura ou escrita) agora chama `IAgentResponseDeliveryService.SendAsync` ao final, persistindo `AgentInteraction.OutboundMessageId` quando a entrega é bem-sucedida. Falha na entrega **não** falha a interação (o Tool/Command de negócio já foi executado com sucesso) — `OutboundMessageId` permanece `null`.
+
+**Camada correta para a chamada cross-context**: `IAgentResponseDeliveryService` (Application, abstrato) + `AgentResponseDeliveryService` (Infrastructure, adapter concreto que chama `ICommunicationRequestDispatcher`/`SendAgentResponseCommand`) — mesmo padrão já estabelecido pelo próprio `IAgentTool` (Exceção 3): apenas AIAgent.Infrastructure pode referenciar a Application layer de outro contexto; AIAgent.Application permanece livre de qualquer acoplamento a Communication.
+
+### 8.7 Decisão "Opção A" estendida a uma superfície de escrita — GuestOperations
+
+Diferente do CP3 (onde apenas Query Mediators foram promovidos), `AddGuestOperationsModule` agora registra também `AddGuestOperationsApplicationMediator()` e todos os 4 pares repositório/reader (antes exclusivos do já **removido** `GuestOperationsCommandDispatchExtensions.AddGuestOperationsCommandDispatch`) — porque todos os Commands de GuestOperations, incluindo os dois `NOT_MODEL_TOOL` (`RecordGuestCheckedIn`/`RecordGuestCheckedOut`), compartilham o mesmo grafo de dependências; nada permaneceu exclusivo do Api. A segurança é garantida exclusivamente por `KeepOnlyMediatorHandlers(typeof(RequestEarlyCheckInCommandHandler), typeof(RequestLateCheckoutCommandHandler), typeof(RequestGuestAccessDeliveryCommandHandler))`, chamada no `IHostPro.Worker/Program.cs` imediatamente após `AddGuestOperationsModule(...)` — os handlers de `RecordGuestCheckedIn`/`RecordGuestCheckedOut` permanecem registrados no módulo compartilhado (suas dependências continuam necessárias), mas são removidos da composição real do Worker.
+
+### 8.8 Achados corrigidos durante a implementação
+
+- **Teste de arquitetura redundante/circular** (achado antes do commit): a primeira versão de `Exactly_The_Three_Approved_Write_Tools_Exist_No_More_No_Less` comparava nomes contra o mesmo array que estava validando — sem valor real. Corrigido simplificando para uma checagem direta de existência + nome do descriptor.
+- **Colisão de nome de variável (CS0136)** em `ProcessConfirmationReplyAsync` — `content` declarado duas vezes em escopos sobrepostos. Corrigido renomeando a primeira ocorrência para `noPendingActionContent`.
+- **Violação de camadas capturada antes de compilar errado**: a primeira tentativa teria feito `ConversationMessageReceivedProcessor` (AIAgent.Application) referenciar `SendAgentResponseCommand`/`ICommunicationRequestDispatcher` de Communication.Application diretamente — viola a regra já estabelecida de que apenas AIAgent.Infrastructure pode acoplar-se à Application layer de outro contexto. Corrigido introduzindo `IAgentResponseDeliveryService` como o boundary correto (§8.6).
+- **Bug real de canonicalização silenciosa `jsonb`**: `AgentPendingAction.SanitizedArguments` mapeado como `jsonb` reescreve/normaliza espaços em branco do JSON na escrita no Postgres, quebrando o round-trip exato de string que um teste de Integration exigia. Diagnosticado por um diff de string preciso (divergência no caractere 22, espaço ausente após `:`). Corrigido remapeando a coluna para `text` (armazenamento opaco controlado pela própria aplicação, nunca consultado via operadores JSON do Postgres) e regenerando a migration (`20260831192224_AddAgentPendingActionAndOutboundMessageId`), com o bloco de RLS/grants reaplicado manualmente (a regeneração automática não o inclui).
+- **DLL pré-compilada obsoleta do MigrationRunner**: a fixture de E2E executa um `IHostPro.MigrationRunner.dll` de Release pré-compilado, não recompilado automaticamente pelas dependências de projeto do teste. Após adicionar a migration do CP4, a primeira execução E2E falhou com `column a.outbound_message_id does not exist` (Postgres `42703`). Corrigido recompilando explicitamente o MigrationRunner em Release antes de cada execução E2E subsequente.
+- **Contaminação cross-test em query de pending action**: os helpers de teste E2E inicialmente buscavam "a pending action ativa mais recente do tenant inteiro" — como os 5 testes da nova classe compartilham o mesmo `GlobalTenantId`, a pending action de um teste vazava para a asserção de outro (confirmado: um teste sem nenhuma pending action própria encontrava `Count == 1`, pertencente a um teste irmão). Corrigido reescopando os três helpers para filtrar por `ReservationId` específico, via join em `AgentSessions`.
+- **Bug real, não-determinístico, pré-existente (CP2) — desempate de ordenação em `IConversationHistoryReader`**: `.OrderBy(CreatedAtUtc).ThenBy(Id)` pode, raramente, ordenar incorretamente duas mensagens criadas microssegundos uma da outra (a resposta de proposta do próprio agente, seguida imediatamente da confirmação real do hóspede) quando ambas colidem no mesmo `timestamptz` truncado do Postgres — o desempate por `Id` (GUID aleatório) não garante que a mensagem inserida por último ordene por último. Isso fazia o `FakeModelProvider` (que sempre inspeciona apenas a última mensagem) ocasionalmente deixar de detectar o marcador de confirmação do hóspede, causando uma resposta genérica e deixando a `AgentPendingAction` presa em `Proposed`. Descoberto através de um padrão de falha não-reprodutível e variável ao longo de três execuções completas consecutivas da nova suíte E2E — assinatura clássica de uma race condition real, não contenção de recursos. Corrigido **sem alterar o schema compartilhado de `Message`** (correção de baixo risco, confinada à própria camada do AI Agent): `IAgentContextBuilder.BuildAsync` ganhou um novo parâmetro `triggeringInboundMessageId`; a implementação particiona de forma estável o histórico já ordenado, garantindo que a mensagem que disparou o processamento seja sempre a última, independentemente do desempate ambíguo do reader. Verificado por duas execuções completas e consecutivas, limpas, 5/5 da suíte E2E (anteriormente instável em 2/5, 3/5, 3/5 em três tentativas).
+- **Asserção obsoleta de um teste do CP3 (mudança de comportamento intencional, não regressão)**: `AIAgentReadToolsWorkflowRoundTripTests.Principal_flow_GetReservationSummary_...` esperava zero mensagens outbound ("o AI Agent nunca envia nada neste checkpoint") — factualmente obsoleto no CP4, que entrega uma resposta real para toda interação bem-sucedida, incluindo as somente-leitura (mandato item 33). Corrigido para esperar exatamente 1 mensagem outbound e `AgentInteraction.OutboundMessageId` preenchido, com comentário explicativo. Busca completa confirmou que nenhum outro teste fazia a mesma suposição agora obsoleta.
+- **Drift de grant `DELETE` no banco de desenvolvimento real, descoberto na verificação de schema pós-Run desta homologação**: a verificação direta (`\dp`) revelou que `ihostpro_app` possuía `DELETE` em `ai_agent.agent_tool_executions` (CP3) e `ai_agent.agent_pending_actions` (CP4) — apesar de ambas as migrations declararem explicitamente apenas `GRANT SELECT, INSERT, UPDATE` (conferido lendo o SQL de cada migration; nenhuma delas nunca concedeu `DELETE`). `agent_sessions`/`agent_interactions` (CP2, mais antigas) não apresentavam esse desvio, e nenhum `ALTER DEFAULT PRIVILEGES` no schema `ai_agent` o explica — a origem mais provável é um comando SQL manual de diagnóstico executado diretamente contra o banco de desenvolvimento em algum momento anterior desta mesma sessão de trabalho, nunca commitado como código. Corrigido via `REVOKE DELETE ON ai_agent.agent_tool_executions/agent_pending_actions FROM ihostpro_app;`, reconfirmado por nova leitura de schema: as 4 tabelas do AI Agent mostram uniformemente `INSERT/SELECT/UPDATE`, sem `DELETE`, alinhado ao que cada migration sempre declarou. Nenhuma linha de código/migration precisou de correção — o problema era exclusivamente um estado de banco de desenvolvimento fora de banda, nunca publicado, nunca chegando a produção.
+
+Nenhum desses achados exigiu mudança de escopo, nova exceção síncrona, ou decisão de produto — todos corrigidos e a implementação continuada, conforme autorização explícita do mandato ("problemas técnicos normais: corrigir e continuar").
+
+### 8.9 Testes — contagens exatas
+
+| Suíte | Resultado |
+|---|---|
+| `IHostPro.Contexts.AIAgent.Tests.Unit` | 110 aprovados |
+| `IHostPro.Contexts.AIAgent.Tests.Integration` (inclui os novos testes de `AgentPendingAction`: round-trip, FK, índice único parcial, RLS, e o round-trip de `AgentInteraction.OutboundMessageId`) | 23 aprovados |
+| `IHostPro.Contexts.GuestOperations.Tests.Unit` | 71 aprovados (sem regressão) |
+| `IHostPro.Contexts.GuestOperations.Tests.Integration` (ajustado para a remoção de `AddGuestOperationsCommandDispatch`, §8.7) | 18 aprovados |
+| `IHostPro.Contexts.Communication.Tests.Unit` | 101 aprovados (sem regressão) |
+| `IHostPro.Contexts.Communication.Tests.Integration` (inclui os 6 novos testes de `SendAgentResponseCommandHandlerTests`, primeira superfície de Command síncrono de Communication) | 26 aprovados |
+| `IHostPro.Contexts.Reservations.Tests.Unit` | 90 aprovados (sem regressão) |
+| `IHostPro.Contexts.Reservations.Tests.Integration` | 105 aprovados (sem regressão) |
+| `IHostPro.Contexts.PropertyManagement.Tests.Unit` | 202 aprovados (sem regressão) |
+| `IHostPro.Contexts.PropertyManagement.Tests.Integration` | 207 aprovados (sem regressão) |
+| `IHostPro.Contexts.Housekeeping.Tests.Unit` | 120 aprovados (sem regressão) |
+| `IHostPro.Contexts.Housekeeping.Tests.Integration` | 101 aprovados (sem regressão) |
+| `IHostPro.Contexts.Configuration.Tests.Unit` | 93 aprovados (sem regressão) |
+| `IHostPro.Contexts.Configuration.Tests.Integration` | 80 aprovados (sem regressão) |
+| `IHostPro.ArchitectureTests` (novo arquivo `AIAgentWriteToolsArchitectureTests`, 7 testes; `AIAgentReadToolsArchitectureTests` ampliado para 11 Tools aprovadas; total 291, de 284) | 291 aprovados |
+| `AIAgentWriteToolsWorkflowRoundTripTests` (E2E real — Postgres/RabbitMQ/Worker/Api reais) — Early Check-In (fluxo de confirmação em dois turnos), negação de negócio (sucesso técnico), Access Delivery (execução imediata sem pending action), resposta real para interação somente-leitura, duplicidade de confirmação | 5 aprovados (parte da suíte completa abaixo) |
+| `IHostPro.Api.Tests.Integration` (suíte completa) | 76 aprovados |
+| MigrationRunner Run #1/#2 | ver §8.10 |
+| Build Release | ver §8.10 |
+
+### 8.10 Regressão completa e evidência final
+
+| Suíte | Resultado |
+|---|---|
+| MigrationRunner Run #1 (Postgres/RabbitMQ de desenvolvimento reais) | Exit code 0 — todos os 11 DbContexts migrados (nenhuma migration pendente nova nesta execução de fechamento — `AgentPendingAction`/`OutboundMessageId` já aplicados anteriormente na sessão); nova topologia RabbitMQ reconfirmada sem alteração |
+| MigrationRunner Run #2 (mesmo banco, imediatamente em seguida) | Exit code 0 — zero drift, zero linha nova em qualquer backfill (`Communication conversation backfill: 3/3 tenants checados, 0 inseridos`, e demais backfills igualmente 0/0) |
+| Verificação de schema pós-Run (read-only, SQL direto) | `ai_agent.agent_pending_actions`: coluna `sanitized_arguments` confirmada `text` (não `jsonb`); FK real `fk_agent_pending_actions_agent_interactions` (`ON DELETE RESTRICT`) para `ai_agent.agent_interactions(id)`; índice único parcial `ix_agent_pending_actions_active_per_session` filtrado por `status IN ('Proposed','Confirmed')`; RLS `FORCE ROW LEVEL SECURITY` com policy `tenant_isolation` fail-closed; `ai_agent.agent_interactions.outbound_message_id` presente, `uuid` nullable. **Achado e corrigido nesta verificação**: drift de grant `DELETE` em 2 das 4 tabelas do AI Agent — ver §8.8 |
+| `IHostPro.Api.Tests.Integration` (suíte completa, execução limpa e isolada, RabbitMQ dev parado durante a execução e reiniciado logo em seguida) | 76 aprovados, 0 com falha (25 min 30 s) |
+| Build Release (solução completa) | 0 erro (20 avisos `NU1903` pré-existentes, SSH.NET, não relacionados a este checkpoint) |
+| `git diff --check` | Sem erros (apenas avisos benignos de normalização LF→CRLF) |
+| Revisão manual completa do diff e dos arquivos novos do CP4 | Nenhum vazamento de secret/QR/`AccessCredentialSecretReference`/`GuestPhone` bruto/payload de provider/tipo específico de Anthropic/Claude; `GuestPhone` em `SendAgentResponseCommandHandler` usado exclusivamente em memória (checagem de nulidade, mascaramento antes de persistir, repasse ao connector), nunca logado ou persistido em claro — mesmo padrão já aprovado de `GuestAccessDeliveryProcessor`/`ReservationCreatedCommunicationProcessor`/`PixChargeCreatedDeliveryProcessor` (Fase 9/10); confirmado por leitura direta de cada Tool, de `AgentPendingAction`, de `SendAgentResponseCommand`/`Result`/`CommandHandler`, e do `ConversationMessageReceivedProcessor` reescrito |
+
+**Nota de transparência sobre `IHostPro.Contexts.Configuration.Tests.Integration`**: durante a execução sequencial da matriz de regressão completa (múltiplas suítes de Integration rodadas uma após a outra contra o mesmo Postgres real de desenvolvimento), `Benchmark_EARLY_CHECKIN_effective_resolution_meets_the_50ms_p95_target_with_a_warm_cache` falhou uma única vez (79/80). Configuration não foi tocado pelo CP4 (nenhum arquivo do contexto aparece no diff). Reexecutado isoladamente (passou em ~1s) e depois a suíte completa novamente do zero (80/80 aprovados) — confirmando contenção de recursos transitória da máquina local sob carga prolongada, mesmo padrão de flakiness de benchmark já observado e documentado no fechamento do CP3 (§7.9), não uma regressão real deste checkpoint.
+
+`Cp4CommitCount`: registrado no relatório final da conversa de homologação.
