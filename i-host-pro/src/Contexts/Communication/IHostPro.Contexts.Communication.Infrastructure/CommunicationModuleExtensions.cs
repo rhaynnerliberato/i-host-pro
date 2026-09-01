@@ -59,6 +59,13 @@ public static class CommunicationModuleExtensions
         // plain, always-real read of Communication's own data).
         services.AddScoped<IConversationHistoryReader, ConversationHistoryReader>();
 
+        // Fase 11, Checkpoint 6 (Human Handoff, Safety & Audit) — the
+        // recipient for SendHumanHandoffNotificationCommand, and the
+        // administrative management surface (Upsert/Get). Registered here,
+        // unconditionally, exactly like every other repository in this
+        // module — no fake/real distinction of its own (plain persistence).
+        services.AddScoped<IAdministratorNotificationContactRepository, AdministratorNotificationContactRepository>();
+
         // Fase 11, Checkpoint 4 (Write Tools & Response Delivery) —
         // Communication's first Application Command, SendAgentResponseCommand
         // (Documento 13 §30's own synchronous "IA -> Application Service ->

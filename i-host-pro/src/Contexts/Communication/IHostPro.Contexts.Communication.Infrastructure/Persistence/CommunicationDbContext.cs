@@ -30,6 +30,9 @@ public sealed class CommunicationDbContext : BaseDbContext
     /// <summary>Fase 11, Checkpoint 1 (Inbound Conversation Foundation).</summary>
     public DbSet<Conversation> Conversations => Set<Conversation>();
 
+    /// <summary>Fase 11, Checkpoint 6 (Human Handoff, Safety &amp; Audit).</summary>
+    public DbSet<AdministratorNotificationContact> AdministratorNotificationContacts => Set<AdministratorNotificationContact>();
+
     public CommunicationDbContext(DbContextOptions<CommunicationDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)
     {

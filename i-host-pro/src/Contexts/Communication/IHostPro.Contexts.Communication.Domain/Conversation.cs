@@ -15,9 +15,12 @@ namespace IHostPro.Contexts.Communication.Domain;
 /// Cardinality: one active Conversation per (TenantId, ReservationId,
 /// Channel) — mandate item 19's own default preference, enforced by a unique
 /// partial index (see <c>ConversationConfiguration</c>). No archive/reopen
-/// semantics exist yet; <see cref="ConversationStatus.Active"/> is the only
-/// state this checkpoint needs (Human Handoff states are Checkpoint 6's
-/// scope, mandate item 20 — never anticipated here).
+/// semantics exist; <see cref="ConversationStatus.Active"/> remains the only
+/// state (Fase 11, Checkpoint 6 official decision —
+/// <c>ConversationStatusChanged=false</c>): "the AI is suspended for a human
+/// handoff" is a fact about <c>AIAgent.AgentSession</c>, never duplicated
+/// here — a Conversation is a message channel, independent of who is
+/// currently driving it.
 ///
 /// Deliberately carries no AI-related state (no intent, no confidence, no
 /// model, no prompt) — that belongs to the future AI Agent Bounded Context's
@@ -69,7 +72,7 @@ public sealed class Conversation : AggregateRoot<Guid>, ITenantOwned
     }
 }
 
-/// <summary>Deliberately minimal (mandate item 20) — Escalated/SuspendedAI/Resolved/Closed belong to Checkpoint 6 (Human Handoff, Safety &amp; Audit), never anticipated here.</summary>
+/// <summary>Deliberately a single value (Fase 11, Checkpoint 6 official decision, <c>ConversationStatusChanged=false</c>) — human-handoff state lives exclusively in <c>AIAgent.AgentSessionStatus.Escalated</c>, never duplicated here.</summary>
 public enum ConversationStatus
 {
     Active,
