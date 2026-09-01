@@ -46,6 +46,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Fase 11, Checkpoint 4 — SendAgentResponseCommand is Communication's
+         first Application Command; needed Mediator for the first time,
+         mirrors Payments.Application's own Checkpoint 3 package reference. -->
+    <PackageReference Include="Mediator.SourceGenerator" Version="3.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <!-- Structured, PII-safe audit logging — same package/pattern already
          used by Identity.Application/Workflow.Application. -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />

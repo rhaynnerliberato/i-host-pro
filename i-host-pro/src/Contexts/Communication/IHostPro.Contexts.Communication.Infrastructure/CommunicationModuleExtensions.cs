@@ -59,6 +59,19 @@ public static class CommunicationModuleExtensions
         // plain, always-real read of Communication's own data).
         services.AddScoped<IConversationHistoryReader, ConversationHistoryReader>();
 
+        // Fase 11, Checkpoint 4 (Write Tools & Response Delivery) —
+        // Communication's first Application Command, SendAgentResponseCommand
+        // (Documento 13 §30's own synchronous "IA -> Application Service ->
+        // Communication" chain). Registered here, unconditionally, rather
+        // than a separate Api-only CommandDispatch extension — Communication
+        // has no Api project, and this Command's only real consumer is the
+        // AI Agent's own Worker-hosted orchestrator (Exception #3). The
+        // handler's own IOutboundMessageConnector dependency still resolves
+        // only where AddCommunicationReservationConsumer (Development-only)
+        // has also been called — same fail-safe boundary every other
+        // outbound-sending processor in this Bounded Context already has.
+        services.AddCommunicationApplicationMediator();
+
         return services;
     }
 
