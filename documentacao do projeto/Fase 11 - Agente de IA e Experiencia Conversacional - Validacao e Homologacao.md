@@ -1,7 +1,7 @@
 # Fase 11 — Agente de IA e Experiência Conversacional — Validação e Homologação
 
-Versão: 1.6
-Status: Em andamento — Checkpoint 7 concluído
+Versão: 1.7
+Status: Concluída — DEFINITIVAMENTE CONCLUÍDA E HOMOLOGADA NO NÍVEL MVP, COM BLOCKERS DE PRODUCTION DOCUMENTADOS (Checkpoint 8 — Final Homologation)
 
 ## 1. Objetivo
 
@@ -46,8 +46,8 @@ CP3 (concluído) — Read Tools & Context Builder
 CP4 (concluído) — Write Tools & Response Delivery
 CP5 (concluído) — Policies, Workflow & Conversational Orchestration
 CP6 (concluído) — Human Handoff, Safety & Audit
-CP7 (concluído, este documento) — Anthropic Claude Real Proof
-CP8 — Final Homologation
+CP7 (concluído) — Anthropic Claude Real Proof
+CP8 (concluído, este documento) — Final Homologation
 
 ## 5. Checkpoint 1 — Inbound Conversation Foundation
 
@@ -726,3 +726,95 @@ Dois cenários, minimizando chamadas reais (pagas) à Anthropic: **Read Tool com
 - Motor de capabilities por provider (`ProviderCapability` abstrato) — decisão explícita do usuário de nunca criar essa abstração só para resolver a incompatibilidade de temperature (§11.1).
 
 `Cp7CommitCount`: registrado no relatório final da conversa de homologação.
+
+## 12. Checkpoint 8 — Final Homologation
+
+**Status:** Concluído. `Phase11MvpCompleted=true`. `ProductionReady=false`. `CorrectiveImplementationNeeded=false`. `CP8ClosureMode=DOCS_ONLY`.
+
+**Objetivo**: auditoria final read-only — nunca a adição de novas features — para determinar se a Fase 11 pode ser declarada definitivamente concluída e homologada no nível MVP, separando rigorosamente MVP blockers, Production blockers, capabilities deferidas, inconsistências documentais e débito técnico não-bloqueante. Zero código, zero migration alterados neste checkpoint.
+
+### 12.1 Metodologia
+
+Revalidação direta contra as fontes de verdade: Documento 16 (Arquitetura do Agente de IA), Documento 06 (Máquina de Estados), Documento 08 (Motor de Configuração e Hierarquia de Regras), Documento 12 (Modelo de Dados Conceitual), Documento 07 (Catálogo de Eventos), Architecture Principles §14, e os próprios documentos de homologação da Fase 9/Fase 10 — lidos integralmente, nunca por memória. Matriz completa dos 29 itens MUST originalmente aprovados no CP0 (AI Gateway, Context Builder, Tools, Anthropic real, multilingual, personalidade/tom, contexto dinâmico, memória de sessão, histórico transacional, RAG, read/write tools, confirmação, integração de policy/workflow, human handoff, auditoria, tracking de tokens/custo, anti-alucinação, prompt dinâmico, fallback/retry, retomada manual, safety, prova real Anthropic) — todos classificados `IMPLEMENTED`, exceto os itens já formalmente deferidos desde gates anteriores (Group/Condomínio, autonomia 0-4, versionamento de prompt, voz/imagem/documento, FAQ estruturada, atribuição humana/chat embutido), nenhum `BLOCKED`.
+
+Verificação direta de código (nunca presumida): catálogo de Tools confirmado por grep contra `AIAgentModuleExtensions.cs` (único site de registro) — exatamente 8 Read Tools + 3 Write Tools aprovadas, zero Tool proibida (`CancelReservation`/`CreatePix`/`RecordGuestCheckedIn`/`RecordGuestCheckedOut`/`CreateWorkflow`/`NotifyFrontDesk`/`RegisterIncident` como Tool — nenhuma existe). RLS/grants das 8 tabelas relevantes da Fase 11 (`ai_agent.*` × 5, `communication.conversations`/`messages`/`administrator_notification_contacts`) reverificados diretamente contra o Postgres real de desenvolvimento: `rls_enabled=true`/`rls_forced=true` em todas, grants `ihostpro_app` uniformemente `INSERT,SELECT,UPDATE`, zero `DELETE` — sem drift desde o CP6/CP7.
+
+### 12.2 Decisão formal — `ReservationResolutionZeroOrMultiple`
+
+O CP5 registrou esta lacuna como `DEFERRED_ARCHITECTURAL_GAP, a ser reavaliado no CP8` — este checkpoint é exatamente essa reavaliação. Hoje (inalterado desde o CP1): uma mensagem inbound cujo telefone resolve 0 ou N Reservation candidatas nunca cria `Conversation`, nunca recebe resposta do AI Agent — apenas logado.
+
+**Decisão final, aprovada pelo usuário: Opção B — não bloqueia o MVP.**
+
+```
+ReservationResolutionZeroOrMultiple=DEFERRED_ARCHITECTURAL_GAP
+BlocksPhase11Mvp=false
+```
+
+Justificativa formal: (1) Documento 16 e Documento 06, lidos integralmente, não exigem atendimento universal de toda mensagem inbound; (2) nenhum dos dois documentos define comportamento obrigatório para zero ou múltiplas reservas candidatas — a própria máquina de estados do Documento 06 §6 não modela nenhum estado de "reserva não resolvida"/"hóspede ambíguo", uma lacuna já existente no desenho conceitual original, não introduzida pela implementação; (3) o comportamento já estava explicitamente registrado desde o CP5 como gap arquitetural deferido, com reavaliação obrigatória marcada para este checkpoint; (4) o MVP do AI Agent permanece deliberadamente reservation-scoped — a automação conversacional inicia quando existe exatamente uma Reservation resolvida; (5) 0/N permanece backlog futuro explícito, nunca uma promessa silenciosa feita hoje. Nenhum fallback novo foi implementado neste checkpoint.
+
+### 12.3 Inconsistências documentais registradas (sem alteração de comportamento, sem requisito novo)
+
+Achados desta auditoria, registrados por transparência — nenhum exige mudança de código, nenhum documento-fonte (Documento 06/08/12/16) foi alterado por este checkpoint (fora do escopo de uma auditoria; qualquer correção aos documentos-fonte originais exigiria seu próprio mandato de aprovação):
+
+- **Temperature** — Documento 08 §10 lista "Temperatura" como dimensão configurável obrigatória do agente IA; o modelo real selecionado (`claude-sonnet-4-6`) rejeita qualquer valor customizado com HTTP 400. Classificação final: `TemperatureControl=NOT_SUPPORTED_BY_SELECTED_MODEL`, `TemperatureSentToAnthropic=false`, `Classification=NOT_APPLICABLE_WITH_SELECTED_PROVIDER_MODEL` — uma exceção documentada e já aprovada (Opção C, CP7) a um requisito que colide com uma restrição técnica real e verificada, nunca uma omissão silenciosa.
+- **Group/Condomínio** — Documento 16 §9 menciona 5 camadas de hierarquia (incluindo grupo e condomínio); Documento 08 §7 (a autoridade real do Policy Engine) define apenas 4 (`GLOBAL/TENANT/GRUPO/IMÓVEL`) — Condomínio nunca foi um escopo oficial do Policy Engine. `GroupPromptScope=false`/`CondominiumPromptScope=false` — débito pré-existente da Fase 5 (nenhuma policy da plataforma implementa o escopo GRUPO hoje, em nenhum PolicyCode), não específico da Fase 11, não bloqueante.
+- **Prompt versioning** — Documento 12 §20 menciona "prompts" numa lista geral de versionamento de artefatos de configuração; o CP0 já decidiu explicitamente `PromptVersioning=NOT MVP`, reafirmado sem contradição nova.
+- **Documento 06, inconsistência interna** — §6 define 8 estados para o sub-fluxo de Atendimento IA; o quadro-resumo do próprio §18 condensa para apenas 4, omitindo "Aguardando Resposta"/"Escalado para Humano"/"Aguardando Informação"/"Encerrado" — inconsistência interna do documento, identificada por este checkpoint, sem relação com a implementação real.
+
+### 12.4 Capabilities deferidas (não-bloqueantes, todas já aprovadas em gates anteriores)
+
+Reservation resolution zero/multiple fallback; Group prompt scope; Condominium prompt scope; autonomia por níveis 0-4 (Documento 08 §11); versionamento de prompt; voz; imagem; documento; FAQ estruturada; Wi-Fi/estacionamento/regras estruturadas; atribuição de atendentes humanos; chat embutido entre hóspede e atendente; orquestração baseada em Workflow (nunca necessária — suspender é domínio do próprio AI Agent, notificar é reação do próprio Communication).
+
+### 12.5 Production blockers (preservados explicitamente, nunca convertidos em MVP blocker)
+
+| Flag | Valor | Origem |
+|---|---|---|
+| `ProductionAnthropicSecretBackend` | `false` | CP7 — nenhum backend real de secret existe para nenhum provider desta base |
+| `MetaAppPublished` | `false` | Fase 9 — herdado, não reaberto |
+| `RealDeliveredWebhookProof` | `false` | Fase 9 — herdado, não reaberto |
+| `WolverineClusterAgentAssignmentDebt` | `true` | Fase 9/10 — débito técnico transversal, destino Fase 12 (Hardening); manifestação plausível observada durante shutdown do Worker no E2E real do CP7 (`durability agent` para `dashboard_messaging`), sem causar nenhuma falha de teste |
+| `ProductionContextBudgetStrategyRequired` | `true` | CP7 — `ContextWindowStrategy=FULL_CURRENT_CONVERSATION_CP7_MVP` foi decisão explícita do mandato; sem estratégia de truncamento para conversas longas em escala real |
+| `PricingConfigStaleness` | `ProductionOperationalDebt` | CP7 — pricing hardcoded, referência explícita e auditável hoje, mas sem atualização automática |
+
+Todos: `BlocksPhase11Mvp=false`, `BlocksProductionReady=true`.
+
+### 12.6 Evidência reutilizada (nenhuma repetição desnecessária)
+
+Fechamento docs-only — nenhum código foi alterado, então nenhuma regressão nova foi executada. Evidência já obtida no CP7, reutilizada integralmente: `IHostPro.Api.Tests.Integration`=87/87; `IHostPro.ArchitectureTests`=304/304; `AnthropicRealProofTests`=1/1 (real); `AnthropicRealAgentWorkflowRoundTripTests`=2/2 (real); Release build=0 erro; `git diff --check`=limpo; revisão de dados sensíveis=limpa. RLS/grants das 8 tabelas relevantes reverificados frescos nesta auditoria (§12.1), sem drift. Nenhuma migration nova — `MigrationRunner` não reexecutado (nenhuma alteração de schema neste checkpoint).
+
+### 12.7 Fechamento formal da Fase 11
+
+```
+Phase11MvpCompleted=true
+AnthropicIntegrated=true
+AnthropicModel=claude-sonnet-4-6
+RealAnthropicProof=true
+ExternalLLMNetworkCalls>0
+ConversationalOrchestrationImplemented=true
+ReadToolsImplemented=true
+BusinessWriteToolsImplemented=true
+WriteConfirmationImplemented=true
+HumanHandoffImplemented=true
+MonetaryCostTracking=true
+MultilingualImplemented=true
+StructuredRagImplemented=true
+VectorDatabase=false
+Embeddings=false
+RealWriteToolProof=false
+BlocksPhase11MvpDueToRealWriteToolProof=false
+ReservationResolutionZeroOrMultiple=DEFERRED_ARCHITECTURAL_GAP
+BlocksPhase11MvpDueToReservationResolutionZeroOrMultiple=false
+GroupPromptScope=false
+CondominiumPromptScope=false
+BlocksPhase11MvpDueToPromptHierarchy=false
+PromptVersioning=false
+BlocksPhase11MvpDueToPromptVersioning=false
+HumanAssignmentImplemented=false
+EmbeddedHumanChatImplemented=false
+BlocksPhase11MvpDueToHumanOperations=false
+ProductionReady=false
+```
+
+**Fase 11 — Agente de IA e Experiência Conversacional = DEFINITIVAMENTE CONCLUÍDA E HOMOLOGADA NO NÍVEL MVP, COM BLOCKERS DE PRODUCTION DOCUMENTADOS.**
+
+`Cp8CommitCount`: registrado no relatório final da conversa de homologação.
