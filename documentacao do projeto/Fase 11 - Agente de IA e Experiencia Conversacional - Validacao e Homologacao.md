@@ -1,7 +1,7 @@
 # Fase 11 — Agente de IA e Experiência Conversacional — Validação e Homologação
 
-Versão: 1.5
-Status: Em andamento — Checkpoint 6 concluído
+Versão: 1.6
+Status: Em andamento — Checkpoint 7 concluído
 
 ## 1. Objetivo
 
@@ -45,8 +45,8 @@ CP2 (concluído) — AI Agent Foundation
 CP3 (concluído) — Read Tools & Context Builder
 CP4 (concluído) — Write Tools & Response Delivery
 CP5 (concluído) — Policies, Workflow & Conversational Orchestration
-CP6 (concluído, este documento) — Human Handoff, Safety & Audit
-CP7 — Anthropic Claude Real Proof
+CP6 (concluído) — Human Handoff, Safety & Audit
+CP7 (concluído, este documento) — Anthropic Claude Real Proof
 CP8 — Final Homologation
 
 ## 5. Checkpoint 1 — Inbound Conversation Foundation
@@ -627,3 +627,102 @@ Duas novas ramificações, nesta ordem: (1) **guard de sessão suspensa** — ve
 - Integração real com Anthropic — permanece integralmente CP7.
 
 `Cp6CommitCount`: registrado no relatório final da conversa de homologação.
+
+## 11. Checkpoint 7 — Anthropic Claude Real Proof
+
+**Status:** Concluído e homologado. `AnthropicIntegrated=true`. `AnthropicModel=claude-sonnet-4-6`. `AnthropicSdk=false`. `Transport=REST_HTTPCLIENT`. `TemperatureControl=NOT_SUPPORTED_BY_SELECTED_MODEL`. `TemperatureSentToAnthropic=false`. `RealAnthropicProof=true`. `ExternalLLMNetworkCalls>0`. `RealReadToolProof=true`. `RealHumanHandoffProof=true`. `RealWriteToolProof=false`. `MultilingualProof=pt-BR,en-US`. `RealTokenUsageProof=true`. `MonetaryCostTracking=true`. `ProductionAnthropicSecretBackend=false`.
+
+**Objetivo**: substituir, atrás da mesma interface `IModelProvider` já homologada desde o CP2, o `FakeModelProvider` determinístico por uma integração REST real com a Anthropic Messages API (`claude-sonnet-4-6`) — prova real de rede, uso de tokens, custo monetário, seleção de Read Tool, classificação de human handoff e suspensão pós-escalonamento — mantendo a regressão determinística inteira (87 testes de `IHostPro.Api.Tests.Integration`) inalterada e gated a um provider `Fake` por padrão. Nenhum SDK oficial/não-oficial, nenhuma prova real de Write Tool (fora de escopo), nenhum backend de secret de Produção.
+
+### 11.1 Governança prévia — CP7 Decision/Contract Gate (read-only) e a incompatibilidade de temperature
+
+Antes de qualquer código, o usuário exigiu um Decision/Contract Gate exclusivamente de leitura (42 itens), cobrindo escolha de modelo, contrato da API, config de provider, fonte/comportamento fail-closed do secret, fonte do system prompt, personalidade/tom, hierarquia de configuração (confirmando a soberania do modelo GLOBAL→TENANT→PROPERTY já decidido na Fase 5, Group/Condomínio permanecendo deferred), estratégia de context window, cost tracking, comportamento de confidence, estratégia de intent/tool-call estruturado, formato de idioma, ownership de timezone, classificação de retry, padrão de HTTP client, telemetria, e o gate de teste real (citando `MetaWhatsAppSandboxProofTests` como precedente exato). Aprovado com um mandato de implementação de 80 itens, travando literalmente: `AnthropicModel=claude-sonnet-4-6`, `Transport=REST_HTTPCLIENT`, `TemperatureDefault=0.2`, `MaxOutputTokens=2048`, `LanguageFormat=BCP47`, `TimezoneOwner=Property`, `MonetaryCostTracking=IMPLEMENT_NOW`, `ContextWindowStrategy=FULL_CURRENT_CONVERSATION_CP7_MVP`, entre outros.
+
+**Achado crítico, descoberto antes de qualquer código de produção**: por exigência do próprio mandato (item 73/76 — verificar a documentação OFICIAL atual antes de implementar, parar se a API rejeitar o contrato), a documentação oficial da Anthropic (`platform.claude.com/docs`) foi consultada e confirmou que o parâmetro `temperature` da Messages API é *"Deprecated. Models released after Claude Opus 4.6 do not support setting temperature. A value of 1.0 will be accepted for backwards compatibility, all other values will be rejected with a 400 error."* — `claude-sonnet-4-6`, lançado depois do Opus 4.6, está nessa categoria: enviar `temperature=0.2` (a própria decisão do item 1 do mandato) teria causado HTTP 400 em toda chamada real. Reportado e parado exatamente como o próprio mandato exige, sem trocar o modelo silenciosamente. O usuário resolveu explicitamente como **Opção C**: manter `claude-sonnet-4-6` (nunca trocar de modelo por causa disso), remover `Temperature` inteiramente do contrato MVP de `AI_AGENT_BEHAVIOR` — nunca reintroduzida como nullable/override/`1.0`-fixo só para preservar artificialmente o requisito antigo, nenhuma abstração de `ProviderCapability` criada só para este ponto. `TemperatureControl=NOT_SUPPORTED_BY_SELECTED_MODEL`/`TemperatureSentToAnthropic=false` são decisões oficiais e definitivas — nunca reabertas.
+
+### 11.2 `AnthropicModelProvider` — REST puro, sem SDK (ADR-009)
+
+`AnthropicModelProvider` (novo, `AIAgent.Infrastructure.ModelProviders.Anthropic`) — segunda implementação real de `IModelProvider`, via `IHttpClientFactory` (sem Polly, sem SDK oficial/não-oficial da Anthropic — provado por `AnthropicModelProviderArchitectureTests.No_Third_Party_Anthropic_SDK_Package_Is_Referenced`). Endpoint `https://api.anthropic.com/v1/messages`, header `anthropic-version: 2023-06-01`, autenticação via `x-api-key` (nunca `Bearer`). Todo DTO de request/response (`AnthropicDtos.cs`) é `internal sealed`, confinado ao namespace `AIAgent.Infrastructure.ModelProviders.Anthropic` — provado por `AnthropicModelProviderArchitectureTests.Every_Anthropic_Specific_Type_Lives_In_Its_Own_Dedicated_Infrastructure_Namespace`, nunca vazando para Domain/Application (o próprio `IModelProvider`/`ModelRequest`/`ModelResult`, definidos no CP2, permanecem inteiramente provider-neutros).
+
+### 11.3 `respond_to_guest` — control tool privado, nunca uma Tool de negócio
+
+Como um provider real não expõe os marcadores determinísticos do `FakeModelProvider`, a extração estruturada de metadados (texto final, idioma, intent, confirmation intent) usa uma tool definition privada e não-de-negócio, `respond_to_guest` (schema JSON `message`/`language`/`intent`(enum fechado dos 11 valores conhecidos)/`confirmation_intent`) — nunca um `IAgentTool`, nunca listada no catálogo de negócio, apenas mapeada diretamente para `ModelResult`. Estratégia de `tool_choice` em duas chamadas, preservando a mesma disciplina "nunca multi-hop" já estabelecida pelo `FakeModelProvider` desde o CP3: **Call#1** (nenhuma mensagem de papel `Tool` no histórico ainda) oferece `tool_choice={"type":"any"}` com todas as Tools de negócio + `respond_to_guest`; **Call#2** (última mensagem já é de papel `Tool`, ou seja, depois de uma Tool real/sintética já ter produzido conteúdo) força `tool_choice={"type":"tool","name":"respond_to_guest","disable_parallel_tool_use":true}` sozinha. Mapeamento de papel de mensagem sem `tool_result` nativo: `Guest→"user"`, `Agent→"assistant"`, `Tool→"user"` com prefixo textual `"[Resultado do sistema] "` — decisão deliberada, já que `ModelMessage` (o contrato provider-neutro) não carrega `tool_use_id` e cada chamada é stateless, mirroring o próprio desenho stateless do `FakeModelProvider`.
+
+### 11.4 Secret handling e seleção fail-closed de provider
+
+`IAnthropicCredentialProvider`/`DevelopmentAnthropicCredentialProvider` (mirrors `DevelopmentWhatsAppCredentialProvider` exatamente) — resolve `AIAgent:Anthropic:Secrets:ApiKey` via `IConfiguration` (User Secrets/environment variable em Development, nunca um valor versionado em `appsettings.json`), registrado somente quando `IsDevelopment()` (parâmetro explícito `bool isDevelopmentEnvironment`, nunca resolvido via `IHostEnvironment` dentro do módulo — mirrors `AddExternalIntegrationsModule`). `ProductionAnthropicSecretBackend=false` — nenhum Key Vault/backend real existe ainda para nenhum provider desta base de código; construir um está fora do escopo deste checkpoint. Seleção via `AIAgent:ModelProvider` (`Fake` padrão/`Anthropic`) — um valor não reconhecido e explicitamente setado falha ALTO no startup (`InvalidOperationException`), nunca um fallback silencioso para Fake. Fora de Development com `Anthropic` selecionado, a resolução de DI falha no startup (nenhum `IAnthropicCredentialProvider` registrado) — o próprio requisito fail-closed do mandato, verificado estruturalmente. A chave nunca se torna campo em nenhum tipo fora do próprio credential provider — provado por `AnthropicModelProviderArchitectureTests.No_Api_Key_Field_Exists_Outside_The_Credential_Provider_Itself`.
+
+### 11.5 `AI_AGENT_BEHAVIOR` — primeiro novo PolicyCode desde o fechamento do catálogo da Fase 5
+
+Primeira nova `PolicyCode` desde `EARLY_CHECKIN`/`LATE_CHECKOUT` (Fase 5) — categoria `"IA"` (uma das categorias já oficiais do Documento 08 §4). Contrato final (pós-Opção C, §11.1): `SystemPrompt, Tone, Formality` — nunca `Temperature`. `GetEffectivePolicyQueryHandler` não é genérico (um `switch` fixo de 2 casos, cada um despachando para seu próprio reader tipado) — o armazenamento subjacente (`PolicyValue`/`GlobalPolicyValue`) já é genérico e não exigiu migration para o dado; o lado de leitura exigiu um novo reader tipado (`IAiAgentBehaviorPolicyReader`/`AiAgentBehaviorPolicy`, mirroring `IEarlyCheckInPolicyReader`/`EarlyCheckInPolicy` exatamente) e um novo `case` no switch — nunca uma genericização do engine (decisão explícita do mandato). Resolvido via a Exceção 1 já aprovada (qualquer contexto pode consultar Configuration & Policy síncrona/diretamente) — `AgentContextBuilder` referencia `Configuration.Contracts` diretamente, mesmo padrão já usado por `IConversationHistoryReader`.
+
+`AgentContextBuilder` foi reescrito para compor `ModelRequest.SystemPrompt` de três partes: (1) uma instrução técnica mínima e fixa de fallback de segurança (estrutural/de segurança apenas — nunca persona de negócio, distinção explícita do mandato em relação à proibição de um prompt de negócio FIXO já registrada no CP2, Documento 16 §22); (2) o `SystemPrompt`/`Tone`/`Formality` de `AI_AGENT_BEHAVIOR` quando resolvido; (3) um fato real de horário atual, via `TimeProvider` + o timezone IANA da própria Property, quando configurado — ou uma instrução explícita "timezone não configurado, nunca presuma um" quando não.
+
+### 11.6 `Property.TimeZoneId` — IANA, extensão do comando administrativo já existente
+
+`Property` ganha `TimeZoneId` (string?, nullable, formato IANA) — validado via `TimeZoneInfo.TryFindSystemTimeZoneById` (nunca uma lista mantida manualmente) dentro de `UpdatePropertyCommandHandler`, estendendo o vertical já existente (`UpdatePropertyCommand`/`PropertyResult`/`UpdatePropertyRequest`/`PropertyDetailResponse`) em vez de criar um novo endpoint — preferência explícita do mandato. Omitido mantém o valor atual; `null` explícito remove; um valor inválido falha com `property_timezone_invalid`, sem efeito colateral. Sem backfill para properties existentes. `IPropertyLocalTimeContextReader`/`PropertyLocalTimeContextReader` (novo, AIAgent.Application/Infrastructure) faz um lookup cross-context de dois saltos (Reservation → PropertyId, Property → TimeZoneId) reutilizando os MESMOS dispatchers que `GetPropertyInformationTool` já usa (Exceção 3) — nenhuma nova exceção síncrona.
+
+### 11.7 Rastreamento monetário real — `AgentInteraction.EstimatedCostUsd`/`CostPricingReference`
+
+`AgentInteraction` ganha `EstimatedCostUsd` (decimal?) e `CostPricingReference` (string?) — computados inteiramente em `AnthropicModelProvider`, a partir do uso real de tokens × sua própria configuração de pricing (`AnthropicPricingOptions`, Infrastructure, nunca Domain/Application): `(inputTokens/1_000_000 × inputRate) + (outputTokens/1_000_000 × outputRate)`, com `inputRate=$3`/`outputRate=$15` por milhão de tokens, `reference="claude-sonnet-4-6"` — confirmados como os valores oficiais atuais da Anthropic durante a mesma verificação de documentação do §11.1. `FakeModelProvider` deixa ambos `null` (`null` = não aplicável/não precificado, nunca zero).
+
+### 11.8 Classificação de falha permanente vs. transitória
+
+`ModelProviderException` ganha `IsPermanent` (bool, default `false`) — 400/401/403/modelo-não-suportado são permanentes (nunca reexecutados); 429/5xx/timeout/erro de rede são transitórios, reutilizando exatamente a mesma política de 1 retry já existente desde o CP5 (`GenerateWithRetryAsync`, agora `catch (ModelProviderException ex) when (!ex.IsPermanent)`) — nenhum framework novo, extensão pontual e aditiva do mecanismo já homologado.
+
+### 11.9 Prova real — duas suítes complementares, achado autônomo de credencial
+
+**Suíte estreita** (`AnthropicRealProofTests`, `AIAgent.Tests.Integration`) — mirrors `MetaWhatsAppSandboxProofTests` exatamente: verifica presença local da credencial (User Secrets do `IHostPro.Worker`, id `dotnet-IHostPro.Worker-cc769433-0535-453a-bbdf-17f44d398b0c` — confirmado por evidência direta do próprio código, nunca presumido, após uma orientação anterior questionar o path), nunca `dotnet user-secrets list`, nunca imprime o valor; ausente, imprime o comando exato de configuração e passa trivialmente. Presente, chama a API real diretamente (fora do pipeline completo) e prova, num único teste: seleção real de `GetReservationSummary`, classificação real de human handoff, detecção real de idioma pt-BR/en-US, resistência a um prompt de injeção pedindo a própria API key.
+
+**Suíte de ciclo completo** (`AnthropicRealAgentWorkflowRoundTripTests`, novo arquivo em `IHostPro.Api.Tests.Integration`) — mirrors a infraestrutura de `AIAgentReadToolsWorkflowRoundTripTests`/`AIAgentHumanHandoffWorkflowRoundTripTests` (Postgres/RabbitMQ via Testcontainers, subprocesso real do `IHostPro.Worker`, `WebApplicationFactory<Program>` real do `IHostPro.Api`, webhook assinado real), mas com `AIAgent__ModelProvider=Anthropic` no ambiente do Worker em vez do `Fake` padrão — `Fixture` própria e dedicada (nunca compartilha a Fixture das suítes determinísticas, nunca contamina a regressão de 87 testes). A chave real nunca é lida/impressa/repassada por este processo: com `DOTNET_ENVIRONMENT=Development` setado e o `UserSecretsId` do próprio `IHostPro.Worker.csproj` embutido na assembly, o Generic Host do .NET carrega automaticamente o mesmo User Secrets store já confirmado presente — mecanismo padrão, nunca uma passagem manual de valor. Gated: sem credencial local, `InitializeAsync` retorna imediatamente sem subir nenhum container, e cada `[Fact]` passa trivialmente.
+
+Dois cenários, minimizando chamadas reais (pagas) à Anthropic: **Read Tool completo** (2 chamadas reais — Call#1 seleciona `GetReservationSummary`, execução real da Tool, Call#2 com o resultado real, resposta final real entregue como `Communication.Message` outbound real) e **Human Handoff completo + suspensão** (1 chamada real — classificação real de `human_handoff_requested` → `AgentHumanHandoff` real com `ReasonCode=ExplicitHumanRequest` → `AgentSession.Status=Escalated` → notificação real ao administrador seedado → **uma segunda mensagem inbound na mesma sessão já escalonada, provando `PostEscalationAnthropicCalls=0`** pelo mesmo sinal estrutural já usado pelo teste determinístico do CP6 — `Intent` permanece `null` porque o guard de sessão suspensa intercepta ANTES de `IModelProvider.GenerateAsync` ser chamado, independente do provider configurado). `RealWriteToolProof=false` confirmado — nenhuma Write Tool é oferecida ou executada em nenhum dos dois cenários. **2/2 aprovados**, com evidência real: `InputTokens`/`OutputTokens` > 0, `EstimatedCostUsd` > 0, `CostPricingReference` não-vazio, `ModelProvider="Anthropic"`, `ModelName="claude-sonnet-4-6"` — todos confirmados por asserção direta contra linhas reais persistidas no Postgres real, nunca por inspeção de log.
+
+**Descoberta autônoma de credencial (mandato explícito do usuário)**: por decisão do usuário, a chave foi configurada localmente por ele mesmo (nunca colada no chat, nunca lida via `dotnet user-secrets list`, nunca impressa) — a sessão apenas confirmou presença/ausência via `IConfiguration`, checando: variáveis de ambiente (`AIAgent__Anthropic__Secrets__ApiKey`/`ANTHROPIC_API_KEY` e variantes, escopos Process/User/Machine), o User Secrets store de ambos os `UserSecretsId` existentes na máquina (`IHostPro.Worker`/`IHostPro.Api`), `launchSettings.json` de todo projeto, e confirmou que o `.env` do repositório (bloqueado pelo próprio sandbox, nunca contornado) é estruturalmente irrelevante — nenhum pacote `DotNetEnv`/dotenv é referenciado em `src/Host`. `AnthropicCredentialDiscovery=MISSING` foi o resultado inicial (reportado com `RealAnthropicProof=NOT_EXECUTED_MISSING_LOCAL_SECRET`) até o usuário configurar a chave e autorizar a execução — nenhuma tentativa de contornar o boundary de segurança, nenhum valor jamais visto pela sessão.
+
+### 11.10 Achados corrigidos durante a implementação
+
+- **Path incorreto do User Secrets, corrigido com evidência direta**: uma orientação inicial presumiu `src/Host/IHostPro.Worker` como o projeto correto para `dotnet user-secrets set`; o usuário exigiu confirmação por evidência antes de aceitar. Investigação do próprio código-fonte (`AnthropicRealProofTests.cs`'s `AddUserSecrets(WorkerUserSecretsId)` + `git grep "UserSecretsId" -- '*.csproj'`) confirmou que o literal `dotnet-IHostPro.Worker-cc769433-...` bate exatamente com o `<UserSecretsId>` de `IHostPro.Worker.csproj` (e não com o de `IHostPro.Api`) — a orientação original estava correta, agora com prova, não presunção.
+- **Conflito de porta autoinfligido, duas vezes**: o container de desenvolvimento `ihostpro-rabbitmq` (mantido em execução para o `MigrationRunner`) ocupava a porta 5672, colidindo com o RabbitMQ efêmero que cada suíte E2E baseada em Testcontainers tenta subir — reproduzido tanto na regressão completa de 87 testes quanto na nova suíte de ciclo completo deste checkpoint. Corrigido parando o container antes de cada execução E2E e reiniciando-o depois — nenhuma chamada real à Anthropic foi afetada (a falha ocorre antes de qualquer chamada de rede), nunca uma regressão de código.
+- **Relatório de um agente de pesquisa com um erro factual, verificado e corrigido antes de qualquer código**: um agente de pesquisa (Explore) usado para levantar a forma exata de `AgentInteraction`/`AgentToolExecution`/`AgentHumanHandoff` reportou incorretamente a ausência dos campos `EstimatedCostUsd`/`CostPricingReference` em `AgentInteraction` — a leitura direta do arquivo-fonte (feita antes de escrever qualquer teste novo) confirmou que ambos os campos já existiam (§11.7, implementados anteriormente nesta mesma sessão). Nenhum código foi escrito com base na informação incorreta do agente — "trust but verify" aplicado.
+
+### 11.11 Testes — contagens exatas
+
+| Suíte | Resultado |
+|---|---|
+| `IHostPro.Contexts.PropertyManagement.Tests.Unit` (inclui os 6 novos testes de validação/idempotência de `Property.TimeZoneId`) | 208 aprovados |
+| `IHostPro.Contexts.PropertyManagement.Tests.Integration` | 207 aprovados |
+| `IHostPro.Contexts.AIAgent.Tests.Unit` (inclui os 23 novos testes de `AnthropicModelProviderTests`, HTTP-fake, zero rede real) | 171 aprovados |
+| `IHostPro.Contexts.AIAgent.Tests.Integration` (inclui `AnthropicRealProofTests`, executado de fato contra a API real desta vez) | 32 aprovados |
+| `IHostPro.Contexts.Configuration.Tests.Unit` | 93 aprovados |
+| `IHostPro.Contexts.Configuration.Tests.Integration` (inclui os 2 novos testes de hierarquia de `AI_AGENT_BEHAVIOR`) | 79 aprovados, 1 falha pré-existente e não relacionada (benchmark de invalidação de cache Redis, já documentado como flaky no fechamento do CP5, confirmado passando isoladamente) |
+| `IHostPro.Contexts.Communication.Tests.Unit`/`Tests.Integration` (sanity check, sem alteração de código neste checkpoint) | 106 / 37 aprovados (sem regressão) |
+| `IHostPro.ArchitectureTests` (novo arquivo `AnthropicModelProviderArchitectureTests`, 5 testes; total 304, de 299) | 304 aprovados |
+| `AnthropicRealAgentWorkflowRoundTripTests` (E2E real, novo arquivo — real Read Tool completo, real Human Handoff completo + prova de suspensão) | 2 aprovados (execução dedicada, real, gated) |
+| `IHostPro.Api.Tests.Integration` (suíte determinística completa) | ver §11.12 |
+| MigrationRunner Run #1/#2 | ver §11.12 |
+| Build Release | 0 erro |
+
+### 11.12 Regressão completa e evidência final
+
+| Suíte | Resultado |
+|---|---|
+| MigrationRunner Run #1 (Postgres/RabbitMQ de desenvolvimento reais) | Exit code 0 — 3 migrations novas aplicadas (`AddPropertyTimeZoneId` em PropertyManagement; `AddAgentInteractionCostTracking` em AI Agent; `AddAiAgentBehaviorPolicyDefinition` em Configuration); nenhuma mudança de topologia RabbitMQ (Anthropic é um cliente REST de saída, nunca um consumer novo) |
+| MigrationRunner Run #2 (mesmo banco, imediatamente em seguida) | Exit code 0 — zero drift |
+| Verificação de schema pós-Run (read-only, SQL direto via `ihostpro_migrator`) | `property_management.properties.time_zone_id`: nullable, varchar(64); `ai_agent.agent_interactions`: `estimated_cost_usd numeric(12,6)`/`cost_pricing_reference varchar(100)`, ambos nullable; `configuration.policy_definitions`: 3ª linha seedada (`AI_AGENT_BEHAVIOR`, categoria `IA`) |
+| `IHostPro.Api.Tests.Integration` (suíte determinística completa, execução limpa — anterior à criação da nova suíte real deste checkpoint, cuja adição é estritamente aditiva e isolada, nunca compartilhando fixture/estado com nenhum dos 87 testes pré-existentes) | 87 aprovados, 0 com falha (29 min 21 s) |
+| `AnthropicRealAgentWorkflowRoundTripTests` (execução dedicada, real, dois cenários, própria Fixture isolada) | 2 aprovados, 0 com falha (Read Tool: 6s; Human Handoff + suspensão: 14s) |
+| Build Release (solução completa) | 0 erro (20 avisos `NU1903` pré-existentes, SSH.NET, não relacionados a este checkpoint) |
+| `git diff --check` | Sem erros (apenas avisos benignos de normalização LF→CRLF) |
+| Revisão de segurança sensível (varredura automatizada em toda saída de teste real e no diff completo) | Zero ocorrência de padrão de chave/`Authorization`/`x-api-key`/`Bearer` em qualquer saída de teste real ou no diff; `dotnet user-secrets list` nunca executado; nenhum corpo bruto de request/response Anthropic logado; texto de resposta do modelo (guest-facing) deliberadamente nunca reproduzido em nenhum relatório desta sessão |
+
+### 11.13 Escopo explicitamente não implementado (por decisão do gate, não por omissão)
+
+- `Temperature` no contrato `AI_AGENT_BEHAVIOR` (`TemperatureControl=NOT_SUPPORTED_BY_SELECTED_MODEL`) — removida definitivamente, nunca reintroduzida (§11.1).
+- Backend real de secret de Produção (`ProductionAnthropicSecretBackend=false`) — nenhum Key Vault/equivalente existe para nenhum provider desta base de código; fora de escopo.
+- SDK oficial/não-oficial da Anthropic (`AnthropicSdk=false`) — REST puro via `IHttpClientFactory`, decisão definitiva do ADR-009.
+- Prova real de Write Tool (`RealWriteToolProof=false`) — nenhuma Write Tool foi oferecida ou exercitada contra a API real; fora do escopo aprovado deste checkpoint.
+- Group/Condomínio na hierarquia de configuração — permanece deferred desde a Fase 5; `AI_AGENT_BEHAVIOR` segue a mesma hierarquia GLOBAL→TENANT→PROPERTY já soberana.
+- Motor de capabilities por provider (`ProviderCapability` abstrato) — decisão explícita do usuário de nunca criar essa abstração só para resolver a incompatibilidade de temperature (§11.1).
+
+`Cp7CommitCount`: registrado no relatório final da conversa de homologação.
