@@ -124,7 +124,9 @@ public static class IdentityAuthorizationExtensions
             .AddPolicy(IdentityPermissionCodes.IntegrationsManage, policy =>
                 policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.IntegrationsManage)))
             .AddPolicy(IdentityPermissionCodes.GuestOperationsManage, policy =>
-                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.GuestOperationsManage)));
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.GuestOperationsManage)))
+            .AddPolicy(IdentityPermissionCodes.AiAgentManage, policy =>
+                policy.Requirements.Add(new PermissionRequirement(IdentityPermissionCodes.AiAgentManage)));
 
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

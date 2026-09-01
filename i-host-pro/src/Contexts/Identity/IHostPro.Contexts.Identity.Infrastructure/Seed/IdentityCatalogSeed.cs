@@ -121,6 +121,13 @@ public static class IdentityCatalogSeed
         // them by value.
         new Permission("GUEST_OPERATIONS:MANAGE", "GUEST_OPERATIONS", "MANAGE"),
         new Permission("GUEST_OPERATIONS:READ", "GUEST_OPERATIONS", "READ"),
+
+        // Fase 11, Checkpoint 6 (Human Handoff, Safety & Audit) — CP6 mandate
+        // item 24: ADMIN only, mirroring IntegrationsManage/GuestOperationsManage's
+        // own precedent (no documented rule grants OPERATOR a brand-new
+        // operational capability by default). Governs the manual Resume
+        // endpoint and the administrator notification contact endpoints.
+        new Permission(IdentityPermissionCodes.AiAgentManage, "AI_AGENT", "MANAGE"),
     ];
 
     public static IReadOnlyList<RolePermission> RolePermissions { get; } =
@@ -142,6 +149,7 @@ public static class IdentityCatalogSeed
         new RolePermission("ADMIN", IdentityPermissionCodes.IntegrationsManage),
         new RolePermission("ADMIN", "GUEST_OPERATIONS:MANAGE"),
         new RolePermission("ADMIN", "GUEST_OPERATIONS:READ"),
+        new RolePermission("ADMIN", IdentityPermissionCodes.AiAgentManage),
 
         // OPERATOR — Documento 09 §6.
         new RolePermission("OPERATOR", "PROPERTIES:READ"),

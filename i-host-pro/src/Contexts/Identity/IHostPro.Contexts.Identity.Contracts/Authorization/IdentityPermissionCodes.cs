@@ -133,4 +133,17 @@ public static class IdentityPermissionCodes
     /// unpromoted and unregistered — no read-only endpoint exists.
     /// </summary>
     public const string GuestOperationsManage = "GUEST_OPERATIONS:MANAGE";
+
+    /// <summary>
+    /// Fase 11, Checkpoint 6 (Human Handoff, Safety &amp; Audit). Genuinely
+    /// new catalog entry, explicitly authorized by the CP6 mandate — ADMIN
+    /// only, mirroring the same conservative precedent already established by
+    /// <see cref="IntegrationsManage"/>/<see cref="GuestOperationsManage"/>
+    /// (a brand-new operational-capability permission starts ADMIN-only; a
+    /// documented rule would be needed to also grant OPERATOR, and none
+    /// exists for resuming an AI Agent session or managing its administrator
+    /// notification contact). Governs both the manual Resume-session endpoint
+    /// and the administrator notification contact management endpoints.
+    /// </summary>
+    public const string AiAgentManage = "AI_AGENT:MANAGE";
 }
