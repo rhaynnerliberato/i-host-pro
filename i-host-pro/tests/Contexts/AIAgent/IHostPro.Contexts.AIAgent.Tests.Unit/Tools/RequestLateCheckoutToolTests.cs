@@ -46,6 +46,31 @@ public class RequestLateCheckoutToolTests
         result.FailureCode.Should().Be("invalid_requested_check_out_at");
     }
 
+    [Theory]
+    [InlineData("2026-09-05T14:00:00")]
+    [InlineData("2026-09-05 14:00:00")]
+    public void BuildSanitizedArguments_rejects_a_datetime_without_an_explicit_offset(string offsetLessRaw)
+    {
+        // Fase 11, Checkpoint 5 (mandate item 20/21) — see the equivalent
+        // RequestEarlyCheckInToolTests test for the full rationale.
+        var tool = new RequestLateCheckoutTool(new FakeGuestOperationsRequestDispatcher());
+
+        var result = tool.BuildSanitizedArguments(new Dictionary<string, string> { ["requestedCheckOutAt"] = offsetLessRaw });
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureCode.Should().Be("invalid_requested_check_out_at");
+    }
+
+    [Fact]
+    public void BuildSanitizedArguments_accepts_a_datetime_with_a_non_UTC_explicit_offset()
+    {
+        var tool = new RequestLateCheckoutTool(new FakeGuestOperationsRequestDispatcher());
+
+        var result = tool.BuildSanitizedArguments(new Dictionary<string, string> { ["requestedCheckOutAt"] = "2026-09-05T14:00:00-03:00" });
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
     [Fact]
     public async Task ExecuteAsync_an_approved_outcome_is_a_successful_tool_result()
     {

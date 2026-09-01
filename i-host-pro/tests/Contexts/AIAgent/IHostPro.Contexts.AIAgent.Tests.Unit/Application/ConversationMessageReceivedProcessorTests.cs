@@ -114,8 +114,9 @@ public class ConversationMessageReceivedProcessorTests
         var messageId = Guid.NewGuid();
         var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
         var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var responseDelivery = FakeAgentResponseDeliveryService.Succeeding(Guid.NewGuid());
         var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"oi {FakeModelProvider.FailureTriggerMarker}")]);
-        var processor = CreateProcessor(interactionRepository, sessionRepository, request);
+        var processor = CreateProcessor(interactionRepository, sessionRepository, request, responseDeliveryService: responseDelivery);
 
         await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
 
@@ -124,7 +125,11 @@ public class ConversationMessageReceivedProcessorTests
         interaction.Outcome.Should().Be(AgentInteractionOutcome.Failure);
         interaction.InputTokens.Should().Be(0);
         interaction.OutputTokens.Should().Be(0);
-        interaction.OutboundMessageId.Should().BeNull("a failed interaction never sends a response");
+        interaction.OutboundMessageId.Should().NotBeNull(
+            "Checkpoint 5 — even after the model call fails twice (FailureTriggerMarker always throws, so the one controlled retry does not help), a deterministic safe fallback response is still delivered");
+
+        responseDelivery.Calls.Should().ContainSingle();
+        responseDelivery.Calls[0].Content.Should().NotBeNullOrWhiteSpace();
 
         sessionRepository.UpdatedSessions.Should().BeEmpty(
             "a failed interaction has no confirmed language/intent/confidence to record — the session remains consistent, untouched");
@@ -186,20 +191,32 @@ public class ConversationMessageReceivedProcessorTests
     }
 
     [Fact]
-    public async Task HandleAsync_unknown_tool_name_fails_the_interaction_with_a_sanitized_failure_code()
+    public async Task HandleAsync_unknown_tool_name_never_dispatches_records_a_sanitized_audit_row_and_still_answers_safely()
     {
+        // Fase 11, Checkpoint 5 (mandate items 24/25): a ToolName outside the
+        // fixed allowlist is never executed via reflection/generic dispatch —
+        // it is audited as a failed AgentToolExecution, but the interaction
+        // itself succeeds with a safe, generic response, unlike CP3/CP4's
+        // original "any tool problem fails the whole interaction" rule (which
+        // still applies to a REAL tool's own business/technical failure).
         var messageId = Guid.NewGuid();
         var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
         var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
         var toolExecutionRepository = new FakeAgentToolExecutionRepository();
+        var responseDelivery = FakeAgentResponseDeliveryService.Succeeding(Guid.NewGuid());
         var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"Olá {FakeModelProvider.ToolCallTriggerPrefix}NoSuchTool]")]);
-        var processor = CreateProcessor(interactionRepository, sessionRepository, request, toolExecutionRepository, []);
+        var processor = CreateProcessor(
+            interactionRepository, sessionRepository, request, toolExecutionRepository, [], responseDeliveryService: responseDelivery);
 
         await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
 
-        interactionRepository.AddedInteractions[0].Outcome.Should().Be(AgentInteractionOutcome.Failure);
+        interactionRepository.AddedInteractions[0].Outcome.Should().Be(AgentInteractionOutcome.Success);
+        interactionRepository.AddedInteractions[0].OutboundMessageId.Should().NotBeNull();
+        toolExecutionRepository.AddedExecutions.Should().ContainSingle("the unknown tool name is still audited, even though it never dispatches");
+        toolExecutionRepository.AddedExecutions[0].Outcome.Should().Be(AgentToolExecutionOutcome.Failure);
         toolExecutionRepository.AddedExecutions[0].FailureCode.Should().Be("unknown_tool");
-        sessionRepository.UpdatedSessions.Should().BeEmpty();
+        sessionRepository.UpdatedSessions.Should().ContainSingle("the interaction completed successfully with a safe response");
+        responseDelivery.Calls.Should().ContainSingle();
     }
 
     [Fact]
@@ -442,5 +459,111 @@ public class ConversationMessageReceivedProcessorTests
         pendingActionRepository.AddedPendingActions.Should().BeEmpty("EXPLICIT_REQUEST_IS_CONFIRMATION tools never create a pending action");
         interactionRepository.AddedInteractions[0].Outcome.Should().Be(AgentInteractionOutcome.Success);
         sessionRepository.UpdatedSessions.Should().ContainSingle();
+    }
+
+    // Fase 11, Checkpoint 5 — Policies, Workflow & Conversational Orchestration.
+
+    [Fact]
+    public async Task HandleAsync_a_transient_Call1_model_failure_is_retried_once_and_the_interaction_succeeds()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"oi {FakeModelProvider.TransientFailureTriggerMarker}")]);
+        var processor = CreateProcessor(interactionRepository, sessionRepository, request);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        interactionRepository.AddedInteractions.Should().ContainSingle();
+        var interaction = interactionRepository.AddedInteractions[0];
+        interaction.Outcome.Should().Be(AgentInteractionOutcome.Success, "attempt #1 fails but the one controlled retry succeeds");
+        interaction.OutboundMessageId.Should().NotBeNull();
+        sessionRepository.UpdatedSessions.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task HandleAsync_a_permanent_Call1_model_failure_survives_the_retry_and_still_fails_with_no_tool_executed()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var toolExecutionRepository = new FakeAgentToolExecutionRepository();
+        var tool = FakeAgentTool.Succeeding("MyTool", "should never run");
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"oi {FakeModelProvider.FailureTriggerMarker}")]);
+        var processor = CreateProcessor(interactionRepository, sessionRepository, request, toolExecutionRepository, [tool]);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        interactionRepository.AddedInteractions[0].Outcome.Should().Be(AgentInteractionOutcome.Failure);
+        toolExecutionRepository.AddedExecutions.Should().BeEmpty("Call#1 never even reaches a ToolCallRequest when it throws");
+        tool.LastContext.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_a_permanent_Call2_model_failure_falls_back_to_the_known_tool_content_verbatim_and_the_interaction_succeeds()
+    {
+        // Fase 11, Checkpoint 5 (mandate item 29/33): the write Tool/Command
+        // already succeeded — Call#2 (turning that known outcome into
+        // natural language) fails both attempts. The orchestrator must NEVER
+        // re-run the tool, and must never claim "could not process your
+        // request" when the underlying action already succeeded — it falls
+        // back to the tool's own already-safe content, verbatim.
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var toolExecutionRepository = new FakeAgentToolExecutionRepository();
+        const string knownToolContent = "Pedido de early check-in: approved.";
+        var tool = FakeAgentTool.Succeeding("MyTool", $"{knownToolContent} {FakeModelProvider.FailureTriggerMarker}");
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"Olá {FakeModelProvider.ToolCallTriggerPrefix}MyTool]")]);
+        var processor = CreateProcessor(interactionRepository, sessionRepository, request, toolExecutionRepository, [tool]);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        toolExecutionRepository.AddedExecutions.Should().ContainSingle();
+        toolExecutionRepository.AddedExecutions[0].Outcome.Should().Be(AgentToolExecutionOutcome.Success, "the Tool/Command itself genuinely succeeded");
+
+        interactionRepository.AddedInteractions.Should().ContainSingle();
+        var interaction = interactionRepository.AddedInteractions[0];
+        interaction.Outcome.Should().Be(AgentInteractionOutcome.Success, "a Call#2 model failure never invalidates an already-successful Tool/Command");
+        interaction.OutboundMessageId.Should().NotBeNull();
+        sessionRepository.UpdatedSessions.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task HandleAsync_unsupported_request_intent_produces_a_safe_response_and_calls_no_tool()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var toolExecutionRepository = new FakeAgentToolExecutionRepository();
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"quero cancelar minha reserva {FakeModelProvider.UnsupportedRequestTriggerMarker}")]);
+        var processor = CreateProcessor(interactionRepository, sessionRepository, request, toolExecutionRepository, []);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        var interaction = interactionRepository.AddedInteractions[0];
+        interaction.Outcome.Should().Be(AgentInteractionOutcome.Success);
+        interaction.Intent.Should().Be("unsupported_request");
+        interaction.OutboundMessageId.Should().NotBeNull();
+        toolExecutionRepository.AddedExecutions.Should().BeEmpty("no Tool/Command is ever called for an unsupported request");
+    }
+
+    [Fact]
+    public async Task HandleAsync_human_handoff_requested_intent_produces_a_safe_response_and_never_claims_a_real_handoff()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var toolExecutionRepository = new FakeAgentToolExecutionRepository();
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"quero falar com uma pessoa {FakeModelProvider.HumanHandoffTriggerMarker}")]);
+        var processor = CreateProcessor(interactionRepository, sessionRepository, request, toolExecutionRepository, []);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        var interaction = interactionRepository.AddedInteractions[0];
+        interaction.Outcome.Should().Be(AgentInteractionOutcome.Success);
+        interaction.Intent.Should().Be("human_handoff_requested");
+        interaction.OutboundMessageId.Should().NotBeNull();
+        toolExecutionRepository.AddedExecutions.Should().BeEmpty("Checkpoint 5 only classifies the request — full handoff (state, admin notification, AI suspension) is Checkpoint 6's scope");
     }
 }

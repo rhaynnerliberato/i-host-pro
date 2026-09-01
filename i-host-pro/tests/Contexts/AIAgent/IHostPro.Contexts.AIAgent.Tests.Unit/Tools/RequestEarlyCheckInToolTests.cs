@@ -46,6 +46,34 @@ public class RequestEarlyCheckInToolTests
         result.FailureCode.Should().Be("invalid_requested_check_in_at");
     }
 
+    [Theory]
+    [InlineData("2026-09-01T12:00:00")]
+    [InlineData("2026-09-01 12:00:00")]
+    public void BuildSanitizedArguments_rejects_a_datetime_without_an_explicit_offset(string offsetLessRaw)
+    {
+        // Fase 11, Checkpoint 5 (mandate item 20/21): no Property/Tenant/
+        // Reservation timezone source exists anywhere in the domain
+        // (TimezoneSource=DEFERRED_TO_CP7) — an offset-less input must be
+        // REJECTED, never silently interpreted using the server's own local
+        // timezone.
+        var tool = new RequestEarlyCheckInTool(new FakeGuestOperationsRequestDispatcher());
+
+        var result = tool.BuildSanitizedArguments(new Dictionary<string, string> { ["requestedCheckInAt"] = offsetLessRaw });
+
+        result.IsSuccess.Should().BeFalse();
+        result.FailureCode.Should().Be("invalid_requested_check_in_at");
+    }
+
+    [Fact]
+    public void BuildSanitizedArguments_accepts_a_datetime_with_a_non_UTC_explicit_offset()
+    {
+        var tool = new RequestEarlyCheckInTool(new FakeGuestOperationsRequestDispatcher());
+
+        var result = tool.BuildSanitizedArguments(new Dictionary<string, string> { ["requestedCheckInAt"] = "2026-09-01T12:00:00-03:00" });
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
     [Fact]
     public async Task ExecuteAsync_an_approved_outcome_is_a_successful_tool_result()
     {
