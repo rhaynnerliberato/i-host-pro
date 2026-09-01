@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using IHostPro.Contexts.AIAgent.Application.Tools;
 using IHostPro.Contexts.GuestOperations.Application;
 
@@ -26,6 +27,11 @@ public sealed class RequestLateCheckoutTool : IConfirmableAgentTool
     private const string RequestedCheckOutAtKey = "requestedCheckOutAt";
     private const string MissingArgumentFailureCode = "missing_requested_check_out_at";
     private const string InvalidArgumentFailureCode = "invalid_requested_check_out_at";
+    private const string PendingPaymentStatus = "pending_payment";
+
+    /// <summary>Fase 11, Checkpoint 5 (mandate item 20) — see <see cref="RequestEarlyCheckInTool.OffsetQualifiedIso8601Pattern"/> for the full rationale; an offset-less input must be rejected, never silently interpreted using the server's own local timezone.</summary>
+    private static readonly Regex OffsetQualifiedIso8601Pattern = new(
+        @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$", RegexOptions.Compiled);
 
     public AgentToolDescriptor Descriptor { get; } = new(
         AgentToolNames.RequestLateCheckout,
@@ -66,9 +72,12 @@ public sealed class RequestLateCheckoutTool : IConfirmableAgentTool
             return AgentToolResult.Failure(result.Error.Code);
 
         var request = result.Value;
-        var content = request.Status == "denied" && request.DenialReasonCode is not null
-            ? $"Pedido de late checkout: {request.Status}. Motivo: {request.DenialReasonCode}."
-            : $"Pedido de late checkout: {request.Status}.";
+        var content = request.Status switch
+        {
+            "denied" when request.DenialReasonCode is not null => $"Pedido de late checkout: {request.Status}. Motivo: {request.DenialReasonCode}.",
+            PendingPaymentStatus => $"Pedido de late checkout: {request.Status}. Uma cobrança foi gerada; o pagamento ainda precisa ser confirmado.",
+            _ => $"Pedido de late checkout: {request.Status}.",
+        };
 
         return AgentToolResult.Success(content);
     }
@@ -85,7 +94,8 @@ public sealed class RequestLateCheckoutTool : IConfirmableAgentTool
             return false;
         }
 
-        if (!DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out requestedCheckOutAt))
+        if (!OffsetQualifiedIso8601Pattern.IsMatch(raw)
+            || !DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out requestedCheckOutAt))
         {
             failureCode = InvalidArgumentFailureCode;
             return false;

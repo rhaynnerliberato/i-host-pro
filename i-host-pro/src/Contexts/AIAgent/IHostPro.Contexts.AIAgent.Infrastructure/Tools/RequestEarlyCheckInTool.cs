@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using IHostPro.Contexts.AIAgent.Application.Tools;
 using IHostPro.Contexts.GuestOperations.Application;
 using IHostPro.Contexts.Reservations.Application;
@@ -33,6 +34,18 @@ public sealed class RequestEarlyCheckInTool : IConfirmableAgentTool
     private const string RequestedCheckInAtKey = "requestedCheckInAt";
     private const string MissingArgumentFailureCode = "missing_requested_check_in_at";
     private const string InvalidArgumentFailureCode = "invalid_requested_check_in_at";
+
+    /// <summary>
+    /// Fase 11, Checkpoint 5 (mandate item 20) — requires an explicit UTC
+    /// offset (<c>Z</c> or <c>±hh:mm</c>). No Property/Tenant/Reservation
+    /// timezone source exists anywhere in the domain (CP5 governance item 18
+    /// — <c>TimezoneSource=DEFERRED_TO_CP7</c>), so an offset-less input must
+    /// be REJECTED rather than silently interpreted using the server's own
+    /// local timezone — <see cref="DateTimeOffset.TryParse(string?, IFormatProvider?, DateTimeStyles, out DateTimeOffset)"/>
+    /// would otherwise do exactly that.
+    /// </summary>
+    private static readonly Regex OffsetQualifiedIso8601Pattern = new(
+        @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$", RegexOptions.Compiled);
 
     public AgentToolDescriptor Descriptor { get; } = new(
         AgentToolNames.RequestEarlyCheckIn,
@@ -98,7 +111,8 @@ public sealed class RequestEarlyCheckInTool : IConfirmableAgentTool
             return false;
         }
 
-        if (!DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out requestedCheckInAt))
+        if (!OffsetQualifiedIso8601Pattern.IsMatch(raw)
+            || !DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out requestedCheckInAt))
         {
             failureCode = InvalidArgumentFailureCode;
             return false;
