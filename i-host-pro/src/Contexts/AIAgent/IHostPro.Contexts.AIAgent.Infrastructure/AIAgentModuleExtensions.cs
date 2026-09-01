@@ -4,6 +4,7 @@ using IHostPro.Contexts.AIAgent.Application.Tools;
 using IHostPro.Contexts.AIAgent.Infrastructure.Messaging;
 using IHostPro.Contexts.AIAgent.Infrastructure.ModelProviders;
 using IHostPro.Contexts.AIAgent.Infrastructure.Persistence;
+using IHostPro.Contexts.AIAgent.Infrastructure.ResponseDelivery;
 using IHostPro.Contexts.AIAgent.Infrastructure.Tools;
 using IHostPro.Contexts.Communication.Contracts;
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +33,7 @@ public static class AIAgentModuleExtensions
         services.AddScoped<IAgentSessionRepository, AgentSessionRepository>();
         services.AddScoped<IAgentInteractionRepository, AgentInteractionRepository>();
         services.AddScoped<IAgentToolExecutionRepository, AgentToolExecutionRepository>();
+        services.AddScoped<IAgentPendingActionRepository, AgentPendingActionRepository>();
         services.AddScoped<IAIAgentTransactionExecutor, AIAgentTransactionExecutor>();
         services.AddScoped<IAgentSessionResolver, AgentSessionResolver>();
         services.AddScoped<IAgentContextBuilder, AgentContextBuilder>();
@@ -60,6 +62,27 @@ public static class AIAgentModuleExtensions
         services.AddScoped<IAgentTool, GetCleaningStatusTool>();
         services.AddScoped<IAgentTool, GetPaymentStatusTool>();
         services.AddScoped<IAgentTool, GetRelevantPoliciesTool>();
+
+        // Fase 11, Checkpoint 4 — the exact, closed set of 3 approved
+        // business Write Tools. RequestEarlyCheckInTool/RequestLateCheckoutTool
+        // also implement IConfirmableAgentTool (CONFIRMATION_REQUIRED);
+        // RequestGuestAccessDeliveryTool is a plain IAgentTool
+        // (EXPLICIT_REQUEST_IS_CONFIRMATION). All three call Guest
+        // Operations' own Application Commands via
+        // IGuestOperationsRequestDispatcher (Exception #3) — already
+        // registered by AddGuestOperationsModule, which IHostPro.Worker
+        // calls before this method.
+        services.AddScoped<IAgentTool, RequestEarlyCheckInTool>();
+        services.AddScoped<IAgentTool, RequestLateCheckoutTool>();
+        services.AddScoped<IAgentTool, RequestGuestAccessDeliveryTool>();
+
+        services.AddScoped<IAgentToolConfirmationPolicy, AgentToolConfirmationPolicy>();
+
+        // Fase 11, Checkpoint 4 — SendAgentResponseCommand's own Exception #3
+        // adapter (never a model-callable Tool). ICommunicationRequestDispatcher
+        // is already registered by AddCommunicationModule, which IHostPro.Worker
+        // calls before this method.
+        services.AddScoped<IAgentResponseDeliveryService, AgentResponseDeliveryService>();
 
         return services;
     }

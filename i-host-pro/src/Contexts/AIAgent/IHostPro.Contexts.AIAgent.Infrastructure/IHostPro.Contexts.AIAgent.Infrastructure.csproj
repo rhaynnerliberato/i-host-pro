@@ -22,6 +22,16 @@
     <ProjectReference Include="..\..\Housekeeping\IHostPro.Contexts.Housekeeping.Application\IHostPro.Contexts.Housekeeping.Application.csproj" />
     <ProjectReference Include="..\..\Configuration\IHostPro.Contexts.Configuration.Application\IHostPro.Contexts.Configuration.Application.csproj" />
     <ProjectReference Include="..\..\Payments\IHostPro.Contexts.Payments.Application\IHostPro.Contexts.Payments.Application.csproj" />
+    <!--
+      Fase 11, Checkpoint 4 — Write Tools & Response Delivery. Same Exception
+      #3 mechanism: RequestEarlyCheckInTool/RequestLateCheckoutTool/
+      RequestGuestAccessDeliveryTool call Guest Operations' own EXISTING
+      Application Commands; AgentResponseDeliveryService calls Communication's
+      own new SendAgentResponseCommand. Both referenced as .Application
+      projects directly, never .Domain/.Infrastructure/.Api.
+    -->
+    <ProjectReference Include="..\..\GuestOperations\IHostPro.Contexts.GuestOperations.Application\IHostPro.Contexts.GuestOperations.Application.csproj" />
+    <ProjectReference Include="..\..\Communication\IHostPro.Contexts.Communication.Application\IHostPro.Contexts.Communication.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

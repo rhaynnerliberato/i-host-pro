@@ -32,6 +32,7 @@ public sealed class AgentInteractionConfiguration : IEntityTypeConfiguration<Age
         builder.Property(i => i.StartedAtUtc).HasColumnName("started_at_utc").IsRequired();
         builder.Property(i => i.CompletedAtUtc).HasColumnName("completed_at_utc");
         builder.Property(i => i.Outcome).HasColumnName("outcome").HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(i => i.OutboundMessageId).HasColumnName("outbound_message_id");
 
         builder.HasIndex(i => new { i.TenantId, i.InboundMessageId }, "ix_agent_interactions_tenant_id_inbound_message_id_unique")
             .IsUnique();
