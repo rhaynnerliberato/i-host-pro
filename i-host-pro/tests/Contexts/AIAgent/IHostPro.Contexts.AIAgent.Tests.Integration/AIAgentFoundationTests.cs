@@ -126,6 +126,7 @@ public class AIAgentFoundationTests : IClassFixture<AIAgentFoundationTests.Fixtu
         (await TableExistsAsync(dbContext, "ai_agent", "agent_sessions")).Should().BeTrue();
         (await TableExistsAsync(dbContext, "ai_agent", "agent_interactions")).Should().BeTrue();
         (await TableExistsAsync(dbContext, "ai_agent", "agent_tool_executions")).Should().BeTrue();
+        (await TableExistsAsync(dbContext, "ai_agent", "agent_pending_actions")).Should().BeTrue();
     }
 
     [Fact]
@@ -381,6 +382,217 @@ public class AIAgentFoundationTests : IClassFixture<AIAgentFoundationTests.Fixtu
         visible.Should().BeEmpty();
     }
 
+    // ---- AgentPendingAction: real persistence + FK + partial unique index + RLS (Fase 11, Checkpoint 4) ----
+
+    [Fact]
+    public async Task AgentPendingAction_round_trips_ToolName_SanitizedArguments_and_Status()
+    {
+        var tenantId = Guid.NewGuid();
+        var agentSessionId = Guid.NewGuid();
+        var proposedByInteractionId = Guid.NewGuid();
+        const string sanitizedArguments = """{"requestedCheckInAt":"2026-09-01T12:00:00Z"}""";
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using (var writeDbContext = CreateDbContext(_migratorConnectionString, tenantContext))
+        await using (var writeTransaction = await writeDbContext.Database.BeginTransactionAsync())
+        {
+            await SetTenantAsync(writeDbContext, tenantId);
+
+            var interaction = AgentInteraction.Start(proposedByInteractionId, tenantId, agentSessionId, Guid.NewGuid(), "Fake", "fake-model-v1", DateTimeOffset.UtcNow);
+            writeDbContext.AgentInteractions.Add(interaction);
+
+            var pendingAction = AgentPendingAction.Propose(
+                Guid.NewGuid(), tenantId, agentSessionId, proposedByInteractionId, "RequestEarlyCheckIn", sanitizedArguments, DateTimeOffset.UtcNow);
+            writeDbContext.AgentPendingActions.Add(pendingAction);
+
+            await writeDbContext.SaveChangesAsync();
+            await writeTransaction.CommitAsync();
+        }
+
+        await using var readDbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var readTransaction = await readDbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(readDbContext, tenantId);
+
+        var persisted = await readDbContext.AgentPendingActions.AsNoTracking()
+            .SingleAsync(a => a.TenantId == tenantId && a.AgentSessionId == agentSessionId);
+
+        persisted.ToolName.Should().Be("RequestEarlyCheckIn");
+        persisted.SanitizedArguments.Should().Be(sanitizedArguments);
+        persisted.Status.Should().Be(AgentPendingActionStatus.Proposed);
+        persisted.ProposedByInteractionId.Should().Be(proposedByInteractionId);
+    }
+
+    [Fact]
+    public async Task AgentPendingAction_rejects_a_reference_to_a_nonexistent_AgentInteraction()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var pendingAction = AgentPendingAction.Propose(
+            Guid.NewGuid(), tenantId, Guid.NewGuid(), Guid.NewGuid(), "RequestEarlyCheckIn", """{"requestedCheckInAt":"2026-09-01T12:00:00Z"}""", DateTimeOffset.UtcNow);
+        dbContext.AgentPendingActions.Add(pendingAction);
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>(
+            "agent_pending_actions.proposed_by_interaction_id carries a real database foreign key — the parent AgentInteraction row must already exist");
+    }
+
+    [Fact]
+    public async Task A_second_active_AgentPendingAction_for_the_same_AgentSession_is_rejected()
+    {
+        var (tenantId, agentSessionId) = await SeedActivePendingActionAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var secondInteraction = AgentInteraction.Start(Guid.NewGuid(), tenantId, agentSessionId, Guid.NewGuid(), "Fake", "fake-model-v1", DateTimeOffset.UtcNow);
+        dbContext.AgentInteractions.Add(secondInteraction);
+        var secondPendingAction = AgentPendingAction.Propose(
+            Guid.NewGuid(), tenantId, agentSessionId, secondInteraction.Id, "RequestLateCheckout", """{"requestedCheckOutAt":"2026-09-05T14:00:00Z"}""", DateTimeOffset.UtcNow);
+        dbContext.AgentPendingActions.Add(secondPendingAction);
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>("only one active (Proposed/Confirmed) AgentPendingAction may exist per AgentSession");
+    }
+
+    [Fact]
+    public async Task A_second_AgentPendingAction_is_allowed_once_the_first_is_Executed()
+    {
+        var (tenantId, agentSessionId) = await SeedActivePendingActionAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using (var completeDbContext = CreateDbContext(_migratorConnectionString, tenantContext))
+        await using (var completeTransaction = await completeDbContext.Database.BeginTransactionAsync())
+        {
+            await SetTenantAsync(completeDbContext, tenantId);
+            var first = await completeDbContext.AgentPendingActions.FirstAsync(a => a.AgentSessionId == agentSessionId);
+            first.Confirm(DateTimeOffset.UtcNow);
+            first.MarkExecuted(DateTimeOffset.UtcNow);
+            await completeDbContext.SaveChangesAsync();
+            await completeTransaction.CommitAsync();
+        }
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var secondInteraction = AgentInteraction.Start(Guid.NewGuid(), tenantId, agentSessionId, Guid.NewGuid(), "Fake", "fake-model-v1", DateTimeOffset.UtcNow);
+        dbContext.AgentInteractions.Add(secondInteraction);
+        var secondPendingAction = AgentPendingAction.Propose(
+            Guid.NewGuid(), tenantId, agentSessionId, secondInteraction.Id, "RequestLateCheckout", """{"requestedCheckOutAt":"2026-09-05T14:00:00Z"}""", DateTimeOffset.UtcNow);
+        dbContext.AgentPendingActions.Add(secondPendingAction);
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task App_role_sees_only_its_own_tenant_AgentPendingAction_rows()
+    {
+        var (tenantId, agentSessionId) = await SeedActivePendingActionAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var visible = await dbContext.AgentPendingActions.Where(a => a.AgentSessionId == agentSessionId).ToListAsync();
+
+        visible.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Wrong_tenant_sees_zero_AgentPendingAction_rows()
+    {
+        var (_, agentSessionId) = await SeedActivePendingActionAsync();
+        var unrelatedTenantId = Guid.NewGuid();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(unrelatedTenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, unrelatedTenantId);
+
+        var visible = await dbContext.AgentPendingActions.Where(a => a.AgentSessionId == agentSessionId).ToListAsync();
+
+        visible.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Absent_tenant_setting_fails_closed_to_zero_AgentPendingAction_rows_even_for_the_migrator_role()
+    {
+        await SeedActivePendingActionAsync();
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, new TenantContext());
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        // Deliberately no set_config('app.tenant_id', ...) call — RLS must fail closed.
+
+        var visible = await dbContext.AgentPendingActions.IgnoreQueryFilters().ToListAsync();
+
+        visible.Should().BeEmpty();
+    }
+
+    // ---- AgentInteraction.OutboundMessageId (Fase 11, Checkpoint 4) ----
+
+    [Fact]
+    public async Task AgentInteraction_OutboundMessageId_round_trips_and_defaults_to_null()
+    {
+        var tenantId = Guid.NewGuid();
+        var inboundMessageId = Guid.NewGuid();
+        var outboundMessageId = Guid.NewGuid();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using (var writeDbContext = CreateDbContext(_migratorConnectionString, tenantContext))
+        await using (var writeTransaction = await writeDbContext.Database.BeginTransactionAsync())
+        {
+            await SetTenantAsync(writeDbContext, tenantId);
+            var interaction = AgentInteraction.Start(Guid.NewGuid(), tenantId, Guid.NewGuid(), inboundMessageId, "Fake", "fake-model-v1", DateTimeOffset.UtcNow);
+            interaction.CompleteSuccessfully(DateTimeOffset.UtcNow, intent: null, language: "pt-BR", confidence: null, inputTokens: 1, outputTokens: 1);
+            writeDbContext.AgentInteractions.Add(interaction);
+            await writeDbContext.SaveChangesAsync();
+            await writeTransaction.CommitAsync();
+        }
+
+        await using (var readDbContext = CreateDbContext(_migratorConnectionString, tenantContext))
+        await using (var readTransaction = await readDbContext.Database.BeginTransactionAsync())
+        {
+            await SetTenantAsync(readDbContext, tenantId);
+            var persisted = await readDbContext.AgentInteractions.AsNoTracking().SingleAsync(i => i.InboundMessageId == inboundMessageId);
+            persisted.OutboundMessageId.Should().BeNull();
+        }
+
+        await using (var updateDbContext = CreateDbContext(_migratorConnectionString, tenantContext))
+        await using (var updateTransaction = await updateDbContext.Database.BeginTransactionAsync())
+        {
+            await SetTenantAsync(updateDbContext, tenantId);
+            var interaction = await updateDbContext.AgentInteractions.SingleAsync(i => i.InboundMessageId == inboundMessageId);
+            interaction.RecordOutboundMessage(outboundMessageId);
+            await updateDbContext.SaveChangesAsync();
+            await updateTransaction.CommitAsync();
+        }
+
+        await using var finalDbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var finalTransaction = await finalDbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(finalDbContext, tenantId);
+        var final = await finalDbContext.AgentInteractions.AsNoTracking().SingleAsync(i => i.InboundMessageId == inboundMessageId);
+        final.OutboundMessageId.Should().Be(outboundMessageId);
+    }
+
     // ---- Confidence persistence round-trip (mandate item 35) ----
 
     [Fact]
@@ -474,6 +686,30 @@ public class AIAgentFoundationTests : IClassFixture<AIAgentFoundationTests.Fixtu
         await transaction.CommitAsync();
 
         return (tenantId, agentInteractionId);
+    }
+
+    private async Task<(Guid TenantId, Guid AgentSessionId)> SeedActivePendingActionAsync()
+    {
+        var tenantId = Guid.NewGuid();
+        var agentSessionId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var interaction = AgentInteraction.Start(Guid.NewGuid(), tenantId, agentSessionId, Guid.NewGuid(), "Fake", "fake-model-v1", DateTimeOffset.UtcNow);
+        dbContext.AgentInteractions.Add(interaction);
+
+        var pendingAction = AgentPendingAction.Propose(
+            Guid.NewGuid(), tenantId, agentSessionId, interaction.Id, "RequestEarlyCheckIn", """{"requestedCheckInAt":"2026-09-01T12:00:00Z"}""", DateTimeOffset.UtcNow);
+        dbContext.AgentPendingActions.Add(pendingAction);
+
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return (tenantId, agentSessionId);
     }
 
     private static async Task SetTenantAsync(AIAgentDbContext dbContext, Guid tenantId) =>

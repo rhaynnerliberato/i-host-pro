@@ -106,7 +106,12 @@ public sealed class AIAgentReadToolsWorkflowRoundTripTests : IClassFixture<Conve
         toolExecutions[0].Outcome.Should().Be(AgentToolExecutionOutcome.Success, WorkerSnapshot());
         toolExecutions[0].AgentInteractionId.Should().Be(interaction.Id);
 
-        (await CountOutboundMessagesAsync(message.ConversationId)).Should().Be(0, "the AI Agent never sends anything outbound this checkpoint");
+        // Fase 11, Checkpoint 4: every successful interaction now delivers a
+        // real response (mandate item 33) — this assertion was "0" under
+        // CP3's own scope (response delivery did not exist yet); CP4
+        // deliberately and explicitly changes that, never a regression.
+        interaction.OutboundMessageId.Should().NotBeNull(WorkerSnapshot());
+        (await CountOutboundMessagesAsync(message.ConversationId)).Should().Be(1, "CP4 delivers a real response for every successful interaction, including read-only ones");
         _ = reservationId;
     }
 

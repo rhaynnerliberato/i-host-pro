@@ -106,7 +106,7 @@ internal sealed class FakeAgentContextBuilder : IAgentContextBuilder
 
     public static FakeAgentContextBuilder Returning(ModelRequest request) => new(request);
 
-    public Task<ModelRequest> BuildAsync(Guid tenantId, Guid conversationId, CancellationToken cancellationToken) =>
+    public Task<ModelRequest> BuildAsync(Guid tenantId, Guid conversationId, Guid triggeringInboundMessageId, CancellationToken cancellationToken) =>
         Task.FromResult(_request);
 }
 
@@ -153,6 +153,117 @@ internal sealed class FakeAgentTool : IAgentTool
         if (_throws is not null)
             throw _throws;
 
+        return Task.FromResult(_result);
+    }
+}
+
+/// <summary>Deterministic test double for the CP4 write-tool confirmation loop.</summary>
+internal sealed class FakeConfirmableAgentTool : IConfirmableAgentTool
+{
+    private readonly AgentToolResult _executeResult;
+    private readonly AgentPendingActionProposalResult _proposalResult;
+
+    private FakeConfirmableAgentTool(string name, AgentPendingActionProposalResult proposalResult, AgentToolResult executeResult)
+    {
+        Descriptor = new AgentToolDescriptor(name, "Fake confirmable tool for orchestrator tests.");
+        _proposalResult = proposalResult;
+        _executeResult = executeResult;
+    }
+
+    public static FakeConfirmableAgentTool Succeeding(string name, string sanitizedArgumentsJson, string executeContent) =>
+        new(name, AgentPendingActionProposalResult.Success(sanitizedArgumentsJson), AgentToolResult.Success(executeContent));
+
+    public static FakeConfirmableAgentTool RejectingProposal(string name, string failureCode) =>
+        new(name, AgentPendingActionProposalResult.Failure(failureCode), AgentToolResult.Failure("unused"));
+
+    public static FakeConfirmableAgentTool FailingExecution(string name, string sanitizedArgumentsJson, string failureCode) =>
+        new(name, AgentPendingActionProposalResult.Success(sanitizedArgumentsJson), AgentToolResult.Failure(failureCode));
+
+    public AgentToolDescriptor Descriptor { get; }
+
+    public IReadOnlyDictionary<string, string>? LastExecuteArguments { get; private set; }
+    public int ExecuteCallCount { get; private set; }
+
+    public AgentPendingActionProposalResult BuildSanitizedArguments(IReadOnlyDictionary<string, string>? arguments) => _proposalResult;
+
+    public Task<AgentToolResult> ExecuteAsync(
+        AgentToolContext context, IReadOnlyDictionary<string, string>? arguments, CancellationToken cancellationToken)
+    {
+        LastExecuteArguments = arguments;
+        ExecuteCallCount++;
+        return Task.FromResult(_executeResult);
+    }
+}
+
+internal sealed class FakeAgentToolConfirmationPolicy : IAgentToolConfirmationPolicy
+{
+    private readonly IReadOnlySet<string> _confirmationRequiredToolNames;
+
+    private FakeAgentToolConfirmationPolicy(IReadOnlySet<string> confirmationRequiredToolNames) =>
+        _confirmationRequiredToolNames = confirmationRequiredToolNames;
+
+    public static FakeAgentToolConfirmationPolicy RequiringConfirmationFor(params string[] toolNames) =>
+        new(toolNames.ToHashSet());
+
+    public static FakeAgentToolConfirmationPolicy RequiringNone() => new(new HashSet<string>());
+
+    public bool RequiresConfirmation(string toolName) => _confirmationRequiredToolNames.Contains(toolName);
+}
+
+internal sealed class FakeAgentPendingActionRepository : IAgentPendingActionRepository
+{
+    private readonly Dictionary<Guid, AgentPendingAction> _byId = new();
+
+    public static FakeAgentPendingActionRepository WithExisting(AgentPendingAction? existing)
+    {
+        var repository = new FakeAgentPendingActionRepository();
+        if (existing is not null)
+            repository._byId[existing.Id] = existing;
+        return repository;
+    }
+
+    public List<AgentPendingAction> AddedPendingActions { get; } = [];
+    public List<AgentPendingAction> UpdatedPendingActions { get; } = [];
+
+    public void Add(AgentPendingAction pendingAction)
+    {
+        _byId[pendingAction.Id] = pendingAction;
+        AddedPendingActions.Add(pendingAction);
+    }
+
+    public void Update(AgentPendingAction pendingAction)
+    {
+        _byId[pendingAction.Id] = pendingAction;
+        UpdatedPendingActions.Add(pendingAction);
+    }
+
+    public Task<AgentPendingAction?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(_byId.GetValueOrDefault(id));
+
+    public Task<AgentPendingAction?> GetActiveByAgentSessionIdAsync(Guid agentSessionId, CancellationToken cancellationToken) =>
+        Task.FromResult(_byId.Values.SingleOrDefault(a =>
+            a.AgentSessionId == agentSessionId
+            && (a.Status == AgentPendingActionStatus.Proposed || a.Status == AgentPendingActionStatus.Confirmed)));
+}
+
+internal sealed class FakeAgentResponseDeliveryService : IAgentResponseDeliveryService
+{
+    private readonly AgentResponseDeliveryResult _result;
+
+    private FakeAgentResponseDeliveryService(AgentResponseDeliveryResult result) => _result = result;
+
+    public static FakeAgentResponseDeliveryService Succeeding(Guid messageId) =>
+        new(new AgentResponseDeliveryResult(true, messageId, null));
+
+    public static FakeAgentResponseDeliveryService Failing(string failureCode) =>
+        new(new AgentResponseDeliveryResult(false, null, failureCode));
+
+    public List<(Guid TenantId, Guid ConversationId, Guid ReservationId, Guid AgentInteractionId, string Content)> Calls { get; } = [];
+
+    public Task<AgentResponseDeliveryResult> SendAsync(
+        Guid tenantId, Guid conversationId, Guid reservationId, Guid agentInteractionId, string content, CancellationToken cancellationToken)
+    {
+        Calls.Add((tenantId, conversationId, reservationId, agentInteractionId, content));
         return Task.FromResult(_result);
     }
 }

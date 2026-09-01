@@ -1,4 +1,5 @@
 using IHostPro.Contexts.Configuration.Application;
+using IHostPro.Contexts.GuestOperations.Application;
 using IHostPro.Contexts.Housekeeping.Application;
 using IHostPro.Contexts.Payments.Application;
 using IHostPro.Contexts.PropertyManagement.Application;
@@ -82,6 +83,15 @@ internal sealed class FakeConfigurationRequestDispatcher : IConfigurationRequest
 }
 
 internal sealed class FakePaymentsRequestDispatcher : IPaymentsRequestDispatcher
+{
+    public RequestDispatcherStub Stub { get; } = new();
+
+    public ValueTask<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default) =>
+        Stub.Send(request, cancellationToken);
+}
+
+/// <summary>Fase 11, Checkpoint 4.</summary>
+internal sealed class FakeGuestOperationsRequestDispatcher : IGuestOperationsRequestDispatcher
 {
     public RequestDispatcherStub Stub { get; } = new();
 

@@ -226,8 +226,10 @@ public class GuestStayOperationsControllerAuthorizationTests : IClassFixture<Gue
                     services.AddIdentityJwtBearerAuthentication();
                     services.AddIdentityAuthorization();
 
+                    // Fase 11, Checkpoint 4: AddGuestOperationsCommandDispatch no
+                    // longer exists — AddGuestOperationsModule now registers the
+                    // Command Mediator + all repositories/readers itself.
                     services.AddGuestOperationsModule(configuration);
-                    services.AddGuestOperationsCommandDispatch();
                 });
                 webHost.Configure(app =>
                 {

@@ -33,6 +33,13 @@ namespace IHostPro.ArchitectureTests;
 /// </summary>
 public class AIAgentReadToolsArchitectureTests
 {
+    /// <summary>
+    /// The 8 Read Tools Checkpoint 3 approved, plus the 3 business Write
+    /// Tools Checkpoint 4 approved (<c>AIAgentWriteToolsArchitectureTests</c>
+    /// asserts the write subset specifically) — together the ENTIRE closed
+    /// set of <see cref="IAgentTool"/> implementations this assembly may
+    /// contain. Adding a 12th requires a new mandate.
+    /// </summary>
     private static readonly Type[] ApprovedToolTypes =
     [
         typeof(GetReservationSummaryTool),
@@ -43,17 +50,20 @@ public class AIAgentReadToolsArchitectureTests
         typeof(GetCleaningStatusTool),
         typeof(GetPaymentStatusTool),
         typeof(GetRelevantPoliciesTool),
+        typeof(RequestEarlyCheckInTool),
+        typeof(RequestLateCheckoutTool),
+        typeof(RequestGuestAccessDeliveryTool),
     ];
 
     [Fact]
-    public void Exactly_The_Eight_Approved_Read_Tools_Exist_No_More_No_Less()
+    public void Exactly_The_Eleven_Approved_Tools_Exist_No_More_No_Less()
     {
         var actualToolTypes = typeof(GetReservationSummaryTool).Assembly.GetTypes()
             .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(IAgentTool).IsAssignableFrom(t))
             .ToList();
 
         actualToolTypes.Should().BeEquivalentTo(ApprovedToolTypes,
-            "Fase 11, Checkpoint 3 approved exactly these 8 Read Tools — adding a 9th (or a write tool) requires a new mandate");
+            "Fase 11 approved exactly 8 Read Tools (Checkpoint 3) plus 3 business Write Tools (Checkpoint 4) — adding a 12th requires a new mandate");
     }
 
     /// <summary>
@@ -81,6 +91,8 @@ public class AIAgentReadToolsArchitectureTests
             "IHostPro.Contexts.Housekeeping.Domain", "IHostPro.Contexts.Housekeeping.Infrastructure", "IHostPro.Contexts.Housekeeping.Api",
             "IHostPro.Contexts.Configuration.Domain", "IHostPro.Contexts.Configuration.Infrastructure", "IHostPro.Contexts.Configuration.Api",
             "IHostPro.Contexts.Payments.Domain", "IHostPro.Contexts.Payments.Infrastructure", "IHostPro.Contexts.Payments.Api",
+            // Fase 11, Checkpoint 4 — the 3 write Tools reach Guest Operations exclusively through .Application.
+            "IHostPro.Contexts.GuestOperations.Domain", "IHostPro.Contexts.GuestOperations.Infrastructure", "IHostPro.Contexts.GuestOperations.Api",
         };
 
         var result = Types.InAssembly(typeof(GetReservationSummaryTool).Assembly)
