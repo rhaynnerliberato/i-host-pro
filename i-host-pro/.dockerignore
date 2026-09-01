@@ -1,0 +1,20 @@
+# Fase 12, Checkpoint 1 (CI/CD Pipeline Hardening) — keeps the Docker build
+# context to source only. Without this, `COPY . .` in docker/*.Dockerfile
+# was dragging in every bin/obj folder produced by local/CI dotnet builds
+# plus the full frontend node_modules and .git history, making "sending
+# build context" the dominant cost of every image build.
+
+**/bin/
+**/obj/
+**/TestResults/
+node_modules/
+.git/
+.vs/
+.idea/
+*.user
+
+# Local-only, never needed inside a container image.
+.env
+.env.*
+!.env.example
+appsettings.*.local.json

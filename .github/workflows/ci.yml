@@ -1,10 +1,17 @@
 name: CI
 
+# Fase 12, Checkpoint 1 (CI/CD Pipeline Hardening). The previous version of
+# this workflow triggered on `branches: [main]` — a branch that has never
+# existed in this repository (only `master`/`feature/**`) — so it never ran
+# on a single real push or PR. It also only covered Identity & Access (Fase
+# 0/1 scope, explicitly marked as a stub for later phases). This version
+# fixes the dead trigger and expands coverage to every Bounded Context that
+# has a real test project today.
 on:
   push:
-    branches: [main]
+    branches: [master, "feature/**"]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 defaults:
   run:
@@ -12,48 +19,319 @@ defaults:
     # a raiz do repositório Git é o workspace inteiro.
     working-directory: i-host-pro
 
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
 jobs:
-  build-and-test:
+  # ---- Fast-fail gate: the whole solution must restore and build in
+  # Release before any of the (many, parallel) test jobs below are worth
+  # starting. ----
+  build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('i-host-pro/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
 
       - name: Restore
         run: dotnet restore IHostPro.sln
 
-      - name: Build
+      - name: Build (Release)
         run: dotnet build IHostPro.sln --no-restore --configuration Release
 
+      # Fase 11, Checkpoint 7 (Documento 21 §9 — análise estática): the .NET
+      # SDK's own built-in Roslyn analyzers already run during every build
+      # above (EnableNETAnalyzers defaults to true for SDK-style projects) —
+      # no new external tool/paid SaaS needed. This step surfaces NuGet's own
+      # built-in vulnerability audit (dotnet restore already emits NU1903 for
+      # the known SSH.NET advisory; this makes it explicit in the CI log
+      # rather than buried in restore output) — informational, never fails
+      # the build, since acting on it is a dependency-upgrade decision, out
+      # of this checkpoint's scope.
+      - name: Static analysis — dependency vulnerability audit
+        run: dotnet list IHostPro.sln package --vulnerable --include-transitive
+
+      # dotnet format --verify-no-changes found 457 pre-existing whitespace
+      # deviations across 22 files (none related to this checkpoint) —
+      # exactly the "volume grande de dívida preexistente" the CP1 mandate
+      # says never to silently fix wholesale. Reported here as a baseline,
+      # deliberately never gating the pipeline — turning it into a hard gate
+      # would fail every future PR on unrelated historical debt.
+      - name: Static analysis — formatting baseline (non-blocking)
+        run: |
+          dotnet format --verify-no-changes --verbosity minimal IHostPro.sln || echo "::warning::dotnet format found pre-existing formatting debt (baseline as of Fase 12 CP1 - 457 deviations across 22 files) - informational only, never blocks CI."
+        continue-on-error: true
+
+  architecture-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('i-host-pro/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore tests/IHostPro.ArchitectureTests/IHostPro.ArchitectureTests.csproj
+
+      - name: Build
+        run: dotnet build tests/IHostPro.ArchitectureTests/IHostPro.ArchitectureTests.csproj --no-restore --configuration Release
+
       - name: Architecture Tests
-        run: dotnet test tests/IHostPro.ArchitectureTests/IHostPro.ArchitectureTests.csproj --no-build --configuration Release -m:1 --logger "trx"
+        run: dotnet test tests/IHostPro.ArchitectureTests/IHostPro.ArchitectureTests.csproj --no-build --configuration Release --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
 
-      - name: Identity & Access - Unit Tests
-        run: dotnet test tests/Contexts/Identity/IHostPro.Contexts.Identity.Tests.Unit/IHostPro.Contexts.Identity.Tests.Unit.csproj --no-build --configuration Release -m:1 --logger "trx"
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-architecture
+          path: i-host-pro/TestResults/*.trx
 
-      # Requires Docker (Testcontainers.PostgreSql/Testcontainers.Redis) —
-      # available by default on GitHub-hosted ubuntu-latest runners.
-      #
-      # -m:1 (MSBuild maxcpucount=1, serializing this invocation) together
-      # with this project's own xunit.runner.json
-      # ("parallelizeTestCollections": false) prevent the many PostgreSQL/
-      # Redis containers this suite's test classes each spin up via
-      # IAsyncLifetime from starting concurrently — running them at once was
-      # observed to intermittently overwhelm the Docker daemon's exec/
-      # health-check polling (a transient DotNet.Testcontainers/Docker.DotNet
-      # exception on an otherwise-unrelated test, not a code defect —
-      # Incremento 2 plan, Etapa 13). Every test still runs and is asserted;
-      # this only removes concurrency between test classes, it does not skip
-      # or weaken any of them.
-      - name: Identity & Access - Integration Tests
-        run: dotnet test tests/Contexts/Identity/IHostPro.Contexts.Identity.Tests.Integration/IHostPro.Contexts.Identity.Tests.Integration.csproj --no-build --configuration Release -m:1 --logger "trx"
+  # ---- Unit tests: one matrix entry per Bounded Context. No external
+  # dependency (Postgres/RabbitMQ/Redis) — pure in-memory, safe to run at
+  # full matrix parallelism. ----
+  unit-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - { name: BuildingBlocks, path: "tests/BuildingBlocks/IHostPro.BuildingBlocks.Tests.Unit/IHostPro.BuildingBlocks.Tests.Unit.csproj" }
+          - { name: AIAgent, path: "tests/Contexts/AIAgent/IHostPro.Contexts.AIAgent.Tests.Unit/IHostPro.Contexts.AIAgent.Tests.Unit.csproj" }
+          - { name: Communication, path: "tests/Contexts/Communication/IHostPro.Contexts.Communication.Tests.Unit/IHostPro.Contexts.Communication.Tests.Unit.csproj" }
+          - { name: Configuration, path: "tests/Contexts/Configuration/IHostPro.Contexts.Configuration.Tests.Unit/IHostPro.Contexts.Configuration.Tests.Unit.csproj" }
+          - { name: Dashboard, path: "tests/Contexts/Dashboard/IHostPro.Contexts.Dashboard.Tests.Unit/IHostPro.Contexts.Dashboard.Tests.Unit.csproj" }
+          - { name: ExternalIntegrations, path: "tests/Contexts/ExternalIntegrations/IHostPro.Contexts.ExternalIntegrations.Tests.Unit/IHostPro.Contexts.ExternalIntegrations.Tests.Unit.csproj" }
+          - { name: GuestOperations, path: "tests/Contexts/GuestOperations/IHostPro.Contexts.GuestOperations.Tests.Unit/IHostPro.Contexts.GuestOperations.Tests.Unit.csproj" }
+          - { name: Housekeeping, path: "tests/Contexts/Housekeeping/IHostPro.Contexts.Housekeeping.Tests.Unit/IHostPro.Contexts.Housekeeping.Tests.Unit.csproj" }
+          - { name: Identity, path: "tests/Contexts/Identity/IHostPro.Contexts.Identity.Tests.Unit/IHostPro.Contexts.Identity.Tests.Unit.csproj" }
+          - { name: Payments, path: "tests/Contexts/Payments/IHostPro.Contexts.Payments.Tests.Unit/IHostPro.Contexts.Payments.Tests.Unit.csproj" }
+          - { name: PropertyManagement, path: "tests/Contexts/PropertyManagement/IHostPro.Contexts.PropertyManagement.Tests.Unit/IHostPro.Contexts.PropertyManagement.Tests.Unit.csproj" }
+          - { name: Reservations, path: "tests/Contexts/Reservations/IHostPro.Contexts.Reservations.Tests.Unit/IHostPro.Contexts.Reservations.Tests.Unit.csproj" }
+          - { name: Workflow, path: "tests/Contexts/Workflow/IHostPro.Contexts.Workflow.Tests.Unit/IHostPro.Contexts.Workflow.Tests.Unit.csproj" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('i-host-pro/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
 
-      # NOTE (Phase 0/1 scope): steps for additional Bounded Contexts, static
-      # analysis and container image build will be added as those modules and
-      # pipelines are implemented (ADR-011).
+      - name: Restore
+        run: dotnet restore ${{ matrix.project.path }}
+
+      - name: Build
+        run: dotnet build ${{ matrix.project.path }} --no-restore --configuration Release
+
+      - name: Unit Tests — ${{ matrix.project.name }}
+        run: dotnet test ${{ matrix.project.path }} --no-build --configuration Release --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-unit-${{ matrix.project.name }}
+          path: i-host-pro/TestResults/*.trx
+
+  # ---- Integration tests: one matrix entry per Bounded Context. Every
+  # project provisions its OWN Postgres/RabbitMQ/Redis via Testcontainers
+  # (confirmed by direct audit of every *.Tests.Integration.csproj — none
+  # depend on an externally-provided database) — so this workflow never
+  # declares fixed `services:` containers. Each matrix entry already runs on
+  # its own isolated GitHub Actions VM, which is what actually prevents the
+  # same RabbitMQ-fixed-port collision (host port 5672) observed locally this
+  # checkpoint when a standing dev container and a Testcontainers-spun one
+  # both tried to bind it — that failure mode can only happen when two such
+  # processes share one Docker daemon, which never happens across separate
+  # matrix jobs. -m:1 is applied uniformly (not just to Identity, which is
+  # the one project with a documented, empirically-observed Testcontainers/
+  # Docker-daemon contention issue in CI) as a conservative stability choice
+  # for the ten projects that have never run in GitHub Actions before —
+  # never verified to NEED it, but strictly safer than assuming they don't.
+  #
+  # AnthropicRealProofTests / MetaWhatsAppSandboxProofTests are excluded
+  # explicitly (never rely solely on their own graceful self-skip-when-no-
+  # credential behavior) — real external provider calls, real cost, already
+  # homologated separately, must never run unattended in CI.
+  integration-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - { name: AIAgent, path: "tests/Contexts/AIAgent/IHostPro.Contexts.AIAgent.Tests.Integration/IHostPro.Contexts.AIAgent.Tests.Integration.csproj", filter: "--filter \"FullyQualifiedName!~AnthropicRealProofTests\"" }
+          - { name: Communication, path: "tests/Contexts/Communication/IHostPro.Contexts.Communication.Tests.Integration/IHostPro.Contexts.Communication.Tests.Integration.csproj", filter: "" }
+          - { name: Configuration, path: "tests/Contexts/Configuration/IHostPro.Contexts.Configuration.Tests.Integration/IHostPro.Contexts.Configuration.Tests.Integration.csproj", filter: "" }
+          - { name: Dashboard, path: "tests/Contexts/Dashboard/IHostPro.Contexts.Dashboard.Tests.Integration/IHostPro.Contexts.Dashboard.Tests.Integration.csproj", filter: "" }
+          - { name: ExternalIntegrations, path: "tests/Contexts/ExternalIntegrations/IHostPro.Contexts.ExternalIntegrations.Tests.Integration/IHostPro.Contexts.ExternalIntegrations.Tests.Integration.csproj", filter: "--filter \"FullyQualifiedName!~MetaWhatsAppSandboxProofTests\"" }
+          - { name: GuestOperations, path: "tests/Contexts/GuestOperations/IHostPro.Contexts.GuestOperations.Tests.Integration/IHostPro.Contexts.GuestOperations.Tests.Integration.csproj", filter: "" }
+          - { name: Housekeeping, path: "tests/Contexts/Housekeeping/IHostPro.Contexts.Housekeeping.Tests.Integration/IHostPro.Contexts.Housekeeping.Tests.Integration.csproj", filter: "" }
+          - { name: Identity, path: "tests/Contexts/Identity/IHostPro.Contexts.Identity.Tests.Integration/IHostPro.Contexts.Identity.Tests.Integration.csproj", filter: "" }
+          - { name: Payments, path: "tests/Contexts/Payments/IHostPro.Contexts.Payments.Tests.Integration/IHostPro.Contexts.Payments.Tests.Integration.csproj", filter: "" }
+          - { name: PropertyManagement, path: "tests/Contexts/PropertyManagement/IHostPro.Contexts.PropertyManagement.Tests.Integration/IHostPro.Contexts.PropertyManagement.Tests.Integration.csproj", filter: "" }
+          - { name: Reservations, path: "tests/Contexts/Reservations/IHostPro.Contexts.Reservations.Tests.Integration/IHostPro.Contexts.Reservations.Tests.Integration.csproj", filter: "" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('i-host-pro/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore ${{ matrix.project.path }}
+
+      - name: Build
+        run: dotnet build ${{ matrix.project.path }} --no-restore --configuration Release
+
+      - name: Integration Tests — ${{ matrix.project.name }}
+        run: dotnet test ${{ matrix.project.path }} --no-build --configuration Release -m:1 ${{ matrix.project.filter }} --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-integration-${{ matrix.project.name }}
+          path: i-host-pro/TestResults/*.trx
+
+  # ---- Full API Integration (real cross-process E2E: Postgres+RabbitMQ
+  # Testcontainers + a real Worker subprocess + a real WebApplicationFactory
+  # Api). The Worker subprocess is launched from a DEBUG build on disk (its
+  # own Fixture reads bin/Debug/net10.0/IHostPro.Worker.dll directly), so
+  # this job needs a Debug build of Worker IN ADDITION to the Release build
+  # every other job already gets from restoring+building its own target —
+  # matches exactly what running this suite locally requires (see
+  # AnthropicRealAgentWorkflowRoundTripTests.Fixture's own doc comment).
+  # AnthropicRealAgentWorkflowRoundTripTests is excluded for the same reason
+  # as the two tests above — real external Anthropic calls, never in
+  # unattended CI. ----
+  api-integration-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('i-host-pro/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore solution
+        run: dotnet restore IHostPro.sln
+
+      - name: Build solution (Release — provides MigrationRunner + Api)
+        run: dotnet build IHostPro.sln --no-restore --configuration Release
+
+      - name: Build Worker (Debug — the Fixture launches this exact build output as a subprocess)
+        run: dotnet build src/Host/IHostPro.Worker/IHostPro.Worker.csproj --configuration Debug
+
+      - name: Full API Integration Tests
+        run: dotnet test tests/Host/IHostPro.Api.Tests.Integration/IHostPro.Api.Tests.Integration.csproj --no-build --configuration Release --filter "FullyQualifiedName!~AnthropicRealAgentWorkflowRoundTripTests" --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-api-integration
+          path: i-host-pro/TestResults/*.trx
+
+  # ---- Frontend E2E (real Angular dev server + a real backend stack +
+  # Playwright). The heaviest job — includes its own npm install and browser
+  # download; Playwright's Chromium install is self-managed by the fixture
+  # itself (WebE2EFixture calls Microsoft.Playwright.Program.Main(["install",
+  # "chromium"]) directly), so no separate browser-install step is needed
+  # here. ----
+  frontend-e2e-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: i-host-pro/frontend/IHostPro.Web/package-lock.json
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('i-host-pro/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: npm ci (frontend)
+        working-directory: i-host-pro/frontend/IHostPro.Web
+        run: npm ci
+
+      - name: Restore solution
+        run: dotnet restore IHostPro.sln
+
+      - name: Build solution (Release — provides MigrationRunner + Api)
+        run: dotnet build IHostPro.sln --no-restore --configuration Release
+
+      - name: Build Worker (Debug — the Fixture launches this exact build output as a subprocess)
+        run: dotnet build src/Host/IHostPro.Worker/IHostPro.Worker.csproj --configuration Debug
+
+      - name: Frontend E2E Tests
+        run: dotnet test tests/Frontend/IHostPro.Web.Tests.E2E/IHostPro.Web.Tests.E2E.csproj --no-build --configuration Release -m:1 --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-frontend-e2e
+          path: i-host-pro/TestResults/*.trx
+
+  # ---- Packaging validation (Documento 21 §6-7 — empacotamento). Confirms
+  # each host can actually be published into a real container image from the
+  # current source tree. Never pushes to any registry (CP1 mandate item 18)
+  # — build success is the only assertion. ----
+  packaging:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - { name: Api, dockerfile: "docker/Api.Dockerfile" }
+          - { name: Worker, dockerfile: "docker/Worker.Dockerfile" }
+          - { name: MigrationRunner, dockerfile: "docker/MigrationRunner.Dockerfile" }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker build — ${{ matrix.image.name }}
+        working-directory: i-host-pro
+        run: docker build -f ${{ matrix.image.dockerfile }} -t ihostpro-${{ matrix.image.name }}-ci .
