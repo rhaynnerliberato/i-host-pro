@@ -147,4 +147,77 @@ public class AgentSessionTests
         act.Should().Throw<ArgumentOutOfRangeException>();
         session.Confidence.Should().BeNull("an invariant violation must never partially apply — the confidence value must never be clamped or silently stored");
     }
+
+    // ---- Escalate/Resume (Fase 11, Checkpoint 6 — Human Handoff, Safety & Audit) ----
+
+    [Fact]
+    public void Escalate_from_Active_transitions_to_Escalated_and_updates_the_timestamp()
+    {
+        var session = CreateValid();
+        var escalatedAt = Now.AddMinutes(1);
+
+        session.Escalate(escalatedAt);
+
+        session.Status.Should().Be(AgentSessionStatus.Escalated);
+        session.UpdatedAtUtc.Should().Be(escalatedAt);
+    }
+
+    [Fact]
+    public void Escalate_throws_when_already_Escalated()
+    {
+        var session = CreateValid();
+        session.Escalate(Now.AddMinutes(1));
+
+        var act = () => session.Escalate(Now.AddMinutes(2));
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Escalate_throws_when_Completed()
+    {
+        var session = CreateValid();
+        session.Complete(Now.AddMinutes(1));
+
+        var act = () => session.Escalate(Now.AddMinutes(2));
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Resume_from_Escalated_transitions_back_to_Active()
+    {
+        var session = CreateValid();
+        session.Escalate(Now.AddMinutes(1));
+        var resumedAt = Now.AddMinutes(5);
+
+        session.Resume(resumedAt);
+
+        session.Status.Should().Be(AgentSessionStatus.Active);
+        session.UpdatedAtUtc.Should().Be(resumedAt);
+    }
+
+    [Fact]
+    public void Resume_throws_when_not_Escalated()
+    {
+        var session = CreateValid();
+
+        var act = () => session.Resume(Now.AddMinutes(1));
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void RecordInteraction_throws_when_session_is_Escalated()
+    {
+        // The suspended-session guard's own domain-level backstop — even if
+        // the orchestrator's own guard were ever bypassed, the aggregate
+        // itself refuses to record a new interaction while Escalated.
+        var session = CreateValid();
+        session.Escalate(Now.AddMinutes(1));
+
+        var act = () => session.RecordInteraction(Now.AddMinutes(2), "pt-BR", null, null, "Fake", "fake-model-v1");
+
+        act.Should().Throw<InvalidOperationException>();
+    }
 }

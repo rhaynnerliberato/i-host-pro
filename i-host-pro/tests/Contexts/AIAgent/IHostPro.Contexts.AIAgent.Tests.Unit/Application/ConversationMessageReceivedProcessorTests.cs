@@ -47,15 +47,19 @@ public class ConversationMessageReceivedProcessorTests
         FakeAgentInteractionRepository interactionRepository, FakeAgentSessionRepository sessionRepository,
         ModelRequest? request = null, FakeAgentToolExecutionRepository? toolExecutionRepository = null,
         IEnumerable<IAgentTool>? tools = null, FakeAgentPendingActionRepository? pendingActionRepository = null,
-        FakeAgentToolConfirmationPolicy? confirmationPolicy = null, FakeAgentResponseDeliveryService? responseDeliveryService = null) =>
+        FakeAgentToolConfirmationPolicy? confirmationPolicy = null, FakeAgentResponseDeliveryService? responseDeliveryService = null,
+        FakeAgentHumanHandoffRepository? handoffRepository = null, FakeAdministratorNotificationService? administratorNotificationService = null) =>
         new(
             FakeAgentSessionResolver.Returning(SessionId), sessionRepository, interactionRepository,
             toolExecutionRepository ?? new FakeAgentToolExecutionRepository(),
             pendingActionRepository ?? FakeAgentPendingActionRepository.WithExisting(null),
+            handoffRepository ?? FakeAgentHumanHandoffRepository.WithExisting(null),
+            new AgentHumanHandoffReasonClassifier(),
             confirmationPolicy ?? FakeAgentToolConfirmationPolicy.RequiringNone(),
             FakeAgentContextBuilder.Returning(request ?? new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, "Olá")])),
             new FakeModelProvider(NullLogger<FakeModelProvider>.Instance),
             responseDeliveryService ?? FakeAgentResponseDeliveryService.Succeeding(Guid.NewGuid()),
+            administratorNotificationService ?? FakeAdministratorNotificationService.Succeeding(),
             tools ?? [],
             new PassThroughAIAgentTransactionExecutor(), TimeProvider.System,
             NullLogger<ConversationMessageReceivedProcessor>.Instance);
@@ -549,8 +553,13 @@ public class ConversationMessageReceivedProcessorTests
     }
 
     [Fact]
-    public async Task HandleAsync_human_handoff_requested_intent_produces_a_safe_response_and_never_claims_a_real_handoff()
+    public async Task HandleAsync_human_handoff_requested_intent_produces_a_safe_response_no_business_tool_and_zero_state_mutation_beyond_audit()
     {
+        // Fase 11, Checkpoint 5: this intent was classified but no handoff
+        // action existed yet. Fase 11, Checkpoint 6: the SAME intent now
+        // triggers the real handoff — this test's own name/assertions were
+        // updated to match, an intentional behavior change (mirrors every
+        // other CP-to-CP assertion update already made in this class).
         var messageId = Guid.NewGuid();
         var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
         var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
@@ -564,6 +573,181 @@ public class ConversationMessageReceivedProcessorTests
         interaction.Outcome.Should().Be(AgentInteractionOutcome.Success);
         interaction.Intent.Should().Be("human_handoff_requested");
         interaction.OutboundMessageId.Should().NotBeNull();
-        toolExecutionRepository.AddedExecutions.Should().BeEmpty("Checkpoint 5 only classifies the request — full handoff (state, admin notification, AI suspension) is Checkpoint 6's scope");
+        toolExecutionRepository.AddedExecutions.Should().BeEmpty("a human handoff never calls any business Tool/Command");
+
+        sessionRepository.UpdatedSessions.Should().ContainSingle();
+        sessionRepository.UpdatedSessions[0].Status.Should().Be(AgentSessionStatus.Escalated);
+    }
+
+    // Fase 11, Checkpoint 6 — Human Handoff, Safety & Audit.
+
+    [Fact]
+    public async Task HandleAsync_a_restricted_intent_creates_a_real_handoff_escalates_the_session_and_notifies_the_administrator()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var handoffRepository = FakeAgentHumanHandoffRepository.WithExisting(null);
+        var notificationService = FakeAdministratorNotificationService.Succeeding();
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"quero um reembolso {FakeModelProvider.IntentTriggerPrefix}refund]")]);
+        var processor = CreateProcessor(
+            interactionRepository, sessionRepository, request,
+            handoffRepository: handoffRepository, administratorNotificationService: notificationService);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        handoffRepository.AddedHandoffs.Should().ContainSingle();
+        var handoff = handoffRepository.AddedHandoffs[0];
+        handoff.ReasonCode.Should().Be(AgentHumanHandoffReasonCode.Refund);
+        handoff.Status.Should().Be(AgentHumanHandoffStatus.Notified, "the notification service succeeded");
+        handoff.NotifiedAtUtc.Should().NotBeNull();
+
+        sessionRepository.UpdatedSessions.Should().ContainSingle();
+        sessionRepository.UpdatedSessions[0].Status.Should().Be(AgentSessionStatus.Escalated);
+
+        notificationService.Calls.Should().ContainSingle();
+        notificationService.Calls[0].ReasonCode.Should().Be("Refund");
+
+        var interaction = interactionRepository.AddedInteractions[0];
+        interaction.Outcome.Should().Be(AgentInteractionOutcome.Success);
+        interaction.OutboundMessageId.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_a_failed_administrator_notification_never_reactivates_the_session_and_never_claims_success()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var handoffRepository = FakeAgentHumanHandoffRepository.WithExisting(null);
+        var notificationService = FakeAdministratorNotificationService.Failing("connector_exception");
+        var responseDelivery = FakeAgentResponseDeliveryService.Succeeding(Guid.NewGuid());
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"acidente grave {FakeModelProvider.IntentTriggerPrefix}accident]")]);
+        var processor = CreateProcessor(
+            interactionRepository, sessionRepository, request,
+            handoffRepository: handoffRepository, administratorNotificationService: notificationService, responseDeliveryService: responseDelivery);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        var handoff = handoffRepository.AddedHandoffs[0];
+        handoff.Status.Should().Be(AgentHumanHandoffStatus.Requested, "notification failure never marks the handoff Notified");
+        handoff.NotificationFailureCode.Should().Be("connector_exception");
+
+        sessionRepository.UpdatedSessions[0].Status.Should().Be(
+            AgentSessionStatus.Escalated, "a failed notification never reactivates the session — no rollback");
+
+        responseDelivery.Calls.Should().ContainSingle();
+        responseDelivery.Calls[0].Content.Should().NotContain("encaminhada", "the guest ack must never claim a notification that did not actually succeed");
+    }
+
+    [Fact]
+    public async Task HandleAsync_a_restricted_intent_cancels_any_active_pending_action_without_calling_any_business_command()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var tool = FakeAgentTool.Succeeding("MyWriteTool", "should never run");
+        var pendingAction = AgentPendingAction.Propose(
+            Guid.NewGuid(), TenantId, SessionId, Guid.NewGuid(), "MyWriteTool", "{}", Now);
+        var pendingActionRepository = FakeAgentPendingActionRepository.WithExisting(pendingAction);
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"polícia {FakeModelProvider.IntentTriggerPrefix}police]")]);
+        var processor = CreateProcessor(
+            interactionRepository, sessionRepository, request, tools: [tool], pendingActionRepository: pendingActionRepository);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        pendingActionRepository.UpdatedPendingActions.Should().ContainSingle();
+        pendingActionRepository.UpdatedPendingActions[0].Status.Should().Be(AgentPendingActionStatus.Cancelled);
+        tool.LastContext.Should().BeNull("cancelling a pending action never calls any business Tool/Command");
+    }
+
+    [Fact]
+    public async Task HandleAsync_low_confidence_intent_creates_a_handoff_without_any_numeric_threshold()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var handoffRepository = FakeAgentHumanHandoffRepository.WithExisting(null);
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"??? {FakeModelProvider.IntentTriggerPrefix}low_confidence]")]);
+        var processor = CreateProcessor(interactionRepository, sessionRepository, request, handoffRepository: handoffRepository);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        handoffRepository.AddedHandoffs.Should().ContainSingle();
+        handoffRepository.AddedHandoffs[0].ReasonCode.Should().Be(AgentHumanHandoffReasonCode.LowConfidence);
+    }
+
+    [Fact]
+    public async Task HandleAsync_a_low_raw_confidence_value_without_a_restricted_intent_never_triggers_a_handoff()
+    {
+        // Fase 11, Checkpoint 6 (mandate item 4/5): no numeric threshold
+        // exists — a low Confidence value alone (with no restricted intent
+        // classified) must never trigger a handoff.
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var handoffRepository = FakeAgentHumanHandoffRepository.WithExisting(null);
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"oi {FakeModelProvider.ConfidenceMarkerPrefix}0.01]")]);
+        var processor = CreateProcessor(interactionRepository, sessionRepository, request, handoffRepository: handoffRepository);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        handoffRepository.AddedHandoffs.Should().BeEmpty();
+        sessionRepository.UpdatedSessions.Should().ContainSingle();
+        sessionRepository.UpdatedSessions[0].Status.Should().Be(AgentSessionStatus.Active, "no escalation occurred — RecordInteraction just updates the session normally");
+        interactionRepository.AddedInteractions[0].Confidence.Should().Be(0.01m);
+    }
+
+    [Fact]
+    public async Task HandleAsync_a_new_inbound_message_on_an_already_escalated_session_never_calls_the_model_or_any_tool()
+    {
+        var messageId = Guid.NewGuid();
+        var escalatedSession = NewActiveSession();
+        escalatedSession.Escalate(Now);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(escalatedSession);
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var toolExecutionRepository = new FakeAgentToolExecutionRepository();
+        var tool = FakeAgentTool.Succeeding("MyTool", "should never run");
+        var handoff = AgentHumanHandoff.Request(Guid.NewGuid(), TenantId, SessionId, AgentHumanHandoffReasonCode.Refund, Now);
+        handoff.MarkNotified(Now);
+        var handoffRepository = FakeAgentHumanHandoffRepository.WithExisting(handoff);
+        var responseDelivery = FakeAgentResponseDeliveryService.Succeeding(Guid.NewGuid());
+        // Even a forbidden Tool-call/confirmation-bypass marker must never be honored while Escalated.
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, $"oi {FakeModelProvider.ToolCallTriggerPrefix}MyTool]")]);
+        var processor = CreateProcessor(
+            interactionRepository, sessionRepository, request, toolExecutionRepository, [tool],
+            handoffRepository: handoffRepository, responseDeliveryService: responseDelivery);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        toolExecutionRepository.AddedExecutions.Should().BeEmpty("the suspended-session guard must never call any Tool");
+        tool.LastContext.Should().BeNull();
+        sessionRepository.UpdatedSessions.Should().BeEmpty("a suspended session is never touched by a subsequent inbound message");
+
+        interactionRepository.AddedInteractions.Should().ContainSingle();
+        interactionRepository.AddedInteractions[0].Outcome.Should().Be(AgentInteractionOutcome.Success);
+        responseDelivery.Calls.Should().ContainSingle();
+        responseDelivery.Calls[0].Content.Should().Contain("encaminhada", "the handoff was already Notified — the auto-ack may say so");
+    }
+
+    [Fact]
+    public async Task HandleAsync_a_new_inbound_message_on_a_requested_but_not_yet_notified_session_never_claims_a_notification()
+    {
+        var messageId = Guid.NewGuid();
+        var escalatedSession = NewActiveSession();
+        escalatedSession.Escalate(Now);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(escalatedSession);
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var handoff = AgentHumanHandoff.Request(Guid.NewGuid(), TenantId, SessionId, AgentHumanHandoffReasonCode.Accident, Now);
+        var handoffRepository = FakeAgentHumanHandoffRepository.WithExisting(handoff);
+        var responseDelivery = FakeAgentResponseDeliveryService.Succeeding(Guid.NewGuid());
+        var request = new ModelRequest(null, [new ModelMessage(ModelMessageRole.Guest, "alguém aí?")]);
+        var processor = CreateProcessor(
+            interactionRepository, sessionRepository, request, handoffRepository: handoffRepository, responseDeliveryService: responseDelivery);
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        responseDelivery.Calls.Should().ContainSingle();
+        responseDelivery.Calls[0].Content.Should().NotContain("encaminhada", "the handoff was never confirmed Notified — never claim it was");
     }
 }

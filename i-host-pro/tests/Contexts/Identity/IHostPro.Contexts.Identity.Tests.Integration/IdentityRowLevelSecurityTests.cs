@@ -127,8 +127,12 @@ public class IdentityRowLevelSecurityTests : IClassFixture<IdentityRowLevelSecur
         // and their two ADMIN role mappings — seeded ahead of any consumer
         // (mirrors the pre-existing SETTINGS:MANAGE/READ precedent), see
         // ADR-024.
-        (await dbContext.Permissions.CountAsync()).Should().Be(35);
-        (await dbContext.RolePermissions.CountAsync()).Should().Be(42);
+        // Fase 11, Checkpoint 6: +1 permission (AI_AGENT:MANAGE) and its
+        // single ADMIN role mapping — guards the Resume endpoint and the
+        // AdministratorNotificationContact management endpoints, same
+        // ADMIN-only precedent as INTEGRATIONS:MANAGE/GUEST_OPERATIONS:MANAGE.
+        (await dbContext.Permissions.CountAsync()).Should().Be(36);
+        (await dbContext.RolePermissions.CountAsync()).Should().Be(43);
     }
 
     [Fact]

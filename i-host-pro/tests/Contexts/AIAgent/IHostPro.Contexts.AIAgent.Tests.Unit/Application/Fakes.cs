@@ -246,6 +246,63 @@ internal sealed class FakeAgentPendingActionRepository : IAgentPendingActionRepo
             && (a.Status == AgentPendingActionStatus.Proposed || a.Status == AgentPendingActionStatus.Confirmed)));
 }
 
+internal sealed class FakeAgentHumanHandoffRepository : IAgentHumanHandoffRepository
+{
+    private readonly Dictionary<Guid, AgentHumanHandoff> _byId = new();
+
+    public static FakeAgentHumanHandoffRepository WithExisting(AgentHumanHandoff? existing)
+    {
+        var repository = new FakeAgentHumanHandoffRepository();
+        if (existing is not null)
+            repository._byId[existing.Id] = existing;
+        return repository;
+    }
+
+    public List<AgentHumanHandoff> AddedHandoffs { get; } = [];
+    public List<AgentHumanHandoff> UpdatedHandoffs { get; } = [];
+
+    public void Add(AgentHumanHandoff handoff)
+    {
+        _byId[handoff.Id] = handoff;
+        AddedHandoffs.Add(handoff);
+    }
+
+    public void Update(AgentHumanHandoff handoff)
+    {
+        _byId[handoff.Id] = handoff;
+        UpdatedHandoffs.Add(handoff);
+    }
+
+    public Task<AgentHumanHandoff?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(_byId.GetValueOrDefault(id));
+
+    public Task<AgentHumanHandoff?> GetActiveByAgentSessionIdAsync(Guid agentSessionId, CancellationToken cancellationToken) =>
+        Task.FromResult(_byId.Values.SingleOrDefault(h =>
+            h.AgentSessionId == agentSessionId
+            && (h.Status == AgentHumanHandoffStatus.Requested || h.Status == AgentHumanHandoffStatus.Notified)));
+}
+
+internal sealed class FakeAdministratorNotificationService : IAdministratorNotificationService
+{
+    private readonly AdministratorNotificationResult _result;
+
+    private FakeAdministratorNotificationService(AdministratorNotificationResult result) => _result = result;
+
+    public static FakeAdministratorNotificationService Succeeding() => new(new AdministratorNotificationResult(true, null));
+
+    public static FakeAdministratorNotificationService Failing(string failureCode) =>
+        new(new AdministratorNotificationResult(false, failureCode));
+
+    public List<(Guid TenantId, Guid ConversationId, Guid ReservationId, Guid AgentHumanHandoffId, string ReasonCode)> Calls { get; } = [];
+
+    public Task<AdministratorNotificationResult> NotifyAsync(
+        Guid tenantId, Guid conversationId, Guid reservationId, Guid agentHumanHandoffId, string reasonCode, CancellationToken cancellationToken)
+    {
+        Calls.Add((tenantId, conversationId, reservationId, agentHumanHandoffId, reasonCode));
+        return Task.FromResult(_result);
+    }
+}
+
 internal sealed class FakeAgentResponseDeliveryService : IAgentResponseDeliveryService
 {
     private readonly AgentResponseDeliveryResult _result;

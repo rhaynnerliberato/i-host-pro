@@ -131,8 +131,21 @@ public sealed class AIAgentConversationalOrchestrationWorkflowRoundTripTests : I
         withOutboundMessage.Should().NotBeNull(WorkerSnapshot());
     }
 
+    /// <summary>
+    /// Updated for Fase 11, Checkpoint 6: <c>human_handoff_requested</c> now
+    /// drives a REAL <see cref="AgentHumanHandoff"/>/<see cref="AgentSession"/>
+    /// escalation (superseding this test's original Checkpoint 5 premise,
+    /// which predates the classifier being wired to
+    /// <c>ProcessHumanHandoffRequestAsync</c>) — no <c>AdministratorNotificationContact</c>
+    /// is seeded in this class, so the notification attempt genuinely fails
+    /// and the handoff stays <see cref="AgentHumanHandoffStatus.Requested"/>;
+    /// the guest ack must still never overclaim a notification that did not
+    /// happen. The real "notification succeeds" path is covered by
+    /// <c>AIAgentHumanHandoffWorkflowRoundTripTests</c> (Checkpoint 6's own
+    /// dedicated E2E gate).
+    /// </summary>
     [Fact]
-    public async Task Human_handoff_requested_intent_is_classified_and_never_claims_a_real_handoff()
+    public async Task Human_handoff_requested_intent_creates_a_real_handoff_and_the_ack_never_overclaims_notification_success()
     {
         const string guestPhone = "+5511830000004";
         await SeedConfirmedReservationAsync(guestPhone, DateTimeOffset.UtcNow.AddDays(30), DateTimeOffset.UtcNow.AddDays(33));
@@ -148,13 +161,21 @@ public sealed class AIAgentConversationalOrchestrationWorkflowRoundTripTests : I
         interaction.Intent.Should().Be("human_handoff_requested");
 
         var toolExecutions = await ReadToolExecutionsAsync(interaction.Id);
-        toolExecutions.Should().BeEmpty("Checkpoint 5 only classifies the request — full handoff (state/notification/AI suspension) is Checkpoint 6's scope");
+        toolExecutions.Should().BeEmpty("a restricted intent is never dispatched as a Tool call — it preempts tool/confirmation handling entirely");
+
+        var session = await ReadSessionByIdAsync(interaction.AgentSessionId);
+        session!.Status.Should().Be(AgentSessionStatus.Escalated, "Checkpoint 6 — an explicit human request genuinely suspends the AI, not just classifies it");
+
+        var handoff = await ReadHandoffByAgentSessionIdAsync(interaction.AgentSessionId);
+        handoff.Should().NotBeNull("a real AgentHumanHandoff row must exist now that the classifier is wired to ProcessHumanHandoffRequestAsync");
+        handoff!.ReasonCode.Should().Be(AgentHumanHandoffReasonCode.ExplicitHumanRequest);
+        handoff.Status.Should().Be(AgentHumanHandoffStatus.Requested, "no AdministratorNotificationContact is seeded in this test class — notification must genuinely fail, never be reported as Notified");
 
         var withOutboundMessage = await WaitForOutboundMessageIdAsync(message.Id);
         withOutboundMessage.Should().NotBeNull(WorkerSnapshot());
 
         var outboundMessage = await ReadMessageByIdAsync(withOutboundMessage!.Value);
-        outboundMessage!.RenderedContent.Should().NotContain("já encaminhei", "the response must never claim a handoff that did not actually happen")
+        outboundMessage!.RenderedContent.Should().NotContain("já encaminhei", "the response must never claim a notification that did not actually happen")
             .And.NotContain("foi notificado");
     }
 
@@ -289,6 +310,34 @@ public sealed class AIAgentConversationalOrchestrationWorkflowRoundTripTests : I
 
         await transaction.CommitAsync();
         return interaction;
+    }
+
+    private async Task<AgentSession?> ReadSessionByIdAsync(Guid agentSessionId)
+    {
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(GlobalTenantId);
+        await using var dbContext = CreateAIAgentDbContext(tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext.Database, GlobalTenantId);
+
+        var session = await dbContext.AgentSessions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == agentSessionId);
+
+        await transaction.CommitAsync();
+        return session;
+    }
+
+    private async Task<AgentHumanHandoff?> ReadHandoffByAgentSessionIdAsync(Guid agentSessionId)
+    {
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(GlobalTenantId);
+        await using var dbContext = CreateAIAgentDbContext(tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext.Database, GlobalTenantId);
+
+        var handoff = await dbContext.AgentHumanHandoffs.AsNoTracking().FirstOrDefaultAsync(h => h.AgentSessionId == agentSessionId);
+
+        await transaction.CommitAsync();
+        return handoff;
     }
 
     private async Task<List<AgentToolExecution>> ReadToolExecutionsAsync(Guid agentInteractionId)

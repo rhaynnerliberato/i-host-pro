@@ -127,6 +127,7 @@ public class AIAgentFoundationTests : IClassFixture<AIAgentFoundationTests.Fixtu
         (await TableExistsAsync(dbContext, "ai_agent", "agent_interactions")).Should().BeTrue();
         (await TableExistsAsync(dbContext, "ai_agent", "agent_tool_executions")).Should().BeTrue();
         (await TableExistsAsync(dbContext, "ai_agent", "agent_pending_actions")).Should().BeTrue();
+        (await TableExistsAsync(dbContext, "ai_agent", "agent_human_handoffs")).Should().BeTrue();
     }
 
     [Fact]
@@ -546,6 +547,192 @@ public class AIAgentFoundationTests : IClassFixture<AIAgentFoundationTests.Fixtu
         visible.Should().BeEmpty();
     }
 
+    // ---- AgentHumanHandoff: real persistence + FK + partial unique index + RLS (Fase 11, Checkpoint 6) ----
+
+    [Fact]
+    public async Task AgentHumanHandoff_round_trips_ReasonCode_Status_and_timestamps()
+    {
+        var (tenantId, agentSessionId) = await SeedActiveAgentSessionAsync();
+        var handoffId = Guid.NewGuid();
+        var requestedAt = DateTimeOffset.UtcNow;
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using (var writeDbContext = CreateDbContext(_migratorConnectionString, tenantContext))
+        await using (var writeTransaction = await writeDbContext.Database.BeginTransactionAsync())
+        {
+            await SetTenantAsync(writeDbContext, tenantId);
+            var handoff = AgentHumanHandoff.Request(handoffId, tenantId, agentSessionId, AgentHumanHandoffReasonCode.Refund, requestedAt);
+            writeDbContext.AgentHumanHandoffs.Add(handoff);
+            await writeDbContext.SaveChangesAsync();
+            await writeTransaction.CommitAsync();
+        }
+
+        await using var readDbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var readTransaction = await readDbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(readDbContext, tenantId);
+
+        var persisted = await readDbContext.AgentHumanHandoffs.AsNoTracking().SingleAsync(h => h.Id == handoffId);
+
+        persisted.ReasonCode.Should().Be(AgentHumanHandoffReasonCode.Refund);
+        persisted.Status.Should().Be(AgentHumanHandoffStatus.Requested);
+        persisted.RequestedAtUtc.Should().BeCloseTo(requestedAt, TimeSpan.FromSeconds(1));
+        persisted.NotifiedAtUtc.Should().BeNull();
+        persisted.ResumedByActorId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AgentHumanHandoff_rejects_a_reference_to_a_nonexistent_AgentSession()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var handoff = AgentHumanHandoff.Request(Guid.NewGuid(), tenantId, Guid.NewGuid(), AgentHumanHandoffReasonCode.Police, DateTimeOffset.UtcNow);
+        dbContext.AgentHumanHandoffs.Add(handoff);
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>(
+            "agent_human_handoffs.agent_session_id carries a real database foreign key — the parent AgentSession row must already exist");
+    }
+
+    [Fact]
+    public async Task A_second_active_AgentHumanHandoff_for_the_same_AgentSession_is_rejected()
+    {
+        var (tenantId, agentSessionId) = await SeedActiveHandoffAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var secondHandoff = AgentHumanHandoff.Request(Guid.NewGuid(), tenantId, agentSessionId, AgentHumanHandoffReasonCode.Accident, DateTimeOffset.UtcNow);
+        dbContext.AgentHumanHandoffs.Add(secondHandoff);
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>("only one active (Requested/Notified) AgentHumanHandoff may exist per AgentSession");
+    }
+
+    [Fact]
+    public async Task A_second_AgentHumanHandoff_is_allowed_once_the_first_is_Resumed()
+    {
+        var (tenantId, agentSessionId) = await SeedActiveHandoffAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using (var resumeDbContext = CreateDbContext(_migratorConnectionString, tenantContext))
+        await using (var resumeTransaction = await resumeDbContext.Database.BeginTransactionAsync())
+        {
+            await SetTenantAsync(resumeDbContext, tenantId);
+            var first = await resumeDbContext.AgentHumanHandoffs.FirstAsync(h => h.AgentSessionId == agentSessionId);
+            first.Resume(DateTimeOffset.UtcNow, Guid.NewGuid());
+            await resumeDbContext.SaveChangesAsync();
+            await resumeTransaction.CommitAsync();
+        }
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var secondHandoff = AgentHumanHandoff.Request(Guid.NewGuid(), tenantId, agentSessionId, AgentHumanHandoffReasonCode.Negotiation, DateTimeOffset.UtcNow);
+        dbContext.AgentHumanHandoffs.Add(secondHandoff);
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task App_role_sees_only_its_own_tenant_AgentHumanHandoff_rows()
+    {
+        var (tenantId, agentSessionId) = await SeedActiveHandoffAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var visible = await dbContext.AgentHumanHandoffs.Where(h => h.AgentSessionId == agentSessionId).ToListAsync();
+
+        visible.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Wrong_tenant_sees_zero_AgentHumanHandoff_rows()
+    {
+        var (_, agentSessionId) = await SeedActiveHandoffAsync();
+        var unrelatedTenantId = Guid.NewGuid();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(unrelatedTenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, unrelatedTenantId);
+
+        var visible = await dbContext.AgentHumanHandoffs.Where(h => h.AgentSessionId == agentSessionId).ToListAsync();
+
+        visible.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Absent_tenant_setting_fails_closed_to_zero_AgentHumanHandoff_rows_even_for_the_migrator_role()
+    {
+        await SeedActiveHandoffAsync();
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, new TenantContext());
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        // Deliberately no set_config('app.tenant_id', ...) call — RLS must fail closed.
+
+        var visible = await dbContext.AgentHumanHandoffs.IgnoreQueryFilters().ToListAsync();
+
+        visible.Should().BeEmpty();
+    }
+
+    // ---- AgentSessionStatus.Escalated (Fase 11, Checkpoint 6) ----
+
+    [Fact]
+    public async Task AgentSession_Escalate_round_trips_and_a_second_Active_session_is_still_rejected_while_Escalated()
+    {
+        var (tenantId, _) = await SeedActiveAgentSessionAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        var conversationId = Guid.NewGuid();
+        await using (var seedDbContext = CreateDbContext(_migratorConnectionString, tenantContext))
+        await using (var seedTransaction = await seedDbContext.Database.BeginTransactionAsync())
+        {
+            await SetTenantAsync(seedDbContext, tenantId);
+            var session = AgentSession.Create(Guid.NewGuid(), tenantId, conversationId, Guid.NewGuid(), DateTimeOffset.UtcNow);
+            session.Escalate(DateTimeOffset.UtcNow);
+            seedDbContext.AgentSessions.Add(session);
+            await seedDbContext.SaveChangesAsync();
+            await seedTransaction.CommitAsync();
+        }
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var persisted = await dbContext.AgentSessions.AsNoTracking().SingleAsync(s => s.ConversationId == conversationId);
+        persisted.Status.Should().Be(AgentSessionStatus.Escalated);
+
+        var secondSession = AgentSession.Create(Guid.NewGuid(), tenantId, conversationId, Guid.NewGuid(), DateTimeOffset.UtcNow);
+        dbContext.AgentSessions.Add(secondSession);
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>(
+            "the widened partial unique index still enforces at most one OPEN (Active or Escalated) session per Conversation");
+    }
+
     // ---- AgentInteraction.OutboundMessageId (Fase 11, Checkpoint 4) ----
 
     [Fact]
@@ -705,6 +892,44 @@ public class AIAgentFoundationTests : IClassFixture<AIAgentFoundationTests.Fixtu
         var pendingAction = AgentPendingAction.Propose(
             Guid.NewGuid(), tenantId, agentSessionId, interaction.Id, "RequestEarlyCheckIn", """{"requestedCheckInAt":"2026-09-01T12:00:00Z"}""", DateTimeOffset.UtcNow);
         dbContext.AgentPendingActions.Add(pendingAction);
+
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return (tenantId, agentSessionId);
+    }
+
+    private async Task<(Guid TenantId, Guid AgentSessionId)> SeedActiveAgentSessionAsync()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var session = AgentSession.Create(Guid.NewGuid(), tenantId, Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow);
+        dbContext.AgentSessions.Add(session);
+
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return (tenantId, session.Id);
+    }
+
+    private async Task<(Guid TenantId, Guid AgentSessionId)> SeedActiveHandoffAsync()
+    {
+        var (tenantId, agentSessionId) = await SeedActiveAgentSessionAsync();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var handoff = AgentHumanHandoff.Request(Guid.NewGuid(), tenantId, agentSessionId, AgentHumanHandoffReasonCode.ExplicitHumanRequest, DateTimeOffset.UtcNow);
+        dbContext.AgentHumanHandoffs.Add(handoff);
 
         await dbContext.SaveChangesAsync();
         await transaction.CommitAsync();
