@@ -34,6 +34,7 @@ public static class AIAgentModuleExtensions
         services.AddScoped<IAgentInteractionRepository, AgentInteractionRepository>();
         services.AddScoped<IAgentToolExecutionRepository, AgentToolExecutionRepository>();
         services.AddScoped<IAgentPendingActionRepository, AgentPendingActionRepository>();
+        services.AddScoped<IAgentHumanHandoffRepository, AgentHumanHandoffRepository>();
         services.AddScoped<IAIAgentTransactionExecutor, AIAgentTransactionExecutor>();
         services.AddScoped<IAgentSessionResolver, AgentSessionResolver>();
         services.AddScoped<IAgentContextBuilder, AgentContextBuilder>();
@@ -83,6 +84,14 @@ public static class AIAgentModuleExtensions
         // is already registered by AddCommunicationModule, which IHostPro.Worker
         // calls before this method.
         services.AddScoped<IAgentResponseDeliveryService, AgentResponseDeliveryService>();
+
+        // Fase 11, Checkpoint 6 (Human Handoff, Safety & Audit) — the safety
+        // classifier (fixed Intent -> AgentHumanHandoffReasonCode allowlist,
+        // never model-supplied) and SendHumanHandoffNotificationCommand's own
+        // Exception #3 adapter, mirroring IAgentResponseDeliveryService's
+        // shape exactly.
+        services.AddScoped<IAgentHumanHandoffReasonClassifier, AgentHumanHandoffReasonClassifier>();
+        services.AddScoped<IAdministratorNotificationService, AdministratorNotificationService>();
 
         return services;
     }

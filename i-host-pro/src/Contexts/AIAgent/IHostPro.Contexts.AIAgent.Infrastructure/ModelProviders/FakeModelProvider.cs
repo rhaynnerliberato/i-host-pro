@@ -78,6 +78,20 @@ namespace IHostPro.Contexts.AIAgent.Infrastructure.ModelProviders;
 /// <see cref="ModelResult.Intent"/> (never a Tool call) — the orchestrator
 /// itself does nothing special with these; they are ordinary final answers
 /// whose <c>Intent</c> is simply auditable in <c>AgentInteraction.Intent</c>.
+///
+/// Fase 11, Checkpoint 6 adds <see cref="IntentTriggerPrefix"/> — a generic
+/// marker carrying any intent value (e.g. <c>[FAKE_MODEL_INTENT:refund]</c>),
+/// so every restricted-intent reason
+/// <see cref="Application.IAgentHumanHandoffReasonClassifier"/> maps
+/// (refund/accident/police/negotiation/severe_damage/serious_complaint/
+/// aggressive_behavior/low_confidence/integration_failure) is provable
+/// without a dedicated named marker per reason — mirrors
+/// <see cref="ConfidenceMarkerPrefix"/>'s own carries-a-value convention.
+/// <see cref="HumanHandoffTriggerMarker"/> remains a separate, named marker
+/// (its own reason, <c>ExplicitHumanRequest</c>, predates this generic
+/// mechanism from Checkpoint 5) — both ultimately just set
+/// <see cref="ModelResult.Intent"/>, so either spelling works for that one
+/// reason.
 /// </remarks>
 public sealed class FakeModelProvider : IModelProvider
 {
@@ -89,6 +103,7 @@ public sealed class FakeModelProvider : IModelProvider
     public const string CancelTriggerMarker = "[FAKE_MODEL_CANCEL]";
     public const string UnsupportedRequestTriggerMarker = "[FAKE_MODEL_UNSUPPORTED]";
     public const string HumanHandoffTriggerMarker = "[FAKE_MODEL_HUMAN_HANDOFF]";
+    public const string IntentTriggerPrefix = "[FAKE_MODEL_INTENT:";
 
     private const string ModelNameValue = "fake-model-v1";
     private const string UnsupportedRequestIntent = "unsupported_request";
@@ -97,12 +112,16 @@ public sealed class FakeModelProvider : IModelProvider
         "No momento não consigo ajudar com esse tipo de solicitação. Posso encaminhar para nossa equipe, se preferir.";
     private const string HumanHandoffResponseText =
         "Identifiquei seu pedido para falar com uma pessoa da nossa equipe. Assim que possível, alguém dará continuidade ao seu atendimento.";
+    private const string GenericIntentResponseText = "[FAKE MODEL RESPONSE] intent classified.";
 
     private static readonly Regex ConfidenceMarkerPattern = new(
         @"\[FAKE_MODEL_CONFIDENCE:(?<value>[0-9]*\.?[0-9]+)\]", RegexOptions.Compiled);
 
     private static readonly Regex ToolCallMarkerPattern = new(
         @"\[FAKE_MODEL_TOOL_CALL:(?<name>[A-Za-z0-9_]+)(?::(?<args>[^\]]+))?\]", RegexOptions.Compiled);
+
+    private static readonly Regex IntentMarkerPattern = new(
+        @"\[FAKE_MODEL_INTENT:(?<intent>[a-z_]+)\]", RegexOptions.Compiled);
 
     private readonly ILogger<FakeModelProvider> _logger;
     private readonly Dictionary<string, int> _transientFailureAttemptsByContent = new();
@@ -173,6 +192,25 @@ public sealed class FakeModelProvider : IModelProvider
                     Confidence: confidence,
                     InputTokens: inputTokens,
                     OutputTokens: HumanHandoffResponseText.Length,
+                    ModelName: ModelNameValue,
+                    FinishReason: "stop"));
+            }
+
+            var intentMatch = IntentMarkerPattern.Match(lastContent);
+            if (intentMatch.Success)
+            {
+                var intent = intentMatch.Groups["intent"].Value;
+
+                _logger.LogInformation(
+                    "[FAKE Model Provider — Development/Test only, no real model called] deterministic intent classified: {Intent}", intent);
+
+                return Task.FromResult(new ModelResult(
+                    Text: GenericIntentResponseText,
+                    DetectedLanguage: "pt-BR",
+                    Intent: intent,
+                    Confidence: confidence,
+                    InputTokens: inputTokens,
+                    OutputTokens: GenericIntentResponseText.Length,
                     ModelName: ModelNameValue,
                     FinishReason: "stop"));
             }

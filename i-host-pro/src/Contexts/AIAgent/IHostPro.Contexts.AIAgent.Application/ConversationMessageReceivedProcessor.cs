@@ -98,15 +98,25 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
     private const string ModelFailureFallbackFinishReason = "model_failure_fallback";
     private const string FallbackModelNamePlaceholder = "n/a";
 
+    // Fase 11, Checkpoint 6 (Human Handoff, Safety & Audit).
+    private const string UnknownNotificationFailureCode = "unknown";
+    private const string HandoffNotifiedAckContent =
+        "O atendimento automático foi pausado e sua solicitação foi encaminhada à nossa equipe. Em breve alguém dará continuidade ao seu atendimento.";
+    private const string HandoffRequestedOnlyAckContent =
+        "O atendimento automático está pausado e sua solicitação de atendimento humano foi registrada.";
+
     private readonly IAgentSessionResolver _sessionResolver;
     private readonly IAgentSessionRepository _sessionRepository;
     private readonly IAgentInteractionRepository _interactionRepository;
     private readonly IAgentToolExecutionRepository _toolExecutionRepository;
     private readonly IAgentPendingActionRepository _pendingActionRepository;
+    private readonly IAgentHumanHandoffRepository _handoffRepository;
+    private readonly IAgentHumanHandoffReasonClassifier _handoffReasonClassifier;
     private readonly IAgentToolConfirmationPolicy _confirmationPolicy;
     private readonly IAgentContextBuilder _contextBuilder;
     private readonly IModelProvider _modelProvider;
     private readonly IAgentResponseDeliveryService _responseDeliveryService;
+    private readonly IAdministratorNotificationService _administratorNotificationService;
     private readonly IReadOnlyList<IAgentTool> _tools;
     private readonly IAIAgentTransactionExecutor _transactionExecutor;
     private readonly TimeProvider _timeProvider;
@@ -118,10 +128,13 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
         IAgentInteractionRepository interactionRepository,
         IAgentToolExecutionRepository toolExecutionRepository,
         IAgentPendingActionRepository pendingActionRepository,
+        IAgentHumanHandoffRepository handoffRepository,
+        IAgentHumanHandoffReasonClassifier handoffReasonClassifier,
         IAgentToolConfirmationPolicy confirmationPolicy,
         IAgentContextBuilder contextBuilder,
         IModelProvider modelProvider,
         IAgentResponseDeliveryService responseDeliveryService,
+        IAdministratorNotificationService administratorNotificationService,
         IEnumerable<IAgentTool> tools,
         IAIAgentTransactionExecutor transactionExecutor,
         TimeProvider timeProvider,
@@ -132,10 +145,13 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
         _interactionRepository = interactionRepository;
         _toolExecutionRepository = toolExecutionRepository;
         _pendingActionRepository = pendingActionRepository;
+        _handoffRepository = handoffRepository;
+        _handoffReasonClassifier = handoffReasonClassifier;
         _confirmationPolicy = confirmationPolicy;
         _contextBuilder = contextBuilder;
         _modelProvider = modelProvider;
         _responseDeliveryService = responseDeliveryService;
+        _administratorNotificationService = administratorNotificationService;
         _tools = tools.ToArray();
         _transactionExecutor = transactionExecutor;
         _timeProvider = timeProvider;
@@ -158,6 +174,22 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
         var sessionId = await _sessionResolver.GetOrCreateActiveSessionIdAsync(
             @event.TenantId, @event.ConversationId, @event.ReservationId, @event.OccurredAtUtc, cancellationToken);
 
+        // Fase 11, Checkpoint 6 (mandate item 13/15/17) — the suspended-session
+        // guard: a session already Escalated NEVER reaches the model or any
+        // Tool, no matter what the new inbound message contains (including a
+        // fake Tool/confirmation marker, or a prompt-injection attempt).
+        // IAgentSessionResolver reuses this same Escalated session rather
+        // than creating a new Active one (see IAgentSessionRepository's own
+        // doc comment), so this check reliably catches every subsequent
+        // message for the duration of the handoff.
+        var session = await _transactionExecutor.ExecuteAsync(
+            () => _sessionRepository.GetByIdAsync(sessionId, cancellationToken), cancellationToken);
+        if (session!.Status == AgentSessionStatus.Escalated)
+        {
+            await HandleSuspendedSessionAsync(@event, sessionId, cancellationToken);
+            return;
+        }
+
         var baseRequest = await _contextBuilder.BuildAsync(@event.TenantId, @event.ConversationId, @event.MessageId, cancellationToken);
         var request = baseRequest with { AvailableTools = _tools.Select(t => t.Descriptor).ToArray() };
 
@@ -169,6 +201,22 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
             var result = await GenerateWithRetryAsync(request, cancellationToken);
 
             await StartInteractionAsync(@event, sessionId, interactionId, startedAtUtc, result.ModelName, cancellationToken);
+
+            // Fase 11, Checkpoint 6 (mandate item 3/11) — the safety
+            // classifier alone maps Intent to a restricted reason; a
+            // restricted intent preempts confirmation/tool-call handling
+            // entirely (mutually exclusive in practice, but checked first on
+            // principle — a real handoff always wins).
+            var handoffReasonCode = _handoffReasonClassifier.Classify(result.Intent);
+            if (handoffReasonCode is { } reasonCode)
+            {
+                await ProcessHumanHandoffRequestAsync(@event, sessionId, interactionId, reasonCode, result, cancellationToken);
+
+                _logger.LogInformation(
+                    "AIAgent {Trigger} outcome for tenant {TenantId} conversationId {ConversationId} sessionId {SessionId} interactionId {InteractionId}: {Result}",
+                    nameof(ConversationMessageReceived), @event.TenantId, @event.ConversationId, sessionId, interactionId, "HumanHandoffRequested");
+                return;
+            }
 
             var finalResult = result.ConfirmationIntent is { } confirmationIntent
                 ? await ProcessConfirmationReplyAsync(@event, sessionId, interactionId, startedAtUtc, confirmationIntent, request, cancellationToken)
@@ -528,6 +576,116 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
                 "AIAgent response delivery failed for tenant {TenantId} conversationId {ConversationId} interactionId {InteractionId}: {FailureCode}",
                 @event.TenantId, @event.ConversationId, interactionId, deliveryResult.FailureCode);
         }
+    }
+
+    /// <summary>
+    /// Fase 11, Checkpoint 6 (mandate item 15/16) — a new inbound message
+    /// arriving while <see cref="AgentSessionStatus.Escalated"/> NEVER
+    /// reaches <see cref="IModelProvider"/> or any Tool. Communication
+    /// already persisted the inbound <c>Message</c> before this handler even
+    /// ran (unchanged) — this records a minimal, model-free
+    /// <see cref="AgentInteraction"/> and delivers a deterministic auto-ack
+    /// reflecting the active handoff's own CURRENT state, never
+    /// re-attempting notification (that already happened once, when the
+    /// handoff was first requested) and never touching
+    /// <see cref="AgentSession"/> at all (it is already Escalated).
+    /// </summary>
+    private async Task HandleSuspendedSessionAsync(ConversationMessageReceived @event, Guid sessionId, CancellationToken cancellationToken)
+    {
+        var now = _timeProvider.GetUtcNow();
+        var interactionId = Guid.NewGuid();
+
+        await _transactionExecutor.ExecuteAsync(() =>
+        {
+            var interaction = AgentInteraction.Start(
+                interactionId, @event.TenantId, sessionId, @event.MessageId, _modelProvider.ProviderName, FallbackModelNamePlaceholder, now);
+            interaction.CompleteSuccessfully(
+                _timeProvider.GetUtcNow(), intent: null, language: null, confidence: null, inputTokens: 0, outputTokens: 0);
+            _interactionRepository.Add(interaction);
+            return Task.FromResult(true);
+        }, cancellationToken);
+
+        var handoff = await _transactionExecutor.ExecuteAsync(
+            () => _handoffRepository.GetActiveByAgentSessionIdAsync(sessionId, cancellationToken), cancellationToken);
+
+        var content = handoff?.Status == AgentHumanHandoffStatus.Notified ? HandoffNotifiedAckContent : HandoffRequestedOnlyAckContent;
+        await DeliverFallbackResponseAsync(@event, interactionId, content, cancellationToken);
+
+        _logger.LogInformation(
+            "AIAgent {Trigger} outcome for tenant {TenantId} conversationId {ConversationId} sessionId {SessionId} interactionId {InteractionId}: {Result}",
+            nameof(ConversationMessageReceived), @event.TenantId, @event.ConversationId, sessionId, interactionId, "SuspendedSessionAcknowledged");
+    }
+
+    /// <summary>
+    /// Fase 11, Checkpoint 6 (mandate item 11) — a restricted intent was just
+    /// classified: create the real <see cref="AgentHumanHandoff"/>, escalate
+    /// the session, cancel any active <see cref="AgentPendingAction"/>
+    /// (mandate item 12 — Cancelled, NEVER executed/rolled back, no business
+    /// Command called), attempt the real administrator notification exactly
+    /// once, and reply with a deterministic acknowledgement — NEVER
+    /// model-generated (mandate item 31), never claiming a notification that
+    /// did not actually succeed (mandate item 16/29). Completes the
+    /// already-started <paramref name="interactionId"/> directly (bypassing
+    /// <see cref="CompleteInteractionAndDeliverResponseAsync"/>'s own call to
+    /// <see cref="AgentSession.RecordInteraction"/>, which requires
+    /// <see cref="AgentSessionStatus.Active"/> — this session is Escalated by
+    /// the time completion happens).
+    /// </summary>
+    private async Task ProcessHumanHandoffRequestAsync(
+        ConversationMessageReceived @event, Guid sessionId, Guid interactionId, AgentHumanHandoffReasonCode reasonCode,
+        ModelResult classifyingResult, CancellationToken cancellationToken)
+    {
+        var now = _timeProvider.GetUtcNow();
+        var handoffId = Guid.NewGuid();
+
+        await _transactionExecutor.ExecuteAsync(async () =>
+        {
+            var handoff = AgentHumanHandoff.Request(handoffId, @event.TenantId, sessionId, reasonCode, now);
+            _handoffRepository.Add(handoff);
+
+            var session = (await _sessionRepository.GetByIdAsync(sessionId, cancellationToken))!;
+            session.Escalate(now);
+            _sessionRepository.Update(session);
+
+            var pendingAction = await _pendingActionRepository.GetActiveByAgentSessionIdAsync(sessionId, cancellationToken);
+            if (pendingAction is not null)
+            {
+                pendingAction.Cancel(now);
+                _pendingActionRepository.Update(pendingAction);
+            }
+
+            var interaction = (await _interactionRepository.GetByIdAsync(interactionId, cancellationToken))!;
+            interaction.CompleteSuccessfully(
+                now, classifyingResult.Intent, classifyingResult.DetectedLanguage, classifyingResult.Confidence,
+                classifyingResult.InputTokens, classifyingResult.OutputTokens);
+            _interactionRepository.Update(interaction);
+
+            return true;
+        }, cancellationToken);
+
+        var notificationResult = await _administratorNotificationService.NotifyAsync(
+            @event.TenantId, @event.ConversationId, @event.ReservationId, handoffId, reasonCode.ToString(), cancellationToken);
+
+        await _transactionExecutor.ExecuteAsync(async () =>
+        {
+            var handoff = (await _handoffRepository.GetByIdAsync(handoffId, cancellationToken))!;
+            if (notificationResult.IsSuccess)
+                handoff.MarkNotified(_timeProvider.GetUtcNow());
+            else
+                handoff.MarkNotificationFailed(_timeProvider.GetUtcNow(), notificationResult.FailureCode ?? UnknownNotificationFailureCode);
+            _handoffRepository.Update(handoff);
+            return true;
+        }, cancellationToken);
+
+        if (!notificationResult.IsSuccess)
+        {
+            _logger.LogWarning(
+                "AIAgent human handoff notification failed for tenant {TenantId} agentHumanHandoffId {AgentHumanHandoffId}: {FailureCode}",
+                @event.TenantId, handoffId, notificationResult.FailureCode);
+        }
+
+        var content = notificationResult.IsSuccess ? HandoffNotifiedAckContent : HandoffRequestedOnlyAckContent;
+        await DeliverFallbackResponseAsync(@event, interactionId, content, cancellationToken);
     }
 
     /// <summary>
