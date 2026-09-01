@@ -20,10 +20,15 @@ namespace IHostPro.Contexts.AIAgent.Domain;
 /// <c>Conversation</c>'s own cardinality precedent (CP1) exactly, enforced
 /// by a unique partial index (see the Infrastructure mapping).
 ///
-/// Status (mandate item 7): deliberately minimal — <see cref="AgentSessionStatus.Active"/>/
-/// <see cref="AgentSessionStatus.Completed"/> only. Escalated/Suspended/
-/// HumanOwned/Failed all belong to Checkpoint 6 (Human Handoff, Safety &amp;
-/// Audit) — never anticipated here, no consumer/use case exists yet.
+/// Status: <see cref="AgentSessionStatus.Active"/>/<see cref="AgentSessionStatus.Completed"/>
+/// (Checkpoint 2), extended by Checkpoint 6 (Human Handoff, Safety &amp;
+/// Audit) with <see cref="AgentSessionStatus.Escalated"/> — the sole owner of
+/// "the AI is currently suspended for this session" (never duplicated onto
+/// <c>Communication.Conversation.Status</c>, which remains <c>Active</c>-only
+/// — a Conversation is a message channel, independent of who is driving it).
+/// <see cref="Escalate"/>/<see cref="Resume"/> transition only
+/// Active↔Escalated; a <see cref="AgentSessionStatus.Completed"/> session is
+/// never reopened by either.
 ///
 /// Confidence (Fase 11, Checkpoint 2 governance resolution): normalized
 /// <c>decimal?</c>, <c>0..1</c> inclusive when non-null, <see langword="null"/>
@@ -111,11 +116,45 @@ public sealed class AgentSession : AggregateRoot<Guid>, ITenantOwned
         EndedAtUtc = now;
         UpdatedAtUtc = now;
     }
+
+    /// <summary>
+    /// Suspends automated processing for this session (Fase 11, Checkpoint 6)
+    /// — the orchestrator must never call <see cref="IHostPro.Contexts.AIAgent.Application.IModelProvider"/>
+    /// or any Tool while <see cref="Status"/> is <see cref="AgentSessionStatus.Escalated"/>.
+    /// Only a real <see cref="AgentHumanHandoff"/> escalates a session — this
+    /// method never runs standalone.
+    /// </summary>
+    public void Escalate(DateTimeOffset now)
+    {
+        if (Status != AgentSessionStatus.Active)
+            throw new InvalidOperationException($"Cannot escalate a session in status '{Status}'.");
+
+        Status = AgentSessionStatus.Escalated;
+        UpdatedAtUtc = now;
+    }
+
+    /// <summary>Manual-only (CP0 decision, reaffirmed by CP6 mandate item 41) — never auto-resumed by timeout, notification outcome, or a new guest message.</summary>
+    public void Resume(DateTimeOffset now)
+    {
+        if (Status != AgentSessionStatus.Escalated)
+            throw new InvalidOperationException($"Cannot resume a session in status '{Status}'.");
+
+        Status = AgentSessionStatus.Active;
+        UpdatedAtUtc = now;
+    }
 }
 
-/// <summary>Deliberately minimal (mandate item 7) — Escalated/Suspended/HumanOwned/Failed belong to Checkpoint 6, never anticipated here.</summary>
+/// <summary>
+/// <see cref="Escalated"/> (Fase 11, Checkpoint 6) is the sole owner of "the
+/// AI is currently suspended for a real human handoff" — never duplicated
+/// onto <c>Communication.Conversation.Status</c>. No <c>Suspended</c>/
+/// <c>HumanOwned</c>/<c>Failed</c> value exists — one restricted-intent state
+/// is sufficient for this checkpoint's scope (manual Resume only, no
+/// assignment/acknowledgement queue).
+/// </summary>
 public enum AgentSessionStatus
 {
     Active,
     Completed,
+    Escalated,
 }

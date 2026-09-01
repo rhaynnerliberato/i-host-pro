@@ -24,6 +24,7 @@ public sealed class AIAgentDbContext : BaseDbContext
     public DbSet<AgentInteraction> AgentInteractions => Set<AgentInteraction>();
     public DbSet<AgentToolExecution> AgentToolExecutions => Set<AgentToolExecution>();
     public DbSet<AgentPendingAction> AgentPendingActions => Set<AgentPendingAction>();
+    public DbSet<AgentHumanHandoff> AgentHumanHandoffs => Set<AgentHumanHandoff>();
 
     public AIAgentDbContext(DbContextOptions<AIAgentDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)

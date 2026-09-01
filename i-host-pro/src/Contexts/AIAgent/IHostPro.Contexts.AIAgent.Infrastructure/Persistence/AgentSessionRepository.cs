@@ -15,7 +15,9 @@ public sealed class AgentSessionRepository : IAgentSessionRepository
 
     public Task<AgentSession?> GetActiveByConversationIdAsync(Guid conversationId, CancellationToken cancellationToken) =>
         _dbContext.AgentSessions.SingleOrDefaultAsync(
-            s => s.ConversationId == conversationId && s.Status == AgentSessionStatus.Active, cancellationToken);
+            s => s.ConversationId == conversationId
+                && (s.Status == AgentSessionStatus.Active || s.Status == AgentSessionStatus.Escalated),
+            cancellationToken);
 
     public void Add(AgentSession aggregate) => _dbContext.AgentSessions.Add(aggregate);
 

@@ -6,10 +6,16 @@ namespace IHostPro.Contexts.AIAgent.Infrastructure.Persistence.Mappings;
 
 /// <summary>
 /// <c>ai_agent.agent_sessions</c> — tenant-owned, RLS-protected (Fase 11,
-/// Checkpoint 2). At most one <see cref="AgentSessionStatus.Active"/> session
+/// Checkpoint 2). At most one OPEN session — <see cref="AgentSessionStatus.Active"/>
+/// or (Fase 11, Checkpoint 6) <see cref="AgentSessionStatus.Escalated"/> —
 /// may exist per <c>(tenant_id, conversation_id)</c> at a time (governance
-/// resolution item 12/27) — enforced by a partial unique index, mirrors
-/// <c>PixChargeConfiguration</c>'s own "at most one Pending" pattern exactly.
+/// resolution item 12/27, widened by CP6's own suspended-session guard) —
+/// enforced by a partial unique index, mirrors <c>PixChargeConfiguration</c>'s
+/// own "at most one Pending" pattern exactly. Widening the filter (rather
+/// than adding a second index) keeps a single source of truth for "does an
+/// open session already exist" — <see cref="Application.AgentSessionResolver"/>
+/// must never create a second session for a Conversation while one is
+/// Escalated, exactly as it already never does while one is Active.
 /// Completed sessions are never constrained — multiple historical sessions
 /// per Conversation are explicitly allowed.
 /// </summary>
@@ -43,6 +49,6 @@ public sealed class AgentSessionConfiguration : IEntityTypeConfiguration<AgentSe
 
         builder.HasIndex(s => new { s.TenantId, s.ConversationId }, "ix_agent_sessions_tenant_id_conversation_id_active_unique")
             .IsUnique()
-            .HasFilter("status = 'Active'");
+            .HasFilter("status IN ('Active', 'Escalated')");
     }
 }
