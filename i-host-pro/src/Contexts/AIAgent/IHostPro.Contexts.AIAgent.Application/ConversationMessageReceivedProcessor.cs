@@ -53,19 +53,50 @@ namespace IHostPro.Contexts.AIAgent.Application;
 /// stays <see langword="null"/>, auditable by its own absence.
 ///
 /// Failure (no tool involved, first model call itself throws): a
-/// <see cref="ModelProviderException"/> persists a
-/// <see cref="AgentInteractionOutcome.Failure"/> <see cref="AgentInteraction"/>
-/// — the session itself is left untouched, no response is ever sent.
+/// <see cref="ModelProviderException"/> — even after the one controlled
+/// retry described below — persists a
+/// <see cref="AgentInteractionOutcome.Failure"/> <see cref="AgentInteraction"/>;
+/// the session itself is left untouched, but (Checkpoint 5) a deterministic
+/// safe fallback message is still delivered to the guest, exactly like any
+/// other interaction's response.
+///
+/// Model call retry (Checkpoint 5, mandate items 26-30): every call to
+/// <see cref="IModelProvider.GenerateAsync"/> is retried EXACTLY ONCE
+/// (2 attempts total) on a <see cref="ModelProviderException"/> — never more,
+/// never for any other kind of failure (unknown tool, business denial,
+/// invalid arguments, low confidence are never exceptions in the first
+/// place). Call#1 (before any Tool has run): if both attempts fail, no Tool
+/// is ever executed and a generic deterministic fallback response is
+/// delivered. Call#2 (<see cref="BuildSyntheticResponseAsync"/>, always AFTER
+/// a Tool — real or synthetic — has already produced its own sanitized
+/// content): if both attempts fail, the orchestrator NEVER re-executes the
+/// Tool/Command — it falls back to delivering that already-known, already-safe
+/// tool content verbatim as the response, so a real business outcome (e.g. an
+/// approved Early Check-in) is never misreported as "could not process your
+/// request."
+///
+/// Unknown Tool (Checkpoint 5, mandate items 24-25): a <c>ToolName</c> the
+/// model requests that is not in the fixed <see cref="_tools"/> allowlist is
+/// NEVER dispatched via reflection or generic lookup — it is recorded as a
+/// failed <see cref="AgentToolExecution"/> (audit only, sanitized failure
+/// code) and answered with a safe, generic response, without ever failing
+/// the whole interaction (unlike CP3/CP4's original "any tool problem fails
+/// the interaction" rule, which still applies to every OTHER kind of tool
+/// failure — a business/technical failure from a REAL, known tool).
 /// </summary>
 public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHandler<ConversationMessageReceived>
 {
     private const string AlreadyProcessedReason = "AlreadyProcessed";
     private const string UnknownToolFailureCode = "unknown_tool";
+    private const string UnknownToolResponseContent = "No momento não consigo realizar essa ação específica. Posso ajudar com outra coisa?";
+    private const string ModelFailureFallbackContent = "Desculpe, não consegui processar sua mensagem agora. Por favor, tente novamente em instantes.";
     private const string NoPendingActionToConfirmContent = "Não há nenhuma ação aguardando confirmação no momento.";
     private const string NoPendingActionToCancelContent = "Não há nenhuma ação aguardando cancelamento no momento.";
     private const string PendingActionCancelledContent = "A ação foi cancelada, conforme solicitado.";
     private const string AnotherPendingActionActiveContent =
         "Já existe uma ação aguardando sua confirmação ou cancelamento. Confirme ou cancele essa ação antes de iniciar outra.";
+    private const string ModelFailureFallbackFinishReason = "model_failure_fallback";
+    private const string FallbackModelNamePlaceholder = "n/a";
 
     private readonly IAgentSessionResolver _sessionResolver;
     private readonly IAgentSessionRepository _sessionRepository;
@@ -135,7 +166,7 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
 
         try
         {
-            var result = await _modelProvider.GenerateAsync(request, cancellationToken);
+            var result = await GenerateWithRetryAsync(request, cancellationToken);
 
             await StartInteractionAsync(@event, sessionId, interactionId, startedAtUtc, result.ModelName, cancellationToken);
 
@@ -162,10 +193,26 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
         catch (ModelProviderException)
         {
             await FailInteractionAsync(@event, sessionId, interactionId, startedAtUtc, wasAlreadyPersisted: false, cancellationToken);
+            await DeliverFallbackResponseAsync(@event, interactionId, ModelFailureFallbackContent, cancellationToken);
 
             _logger.LogWarning(
                 "AIAgent {Trigger} outcome for tenant {TenantId} conversationId {ConversationId} sessionId {SessionId} interactionId {InteractionId}: {Result}",
                 nameof(ConversationMessageReceived), @event.TenantId, @event.ConversationId, sessionId, interactionId, "InteractionFailed");
+        }
+    }
+
+    /// <summary>Calls <see cref="IModelProvider.GenerateAsync"/> with exactly one controlled retry on <see cref="ModelProviderException"/> (Checkpoint 5, mandate item 26) — 2 attempts total, never more; the second failure propagates to the caller.</summary>
+    private async Task<ModelResult> GenerateWithRetryAsync(ModelRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _modelProvider.GenerateAsync(request, cancellationToken);
+        }
+        catch (ModelProviderException)
+        {
+            _logger.LogWarning(
+                "AIAgent {Trigger}: model provider call failed, retrying once", nameof(ConversationMessageReceived));
+            return await _modelProvider.GenerateAsync(request, cancellationToken);
         }
     }
 
@@ -181,10 +228,13 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
 
     /// <summary>
     /// Handles a <c>ToolCallRequest</c> from Call#1 — a Read Tool (executes
-    /// immediately, unchanged from Checkpoint 3), or a write Tool: either
+    /// immediately, unchanged from Checkpoint 3), a write Tool: either
     /// requires confirmation (proposes, never executes yet) or executes
     /// immediately (<c>RequestGuestAccessDelivery</c> — the guest's own
-    /// explicit request already is the confirmation).
+    /// explicit request already is the confirmation), or (Checkpoint 5) a
+    /// <c>ToolName</c> outside the fixed allowlist entirely — never dispatched,
+    /// answered with a safe generic response instead of failing the whole
+    /// interaction (mandate items 24/25).
     /// </summary>
     private async Task<ModelResult?> ProcessToolCallRequestAsync(
         ConversationMessageReceived @event, Guid sessionId, Guid interactionId, DateTimeOffset startedAtUtc,
@@ -192,7 +242,13 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
     {
         var tool = _tools.FirstOrDefault(t => t.Descriptor.Name == toolCallRequest.ToolName);
 
-        if (tool is not null && _confirmationPolicy.RequiresConfirmation(toolCallRequest.ToolName))
+        if (tool is null)
+        {
+            await RecordUnknownToolExecutionAsync(@event, interactionId, toolCallRequest.ToolName, cancellationToken);
+            return await BuildSyntheticResponseAsync(request, UnknownToolResponseContent, cancellationToken);
+        }
+
+        if (_confirmationPolicy.RequiresConfirmation(toolCallRequest.ToolName))
         {
             var existingPending = await _transactionExecutor.ExecuteAsync(
                 () => _pendingActionRepository.GetActiveByAgentSessionIdAsync(sessionId, cancellationToken), cancellationToken);
@@ -277,6 +333,15 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
         }, cancellationToken);
 
         var tool = _tools.FirstOrDefault(t => t.Descriptor.Name == pendingAction.ToolName);
+        if (tool is null)
+        {
+            _logger.LogError(
+                "AIAgent {Trigger} pending action references tool {ToolName} that no longer exists for tenant {TenantId} interactionId {InteractionId}",
+                nameof(ConversationMessageReceived), pendingAction.ToolName, @event.TenantId, interactionId);
+            await FailInteractionAsync(@event, sessionId, interactionId, startedAtUtc, wasAlreadyPersisted: true, cancellationToken);
+            return null;
+        }
+
         var arguments = JsonSerializer.Deserialize<Dictionary<string, string>>(pendingAction.SanitizedArguments);
 
         var (succeeded, content) = await ExecuteToolWithAuditAsync(
@@ -295,40 +360,36 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
     }
 
     /// <summary>
-    /// Runs (or synthesizes an "unknown tool" failure for) exactly one Tool,
-    /// always recording a matching <see cref="AgentToolExecution"/> audit
-    /// row first — mirrors Checkpoint 3's own execution shape exactly,
-    /// generalized to also serve the post-confirmation execution path. A
-    /// tool exception is logged for operator diagnostics only, never
-    /// persisted; <see cref="AgentToolExecution.FailureCode"/> stores only
-    /// the sanitized exception TYPE name.
+    /// Runs exactly one known Tool, always recording a matching
+    /// <see cref="AgentToolExecution"/> audit row first — mirrors Checkpoint
+    /// 3's own execution shape exactly, generalized to also serve the
+    /// post-confirmation execution path. A tool exception is logged for
+    /// operator diagnostics only, never persisted;
+    /// <see cref="AgentToolExecution.FailureCode"/> stores only the sanitized
+    /// exception TYPE name. <paramref name="tool"/> is always a real,
+    /// allowlisted Tool here — an unknown <c>ToolName</c> is intercepted
+    /// earlier by <see cref="RecordUnknownToolExecutionAsync"/> (Checkpoint 5)
+    /// and never reaches this method.
     /// </summary>
     private async Task<(bool Succeeded, string? Content)> ExecuteToolWithAuditAsync(
         ConversationMessageReceived @event, Guid sessionId, Guid interactionId, DateTimeOffset startedAtUtc,
-        string toolName, IAgentTool? tool, IReadOnlyDictionary<string, string>? arguments, CancellationToken cancellationToken)
+        string toolName, IAgentTool tool, IReadOnlyDictionary<string, string>? arguments, CancellationToken cancellationToken)
     {
         var toolExecutionId = Guid.NewGuid();
         var toolStartedAtUtc = _timeProvider.GetUtcNow();
 
         AgentToolResult toolResult;
-        if (tool is null)
+        var toolContext = new AgentToolContext(@event.TenantId, @event.ConversationId, @event.ReservationId, sessionId, interactionId);
+        try
         {
-            toolResult = AgentToolResult.Failure(UnknownToolFailureCode);
+            toolResult = await tool.ExecuteAsync(toolContext, arguments, cancellationToken);
         }
-        else
+        catch (Exception ex)
         {
-            var toolContext = new AgentToolContext(@event.TenantId, @event.ConversationId, @event.ReservationId, sessionId, interactionId);
-            try
-            {
-                toolResult = await tool.ExecuteAsync(toolContext, arguments, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex,
-                    "AIAgent {Trigger} tool {ToolName} threw for tenant {TenantId} conversationId {ConversationId} interactionId {InteractionId}",
-                    nameof(ConversationMessageReceived), toolName, @event.TenantId, @event.ConversationId, interactionId);
-                toolResult = AgentToolResult.Failure(ex.GetType().Name);
-            }
+            _logger.LogError(ex,
+                "AIAgent {Trigger} tool {ToolName} threw for tenant {TenantId} conversationId {ConversationId} interactionId {InteractionId}",
+                nameof(ConversationMessageReceived), toolName, @event.TenantId, @event.ConversationId, interactionId);
+            toolResult = AgentToolResult.Failure(ex.GetType().Name);
         }
 
         await _transactionExecutor.ExecuteAsync(() =>
@@ -356,12 +417,57 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
         return (true, toolResult.Content);
     }
 
-    /// <summary>Issues Call#2 with <paramref name="toolContent"/> appended as a <see cref="ModelMessageRole.Tool"/> turn — the same mechanism Checkpoint 3 already uses for real Tool results, reused here for every synthetic/orchestration-produced content string too (propose/confirm/cancel/blocked notices).</summary>
+    /// <summary>
+    /// Records a failed <see cref="AgentToolExecution"/> audit row for a
+    /// <c>ToolName</c> the model requested that is not in the fixed
+    /// <see cref="_tools"/> allowlist (Checkpoint 5, mandate item 24) —
+    /// never dispatched via reflection or a generic lookup; the interaction
+    /// itself does NOT fail (see <see cref="ProcessToolCallRequestAsync"/>'s
+    /// safe response instead).
+    /// </summary>
+    private Task RecordUnknownToolExecutionAsync(
+        ConversationMessageReceived @event, Guid interactionId, string toolName, CancellationToken cancellationToken) =>
+        _transactionExecutor.ExecuteAsync(() =>
+        {
+            var toolStartedAtUtc = _timeProvider.GetUtcNow();
+            var toolExecution = AgentToolExecution.Start(Guid.NewGuid(), @event.TenantId, interactionId, toolName, toolStartedAtUtc);
+            toolExecution.CompleteWithFailure(_timeProvider.GetUtcNow(), UnknownToolFailureCode);
+            _toolExecutionRepository.Add(toolExecution);
+            return Task.FromResult(true);
+        }, cancellationToken);
+
+    /// <summary>
+    /// Issues Call#2 with <paramref name="toolContent"/> appended as a
+    /// <see cref="ModelMessageRole.Tool"/> turn — the same mechanism
+    /// Checkpoint 3 already uses for real Tool results, reused here for every
+    /// synthetic/orchestration-produced content string too (propose/confirm/
+    /// cancel/blocked notices). Retried once (Checkpoint 5, mandate item 26);
+    /// if the model still fails after the retry, this method NEVER
+    /// propagates — <paramref name="toolContent"/> is already a safe,
+    /// human-presentable fact (the Tool/Command's own known outcome), so it
+    /// is delivered verbatim instead of a natural-language paraphrase
+    /// (mandate item 29/33 — never re-run the Tool, never claim "could not
+    /// process" when the underlying action already succeeded).
+    /// </summary>
     private async Task<ModelResult> BuildSyntheticResponseAsync(ModelRequest request, string toolContent, CancellationToken cancellationToken)
     {
         var toolMessages = request.Messages.Append(new ModelMessage(ModelMessageRole.Tool, toolContent)).ToArray();
         var followUpRequest = request with { Messages = toolMessages };
-        return await _modelProvider.GenerateAsync(followUpRequest, cancellationToken);
+
+        try
+        {
+            return await GenerateWithRetryAsync(followUpRequest, cancellationToken);
+        }
+        catch (ModelProviderException)
+        {
+            _logger.LogWarning(
+                "AIAgent {Trigger}: model provider call#2 failed after retry, falling back to the known tool content verbatim",
+                nameof(ConversationMessageReceived));
+
+            return new ModelResult(
+                Text: toolContent, DetectedLanguage: null, Intent: null, Confidence: null,
+                InputTokens: 0, OutputTokens: 0, ModelName: FallbackModelNamePlaceholder, FinishReason: ModelFailureFallbackFinishReason);
+        }
     }
 
     /// <summary>Persists the interaction's own completion, then delivers the final response as a real outbound message (Checkpoint 4) — a delivery failure never fails the interaction itself (mandate item 30).</summary>
@@ -385,8 +491,26 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
             return true;
         }, cancellationToken);
 
+        await DeliverFallbackResponseAsync(@event, interactionId, finalResult.Text, cancellationToken);
+    }
+
+    /// <summary>
+    /// Delivers <paramref name="content"/> as a real outbound message and
+    /// records <see cref="AgentInteraction.OutboundMessageId"/> on success —
+    /// shared by the normal successful-interaction path and (Checkpoint 5)
+    /// the exhausted-model-retry fallback path, since both ultimately do the
+    /// exact same thing: best-effort delivery of a final answer, regardless
+    /// of the interaction's own <see cref="AgentInteractionOutcome"/>
+    /// (<see cref="AgentInteraction.RecordOutboundMessage"/> is valid on any
+    /// outcome). A delivery failure here is never retried further and never
+    /// fails/reopens the interaction — it is logged and the interaction
+    /// simply keeps <c>OutboundMessageId = null</c>.
+    /// </summary>
+    private async Task DeliverFallbackResponseAsync(
+        ConversationMessageReceived @event, Guid interactionId, string content, CancellationToken cancellationToken)
+    {
         var deliveryResult = await _responseDeliveryService.SendAsync(
-            @event.TenantId, @event.ConversationId, @event.ReservationId, interactionId, finalResult.Text, cancellationToken);
+            @event.TenantId, @event.ConversationId, @event.ReservationId, interactionId, content, cancellationToken);
 
         if (deliveryResult.IsSuccess)
         {
