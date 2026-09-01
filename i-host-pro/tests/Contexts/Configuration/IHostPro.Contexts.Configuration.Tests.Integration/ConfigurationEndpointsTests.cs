@@ -352,7 +352,7 @@ public class ConfigurationEndpointsTests : IClassFixture<ConfigurationEndpointsT
     // ---- List ----
 
     [Fact]
-    public async Task List_as_AI_AGENT_returns_the_two_seeded_definitions()
+    public async Task List_as_AI_AGENT_returns_the_three_seeded_definitions()
     {
         using var host = await BuildHostAsync();
         using var client = host.GetTestClient();
@@ -363,7 +363,7 @@ public class ConfigurationEndpointsTests : IClassFixture<ConfigurationEndpointsT
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         body.EnumerateArray().Select(e => e.GetProperty("code").GetString())
-            .Should().BeEquivalentTo(["EARLY_CHECKIN", "LATE_CHECKOUT"]);
+            .Should().BeEquivalentTo(["EARLY_CHECKIN", "LATE_CHECKOUT", "AI_AGENT_BEHAVIOR"]);
     }
 
     // ---- GetValue ----

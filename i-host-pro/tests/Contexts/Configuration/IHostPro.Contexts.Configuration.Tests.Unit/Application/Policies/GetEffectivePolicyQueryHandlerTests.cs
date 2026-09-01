@@ -14,7 +14,8 @@ public class GetEffectivePolicyQueryHandlerTests
     {
         var handler = new GetEffectivePolicyQueryHandler(
             FakeEarlyCheckInPolicyReader.Returning(PolicyReadResult<EarlyCheckInPolicy>.NotConfigured()),
-            FakeLateCheckoutPolicyReader.Returning(PolicyReadResult<LateCheckoutPolicy>.NotConfigured()));
+            FakeLateCheckoutPolicyReader.Returning(PolicyReadResult<LateCheckoutPolicy>.NotConfigured()),
+            FakeAiAgentBehaviorPolicyReader.Returning(PolicyReadResult<AiAgentBehaviorPolicy>.NotConfigured()));
 
         var result = await handler.Handle(new GetEffectivePolicyQuery(TenantId, "NOT_A_REAL_CODE", null), CancellationToken.None);
 
@@ -28,7 +29,8 @@ public class GetEffectivePolicyQueryHandlerTests
         var value = new EarlyCheckInPolicy(true, null, false, false, false);
         var handler = new GetEffectivePolicyQueryHandler(
             FakeEarlyCheckInPolicyReader.Returning(PolicyReadResult<EarlyCheckInPolicy>.Resolved(value, PolicyResolvedScope.Tenant, 1)),
-            FakeLateCheckoutPolicyReader.Returning(PolicyReadResult<LateCheckoutPolicy>.NotConfigured()));
+            FakeLateCheckoutPolicyReader.Returning(PolicyReadResult<LateCheckoutPolicy>.NotConfigured()),
+            FakeAiAgentBehaviorPolicyReader.Returning(PolicyReadResult<AiAgentBehaviorPolicy>.NotConfigured()));
 
         var result = await handler.Handle(new GetEffectivePolicyQuery(TenantId, "EARLY_CHECKIN", null), CancellationToken.None);
 
@@ -43,7 +45,8 @@ public class GetEffectivePolicyQueryHandlerTests
     {
         var handler = new GetEffectivePolicyQueryHandler(
             FakeEarlyCheckInPolicyReader.Returning(PolicyReadResult<EarlyCheckInPolicy>.NotConfigured()),
-            FakeLateCheckoutPolicyReader.Returning(PolicyReadResult<LateCheckoutPolicy>.NotConfigured()));
+            FakeLateCheckoutPolicyReader.Returning(PolicyReadResult<LateCheckoutPolicy>.NotConfigured()),
+            FakeAiAgentBehaviorPolicyReader.Returning(PolicyReadResult<AiAgentBehaviorPolicy>.NotConfigured()));
 
         var result = await handler.Handle(new GetEffectivePolicyQuery(TenantId, "LATE_CHECKOUT", null), CancellationToken.None);
 

@@ -46,6 +46,8 @@ public static class ConfigurationModuleExtensions
             sp.GetRequiredService<IPolicyValueCache>()));
         services.AddScoped<IEarlyCheckInPolicyReader, EarlyCheckInPolicyReader>();
         services.AddScoped<ILateCheckoutPolicyReader, LateCheckoutPolicyReader>();
+        // Fase 11, Checkpoint 7 — AI Agent's own Context Builder consumes this directly (Exceção 1).
+        services.AddScoped<IAiAgentBehaviorPolicyReader, AiAgentBehaviorPolicyReader>();
 
         // Fase 9, Checkpoint 1 — "Comunicação e Integrações do MVP": the
         // general Configuration & Policy synchronous-query exception

@@ -20,11 +20,15 @@ public sealed class GetEffectivePolicyQueryHandler : IQueryHandler<GetEffectiveP
 
     private readonly IEarlyCheckInPolicyReader _earlyCheckInReader;
     private readonly ILateCheckoutPolicyReader _lateCheckoutReader;
+    private readonly IAiAgentBehaviorPolicyReader _aiAgentBehaviorReader;
 
-    public GetEffectivePolicyQueryHandler(IEarlyCheckInPolicyReader earlyCheckInReader, ILateCheckoutPolicyReader lateCheckoutReader)
+    public GetEffectivePolicyQueryHandler(
+        IEarlyCheckInPolicyReader earlyCheckInReader, ILateCheckoutPolicyReader lateCheckoutReader,
+        IAiAgentBehaviorPolicyReader aiAgentBehaviorReader)
     {
         _earlyCheckInReader = earlyCheckInReader;
         _lateCheckoutReader = lateCheckoutReader;
+        _aiAgentBehaviorReader = aiAgentBehaviorReader;
     }
 
     public async ValueTask<Result<EffectivePolicyResult>> Handle(GetEffectivePolicyQuery query, CancellationToken cancellationToken)
@@ -39,6 +43,11 @@ public sealed class GetEffectivePolicyQueryHandler : IQueryHandler<GetEffectiveP
             case "LATE_CHECKOUT":
             {
                 var result = await _lateCheckoutReader.GetEffectiveAsync(query.TenantId, query.PropertyId, cancellationToken);
+                return Result.Success(new EffectivePolicyResult(query.PolicyCode, result.Status, result.Value, result.ResolvedScope, result.Version));
+            }
+            case "AI_AGENT_BEHAVIOR":
+            {
+                var result = await _aiAgentBehaviorReader.GetEffectiveAsync(query.TenantId, query.PropertyId, cancellationToken);
                 return Result.Success(new EffectivePolicyResult(query.PolicyCode, result.Status, result.Value, result.ResolvedScope, result.Version));
             }
             default:

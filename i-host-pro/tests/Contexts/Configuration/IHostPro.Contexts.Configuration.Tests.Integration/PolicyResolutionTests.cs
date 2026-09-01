@@ -279,6 +279,45 @@ public class PolicyResolutionTests : IClassFixture<PolicyResolutionTests.Fixture
         result.Value.Should().Be(new LateCheckoutPolicy(true, new TimeOnly(15, 0), LateCheckoutChargeType.Percentage, 10.5m, true, true, true));
     }
 
+    /// <summary>Fase 11, Checkpoint 7 — the same PROPERTY → TENANT → GLOBAL algorithm this whole suite already proves generically, exercised once through <see cref="IAiAgentBehaviorPolicyReader"/> specifically. No Temperature field exists (mandate item 12/13 — claude-sonnet-4-6 rejects any custom value).</summary>
+    [Fact]
+    public async Task AiAgentBehavior_resolves_correctly_with_all_fields_round_tripped()
+    {
+        var tenantId = Guid.NewGuid();
+        await SeedTenantScopedAsync(
+            tenantId, "AI_AGENT_BEHAVIOR", PolicyScope.Tenant(),
+            """{"systemPrompt":"Você é o assistente do iHostPro.","tone":"cordial","formality":"informal"}""");
+
+        await using var scope = _fixture.CreateScope();
+        SetAmbientTenant(scope, tenantId);
+        var reader = scope.ServiceProvider.GetRequiredService<IAiAgentBehaviorPolicyReader>();
+
+        var result = await reader.GetEffectiveAsync(tenantId, null);
+
+        result.Value.Should().Be(new AiAgentBehaviorPolicy("Você é o assistente do iHostPro.", "cordial", "informal"));
+    }
+
+    /// <summary>Property scope must still win over Tenant for AI_AGENT_BEHAVIOR — the same precedence <see cref="Property_value_takes_precedence_over_tenant_and_global"/> already proves generically, confirmed once more for this specific reader (never assumed to behave differently).</summary>
+    [Fact]
+    public async Task AiAgentBehavior_property_value_takes_precedence_over_tenant()
+    {
+        var tenantId = Guid.NewGuid();
+        var propertyId = Guid.NewGuid();
+        await SeedTenantScopedAsync(
+            tenantId, "AI_AGENT_BEHAVIOR", PolicyScope.Tenant(), """{"systemPrompt":"Tenant prompt.","tone":null,"formality":null}""");
+        await SeedTenantScopedAsync(
+            tenantId, "AI_AGENT_BEHAVIOR", PolicyScope.Property(propertyId), """{"systemPrompt":"Property prompt.","tone":null,"formality":null}""");
+
+        await using var scope = _fixture.CreateScope();
+        SetAmbientTenant(scope, tenantId);
+        var reader = scope.ServiceProvider.GetRequiredService<IAiAgentBehaviorPolicyReader>();
+
+        var result = await reader.GetEffectiveAsync(tenantId, propertyId);
+
+        result.Value!.SystemPrompt.Should().Be("Property prompt.");
+        result.ResolvedScope.Should().Be(PolicyResolvedScope.Property);
+    }
+
     // ---- Fail-closed: unavailability is never hidden as NotConfigured ----
 
     [Fact]

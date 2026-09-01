@@ -6,8 +6,10 @@ namespace IHostPro.Contexts.Configuration.Infrastructure.Seed;
 /// The platform's fixed policy catalog, seeded via EF Core migration data
 /// (deterministic, applied exactly once when the migration runs) — mirrors
 /// <c>IdentityCatalogSeed</c> exactly. Fase 5, Incremento 1, catálogo
-/// oficial (§3): apenas <c>EARLY_CHECKIN</c> e <c>LATE_CHECKOUT</c> — nenhum
-/// outro código existe ou deve ser inventado.
+/// oficial (§3): originalmente apenas <c>EARLY_CHECKIN</c> e <c>LATE_CHECKOUT</c>;
+/// nenhum outro código deve ser inventado sem mandato explícito. Fase 11,
+/// Checkpoint 7 adicionou <c>AI_AGENT_BEHAVIOR</c> (mandato próprio,
+/// Documento 08 §4/§10 — "IA" é uma categoria de configuração já oficial).
 ///
 /// Only <see cref="PolicyDefinition"/> rows are seeded here — never a
 /// <see cref="PolicyValue"/> or <see cref="GlobalPolicyValue"/> (official
@@ -35,6 +37,19 @@ public static class ConfigurationCatalogSeed
             name: "Late Checkout",
             description: "Regras operacionais para autorizar a saída do hóspede após o horário padrão de checkout, incluindo cobrança quando aplicável.",
             category: "CHECK_IN_OUT",
+            valueType: PolicyValueType.Object,
+            schemaVersion: 1,
+            isActive: true),
+
+        // Fase 11, Checkpoint 7 — the first entry using "IA", one of
+        // Documento 08 §4's own officially-listed categories (unlike
+        // "CHECK_IN_OUT" above, which the two entries above openly
+        // acknowledge as a non-official, low-risk label).
+        new PolicyDefinition(
+            code: "AI_AGENT_BEHAVIOR",
+            name: "AI Agent Behavior",
+            description: "Instruções de sistema, tom e formalidade do Agente de IA, compostas dinamicamente pelo Context Builder — nunca um prompt fixo no código.",
+            category: "IA",
             valueType: PolicyValueType.Object,
             schemaVersion: 1,
             isActive: true),

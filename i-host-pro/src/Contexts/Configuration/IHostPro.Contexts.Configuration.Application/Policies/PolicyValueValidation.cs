@@ -36,6 +36,8 @@ internal static class PolicyValueValidation
                     return ValidateEarlyCheckIn(rawValue);
                 case "LATE_CHECKOUT":
                     return ValidateLateCheckout(rawValue);
+                case "AI_AGENT_BEHAVIOR":
+                    return ValidateAiAgentBehavior(rawValue);
                 default:
                     // The caller already confirmed policyCode exists in the
                     // catalog before reaching here — an unknown code at this
@@ -79,6 +81,16 @@ internal static class PolicyValueValidation
         }
 
         if (value.ChargeType == LateCheckoutChargeType.None && value.ChargeValue is not null)
+            return Result.Failure<string>(InvalidPolicyValueError);
+
+        return Result.Success(JsonSerializer.Serialize(value, Options));
+    }
+
+    /// <summary>Fase 11, Checkpoint 7 — <c>SystemPrompt</c> is the only required field; a blank value is rejected the same way Documento 16 §20 forbids a fixed/empty prompt.</summary>
+    private static Result<string> ValidateAiAgentBehavior(string rawValue)
+    {
+        var value = JsonSerializer.Deserialize<AiAgentBehaviorPolicy>(rawValue, Options);
+        if (value is null || string.IsNullOrWhiteSpace(value.SystemPrompt))
             return Result.Failure<string>(InvalidPolicyValueError);
 
         return Result.Success(JsonSerializer.Serialize(value, Options));

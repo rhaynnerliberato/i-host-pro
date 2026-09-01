@@ -25,3 +25,15 @@ internal sealed class FakeLateCheckoutPolicyReader : ILateCheckoutPolicyReader
     public Task<PolicyReadResult<LateCheckoutPolicy>> GetEffectiveAsync(
         Guid tenantId, Guid? propertyId, CancellationToken cancellationToken = default) => Task.FromResult(_result);
 }
+
+internal sealed class FakeAiAgentBehaviorPolicyReader : IAiAgentBehaviorPolicyReader
+{
+    private readonly PolicyReadResult<AiAgentBehaviorPolicy> _result;
+
+    private FakeAiAgentBehaviorPolicyReader(PolicyReadResult<AiAgentBehaviorPolicy> result) => _result = result;
+
+    public static FakeAiAgentBehaviorPolicyReader Returning(PolicyReadResult<AiAgentBehaviorPolicy> result) => new(result);
+
+    public Task<PolicyReadResult<AiAgentBehaviorPolicy>> GetEffectiveAsync(
+        Guid tenantId, Guid? propertyId, CancellationToken cancellationToken = default) => Task.FromResult(_result);
+}

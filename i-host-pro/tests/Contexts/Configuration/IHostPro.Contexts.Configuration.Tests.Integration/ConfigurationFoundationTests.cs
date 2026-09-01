@@ -154,13 +154,13 @@ public class ConfigurationFoundationTests : IClassFixture<ConfigurationFoundatio
     // ---- Seed catalog (official decision 2.2: definitions only, no default values) ----
 
     [Fact]
-    public async Task Policy_definitions_are_seeded_with_the_two_catalog_entries()
+    public async Task Policy_definitions_are_seeded_with_the_three_catalog_entries()
     {
         await using var dbContext = CreateDbContext(_migratorConnectionString, new TenantContext());
 
         var codes = await dbContext.PolicyDefinitions.Select(d => d.Id).ToListAsync();
 
-        codes.Should().BeEquivalentTo(["EARLY_CHECKIN", "LATE_CHECKOUT"]);
+        codes.Should().BeEquivalentTo(["EARLY_CHECKIN", "LATE_CHECKOUT", "AI_AGENT_BEHAVIOR"]);
     }
 
     [Fact]
@@ -477,7 +477,7 @@ public class ConfigurationFoundationTests : IClassFixture<ConfigurationFoundatio
         await connection.OpenAsync();
 
         var count = (long)(await ExecuteScalarAsync(connection, "SELECT count(*) FROM configuration.policy_definitions"))!;
-        count.Should().Be(2);
+        count.Should().Be(3);
 
         var insertAct = async () => await ExecuteAsync(
             connection,
