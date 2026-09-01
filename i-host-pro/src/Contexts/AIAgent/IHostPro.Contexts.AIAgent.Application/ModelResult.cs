@@ -19,6 +19,18 @@ namespace IHostPro.Contexts.AIAgent.Application;
 /// the sanitized result appended as a <see cref="ModelMessageRole.Tool"/>
 /// turn. <see langword="null"/> means the model produced (or is producing) a
 /// final answer directly, no tool needed.
+///
+/// <see cref="ConfirmationIntent"/> (Fase 11, Checkpoint 4) is the model's
+/// own provider-neutral classification of the guest's LATEST message as a
+/// reply to a pending write-tool proposal: <see langword="true"/> = confirm,
+/// <see langword="false"/> = explicit cancel, <see langword="null"/> =
+/// neither (an ordinary message, unrelated to any pending action). This is
+/// intent CLASSIFICATION only — the model never decides whether a
+/// confirmation was actually required, and never decides what gets executed
+/// as a result; the orchestrator alone owns that (CP4 mandate item 18 — "no
+/// model self-authorization"). Mutually exclusive with
+/// <see cref="ToolCallRequest"/> in practice — a single model call either
+/// classifies a confirmation/cancellation or proposes a tool, never both.
 /// </summary>
 public sealed record ModelResult(
     string Text,
@@ -29,7 +41,8 @@ public sealed record ModelResult(
     int OutputTokens,
     string ModelName,
     string? FinishReason,
-    ModelToolCallRequest? ToolCallRequest = null);
+    ModelToolCallRequest? ToolCallRequest = null,
+    bool? ConfirmationIntent = null);
 
 /// <summary>Provider-neutral tool-call request (Fase 11, Checkpoint 3) — Name + minimal Arguments only, never a provider-specific tool-call schema.</summary>
 public sealed record ModelToolCallRequest(string ToolName, IReadOnlyDictionary<string, string>? Arguments);
