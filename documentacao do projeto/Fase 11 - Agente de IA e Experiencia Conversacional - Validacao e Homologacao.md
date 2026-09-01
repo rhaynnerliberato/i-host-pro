@@ -1,7 +1,7 @@
 # Fase 11 — Agente de IA e Experiência Conversacional — Validação e Homologação
 
-Versão: 1.3
-Status: Em andamento — Checkpoint 4 concluído
+Versão: 1.4
+Status: Em andamento — Checkpoint 5 concluído
 
 ## 1. Objetivo
 
@@ -43,8 +43,8 @@ CP0 (concluído) — Architecture & Product Decision Gate
 CP1 (concluído) — Inbound Conversation Foundation
 CP2 (concluído) — AI Agent Foundation
 CP3 (concluído) — Read Tools & Context Builder
-CP4 (concluído, este documento) — Write Tools & Response Delivery
-CP5 — Policies, Workflow & Conversational Orchestration
+CP4 (concluído) — Write Tools & Response Delivery
+CP5 (concluído, este documento) — Policies, Workflow & Conversational Orchestration
 CP6 — Human Handoff, Safety & Audit
 CP7 — Anthropic Claude Real Proof
 CP8 — Final Homologation
@@ -447,3 +447,83 @@ Nenhum desses achados exigiu mudança de escopo, nova exceção síncrona, ou de
 **Nota de transparência sobre `IHostPro.Contexts.Configuration.Tests.Integration`**: durante a execução sequencial da matriz de regressão completa (múltiplas suítes de Integration rodadas uma após a outra contra o mesmo Postgres real de desenvolvimento), `Benchmark_EARLY_CHECKIN_effective_resolution_meets_the_50ms_p95_target_with_a_warm_cache` falhou uma única vez (79/80). Configuration não foi tocado pelo CP4 (nenhum arquivo do contexto aparece no diff). Reexecutado isoladamente (passou em ~1s) e depois a suíte completa novamente do zero (80/80 aprovados) — confirmando contenção de recursos transitória da máquina local sob carga prolongada, mesmo padrão de flakiness de benchmark já observado e documentado no fechamento do CP3 (§7.9), não uma regressão real deste checkpoint.
 
 `Cp4CommitCount`: registrado no relatório final da conversa de homologação.
+
+## 9. Checkpoint 5 — Policies, Workflow & Conversational Orchestration
+
+**Status:** Concluído e homologado. `ConversationalOrchestrationImplemented=true`. `ModelTechnicalRetryCount=1`. `AutomaticWriteToolRetry=false`. `ResponseDeliveryRetryCount=1`. `UnknownToolExecutionBlocked=true`. `NaturalLanguageLocalTimeResolutionBlocked=true`. `TimezoneSource=DEFERRED_TO_CP7`. `SystemPromptSource=DEFERRED_TO_CP7`. `PersonalityToneConfiguration=DEFERRED_TO_CP7`. `ZeroMultipleReservationHandling=DEFERRED_ARCHITECTURAL_GAP`. `HumanHandoffImplemented=false`. `AnthropicIntegrated=false`. `ExternalLLMNetworkCalls=0`.
+
+**Objetivo**: fechar as lacunas de robustez/segurança da orquestração conversacional do CP4 sem introduzir nenhum componente/aggregate/exceção síncrona/Tool novos — um retry único e controlado para falha técnica do model provider (nunca para Write Tool), bloqueio seguro de `ToolName` desconhecido (nunca reflection/dispatch genérico), classificação de intent não suportado e de pedido explícito de humano (via `ModelResult.Intent`, sem nenhuma ação real de handoff — isso permanece CP6), e a correção de um risco de segurança real descoberto na própria auditoria do CP5: `DateTimeOffset.TryParse` aceitava silenciosamente um datetime sem offset explícito, usando o timezone local do servidor como fallback.
+
+### 9.1 Governança prévia — CP5 Decision/Contract Gate (read-only)
+
+Antes de qualquer código, o usuário exigiu um Decision/Contract Gate exclusivamente de leitura, cobrindo: revalidação de Documento 16 (Arquitetura do Agente de IA, integral), Documento 17 (Catálogo de Workflows, integral), Documento 06 (Máquina de Estados, integral), Documento 08 (Motor de Configuração/Políticas, integral), Architecture Principles, e inspeção direta do código atual (`ConversationMessageReceivedProcessor`, `InboundGuestMessageProcessor`, `ModelResult`, os enums `AgentInteractionOutcome`/`AgentSessionStatus`, `PolicyScopeType`). Um relatório de governança de 38 itens foi produzido e aprovado sem alteração. Decisões oficiais do gate:
+
+- **Policy role**: a avaliação de política de Early/Late permanece exclusivamente dentro dos Commands de GuestOperations (já existente desde ADR-024) — o AI Agent nunca executa uma segunda policy engine antes do Command. `GetRelevantPolicies` permanece Tool informativa de leitura. Nenhum `IAgentPolicyEngine`/`ToolEligibilityPolicy` paralelo foi criado.
+- **Workflow role**: Early/Late/AccessDelivery continuam acionando as coreografias reais já existentes via evento; o AI Agent nunca cria Workflow diretamente nem chama um dispatcher genérico.
+- **Orquestrador**: `ConversationMessageReceivedProcessor` NÃO foi extraído em um novo componente (`AgentConversationOrchestrator`/`AgentRunCoordinator`) — nenhuma nova responsabilidade concreta justificava a extração; o arquivo permanece uma única classe bem decomposta em métodos privados de responsabilidade única.
+- **Máquinas de estado**: nenhum novo estado em `Conversation`/`AgentSession`/`AgentInteraction` — "Aguardando Resposta" (Documento 06 §6) permanece derivável do fato `AgentPendingAction.Status ∈ {Proposed, Confirmed}`, nunca um campo próprio.
+- **0/N reservas — gap arquitetural registrado, não escondido**: `ReservationResolutionZeroOrMultiple=DEFERRED_ARCHITECTURAL_GAP`. Hoje, 0 candidatos (nenhuma Reservation encontrada) ou N>1 candidatos (múltiplas Reservations elegíveis) resultam em **nenhuma Conversation criada, nenhum processamento pelo AI Agent, nenhuma resposta ao hóspede** — apenas um log (`InboundGuestMessageProcessor`, decisão original do CP1). Responder a esses casos exigiria tornar `Conversation.ReservationId` opcional ou criar um conceito de pré-sessão fora da invariante atual ("nenhuma conversa existe sem uma origem", Documento 12 §17) — uma mudança de contrato/arquitetura, não uma decisão segura de orquestração. Por decisão explícita do usuário, este gap permanece **fora do escopo do CP5**, preservado exatamente como o CP1 o deixou, e **deverá ser reavaliado pelo CP8** (Final Homologation) para decidir se permanece deferred ou exige um checkpoint corretivo.
+- **System prompt / personalidade / tom**: nenhuma dessas configurações existe em Configuration hoje (nenhum `PolicyCategory` relacionado a IA no domínio); criá-las agora seria escopo novo desproporcional a um checkpoint que ainda roda sobre `FakeModelProvider`. `SystemPromptSource=DEFERRED_TO_CP7`, `PersonalityToneConfiguration=DEFERRED_TO_CP7`.
+- **Timezone**: nenhum conceito de timezone existe em Property/Tenant/Reservation em nenhum lugar do domínio. `TimezoneSource=DEFERRED_TO_CP7` — o CP5 não cria essa fonte, apenas corrige o parsing para nunca interpretar silenciosamente um datetime sem offset usando o timezone do servidor (§9.4).
+- **Retry**: exatamente 1 retry controlado (2 tentativas no total) para falha técnica de `IModelProvider.GenerateAsync`; nunca para Write Tool após incerteza de execução; 1 retry para a chamada de entrega de resposta em falha técnica, reutilizando a mesma chave de idempotência determinística já existente.
+
+### 9.2 Retry único e controlado do model provider
+
+`GenerateWithRetryAsync` (novo método privado em `ConversationMessageReceivedProcessor`) envolve toda chamada a `IModelProvider.GenerateAsync` — tenta uma vez, e em caso de `ModelProviderException`, tenta exatamente mais uma vez (2 tentativas no total, nunca mais). Aplica-se uniformemente às duas chamadas do loop (Call#1, antes de qualquer Tool; Call#2, em `BuildSyntheticResponseAsync`, sempre depois de uma Tool real ou sintética já ter produzido seu próprio conteúdo sanitizado):
+
+- **Call#1 esgota o retry**: nenhuma Tool é executada; a interação é marcada `Failure`; uma resposta de fallback determinística e segura ("Desculpe, não consegui processar sua mensagem agora...") ainda é entregue ao hóspede — mudança de comportamento intencional em relação ao CP2/CP4, onde uma falha de Call#1 nunca enviava nada.
+- **Call#2 esgota o retry**: a Tool/Command já executou com sucesso (ou já produziu um conteúdo sintético seguro, como uma proposta ou cancelamento) — o orquestrador **nunca** re-executa a Tool. `BuildSyntheticResponseAsync` cai de volta para o próprio `toolContent` já conhecido, entregue verbatim como resposta — nunca uma paráfrase, mas também nunca "não consegui processar" quando a ação real já teve sucesso (mandato item 29/33). A interação completa como `Success`.
+
+`FakeModelProvider` ganhou `TransientFailureTriggerMarker` (`"[FAKE_MODEL_TRANSIENT_FAILURE]"`) — lança `ModelProviderException` apenas na primeira vez que um dado conteúdo de mensagem é visto pela própria instância (contador em memória, correto porque `IModelProvider` é registrado `Scoped` — uma instância por mensagem processada), e cai para uma resposta normal na segunda chamada com o mesmo conteúdo — prova o retry ponta a ponta sem nenhuma reconfiguração de DI.
+
+### 9.3 `ToolName` desconhecido — nunca dispatch genérico, sempre resposta segura
+
+Mudança de comportamento intencional em relação ao CP3/CP4 (onde qualquer problema de Tool, incluindo nome desconhecido, falhava a interação inteira sem nenhuma resposta): agora, um `ToolName` fora da allowlist fixa (`_tools`) é interceptado **antes** de `ExecuteToolWithAuditAsync` — nunca localizado via reflection/lookup genérico, apenas comparado contra os nomes já registrados. `RecordUnknownToolExecutionAsync` grava um `AgentToolExecution` de auditoria com `FailureCode="unknown_tool"` (mesma semântica de antes), mas a interação **não falha** — uma resposta segura e genérica é entregue ("No momento não consigo realizar essa ação específica. Posso ajudar com outra coisa?"), sem nunca revelar o nome da Tool solicitada, stack trace ou detalhe interno. Toda falha de uma Tool REAL e conhecida (falha de negócio ou exceção inesperada) continua com o comportamento original do CP3/CP4 — interação falha, sem resposta.
+
+### 9.4 Correção de segurança — offset de timezone obrigatório
+
+Auditoria do CP5 encontrou um risco real: `RequestEarlyCheckInTool`/`RequestLateCheckoutTool` usavam `DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, ...)`, que aceita silenciosamente uma string sem offset explícito e a interpreta usando o timezone **local do servidor** — nenhuma fonte de timezone existe em Property/Tenant/Reservation em lugar nenhum do domínio, então esse fallback poderia produzir um instante UTC incorreto sem nenhum erro. Corrigido em ambas as Tools com uma validação de regex (`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`) que exige `Z` ou um offset explícito `±hh:mm` antes de aceitar o parse — uma entrada sem offset é rejeitada com o mesmo `FailureCode` (`invalid_requested_check_in_at`/`invalid_requested_check_out_at`) já usado para qualquer data malformada, nunca interpretada silenciosamente. `NaturalLanguageLocalTimeResolutionBlocked=true` registra essa correção; `TimezoneSource` permanece `DEFERRED_TO_CP7` — o CP5 corrigiu o risco sem criar a fonte real de timezone.
+
+### 9.5 Classificação de intent não suportado e de pedido de humano
+
+Dois novos marcadores determinísticos em `FakeModelProvider`: `UnsupportedRequestTriggerMarker` (`Intent="unsupported_request"`) e `HumanHandoffTriggerMarker` (`Intent="human_handoff_requested"`) — ambos produzem uma resposta final normal (nunca um `ToolCallRequest`), classificada via o campo `ModelResult.Intent` já existente desde o CP2, sem exigir nenhuma mudança de contrato ou novo caminho no orquestrador (a interação segue o fluxo padrão de "resposta direta", já suportado). Para pedidos não suportados (cancelamento, reembolso, desconto, negociação): resposta honesta explicando que o AI Agent não pode ajudar com isso, nunca simulando uma ação/Command que não ocorreu. Para pedido explícito de humano: o CP5 **apenas classifica** — a resposta reconhece o pedido sem jamais afirmar "já encaminhei" ou "o atendente foi notificado", já que nenhum handoff real (estado, notificação ao administrador, suspensão da IA) existe ainda — tudo isso permanece integralmente CP6.
+
+### 9.6 Retry de entrega de resposta
+
+`AgentResponseDeliveryService` (Infrastructure) ganhou 1 retry automático quando `SendAgentResponseCommand` falha por um motivo que não seja um dos dois códigos permanentes/de estado de dados já conhecidos (`ConversationNotFound`, `GuestContactOrPhoneNotAvailable`) — qualquer outra falha (tipicamente `connector_exception`/`connector_rejected`) é tentada novamente exatamente uma vez. Como a chave de idempotência de `SendAgentResponseCommand` já é determinística (`TenantId`/`AgentInteractionId`/`Channel`), a segunda chamada reutiliza automaticamente a mesma chave — nunca cria uma segunda `Message`.
+
+### 9.7 Testes — contagens exatas
+
+| Suíte | Resultado |
+|---|---|
+| `IHostPro.Contexts.AIAgent.Tests.Unit` (inclui os novos testes de retry, unknown tool, unsupported/human-handoff intent, e o novo `AgentResponseDeliveryServiceTests`) | 126 aprovados |
+| `IHostPro.Contexts.AIAgent.Tests.Integration` (sem alteração de schema — nenhuma migration neste checkpoint) | 23 aprovados (sem regressão) |
+| `IHostPro.Contexts.GuestOperations.Tests.Integration` (sem alteração de código neste checkpoint) | 18 aprovados (sem regressão) |
+| `IHostPro.Contexts.Communication.Tests.Integration` (sem alteração de código neste checkpoint) | 26 aprovados (sem regressão) |
+| `IHostPro.ArchitectureTests` (sem novo arquivo — nenhuma nova Tool/exceção/aggregate) | 291 aprovados (sem regressão) |
+| `AIAgentConversationalOrchestrationWorkflowRoundTripTests` (E2E real — Postgres/RabbitMQ/Worker/Api reais, novo arquivo) — retry transitório com sucesso real, Tool desconhecida sem dispatch, intent não suportado, pedido de humano, rejeição de datetime sem offset | 5 aprovados (confirmado em duas execuções consecutivas; parte da suíte completa abaixo) |
+| `IHostPro.Api.Tests.Integration` (suíte completa) | ver §9.8 |
+| MigrationRunner | N/A — nenhuma migration, nenhuma mudança de topologia/composição neste checkpoint |
+| Build Release | 0 erro |
+
+### 9.8 Regressão completa e evidência final
+
+| Suíte | Resultado |
+|---|---|
+| `IHostPro.Api.Tests.Integration` (suíte completa, execução final limpa) | 81 aprovados, 0 com falha (25 min 17 s) |
+| Build Release (solução completa) | 0 erro (20 avisos `NU1903` pré-existentes, SSH.NET, não relacionados a este checkpoint) |
+| `git diff --check` | Sem erros (apenas avisos benignos de normalização LF→CRLF) |
+| Revisão manual do diff | Nenhum novo vazamento de secret/QR/`GuestPhone`/payload de provider/tipo Anthropic-Claude; nenhuma mudança de contrato de dados sensíveis — apenas orquestração, validação e conteúdo de resposta |
+
+**Nota de transparência sobre `IHostPro.Api.Tests.Integration`**: as duas primeiras execuções completas desta sessão de fechamento (76 aprovados titulares mais os 5 novos deste checkpoint = 81 testes) apresentaram, cada uma, exatamente 2 falhas isoladas: `ConversationMessageReceivedWorkflowRoundTripTests.A_single_inbound_message_creates_one_AgentSession_and_one_successful_AgentInteraction` (teste do CP2, mensagem sem nenhum marcador, não tocado por este checkpoint) e `PolicyUpdatedRegressionTests.PolicyUpdated_delivered_through_real_RabbitMQ_to_the_real_Worker_advances_the_real_Redis_cache_generation` (teste de Configuration, sem nenhuma relação com o AI Agent). Investigados antes de qualquer conclusão: ambos, executados isoladamente (mesmo commit, sem nenhuma alteração de código), passaram limpos e rapidamente (8s e 36s respectivamente, bem dentro dos próprios orçamentos de timeout). Uma terceira execução completa, sem nenhuma mudança de código entre as tentativas, resultou em 81 aprovados, 0 com falha — confirmando que as falhas anteriores foram artefato de contenção de recursos (Postgres/RabbitMQ/Worker reais sob carga prolongada, agora com três classes de teste E2E do AI Agent compartilhando o mesmo fixture/Worker), não uma regressão real deste checkpoint — mesmo padrão já observado e documentado durante o fechamento de CP3/CP4 nesta mesma sessão.
+
+### 9.9 Escopo explicitamente não implementado (por decisão do gate, não por omissão)
+
+- Disambiguação de 0/N reservas (`ReservationResolutionZeroOrMultiple=DEFERRED_ARCHITECTURAL_GAP`, a ser reavaliado no CP8).
+- Fonte real de timezone por Property/Tenant/Reservation, e qualquer parser de linguagem natural para datas (`TimezoneSource=DEFERRED_TO_CP7`).
+- System prompt real, personalidade/tom/formalidade configuráveis (`SystemPromptSource=DEFERRED_TO_CP7`, `PersonalityToneConfiguration=DEFERRED_TO_CP7`).
+- Handoff humano completo — estado de escalonamento, notificação ao administrador, suspensão da IA (`HumanHandoffImplemented=false`, CP6).
+- Motor de autonomia por níveis 0-4 (Documento 08 §11) — não implementado em lugar nenhum da plataforma hoje; desproporcional a um checkpoint ainda em `FakeModelProvider`.
+- Retry de Read Tool — deliberadamente omitido (explicitamente opcional no mandato); a idempotência/segurança de leitura já é garantida pela ausência de efeito colateral.
+
+`Cp5CommitCount`: registrado no relatório final da conversa de homologação.
