@@ -24,6 +24,23 @@ namespace IHostPro.Contexts.Identity.Domain;
 /// <c>SecurityAuditEntryConfiguration</c>): this record must never be lost,
 /// blocked, or cascade-deleted as a side effect of the referenced
 /// User/Session/RefreshToken row being removed in the future.
+///
+/// <see cref="ActorId"/> (Fase 12, Checkpoint 4 — Security/Secrets/LGPD
+/// Hardening) is the authenticated Administrator who PERFORMED an
+/// admin-on-another-user operation — distinct from <see cref="UserId"/>,
+/// which for those same operations is the TARGET user the action was done
+/// to. Before this checkpoint, only the target was ever recorded, making
+/// "who blocked user X" unanswerable from this table. Deliberately
+/// <c>nullable</c>, with NO backfill for pre-existing rows (explicit
+/// Decision Gate instruction: never invent a historical actor via
+/// <c>TargetUserId</c>, a fabricated system user, <c>Guid.Empty</c>, or the
+/// current caller at migration time) — a <see langword="null"/>
+/// <see cref="ActorId"/> on a row written before this checkpoint means
+/// "unknown," never "system." Always sourced from the already-authenticated
+/// command's own <c>ActorId</c> (itself sourced exclusively from the JWT
+/// claims, never the request body — see e.g. <c>BlockUserCommand</c>'s own
+/// doc comment) — this class never accepts an arbitrary caller-supplied
+/// value.
 /// </summary>
 public sealed class SecurityAuditEntry : Entity<Guid>, ITenantOwned
 {
@@ -32,6 +49,7 @@ public sealed class SecurityAuditEntry : Entity<Guid>, ITenantOwned
     public SecurityAuditReasonCode? ReasonCode { get; private set; }
     public DateTimeOffset OccurredAt { get; private set; }
     public Guid? UserId { get; private set; }
+    public Guid? ActorId { get; private set; }
     public Guid? SessionId { get; private set; }
     public Guid? RefreshTokenId { get; private set; }
     public string? IpAddress { get; private set; }
@@ -49,6 +67,7 @@ public sealed class SecurityAuditEntry : Entity<Guid>, ITenantOwned
         SecurityAuditReasonCode? reasonCode,
         DateTimeOffset occurredAt,
         Guid? userId,
+        Guid? actorId,
         Guid? sessionId,
         Guid? refreshTokenId,
         string? ipAddress,
@@ -60,6 +79,7 @@ public sealed class SecurityAuditEntry : Entity<Guid>, ITenantOwned
         ReasonCode = reasonCode;
         OccurredAt = occurredAt;
         UserId = userId;
+        ActorId = actorId;
         SessionId = sessionId;
         RefreshTokenId = refreshTokenId;
         IpAddress = ipAddress;
@@ -74,6 +94,7 @@ public sealed class SecurityAuditEntry : Entity<Guid>, ITenantOwned
         Guid correlationId,
         SecurityAuditReasonCode? reasonCode = null,
         Guid? userId = null,
+        Guid? actorId = null,
         Guid? sessionId = null,
         Guid? refreshTokenId = null,
         string? ipAddress = null)
@@ -84,7 +105,7 @@ public sealed class SecurityAuditEntry : Entity<Guid>, ITenantOwned
             throw new ArgumentException("Correlation id cannot be empty.", nameof(correlationId));
 
         return new SecurityAuditEntry(
-            id, tenantId, eventType, reasonCode, occurredAt, userId, sessionId, refreshTokenId, ipAddress,
+            id, tenantId, eventType, reasonCode, occurredAt, userId, actorId, sessionId, refreshTokenId, ipAddress,
             correlationId);
     }
 }

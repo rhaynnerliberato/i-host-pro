@@ -89,11 +89,11 @@ public sealed class CreateUserCommandHandler : ICommandHandler<CreateUserCommand
 
         _auditWriter.Record(SecurityAuditEntry.Record(
             Guid.NewGuid(), command.TenantId, SecurityAuditEventType.UserCreated, now, correlationId,
-            reasonCode: null, userId: user.Id, sessionId: null, refreshTokenId: null, ipAddress: null));
+            reasonCode: null, userId: user.Id, actorId: command.ActorId, sessionId: null, refreshTokenId: null, ipAddress: null));
 
         _auditWriter.Record(SecurityAuditEntry.Record(
             Guid.NewGuid(), command.TenantId, SecurityAuditEventType.UserRoleAssigned, now, correlationId,
-            reasonCode: null, userId: user.Id, sessionId: null, refreshTokenId: null, ipAddress: null));
+            reasonCode: null, userId: user.Id, actorId: command.ActorId, sessionId: null, refreshTokenId: null, ipAddress: null));
 
         var userCreated = new UserCreated
         {

@@ -39,6 +39,11 @@ public sealed class SecurityAuditEntryConfiguration : IEntityTypeConfiguration<S
 
         builder.Property(e => e.OccurredAt).HasColumnName("occurred_at").IsRequired();
         builder.Property(e => e.UserId).HasColumnName("user_id");
+        // Fase 12, CP4 — the administrator who performed the action, distinct
+        // from UserId (the target). Nullable, no FK (same never-lose-history
+        // reasoning as UserId/SessionId/RefreshTokenId above), never
+        // backfilled for pre-existing rows.
+        builder.Property(e => e.ActorId).HasColumnName("actor_id");
         builder.Property(e => e.SessionId).HasColumnName("session_id");
         builder.Property(e => e.RefreshTokenId).HasColumnName("refresh_token_id");
         builder.Property(e => e.IpAddress).HasColumnName("ip_address").HasMaxLength(45);
@@ -56,6 +61,7 @@ public sealed class SecurityAuditEntryConfiguration : IEntityTypeConfiguration<S
 
         builder.HasIndex(e => new { e.TenantId, e.OccurredAt });
         builder.HasIndex(e => new { e.TenantId, e.UserId, e.OccurredAt });
+        builder.HasIndex(e => new { e.TenantId, e.ActorId, e.OccurredAt });
         builder.HasIndex(e => new { e.TenantId, e.SessionId, e.OccurredAt });
     }
 }

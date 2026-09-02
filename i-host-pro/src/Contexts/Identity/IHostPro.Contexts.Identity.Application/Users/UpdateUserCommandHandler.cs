@@ -94,7 +94,7 @@ public sealed class UpdateUserCommandHandler : ICommandHandler<UpdateUserCommand
 
             _auditWriter.Record(SecurityAuditEntry.Record(
                 Guid.NewGuid(), command.TenantId, SecurityAuditEventType.UserUpdated, now, correlationId,
-                reasonCode: null, userId: command.TargetUserId, sessionId: null, refreshTokenId: null, ipAddress: null));
+                reasonCode: null, userId: command.TargetUserId, actorId: command.ActorId, sessionId: null, refreshTokenId: null, ipAddress: null));
 
             _eventCollector.Enqueue(new UserUpdated
             {

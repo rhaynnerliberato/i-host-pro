@@ -327,6 +327,9 @@ public class BlockUserCommandHandlerTests : IClassFixture<BlockUserCommandHandle
         var auditEntries = await dbContext.SecurityAuditLog.Where(e => e.UserId == targetUserId).ToListAsync();
         auditEntries.Should().ContainSingle();
         auditEntries[0].EventType.Should().Be(SecurityAuditEventType.UserBlocked);
+        // Fase 12, Checkpoint 4 — the acting administrator, never the target, ends up in ActorId.
+        auditEntries[0].ActorId.Should().Be(actorId);
+        auditEntries[0].UserId.Should().Be(targetUserId);
     }
 
     /// <summary>

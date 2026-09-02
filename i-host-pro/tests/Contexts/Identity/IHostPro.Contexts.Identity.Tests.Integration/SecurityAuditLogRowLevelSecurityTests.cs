@@ -295,11 +295,68 @@ public class SecurityAuditLogRowLevelSecurityTests : IClassFixture<SecurityAudit
         entry.ReasonCode.Should().Be(SecurityAuditReasonCode.UserNotFound);
     }
 
+    [Fact]
+    public async Task An_entry_with_ActorId_populated_persists_and_reads_back_distinct_from_UserId()
+    {
+        // Fase 12, Checkpoint 4, mandate item 14 — end-to-end (real Postgres,
+        // real RLS) proof that ActorId (who acted) and UserId (who was acted
+        // upon) round-trip as two independent columns, never conflated.
+        var (tenantId, targetUserId) = await SeedTenantWithUserAsync();
+        var (_, actorId) = await SeedTenantWithUserAsync();
+
+        var entryId = await InsertAuditEntryAsync(
+            tenantId, SecurityAuditEventType.UserBlocked, userId: targetUserId, actorId: actorId);
+
+        await using var dbContext = CreateMigratorDbContextWithTenant(tenantId);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var entry = await dbContext.SecurityAuditLog.SingleAsync(e => e.Id == entryId);
+
+        entry.ActorId.Should().Be(actorId);
+        entry.UserId.Should().Be(targetUserId);
+    }
+
+    [Fact]
+    public async Task A_historical_row_written_before_ActorId_existed_still_reads_correctly_with_a_null_actor()
+    {
+        // Fase 12, Checkpoint 4, mandate item 11/14 — the migration is
+        // explicitly forbidden from backfilling a fabricated actor onto rows
+        // that predate this column. Simulates that exact historical shape by
+        // inserting directly via raw SQL with no actor_id at all (defaults to
+        // NULL), then proves the application's own read path (EF, through
+        // RLS) tolerates it without error and without inventing a value.
+        var (tenantId, userId) = await SeedTenantWithUserAsync();
+        var entryId = Guid.NewGuid();
+
+        await using (var connection = new NpgsqlConnection(_appConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+            await ExecuteAsync(connection, $"SET LOCAL app.tenant_id = '{tenantId}'");
+            await ExecuteAsync(connection, $"""
+                INSERT INTO identity.security_audit_log (id, tenant_id, event_type, occurred_at, correlation_id, user_id)
+                VALUES ('{entryId}', '{tenantId}', 'UserBlocked', now(), '{Guid.NewGuid()}', '{userId}');
+                """);
+            await transaction.CommitAsync();
+        }
+
+        await using var dbContext = CreateMigratorDbContextWithTenant(tenantId);
+        await using var verifyTransaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var entry = await dbContext.SecurityAuditLog.SingleAsync(e => e.Id == entryId);
+
+        entry.ActorId.Should().BeNull();
+        entry.UserId.Should().Be(userId);
+    }
+
     private async Task<Guid> InsertAuditEntryAsync(
         Guid tenantId,
         SecurityAuditEventType eventType,
         SecurityAuditReasonCode? reasonCode = null,
-        Guid? userId = null)
+        Guid? userId = null,
+        Guid? actorId = null)
     {
         await using var dbContext = CreateMigratorDbContextWithTenant(tenantId);
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
@@ -307,7 +364,8 @@ public class SecurityAuditLogRowLevelSecurityTests : IClassFixture<SecurityAudit
 
         var id = Guid.NewGuid();
         dbContext.SecurityAuditLog.Add(SecurityAuditEntry.Record(
-            id, tenantId, eventType, DateTimeOffset.UtcNow, Guid.NewGuid(), reasonCode: reasonCode, userId: userId));
+            id, tenantId, eventType, DateTimeOffset.UtcNow, Guid.NewGuid(),
+            reasonCode: reasonCode, userId: userId, actorId: actorId));
 
         await dbContext.SaveChangesAsync();
         await transaction.CommitAsync();

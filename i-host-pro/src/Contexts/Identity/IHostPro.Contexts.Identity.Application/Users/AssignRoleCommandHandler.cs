@@ -83,7 +83,7 @@ public sealed class AssignRoleCommandHandler : ICommandHandler<AssignRoleCommand
 
         _auditWriter.Record(SecurityAuditEntry.Record(
             Guid.NewGuid(), command.TenantId, SecurityAuditEventType.UserRoleAssigned, now, correlationId,
-            reasonCode: null, userId: command.TargetUserId, sessionId: null, refreshTokenId: null, ipAddress: null));
+            reasonCode: null, userId: command.TargetUserId, actorId: command.ActorId, sessionId: null, refreshTokenId: null, ipAddress: null));
 
         var roleAssigned = new UserRoleAssigned
         {

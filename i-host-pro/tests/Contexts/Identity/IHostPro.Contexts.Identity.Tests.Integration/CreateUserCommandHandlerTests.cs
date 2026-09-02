@@ -302,6 +302,9 @@ public class CreateUserCommandHandlerTests : IClassFixture<CreateUserCommandHand
         auditEntries.Should().HaveCount(2);
         auditEntries.Should().Contain(e => e.EventType == SecurityAuditEventType.UserCreated);
         auditEntries.Should().Contain(e => e.EventType == SecurityAuditEventType.UserRoleAssigned);
+        // Fase 12, Checkpoint 4 — the acting administrator, never the newly
+        // created user itself, ends up in ActorId on both entries.
+        auditEntries.Should().OnlyContain(e => e.ActorId == actorId);
     }
 
     [Fact]

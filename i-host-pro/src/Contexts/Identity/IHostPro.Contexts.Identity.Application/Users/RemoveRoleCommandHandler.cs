@@ -109,7 +109,7 @@ public sealed class RemoveRoleCommandHandler : ICommandHandler<RemoveRoleCommand
 
         _auditWriter.Record(SecurityAuditEntry.Record(
             Guid.NewGuid(), command.TenantId, SecurityAuditEventType.UserRoleRemoved, now, correlationId,
-            reasonCode: null, userId: command.TargetUserId, sessionId: null, refreshTokenId: null, ipAddress: null));
+            reasonCode: null, userId: command.TargetUserId, actorId: command.ActorId, sessionId: null, refreshTokenId: null, ipAddress: null));
 
         var roleRemoved = new UserRoleRemoved
         {

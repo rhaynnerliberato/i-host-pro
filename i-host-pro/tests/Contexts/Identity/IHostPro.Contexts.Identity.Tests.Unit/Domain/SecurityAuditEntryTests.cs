@@ -23,6 +23,9 @@ public class SecurityAuditEntryTests
         entry.CorrelationId.Should().Be(correlationId);
         entry.ReasonCode.Should().BeNull();
         entry.UserId.Should().BeNull();
+        // Fase 12, Checkpoint 4 — a nullable ActorId is exactly what lets pre-
+        // migration (historical) rows keep loading without a fabricated actor.
+        entry.ActorId.Should().BeNull();
         entry.SessionId.Should().BeNull();
         entry.RefreshTokenId.Should().BeNull();
         entry.IpAddress.Should().BeNull();
@@ -32,6 +35,7 @@ public class SecurityAuditEntryTests
     public void Record_creates_an_entry_with_every_optional_field_populated()
     {
         var userId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
         var sessionId = Guid.NewGuid();
         var refreshTokenId = Guid.NewGuid();
 
@@ -43,15 +47,37 @@ public class SecurityAuditEntryTests
             Guid.NewGuid(),
             reasonCode: SecurityAuditReasonCode.SessionNotActive,
             userId: userId,
+            actorId: actorId,
             sessionId: sessionId,
             refreshTokenId: refreshTokenId,
             ipAddress: "203.0.113.7");
 
         entry.ReasonCode.Should().Be(SecurityAuditReasonCode.SessionNotActive);
         entry.UserId.Should().Be(userId);
+        entry.ActorId.Should().Be(actorId);
         entry.SessionId.Should().Be(sessionId);
         entry.RefreshTokenId.Should().Be(refreshTokenId);
         entry.IpAddress.Should().Be("203.0.113.7");
+    }
+
+    [Fact]
+    public void Record_accepts_a_distinct_ActorId_from_UserId_never_conflating_actor_and_target()
+    {
+        // Fase 12, Checkpoint 4, mandate item 14 — proves at the domain level
+        // that ActorId (who performed the operation) and UserId (who it was
+        // performed on) are two independent optional fields, never the same
+        // slot: an administrative operation on another user must be able to
+        // record both simultaneously, distinctly.
+        var actorId = Guid.NewGuid();
+        var targetUserId = Guid.NewGuid();
+
+        var entry = SecurityAuditEntry.Record(
+            Guid.NewGuid(), Guid.NewGuid(), SecurityAuditEventType.UserBlocked, Now, Guid.NewGuid(),
+            userId: targetUserId, actorId: actorId);
+
+        entry.ActorId.Should().Be(actorId);
+        entry.UserId.Should().Be(targetUserId);
+        (entry.ActorId == entry.UserId).Should().BeFalse();
     }
 
     [Fact]
