@@ -33,15 +33,18 @@ public sealed class AgentContextBuilder : IAgentContextBuilder
     private readonly IConversationHistoryReader _historyReader;
     private readonly IAiAgentBehaviorPolicyReader _behaviorPolicyReader;
     private readonly IPropertyLocalTimeContextReader _propertyLocalTimeContextReader;
+    private readonly IContextBudgetPolicy _contextBudgetPolicy;
     private readonly TimeProvider _timeProvider;
 
     public AgentContextBuilder(
         IConversationHistoryReader historyReader, IAiAgentBehaviorPolicyReader behaviorPolicyReader,
-        IPropertyLocalTimeContextReader propertyLocalTimeContextReader, TimeProvider timeProvider)
+        IPropertyLocalTimeContextReader propertyLocalTimeContextReader, IContextBudgetPolicy contextBudgetPolicy,
+        TimeProvider timeProvider)
     {
         _historyReader = historyReader;
         _behaviorPolicyReader = behaviorPolicyReader;
         _propertyLocalTimeContextReader = propertyLocalTimeContextReader;
+        _contextBudgetPolicy = contextBudgetPolicy;
         _timeProvider = timeProvider;
     }
 
@@ -54,7 +57,9 @@ public sealed class AgentContextBuilder : IAgentContextBuilder
             .OrderBy(m => m.MessageId == triggeringInboundMessageId ? 1 : 0)
             .ToList();
 
-        var messages = orderedHistory
+        var boundedHistory = ApplyContextBudget(orderedHistory);
+
+        var messages = boundedHistory
             .Select(m => new ModelMessage(
                 m.Direction == ConversationMessageDirection.Inbound ? ModelMessageRole.Guest : ModelMessageRole.Agent,
                 m.Content))
@@ -67,6 +72,53 @@ public sealed class AgentContextBuilder : IAgentContextBuilder
 
         return new ModelRequest(SystemPrompt: systemPrompt, Messages: messages);
     }
+
+    /// <summary>
+    /// Fase 12, Checkpoint 3, Decision Gate §§6-9 — closes
+    /// <c>ProductionContextBudgetStrategyRequired</c> (Fase 11 CP7): applies
+    /// ONLY to conversation history — the system prompt (AI_AGENT_BEHAVIOR,
+    /// policies, timezone/current-time facts) is assembled entirely
+    /// separately in <see cref="ComposeSystemPrompt"/> and is never subject
+    /// to this budget. Walks <paramref name="orderedHistory"/> from the END
+    /// (most recent first, per the approved algorithm) and keeps messages
+    /// while their estimated token cost still fits the configured budget —
+    /// the OLDEST messages are the first ones dropped. The single most
+    /// recent message (which is always the triggering inbound message,
+    /// per <see cref="BuildAsync"/>'s own re-sort) is always kept even if it
+    /// alone exceeds the budget — the model must always see at least what it
+    /// is actually replying to.
+    /// </summary>
+    private List<ConversationHistoryMessage> ApplyContextBudget(List<ConversationHistoryMessage> orderedHistory)
+    {
+        var options = _contextBudgetPolicy.Current;
+        if (!options.Enabled)
+            return orderedHistory;
+
+        var kept = new List<ConversationHistoryMessage>();
+        var usedTokens = 0;
+
+        for (var i = orderedHistory.Count - 1; i >= 0; i--)
+        {
+            var messageTokens = EstimateTokens(orderedHistory[i].Content, options.CharsPerTokenEstimate);
+            if (kept.Count > 0 && usedTokens + messageTokens > options.MaxHistoryTokens)
+                break;
+
+            kept.Add(orderedHistory[i]);
+            usedTokens += messageTokens;
+        }
+
+        kept.Reverse();
+        return kept;
+    }
+
+    /// <summary>
+    /// A documented, deliberately conservative ESTIMATE (mandate §8) — no
+    /// official Anthropic tokenizer is available in this stack without
+    /// adding an otherwise-unneeded dependency. Never treated as an exact
+    /// count anywhere this is consumed.
+    /// </summary>
+    private static int EstimateTokens(string content, double charsPerTokenEstimate) =>
+        (int)Math.Ceiling(content.Length / charsPerTokenEstimate);
 
     /// <summary>
     /// Never a fixed business prompt on its own (Documento 16 §20) — only the

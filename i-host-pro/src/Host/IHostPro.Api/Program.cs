@@ -1,7 +1,9 @@
+using IHostPro.Api.RateLimiting;
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
+using IHostPro.BuildingBlocks.Infrastructure.RateLimiting;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
 using IHostPro.Contexts.Identity.Api.Authorization;
 using IHostPro.Contexts.Identity.Contracts;
@@ -123,10 +125,11 @@ try
     // touches any dependency at all. Postgres and RabbitMQ are hard
     // dependencies for every write path this Api serves — Unhealthy when
     // down. Redis backs only Configuration & Policy's read-through cache
-    // (CachedPolicyValueResolver has no fallback to Postgres on a Redis
-    // failure — confirmed by direct source read), so only policy-dependent
-    // reads are impaired, never the whole Api — reported as Degraded, never
-    // Unhealthy, so a Redis blip alone never flips readiness off entirely.
+    // (RedisPolicyValueCache falls back to PostgreSQL on any Redis failure —
+    // corrected during CP2's own final validation, see the Fase 12
+    // homologation document §4.8), so only a caching optimization is lost,
+    // never a whole read path — reported as Degraded, never Unhealthy, so a
+    // Redis blip alone never flips readiness off entirely.
     var rabbitMqConnectionForHealth = new Lazy<Task<RabbitMQ.Client.IConnection>>(() => new RabbitMQ.Client.ConnectionFactory
     {
         HostName = builder.Configuration["RabbitMq:Host"] ?? "localhost",
@@ -148,6 +151,16 @@ try
             name: "redis",
             failureStatus: HealthStatus.Degraded,
             tags: ["ready"]);
+
+    // Fase 12, Checkpoint 3 (Resilience & Rate Limiting) — Redis-backed,
+    // centrally-configured rate limiting (ADR-006 already names Redis for
+    // this). AddIHostProRateLimiting registers the host-agnostic
+    // IDistributedRateLimiter (shared with IHostPro.Worker's own AI
+    // cost-guard policy); AddIHostProHttpRateLimiting wires the three
+    // HTTP-native categories onto it (see ApiRateLimitingExtensions'
+    // doc comment — Webhook is deliberately excluded here, see there).
+    builder.Services.AddIHostProRateLimiting(builder.Configuration);
+    builder.Services.AddIHostProHttpRateLimiting();
 
     // Tenant-aware transactional pipeline (TenantTransactionBehavior /
     // TenantBootstrapBehavior + ITenantAwareUnitOfWork) — foundation
@@ -820,7 +833,20 @@ try
     app.UseCors(FrontendCorsPolicy);
     app.UseAuthentication();
     app.UseAuthorization();
-    app.MapControllers();
+    // Fase 12, Checkpoint 3 — after UseAuthorization so a partition keyed by
+    // the authenticated TenantId/UserId claim (TenantApi/AdminApi policies)
+    // sees a populated HttpContext.User; AllowAnonymous actions (Login/
+    // Refresh) still reach UseRateLimiter fine — authentication middleware
+    // runs regardless of [AllowAnonymous], it just never blocks the request.
+    app.UseRateLimiter();
+    // TenantApi is the default for every controller-routed endpoint;
+    // [EnableRateLimiting("Authentication")] on Login/Refresh and
+    // [EnableRateLimiting("AdminApi")] on the administrative controllers
+    // each override this default for their own actions — see
+    // RequireRateLimitingByDefault's own doc comment for why this is NOT a
+    // plain .RequireRateLimiting(...) call (that silently wins over the
+    // per-action attributes instead of yielding to them).
+    app.MapControllers().RequireRateLimitingByDefault(ApiRateLimitingExtensions.TenantApiPolicy);
     // Fase 12, Checkpoint 2 — liveness (process is up, checks nothing) vs
     // readiness (checks every "ready"-tagged dependency) are now distinct,
     // matching Documento 21 §18's Healthy/Degraded/Unhealthy model instead

@@ -89,6 +89,14 @@ public static class ExternalIntegrationsModuleExtensions
         // Production-blocked, never the algorithm that consumes it.
         services.AddSingleton<IWebhookSignatureVerifier, MetaWebhookSignatureVerifier>();
 
+        // Fase 12, Checkpoint 3 (Resilience & Rate Limiting) — the "Webhook"
+        // HTTP category. Delegates to the shared IDistributedRateLimiter
+        // (BuildingBlocks.Infrastructure, registered by IHostPro.Api's own
+        // AddIHostProRateLimiting call) — this is the ONLY reason
+        // WhatsAppWebhookController can use the rate limiter without
+        // referencing Infrastructure directly (Api projects never do).
+        services.AddSingleton<IWebhookRateLimiter, IHostPro.Contexts.ExternalIntegrations.Infrastructure.RateLimiting.WebhookRateLimiter>();
+
         // Fase 9, Checkpoint 2.3.2 — webhook status normalization
         // (ADR-022). Unconditional: no secret, no external network call —
         // just JSON parsing plus the route repository above.

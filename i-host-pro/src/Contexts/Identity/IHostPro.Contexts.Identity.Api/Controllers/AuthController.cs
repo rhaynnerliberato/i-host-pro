@@ -4,6 +4,7 @@ using IHostPro.Contexts.Identity.Application;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace IHostPro.Contexts.Identity.Api.Controllers;
 
@@ -25,6 +26,15 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    // Fase 12, Checkpoint 3 — brute-force/credential-stuffing protection,
+    // partitioned by caller IP (see ApiRateLimitingExtensions, IHostPro.Api's
+    // composition root — the literal name here is the only coupling point,
+    // deliberately never a type reference: this project must not depend on
+    // Infrastructure/the Host). Complements, never duplicates, the existing
+    // per-user Identity lockout (AccountLockoutOptions) — that one guards a
+    // single targeted account; this one guards against many accounts being
+    // tried from the same IP.
+    [EnableRateLimiting("Authentication")]
     [ProducesResponseType(typeof(AuthTokensResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
@@ -44,6 +54,11 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("refresh")]
     [AllowAnonymous]
+    // Fase 12, Checkpoint 3 — same Authentication policy as Login, same
+    // IP partition: refresh-token abuse is explicitly in scope alongside
+    // login brute force. Complements, never replaces, the independent
+    // rotated-token-reuse detection RefreshTokenCommandHandler already does.
+    [EnableRateLimiting("Authentication")]
     [ProducesResponseType(typeof(AuthTokensResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request, CancellationToken cancellationToken)

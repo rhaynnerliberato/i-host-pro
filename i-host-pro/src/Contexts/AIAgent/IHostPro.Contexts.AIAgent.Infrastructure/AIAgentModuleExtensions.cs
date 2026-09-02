@@ -56,6 +56,22 @@ public static class AIAgentModuleExtensions
         services.AddScoped<IAgentSessionResolver, AgentSessionResolver>();
         services.AddScoped<IAgentContextBuilder, AgentContextBuilder>();
 
+        // Fase 12, Checkpoint 3 — conversation-history token budget (closes
+        // ProductionContextBudgetStrategyRequired from Fase 11 CP7). Mirrors
+        // AnthropicOptions' own Configure<T> shape exactly — no
+        // ValidateOnStart needed, every field has a safe conservative
+        // default and no external connection to validate.
+        services.Configure<ContextBudgetOptions>(configuration.GetSection(ContextBudgetOptions.SectionName));
+        services.AddSingleton<IContextBudgetPolicy, IHostPro.Contexts.AIAgent.Infrastructure.ContextBudget.ContextBudgetPolicy>();
+
+        // Fase 12, Checkpoint 3 (Resilience & Rate Limiting) — the
+        // "AiExpensiveOperation" cost-guard, applied by
+        // ConversationMessageReceivedProcessor at the real orchestration
+        // boundary (never an HTTP endpoint — the AI Agent has none).
+        // Delegates to the shared IDistributedRateLimiter, registered by
+        // IHostPro.Worker's own AddIHostProRateLimiting call.
+        services.AddSingleton<IAiAgentRateLimiter, IHostPro.Contexts.AIAgent.Infrastructure.RateLimiting.AiAgentRateLimiter>();
+
         // Fase 11, Checkpoint 7 — reuses the same Reservations/PropertyManagement
         // dispatchers GetPropertyInformationTool already depends on.
         services.AddScoped<IPropertyLocalTimeContextReader, PropertyLocalTimeContextReader>();

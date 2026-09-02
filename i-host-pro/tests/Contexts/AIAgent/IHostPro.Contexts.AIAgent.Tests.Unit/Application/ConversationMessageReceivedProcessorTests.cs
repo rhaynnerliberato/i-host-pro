@@ -48,7 +48,8 @@ public class ConversationMessageReceivedProcessorTests
         ModelRequest? request = null, FakeAgentToolExecutionRepository? toolExecutionRepository = null,
         IEnumerable<IAgentTool>? tools = null, FakeAgentPendingActionRepository? pendingActionRepository = null,
         FakeAgentToolConfirmationPolicy? confirmationPolicy = null, FakeAgentResponseDeliveryService? responseDeliveryService = null,
-        FakeAgentHumanHandoffRepository? handoffRepository = null, FakeAdministratorNotificationService? administratorNotificationService = null) =>
+        FakeAgentHumanHandoffRepository? handoffRepository = null, FakeAdministratorNotificationService? administratorNotificationService = null,
+        FakeAiAgentRateLimiter? rateLimiter = null) =>
         new(
             FakeAgentSessionResolver.Returning(SessionId), sessionRepository, interactionRepository,
             toolExecutionRepository ?? new FakeAgentToolExecutionRepository(),
@@ -61,8 +62,42 @@ public class ConversationMessageReceivedProcessorTests
             responseDeliveryService ?? FakeAgentResponseDeliveryService.Succeeding(Guid.NewGuid()),
             administratorNotificationService ?? FakeAdministratorNotificationService.Succeeding(),
             tools ?? [],
-            new PassThroughAIAgentTransactionExecutor(), TimeProvider.System,
+            new PassThroughAIAgentTransactionExecutor(), rateLimiter ?? FakeAiAgentRateLimiter.AlwaysAllow(), TimeProvider.System,
             NullLogger<ConversationMessageReceivedProcessor>.Instance);
+
+    /// <summary>
+    /// Fase 12, Checkpoint 3, Decision Gate §3 — a rejected tenant is treated
+    /// exactly like a technical model-provider failure: same Failure
+    /// outcome, same generic fallback response, no new business state. The
+    /// model/tool layer must never be reached at all (FakeModelProvider/the
+    /// context builder are never given a chance to run before the rate
+    /// limiter is checked).
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_when_rate_limited_persists_a_Failure_interaction_and_delivers_the_generic_fallback_without_calling_the_model()
+    {
+        var messageId = Guid.NewGuid();
+        var interactionRepository = FakeAgentInteractionRepository.WithExisting(null);
+        var sessionRepository = FakeAgentSessionRepository.WithExisting(NewActiveSession());
+        var responseDelivery = FakeAgentResponseDeliveryService.Succeeding(Guid.NewGuid());
+        var processor = CreateProcessor(
+            interactionRepository, sessionRepository, responseDeliveryService: responseDelivery,
+            rateLimiter: FakeAiAgentRateLimiter.AlwaysReject());
+
+        await processor.HandleAsync(BuildEvent(messageId), CancellationToken.None);
+
+        interactionRepository.AddedInteractions.Should().ContainSingle();
+        var interaction = interactionRepository.AddedInteractions[0];
+        interaction.TenantId.Should().Be(TenantId);
+        interaction.AgentSessionId.Should().Be(SessionId);
+        interaction.InboundMessageId.Should().Be(messageId);
+        interaction.Outcome.Should().Be(AgentInteractionOutcome.Failure, "a rate-limited tenant is a technical guard, never a new business outcome");
+
+        responseDelivery.Calls.Should().ContainSingle("the guest must still receive a response — never a silent drop");
+        responseDelivery.Calls[0].Content.Should().Be(
+            "Desculpe, não consegui processar sua mensagem agora. Por favor, tente novamente em instantes.",
+            "the same generic fallback wording as a technical model failure — never new guest-facing copy");
+    }
 
     [Fact]
     public async Task HandleAsync_success_persists_an_AgentInteraction_and_updates_session_metadata()

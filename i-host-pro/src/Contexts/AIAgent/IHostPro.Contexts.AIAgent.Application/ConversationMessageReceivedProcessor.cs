@@ -119,6 +119,7 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
     private readonly IAdministratorNotificationService _administratorNotificationService;
     private readonly IReadOnlyList<IAgentTool> _tools;
     private readonly IAIAgentTransactionExecutor _transactionExecutor;
+    private readonly IAiAgentRateLimiter _rateLimiter;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<ConversationMessageReceivedProcessor> _logger;
 
@@ -137,6 +138,7 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
         IAdministratorNotificationService administratorNotificationService,
         IEnumerable<IAgentTool> tools,
         IAIAgentTransactionExecutor transactionExecutor,
+        IAiAgentRateLimiter rateLimiter,
         TimeProvider timeProvider,
         ILogger<ConversationMessageReceivedProcessor> logger)
     {
@@ -154,6 +156,7 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
         _administratorNotificationService = administratorNotificationService;
         _tools = tools.ToArray();
         _transactionExecutor = transactionExecutor;
+        _rateLimiter = rateLimiter;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -190,12 +193,33 @@ public sealed class ConversationMessageReceivedProcessor : IIntegrationEventHand
             return;
         }
 
+        var interactionId = Guid.NewGuid();
+        var startedAtUtc = _timeProvider.GetUtcNow();
+
+        // Fase 12, Checkpoint 3 (Resilience & Rate Limiting), Decision Gate
+        // §3 — the AI cost-guard: checked BEFORE the context build/model call
+        // (the actually expensive, paid step this guards), never before
+        // idempotency/session/escalation, which are cheap local DB work that
+        // must run identically regardless of budget. A rejected tenant is
+        // treated exactly like a technical model-provider failure (same
+        // Failure outcome, same generic fallback response) — never a new
+        // business outcome/guest-facing wording, never a crash loop, never
+        // billing/plan enforcement (that belongs to the future SaaS
+        // Commercial Readiness audit, explicitly out of scope here).
+        if (!await _rateLimiter.IsAllowedAsync(@event.TenantId, cancellationToken))
+        {
+            await FailInteractionAsync(@event, sessionId, interactionId, startedAtUtc, wasAlreadyPersisted: false, cancellationToken);
+            await DeliverFallbackResponseAsync(@event, interactionId, ModelFailureFallbackContent, cancellationToken);
+
+            _logger.LogWarning(
+                "AIAgent {Trigger} outcome for tenant {TenantId} conversationId {ConversationId} sessionId {SessionId} interactionId {InteractionId}: {Result}",
+                nameof(ConversationMessageReceived), @event.TenantId, @event.ConversationId, sessionId, interactionId, "RateLimited");
+            return;
+        }
+
         var baseRequest = await _contextBuilder.BuildAsync(
             @event.TenantId, @event.ConversationId, @event.MessageId, @event.ReservationId, cancellationToken);
         var request = baseRequest with { AvailableTools = _tools.Select(t => t.Descriptor).ToArray() };
-
-        var interactionId = Guid.NewGuid();
-        var startedAtUtc = _timeProvider.GetUtcNow();
 
         try
         {

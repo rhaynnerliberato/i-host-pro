@@ -6,6 +6,7 @@ using IHostPro.Worker.Observability;
 using Npgsql;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
+using IHostPro.BuildingBlocks.Infrastructure.RateLimiting;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
 using IHostPro.Contexts.Configuration.Application.Policies;
 using IHostPro.Contexts.Configuration.Contracts;
@@ -291,6 +292,20 @@ try
     // below applies only to AnthropicModelProvider's own credential
     // provider (see AddAIAgentModule's own doc comment) — mirrors
     // AddExternalIntegrationsModule's own call site exactly.
+    // Fase 12, Checkpoint 3 (Resilience & Rate Limiting) — DLQ observability
+    // (DeadLetterObservable=true). Worker-only: this is the process that
+    // owns every ancillary schema's own wolverine_dead_letters table.
+    builder.Services.AddHostedService<IHostPro.Worker.Observability.DeadLetterMetricsBackgroundService>();
+
+    // Fase 12, Checkpoint 3 (Resilience & Rate Limiting) — the shared,
+    // host-agnostic Redis-backed limiter, registered here (never HTTP
+    // middleware — this process serves none) so
+    // ConversationMessageReceivedProcessor's own IAiAgentRateLimiter
+    // (AIAgentModuleExtensions) resolves. Same config section/options as
+    // IHostPro.Api's own AddIHostProRateLimiting call — one Redis, one set of
+    // policies, both hosts.
+    builder.Services.AddIHostProRateLimiting(builder.Configuration);
+
     builder.Services.AddAIAgentModule(builder.Configuration, builder.Environment.IsDevelopment());
     builder.Services.AddAIAgentConversationMessageConsumer();
 
@@ -1233,6 +1248,9 @@ try
             .AddHttpClientInstrumentation()
             .AddRuntimeInstrumentation()
             .AddNpgsqlInstrumentation()
+            // Fase 12, Checkpoint 3 — DeadLetterMetricsBackgroundService's
+            // own Meter (wolverine.dead_letters, count-only, never payload).
+            .AddMeter("IHostPro.Wolverine")
             // Fase 12, Checkpoint 2 (Documento 21 §16 — "IA" is one of the
             // explicitly required metric categories) — AnthropicModelProvider's
             // own Meter, the only class in the solution that constructs it;

@@ -5,6 +5,7 @@ using IHostPro.Contexts.Identity.Application.Catalog;
 using IHostPro.Contexts.Identity.Contracts.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace IHostPro.Contexts.Identity.Api.Controllers;
 
@@ -20,6 +21,9 @@ namespace IHostPro.Contexts.Identity.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/permissions")]
+// Fase 12, Checkpoint 3 — administrative catalog surface (PermissionsRead),
+// same AdminApi category/partition as UserAdministrationController.
+[EnableRateLimiting("AdminApi")]
 public sealed class PermissionsController : ControllerBase
 {
     private readonly IIdentityRequestDispatcher _sender;

@@ -52,12 +52,15 @@ public sealed class WhatsAppWebhookController : ControllerBase
     private const string MessageIgnored = "WhatsAppWebhookMessageIgnored";
     private const string MessageEventPublished = "WhatsAppWebhookMessageEventPublished";
 
+    private const string RateLimited = "WhatsAppWebhookRateLimited";
+
     private readonly IWhatsAppWebhookCredentialProvider _credentialProvider;
     private readonly IWebhookSignatureVerifier _signatureVerifier;
     private readonly IWhatsAppWebhookStatusProcessor _statusProcessor;
     private readonly IWhatsAppWebhookStatusEventPublisher _eventPublisher;
     private readonly IWhatsAppWebhookMessageProcessor _messageProcessor;
     private readonly IWhatsAppWebhookMessageEventPublisher _messageEventPublisher;
+    private readonly IWebhookRateLimiter _rateLimiter;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
@@ -67,6 +70,7 @@ public sealed class WhatsAppWebhookController : ControllerBase
         IWhatsAppWebhookStatusEventPublisher eventPublisher,
         IWhatsAppWebhookMessageProcessor messageProcessor,
         IWhatsAppWebhookMessageEventPublisher messageEventPublisher,
+        IWebhookRateLimiter rateLimiter,
         ILogger<WhatsAppWebhookController> logger)
     {
         _credentialProvider = credentialProvider;
@@ -75,6 +79,7 @@ public sealed class WhatsAppWebhookController : ControllerBase
         _eventPublisher = eventPublisher;
         _messageProcessor = messageProcessor;
         _messageEventPublisher = messageEventPublisher;
+        _rateLimiter = rateLimiter;
         _logger = logger;
     }
 
@@ -142,6 +147,31 @@ public sealed class WhatsAppWebhookController : ControllerBase
         }
 
         _logger.LogInformation("{AuditEvent}: bodyLength {BodyLength}", SignatureAccepted, rawBody.Length);
+
+        // Fase 12, Checkpoint 3 — "Webhook" rate-limit category (Decision
+        // Gate §2), applied only after a real Meta signature is confirmed
+        // (never gates unauthenticated traffic) and before either processor
+        // does its own DB work. Partitioned by phone_number_id — a
+        // provider/account-level technical identifier, NEVER the guest's
+        // phone/sender/body (mandate §2 explicitly prohibits that). A
+        // best-effort, self-contained peek at the already-buffered rawBody —
+        // deliberately never MetaWebhookEnvelope (Infrastructure.Meta-only,
+        // mandate §16) — "unknown" when the shape doesn't match, which still
+        // rate-limits (conservatively, as one shared bucket) rather than
+        // skipping the check entirely.
+        var rateLimitDecision = await _rateLimiter.CheckAsync(ExtractPhoneNumberIdForRateLimiting(rawBody), cancellationToken);
+        if (!rateLimitDecision.Allowed)
+        {
+            _logger.LogWarning("{AuditEvent}: bodyLength {BodyLength}", RateLimited, rawBody.Length);
+            if (rateLimitDecision.RetryAfter is { } retryAfter)
+                Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString();
+            // 429, not the "always 2xx" policy above — an over-limit burst is
+            // transient (clears once the window resets), exactly the kind of
+            // condition Meta's own retry-with-backoff exists for (mandate
+            // §26: never break provider retry semantics — this USES them,
+            // never a silent drop that would look identical to real loss).
+            return StatusCode(StatusCodes.Status429TooManyRequests);
+        }
 
         // Both processors independently parse the SAME raw body — statuses[]
         // and messages[] are mutually exclusive per change (Meta never mixes
@@ -222,6 +252,36 @@ public sealed class WhatsAppWebhookController : ControllerBase
                 _logger.LogWarning(
                     "{AuditEvent}: tenant {TenantId}", MessageIgnored, outcome.TenantId);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Best-effort only, used exclusively as a rate-limit partition key —
+    /// never for routing/business logic (that remains
+    /// <see cref="IWhatsAppWebhookStatusProcessor"/>/<see cref="IWhatsAppWebhookMessageProcessor"/>'s
+    /// own job, via the Infrastructure-only <c>MetaWebhookEnvelope</c>). Reads
+    /// <c>entry[0].changes[0].value.metadata.phone_number_id</c> directly off
+    /// the already-parsed <see cref="JsonDocument"/> — never re-reads the
+    /// stream, never logged (this controller's own doc comment: "Never
+    /// logs... the PhoneNumberId").
+    /// </summary>
+    private static string ExtractPhoneNumberIdForRateLimiting(byte[] rawBody)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(rawBody);
+            var phoneNumberId = document.RootElement
+                .GetProperty("entry")[0]
+                .GetProperty("changes")[0]
+                .GetProperty("value")
+                .GetProperty("metadata")
+                .GetProperty("phone_number_id")
+                .GetString();
+            return string.IsNullOrEmpty(phoneNumberId) ? "unknown" : phoneNumberId;
+        }
+        catch (Exception ex) when (ex is KeyNotFoundException or IndexOutOfRangeException or InvalidOperationException or JsonException)
+        {
+            return "unknown";
         }
     }
 

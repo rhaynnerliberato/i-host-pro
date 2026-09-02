@@ -8,6 +8,7 @@ using IHostPro.Contexts.Identity.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace IHostPro.Contexts.Identity.Api.Controllers;
 
@@ -26,6 +27,12 @@ namespace IHostPro.Contexts.Identity.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/users")]
+// Fase 12, Checkpoint 3 — every action here requires UsersManage, so this
+// whole controller is the platform's "Administrative API" HTTP category
+// (Decision Gate §2), partitioned by TenantId+UserId (see
+// ApiRateLimitingExtensions, IHostPro.Api's composition root) instead of the
+// broader default TenantApi policy every other controller gets.
+[EnableRateLimiting("AdminApi")]
 public sealed class UserAdministrationController : ControllerBase
 {
     private readonly IIdentityRequestDispatcher _sender;

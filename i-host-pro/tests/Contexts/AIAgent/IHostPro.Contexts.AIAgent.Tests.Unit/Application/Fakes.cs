@@ -98,6 +98,16 @@ internal sealed class FakeAgentToolExecutionRepository : IAgentToolExecutionRepo
     public void Remove(AgentToolExecution aggregate) => _byId.Remove(aggregate.Id);
 }
 
+/// <summary>Fase 12, Checkpoint 3 — every existing flow-level test exercises AI Agent orchestration, never rate limiting, so this fake always allows.</summary>
+internal sealed class FakeAiAgentRateLimiter : IAiAgentRateLimiter
+{
+    private readonly bool _allowed;
+    private FakeAiAgentRateLimiter(bool allowed) => _allowed = allowed;
+    public static FakeAiAgentRateLimiter AlwaysAllow() => new(true);
+    public static FakeAiAgentRateLimiter AlwaysReject() => new(false);
+    public Task<bool> IsAllowedAsync(Guid tenantId, CancellationToken cancellationToken) => Task.FromResult(_allowed);
+}
+
 internal sealed class FakeAgentContextBuilder : IAgentContextBuilder
 {
     private readonly ModelRequest _request;
