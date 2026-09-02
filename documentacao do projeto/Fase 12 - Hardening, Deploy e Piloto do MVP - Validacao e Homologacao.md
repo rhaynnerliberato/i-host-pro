@@ -323,3 +323,113 @@ Investigação com evidência direta: origem em Fase 9 CP2.3.4, reafirmada Fase 
 - Billing/planos/assinaturas/entitlements comerciais — pertence à futura auditoria de SaaS Commercial Readiness, nunca a este checkpoint.
 - Thresholds numéricos finais de Produção para rate limiting e context budget — `ProductionRateLimitThresholdsRequired=true`/`ProductionContextBudgetFinalThresholdRequired=true`, dependem de dados reais do piloto.
 - Manifestos Kubernetes/probes reais — decisão já registrada no CP2, mantida.
+
+## 6. Checkpoint 4 — Security, Secrets & LGPD Hardening
+
+### 6.1 Escopo e objetivo
+
+Hardening de proteção de secrets, autenticação/autorização, segurança administrativa, exposição mínima de dados, LGPD, ciclo de vida de dados pessoais, auditabilidade de operações sensíveis, e preparação provider-agnostic de secrets de Produção — explicitamente SEM escolher provedor de nuvem (`CloudProviderDecision=DEFERRED_TO_CP5`) e SEM implementar billing/comercialização SaaS. `BaseSha=0922c9d`.
+
+### 6.2 Correção de build — `ForwardedHeadersOptions` no .NET 10
+
+Investigação empírica (probe descartável, mesma técnica já usada em CP2/CP3) revelou dois desvios silenciosos da documentação/memória: `ForwardedHeadersOptions` vive em `Microsoft.AspNetCore.Builder` (não `Microsoft.AspNetCore.HttpOverrides`, apesar do assembly físico continuar `Microsoft.AspNetCore.HttpOverrides.dll`); e `KnownNetworks` está obsoleto (`ASPDEPR005`) em favor de `KnownIPNetworks` (`System.Net.IPNetwork`, não mais `Microsoft.AspNetCore.HttpOverrides.IPNetwork`). Corrigido em `Program.cs` — nunca limpa os defaults seguros do framework (`127.0.0.0/8`/`::1`), só adiciona o que vier de `ForwardedHeaders:KnownProxies`/`KnownNetworks`. Provado com 2 testes reais (`SecurityHardeningTests`): origem não configurada é ignorada mesmo com `X-Forwarded-For` forjado; origem explicitamente configurada como confiável é honrada.
+
+### 6.3 Safe Hardening (mandato §1 A-F)
+
+`SafeHardeningImplemented=true`. `SecurityHeadersConfigured=true` — `X-Content-Type-Options`/`X-Frame-Options: DENY`/`Referrer-Policy`/`Permissions-Policy`, deliberadamente sem CSP (instrução explícita — API pura JSON, frontend hospedado separadamente). `CorsProductionSafe=true` — `CorsOriginsResolver` extraído de `Program.cs` especificamente para ser testável isoladamente (o `throw` inline original era inobservável em teste, já que o `catch` de nível superior do `Program.cs` engole exceções em `Log.Fatal`); Production sem `Cors:AllowedOrigins` configurado falha explicitamente, nunca cai para `localhost:4200`. `SensitiveErrorLeak=false` — `SanitizedExceptionHandler : IExceptionHandler` retorna sempre um `ProblemDetails` genérico fixo com `traceId`, nunca `exception.Message`/stack trace, independente do ambiente; provado disparando uma exceção real contendo uma string sentinela e confirmando sua ausência total do corpo da resposta. `ApiContainerNonRoot=true`/`WorkerContainerNonRoot=true`/`MigrationRunnerContainerNonRoot=true` — usuário `app` (uid 1654) built-in das imagens oficiais `mcr.microsoft.com/dotnet/{aspnet,runtime}:10.0`, sem `chmod 777` nem workaround inseguro; verificado rodando os três containers de fato (não apenas inspecionando o Dockerfile).
+
+### 6.4 MigrationRunner Docker — defeito preexistente corrigido
+
+Achado durante a validação non-root: o container do MigrationRunner não subia — `Framework not found: Microsoft.AspNetCore.App`, porque seu Dockerfile usava a imagem `dotnet/runtime:10.0` (sem ASP.NET Core), mas o `.runtimeconfig.json` publicado passou a exigir `Microsoft.AspNetCore.App` (dependência transitiva via suas `ProjectReference`s de `.Infrastructure`). Confirmado como preexistente e não relacionado à mudança non-root (erro de resolução nativa do host, ocorre antes de qualquer código gerenciado, inclusive antes de qualquer verificação de permissão). Corrigido trocando para `mcr.microsoft.com/dotnet/aspnet:10.0` (mesma imagem que Api/Worker já usam). `MigrationRunnerDockerFixed=true`, `MigrationRunnerDockerBuild=true`, `MigrationRunnerDockerBoot=true`, `MigrationRunnerRunsNonRoot=true` — todos confirmados rodando o container real.
+
+### 6.5 SSH.NET / NU1903 — investigação completa, nenhuma correção aplicada
+
+Investigado via advisory oficial (`CVE-2026-48798`, `GHSA-q939-rpr3-3284`): vulnerabilidade em `ScpClient.Download` (directory traversal / escrita arbitrária de arquivo via servidor SCP malicioso/comprometido/MITM). Faixa vulnerável `<= 2025.1.0`; primeira versão corrigida `2026.0.0` — dois majors à frente do versionamento por ano do SSH.NET. É transitiva, via `Testcontainers` (13 projetos de teste, nunca em `src/` de produção). **Nenhum patch/minor resolve**: testado atualizar `Testcontainers.PostgreSql/RabbitMq/Redis` 4.1.0→4.7.0 (última disponível) — mesmo essa ainda referencia SSH.NET 2024.2.0, ainda na faixa vulnerável; a tentativa foi revertida (não alcançava nada, ficaria fora do escopo autorizado). Confirmado via inspeção de metadados do assembly (reflexão sobre `Testcontainers.dll`) que a API vulnerável (`ScpClient.Download`) nunca é referenciada — o pacote só usa `Renci.SshNet.SshClient` para port-forwarding.
+
+`SshNetNu1903Present=true`, `RuntimeProductionAffected=false`, `TestDependencyOnly=true`, `VulnerableApiUsed=false`, `SafePatchOrMinorAvailable=false`, `ForcedMajorOverrideApproved=false`, `RiskDisposition=TEMPORARILY_ACCEPTED_WITH_DOCUMENTED_NON_USAGE`, `ReevaluateWhenTestcontainersSupportsFixedSshNet=true`. Confirmado como a única vulnerabilidade em toda a solução (`dotnet list package --vulnerable --include-transitive`, reexecutado múltiplas vezes ao longo do checkpoint).
+
+### 6.6 Identity — ActorId no trilha de auditoria administrativa
+
+`IdentityAdministrativeActorAuditImplemented=true`. `SecurityAuditEntry` ganha `ActorId` nullable, populado a partir do `ActorId` já autenticado de cada comando (nunca um valor vindo do cliente, nunca backfillado em linhas históricas) para as 7 operações administrativas aprovadas: `CreateUser`, `UpdateUser`, `BlockUser`, `UnblockUser`, `AssignRole`, `RemoveRole`, `AdminResetPassword`. Operações self-service (troca da própria senha, própria sessão/logout/refresh) deliberadamente intocadas — o próprio usuário já é o alvo ali.
+
+`AdminAChangesUserBProof=true` — provado ponta a ponta (Admin A agindo sobre User B sempre resulta em `ActorId=Admin A`, `UserId=User B`, nunca invertido) nos 7 handlers, incluindo um teste HTTP real end-to-end. `CrossTenantDenied=true` — inalterado, mecanismo de isolamento por tenant já existente não foi tocado. `HistoricalNullActorCompatible=true` — provado inserindo uma linha via SQL bruto sem `actor_id` (simulando uma linha pré-migração) e confirmando que o caminho de leitura da aplicação (EF, através de RLS) lê sem erro, sem inventar um valor. Migração (`AddSecurityAuditEntryActorId`) aplicada e reaplicada contra o banco de dev real com zero drift.
+
+### 6.7 AI Agent Resume — reaproveitamento de mecanismo já existente, sem tabela nova
+
+`AIAgentResumeAuditImplemented=true`, `ExistingDurableResumeAuditAccepted=true`, `AIAgentResumeDedicatedAuditTableRequired=false`. Investigação encontrou que `agent_human_handoffs.resumed_by_actor_id` já satisfaz integralmente o requisito: coluna durável, RLS-protegida (`ai_agent.agent_human_handoffs`, tenant-scoped), populada a partir de `AIAgentIdentityReader.TryRead(User, ...)` (claims JWT, nunca do corpo da requisição — `AIAgentSessionsController.Resume`), já coberta por um teste E2E real (`AIAgentHumanHandoffWorkflowRoundTripTests` — `resumedHandoff.ResumedByActorId.Should().Be(actorId, "the real authenticated actor, never a caller-supplied value")`) e por um teste de cross-tenant denial já existente no handler (`Handle_fails_when_the_session_belongs_to_a_different_tenant`). Decisão explícita: criar `ai_agent.human_handoff_audit_log` duplicaria essa informação apenas por uniformidade estética entre Bounded Contexts — não implementada.
+
+### 6.8 Guest Access — proveniência do ator corrigida, depois trilha durável aprovada
+
+**Proveniência (primeira etapa, sem migração)**: três fluxos publicavam `ActorType="System"` mesmo sendo staff- ou AI-Agent-triggered, nunca automáticos: `RequestGuestAccessDelivery` (staff via Api, ou o AI Agent agindo sobre o pedido explícito do hóspede), `RecordGuestCheckedIn`/`CheckedOut` (staff apenas). Corrigido usando o vocabulário já existente `IntegrationEvent.ActorType`/`ActorId` ("User"/"AI"/"System"/"Integration") — nenhum campo novo inventado. `PixChargeConfirmedLateCheckoutApprover` (`ActorType="System"`) permanece intocado — esse fluxo é genuinamente automático (webhook-driven). Early-check-in/late-checkout — Approved/Denied — também permanecem `System`: são decisões automáticas do motor de política determinístico da plataforma, não de uma pessoa ou do AI Agent.
+
+**Trilha durável (segunda etapa, Decision Gate aprovado)**: `GuestAccessDurableActorAuditExists` era `false` — o ator corrigido só alcançava um log estruturado (`ILogger`) do `GuestAccessDeliveryProcessor`, nunca uma tabela. Aprovada e implementada `guest_operations.guest_stay_operation_audit_log`, espelhando `Reservations.ReservationAuditEntry`/`reservation_audit_log`: append-only (`ihostpro_app` só tem `INSERT`+`SELECT`, `UPDATE`/`DELETE` revogados explicitamente), RLS `ENABLE`+`FORCE` com policy `tenant_isolation` fail-closed, sem FK para `identity.tenants` (mesmo precedente de `reservation_audit_log`) e sem FK para o próprio agregado (uma trilha de auditoria deve sobreviver independente dele). Cobre exatamente as três ações com ator real comprovável: `AccessDeliveryRequested` (User ou AI), `CheckedIn` (User), `CheckedOut` (User).
+
+`GuestAccessActorProvenanceImplemented=true`, `GuestAccessDurableActorAuditImplemented=true`. Migração (`AddGuestStayOperationAuditLog`) aplicada e reaplicada contra o banco de dev real com zero drift. Provado: RLS forçado com isolamento de tenant (tenant correto/errado, rejeição por `WITH CHECK`), grants append-only confirmados contra `information_schema`, nenhuma coluna de conteúdo sensível ao hóspede existe na tabela (checagem estrutural, não apenas revisão de código), e ambos os tipos de ator (User via Api, AI via Tool) gravam `ActorType`/`ActorId` corretos.
+
+### 6.9 WhatsApp Template Mapping — auditoria por reaproveitamento direto
+
+`WhatsAppTemplateMappingAuditImplemented=true`, `AuditPattern=AuditConfigureWhatsAppIntegrationBehavior-compatible`, `MigrationRequired=false`, `ArchitectureExceptionRequired=false`. `ConfigureWhatsAppTemplateMappingCommand.ActorUserId` existia desde Fase 9 CP2.2 mas nunca era lido. `AuditConfigureWhatsAppTemplateMappingBehavior` clona o padrão já aprovado do behavior irmão (`WhatsAppIntegrations.AuditConfigureWhatsAppIntegrationBehavior`) — mesmo formato de log estruturado, mesmo "Success" só após o commit real da transação interna, mesma ordem de registro (mais externo, envolvendo `TenantTransactionBehavior`). Nunca loga corpo de template/telefone/credencial/token/app secret/verify token/payload do provedor — um template mapping nunca carrega nenhum desses.
+
+### 6.10 Payments — decisão de não criar auditoria
+
+`PaymentsAdministrativeAuditTableRequired=false`, `PaymentsCurrentOperations=SYSTEM_TO_SYSTEM`. Confirmado por auditoria: não existe hoje nenhum comando administrativo manual (override, estorno, ajuste, cancelamento manual) em Payments — apenas 3 handlers reativos a webhook (`PixChargeConfirmationReceived`/`Expiration`/`FailureReceived`) mais um inicializador de cobrança, todos logando via `ILogger`, nunca uma tabela. Nenhuma ação humana administrativa sensível existe hoje para auditar. Reabrir se surgir override/estorno/ajuste/cancelamento manual.
+
+### 6.11 Fronteira de secrets / JWT
+
+`ProductionSecretProviderBoundaryReady=true` — padrão já existente (interface + implementação Dev-only + ausência de implementação Production, falha explícita de DI) aceito como suficiente para os 5 provedores de credenciais (`IJwtSigningKeyProvider`, `IAnthropicCredentialProvider`, `IWhatsAppCredentialProvider`, `IWhatsAppWebhookCredentialProvider`, `IPropertyAccessCredentialProvider`), sem criar abstração nova. `CloudSpecificSecretBackendImplemented=false` — backend concreto permanece decisão do CP5. `ProductionJwtKeyBackendImplemented=false`, `BlocksCP4Completion=false`, `BlocksProductionReady=true`, `TargetCheckpoint=CP5` — RS256/`IJwtSigningKeyProvider`/`kid`/algoritmo pinado inalterados, nenhuma criptografia tocada. Nenhuma abstração de credencial artificial criada para Redis/Postgres/RabbitMQ/OTLP — continuam via `IConfiguration`/environment, provider-agnostic.
+
+### 6.12 LGPD — inventário técnico neutro, export e erasure adiados
+
+`LgpdTechnicalInventoryComplete=true` — matriz de dados pessoais (guest name/phone, staff name/email, conteúdo de mensagens, metadados de pagamento, dados de acesso à propriedade, identificadores de auditoria, IPs, identificadores de provedor WhatsApp) mapeada por BC dono, sem nenhuma justificativa legal inventada (correção explícita de uma versão anterior que continha uma justificativa "fiscal" nunca estabelecida por nenhum documento-fonte). Colunas restritas a `APPROVED`/`NOT_APPLICABLE`/`PENDING_RETENTION_POLICY`/`PENDING_LEGAL_PRODUCT_DECISION` — nunca um valor legal fabricado.
+
+`LgpdExportDesignApproved=true`, `LgpdExportImplemented=false`, `LgpdExportCapability=DESIGN_APPROVED_IMPLEMENTATION_DEFERRED`, `LgpdExportBlocksCp4Completion=false`, `LgpdExportBlocksProductionReady=true`. Desenho aprovado (entry point admin-only, ator do JWT, tenant do contexto autenticado, leitura cross-BC via Contracts/readers existentes, redação obrigatória de secrets/credenciais/dados de outros tenants, auditoria da própria solicitação sem armazenar cópia do conteúdo exportado) — não implementado; decisões pendentes: identidade canônica do "guest" como data subject (não existe uma entidade `Guest` própria hoje) e ciclo de vida do artefato de exportação (depende de infraestrutura ainda não escolhida no CP5).
+
+`DataRetentionPolicyDefined=false`, `LgpdErasurePolicy=PENDING_LEGAL_PRODUCT_DECISION`, `LgpdAnonymizationPolicy=PENDING_LEGAL_PRODUCT_DECISION`, `HardDeleteInCP4=false`, `LgpdDestructiveProcessingImplemented=false`. Nenhum prazo numérico de retenção foi inventado em nenhum documento. Tensão explicitamente registrada, não resolvida tecnicamente: Documento 15 §13 exige imutabilidade do trilha de segurança; qualquer erasure que toque `IpAddress`/`UserId` em `security_audit_log` colide com isso — rotulada `LEGAL_PRODUCT_DECISION_REQUIRED`.
+
+### 6.13 MFA / Support Impersonation
+
+`MfaImplemented=false`, `MfaPhase12Cp4Required=false`, `MfaSaaSCommercialReadinessDecisionRequired=true`. `SupportImpersonationImplemented=false`, `SupportImpersonationSaaSCommercialReadinessCandidate=true`. Nenhum dos dois implementado — registrados como insumo para a futura auditoria de SaaS Commercial Readiness.
+
+### 6.14 RabbitMQ — drift de ambiente local do MigrationRunner
+
+`RabbitMqProvisioningDevEnvironmentMismatch=true`, classificado `LOCAL_ENVIRONMENT_DRIFT`. Config key estrutural: `RabbitMq:Username`/`RabbitMq:Password` — a mesma que Api/Worker usam, MigrationRunner está estruturalmente correto. `docker-compose.yml` declara `ihostpro`/`ihostpro_dev` desde o único commit em seu histórico, mas o container standing local não aceita essas credenciais atualmente — drift do ambiente local específico desta máquina de desenvolvimento, investigado apenas por métodos autorizados (nenhum valor de secret impresso, nenhuma credencial adivinhada, nenhum `dotnet user-secrets list`). Não bloqueia CP4: as migrações de banco (a parte relevante ao checkpoint) já provaram zero drift 2× contra o banco real; a falha acontece depois, numa etapa de provisionamento de tópicos RabbitMQ que já existia antes deste checkpoint.
+
+### 6.15 Test harness — dívidas identificadas e correção de CI aplicada
+
+Durante a regressão final, uma terceira execução completa de `IHostPro.Api.Tests.Integration` travou por ~1h36 sem produzir progresso (containers de um fixture ociosos por ~1h, nenhum processo `dotnet test` ativo no host) — classificada `FINAL_RUN_HUNG`, interrompida de forma controlada, ambiente limpo restaurado. Investigação limitada não encontrou um bug óbvio de `await` sem timeout no código de disposal dos fixtures (`DisposeAsync` corretamente aguarda o encerramento do Worker e o dispose dos containers Postgres/RabbitMQ) — causa mais provável é exaustão de recursos Docker/WSL2 após horas de uso pesado contínuo na mesma sessão (`TestcontainersResourceExhaustion`), não confirmada com certeza absoluta.
+
+Achado relacionado, confirmado empiricamente: `wslrelay.exe` (processo de port-relay do Docker Desktop) reteve a porta 5672 do host por alguns segundos após `docker stop` do container RabbitMQ standing — uma janela real de corrida entre "container parado" e "porta efetivamente livre" no nível SO/WSL2. Combinado com ~30 dos ~50 arquivos deste projeto de teste usando `WithPortBinding(5672, 5672)` (porta fixa, nunca dinâmica), isso é a causa mais provável da flakiness ocasional observada entre execuções sequenciais.
+
+`TestHarnessHardeningRequired=true`: `ApiIntegrationFixedRabbitMqPortDebt=true` (`PortReleaseRaceEmpiricallyConfirmed=true`), `ConversationWorkflowTimingFlakinessObserved=true` (2 testes de `ConversationMessageReceivedWorkflowRoundTripTests` falharam uma vez sob carga, passaram 5/5 imediatamente depois sem nenhuma mudança de código), `FullApiIntegrationHarnessHangObserved=true`, fixture hand-rolled do `WhatsAppWebhookHostLoggingTests`/famı́lia sem `IWebhookRateLimiter` desde CP3 (`PRE_EXISTING_TEST_FIXTURE_DI_DEBT`), `MetaWhatsAppSandboxProofTests` sem gate de skip para ausência de credencial real (`PRE_EXISTING_EXTERNAL_PROOF_GATING_DEBT`). Nenhuma dessas dívidas foi corrigida neste checkpoint (são débito de infraestrutura de teste, não defeito funcional do CP4) — exceto uma: `CiFullIntegrationJobTimeoutConfigured=true`, `CiFullIntegrationJobTimeoutMinutes=90` aplicado ao job `api-integration-tests` em `ci.yml` (duração normal observada ≈ 54-55 min, teto de 90 min dá ~65% de margem) — evita que um hang como o observado consuma até 6h (default do GitHub Actions) sem qualquer intervenção.
+
+### 6.16 Testes — evidência
+
+| Suíte | Resultado |
+|---|---|
+| `IHostPro.Contexts.Identity.Tests.Unit` | 471/471 |
+| `IHostPro.Contexts.Identity.Tests.Integration` | 422/422 (Testcontainers, Postgres real) |
+| `IHostPro.Contexts.AIAgent.Tests.Unit` | 210/210 |
+| `IHostPro.Contexts.AIAgent.Tests.Integration` | 32/32 |
+| `IHostPro.Contexts.GuestOperations.Tests.Unit` | 72/72 |
+| `IHostPro.Contexts.GuestOperations.Tests.Integration` (novo `GuestStayOperationAuditLogRowLevelSecurityTests`, 7 testes) | 25/25 |
+| `IHostPro.Contexts.ExternalIntegrations.Tests.Unit` (novo `AuditConfigureWhatsAppTemplateMappingBehaviorTests`, 4 testes) | 141/141 |
+| `IHostPro.Contexts.ExternalIntegrations.Tests.Integration` | 32/58 — **26 falhas preexistentes, provadas contra baseline `0922c9d` em worktree separado (idêntico: 26 falhas, mesmas 7 classes, mesma contagem exata)**, `ExternalIntegrationsIntegrationFailuresPreExisting=true`, `ExternalIntegrationsIntegrationFailuresCausalToCP4=false` |
+| `IHostPro.ArchitectureTests` | 304/304 |
+| `IHostPro.Api.Tests.Integration` (completo, instrumentado com `--logger trx`, ambiente limpo) | **102/102**, 0 falhas, 0 ignorados, 54m43s — `FullApiIntegrationGreen=true` (confirmado 2× nesta rodada final, em execuções independentes) |
+| Release build (`dotnet build -c Release`) | 0 erros |
+| Docker build Api/Worker/MigrationRunner | ✅ todos, non-root confirmado nos três (uid 1654) |
+| `docker compose config` | ✅ |
+| `dotnet list package --vulnerable --include-transitive` | Só SSH.NET (§6.5) |
+| `git diff --check` | ✅ limpo |
+| Revisão de dados sensíveis no diff | ✅ nenhum segredo encontrado |
+| MigrationRunner Run #1/#2 (2 migrações: `AddSecurityAuditEntryActorId`, `AddGuestStayOperationAuditLog`) | ✅ zero drift em ambas, contra o banco de dev real |
+
+### 6.17 Escopo explicitamente não implementado (por decisão do gate, não por omissão)
+
+- `ai_agent.human_handoff_audit_log` — não criada; mecanismo já existente (`agent_human_handoffs.resumed_by_actor_id`) aceito como suficiente (§6.7).
+- LGPD Export — desenho aprovado, implementação adiada (`GuestDataSubjectIdentity`/`ExportArtifactLifecycle` pendentes, §6.12).
+- LGPD Erasure/Retention — bloqueado por decisão jurídica/produto externa a este checkpoint (§6.12).
+- MFA/Support Impersonation — não implementados, candidatos à futura auditoria de SaaS Commercial Readiness (§6.13).
+- Backend concreto de secrets/JWT de Produção — decisão do CP5 (§6.11).
+- Correção da porta fixa RabbitMQ nos testes / dívidas de test harness — registradas, não corrigidas neste checkpoint (exceto o timeout de CI, §6.15).
+- `SaaSCommercialReadinessAudit=MANDATORY_BEFORE_PHASE12_PLANNING_CLOSURE` — preservado, ainda não executado.
