@@ -18,7 +18,21 @@ RUN dotnet publish tools/IHostPro.MigrationRunner/IHostPro.MigrationRunner.cspro
     -o /app/publish \
     --no-restore
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
+
+# Fase 12, Checkpoint 4 (Security/Secrets/LGPD Hardening) — the plain
+# "runtime" image this final stage used before this checkpoint no longer
+# boots at all: the published runtimeconfig.json requires
+# Microsoft.AspNetCore.App (this project's own ProjectReferences pull it in
+# transitively), which the plain runtime image does not carry, so
+# `dotnet IHostPro.MigrationRunner.dll` fails at the native host-resolver
+# stage before any managed code — including this checkpoint's own USER
+# switch below — ever runs. Same aspnet image Api/Worker already use.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
-COPY --from=build /app/publish .
+COPY --from=build --chown=$APP_UID:$APP_UID /app/publish .
+
+# Fase 12, Checkpoint 4 (Security/Secrets/LGPD Hardening) — runs as the
+# official image's own built-in non-root user (never root).
+USER $APP_UID
+
 ENTRYPOINT ["dotnet", "IHostPro.MigrationRunner.dll"]

@@ -1,4 +1,5 @@
 using IHostPro.Api.RateLimiting;
+using IHostPro.Api.Security;
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
@@ -70,6 +71,17 @@ try
 
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
+    // Fase 12, Checkpoint 4 (Security/Secrets/LGPD Hardening) — an unhandled
+    // exception previously fell through to Kestrel's bare framework default
+    // (an empty 500 body) with no consistent logging and no ProblemDetails
+    // shape, unlike every EXPECTED failure this Api already maps via
+    // ResultHttpMapper. AddProblemDetails() + the UseExceptionHandler below
+    // give unhandled exceptions the same response shape, and — critically —
+    // guarantee the response body never includes the exception's own
+    // Message/stack trace/inner exception, regardless of environment; only
+    // a generic, fixed detail string is ever returned.
+    builder.Services.AddProblemDetails();
+    builder.Services.AddExceptionHandler<SanitizedExceptionHandler>();
     // Swashbuckle's default schemaId for generic types is derived only from
     // the type's own name and its generic arguments (e.g. Optional<string> ->
     // "StringOptional"), so identically-named generic types declared
@@ -97,13 +109,36 @@ try
     // a wildcard. No AllowCredentials(): the frontend authenticates with a
     // Bearer token attached manually to each request, never a cookie, so the
     // browser's credentialed-request mode is not needed here.
+    //
+    // Fase 12, Checkpoint 4 (Security/Secrets/LGPD Hardening) — CorsOriginsResolver
+    // fails fast in Production instead of silently falling back to the dev
+    // default; see its own doc comment for the full rationale and for why
+    // the rule lives there rather than inline here.
     const string FrontendCorsPolicy = "Frontend";
-    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-        ?? ["http://localhost:4200"];
+    var allowedOrigins = CorsOriginsResolver.ResolveAllowedOrigins(builder.Configuration, builder.Environment.IsProduction());
     builder.Services.AddCors(options => options.AddPolicy(FrontendCorsPolicy, policy => policy
         .WithOrigins(allowedOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()));
+
+    // Fase 12, Checkpoint 4 — X-Forwarded-For/X-Forwarded-Proto support,
+    // configurable so CP5 can name the real reverse proxy once its
+    // infrastructure exists. ASP.NET Core's own default (KnownNetworks =
+    // 127.0.0.0/8, KnownProxies = ::1) already means "trust nothing except a
+    // proxy on this same machine" — never cleared here, only ever added to,
+    // so this never regresses to "trust any forwarded source" (the exact
+    // spoofing risk AuthController's own doc comment already calls out).
+    // With no "ForwardedHeaders:*" configuration (today, in every
+    // environment), behavior is unchanged from before this checkpoint.
+    var forwardedHeadersOptions = new Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
+    {
+        ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+            | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto,
+    };
+    foreach (var proxy in builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+        forwardedHeadersOptions.KnownProxies.Add(System.Net.IPAddress.Parse(proxy));
+    foreach (var network in builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [])
+        forwardedHeadersOptions.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
 
     // Multi-tenant: resolved per request by an authentication/authorization
     // middleware once login/JWT exist (Incremento 2). The scoped instance is
@@ -822,10 +857,26 @@ try
 
     var app = builder.Build();
 
+    // Fase 12, Checkpoint 4 — ordering matters and follows ASP.NET Core's
+    // own documented guidance: ForwardedHeaders first (so every later
+    // middleware/handler sees the real client scheme/IP once a real proxy is
+    // configured, never before); the exception handler next, so it wraps
+    // everything downstream; HSTS only when not Development (a dev
+    // certificate is never publicly trusted, so HSTS there would just be
+    // noise) and only ever added on top of HTTPS redirection, never instead
+    // of it.
+    app.UseForwardedHeaders(forwardedHeadersOptions);
+    app.UseExceptionHandler();
+    app.UseIHostProSecurityHeaders();
+
     if (app.Environment.IsDevelopment())
     {
         app.UseSwagger();
         app.UseSwaggerUI();
+    }
+    else
+    {
+        app.UseHsts();
     }
 
     app.UseSerilogRequestLogging();

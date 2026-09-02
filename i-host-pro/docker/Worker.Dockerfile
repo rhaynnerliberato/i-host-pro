@@ -25,10 +25,16 @@ RUN dotnet publish src/Host/IHostPro.Worker/IHostPro.Worker.csproj \
 # the shared framework it depends on isn't present in dotnet/runtime.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
-COPY --from=build /app/publish .
+COPY --from=build --chown=$APP_UID:$APP_UID /app/publish .
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -f http://localhost:5141/health/ready || exit 1
+
+# Fase 12, Checkpoint 4 (Security/Secrets/LGPD Hardening) — runs as the
+# official image's own built-in non-root user (never root) from here on.
+# Must come after apt-get (which needs root) and after the --chown'd COPY
+# above, so the app user actually owns the files it runs.
+USER $APP_UID
 
 ENTRYPOINT ["dotnet", "IHostPro.Worker.dll"]
