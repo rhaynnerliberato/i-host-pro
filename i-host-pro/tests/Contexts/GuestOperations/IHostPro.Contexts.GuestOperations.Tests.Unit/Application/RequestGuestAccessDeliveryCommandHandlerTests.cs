@@ -20,6 +20,7 @@ public class RequestGuestAccessDeliveryCommandHandlerTests
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly Guid ReservationId = Guid.NewGuid();
     private static readonly Guid PropertyId = Guid.NewGuid();
+    private static readonly Guid ActorId = Guid.NewGuid();
     private static readonly DateTimeOffset Now = new(2026, 8, 28, 12, 0, 0, TimeSpan.Zero);
 
     private static GuestStayOperation CreateActiveOperation() =>
@@ -32,6 +33,8 @@ public class RequestGuestAccessDeliveryCommandHandlerTests
     {
         TenantId = TenantId,
         ReservationId = ReservationId,
+        ActorType = "User",
+        ActorId = ActorId.ToString(),
     };
 
     private static RequestGuestAccessDeliveryCommandHandler CreateHandler(
@@ -59,7 +62,8 @@ public class RequestGuestAccessDeliveryCommandHandlerTests
         published.PropertyId.Should().Be(PropertyId);
         published.AggregateId.Should().Be(operation.Id);
         published.AggregateType.Should().Be("GuestStayOperation");
-        published.ActorType.Should().Be("System");
+        published.ActorType.Should().Be("User");
+        published.ActorId.Should().Be(ActorId.ToString());
     }
 
     [Fact]

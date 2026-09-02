@@ -25,7 +25,13 @@ public class RequestGuestAccessDeliveryToolTests
     {
         var dispatcher = new FakeGuestOperationsRequestDispatcher();
         dispatcher.Stub.SetResponse(
-            new RequestGuestAccessDeliveryCommand { TenantId = Context.TenantId, ReservationId = Context.ReservationId },
+            new RequestGuestAccessDeliveryCommand
+            {
+                TenantId = Context.TenantId,
+                ReservationId = Context.ReservationId,
+                ActorType = "AI",
+                ActorId = Context.AgentSessionId.ToString(),
+            },
             Result.Success(new GuestStayOperationResult(
                 Guid.NewGuid(), Context.ReservationId, Guid.NewGuid(), "active", null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)));
         var tool = new RequestGuestAccessDeliveryTool(dispatcher);
@@ -41,7 +47,13 @@ public class RequestGuestAccessDeliveryToolTests
     {
         var dispatcher = new FakeGuestOperationsRequestDispatcher();
         dispatcher.Stub.SetResponse(
-            new RequestGuestAccessDeliveryCommand { TenantId = Context.TenantId, ReservationId = Context.ReservationId },
+            new RequestGuestAccessDeliveryCommand
+            {
+                TenantId = Context.TenantId,
+                ReservationId = Context.ReservationId,
+                ActorType = "AI",
+                ActorId = Context.AgentSessionId.ToString(),
+            },
             Result.Success(new GuestStayOperationResult(
                 Guid.NewGuid(), Context.ReservationId, Guid.NewGuid(), "active", null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)));
         var tool = new RequestGuestAccessDeliveryTool(dispatcher);
@@ -52,11 +64,41 @@ public class RequestGuestAccessDeliveryToolTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_always_identifies_itself_as_the_AI_actor_never_a_human_user()
+    {
+        // Fase 12, Checkpoint 4 (Security/Secrets/LGPD Hardening) — the AI
+        // Agent's own session id, never a fabricated human User id, is what
+        // must reach the command when this Tool is the caller.
+        var dispatcher = new FakeGuestOperationsRequestDispatcher();
+        dispatcher.Stub.SetResponse(
+            new RequestGuestAccessDeliveryCommand
+            {
+                TenantId = Context.TenantId,
+                ReservationId = Context.ReservationId,
+                ActorType = "AI",
+                ActorId = Context.AgentSessionId.ToString(),
+            },
+            Result.Success(new GuestStayOperationResult(
+                Guid.NewGuid(), Context.ReservationId, Guid.NewGuid(), "active", null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)));
+        var tool = new RequestGuestAccessDeliveryTool(dispatcher);
+
+        var result = await tool.ExecuteAsync(Context, null, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue("the dispatcher stub only matches a command carrying exactly ActorType=\"AI\" and the session id");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_propagates_the_dispatcher_failure_code()
     {
         var dispatcher = new FakeGuestOperationsRequestDispatcher();
         dispatcher.Stub.SetResponse(
-            new RequestGuestAccessDeliveryCommand { TenantId = Context.TenantId, ReservationId = Context.ReservationId },
+            new RequestGuestAccessDeliveryCommand
+            {
+                TenantId = Context.TenantId,
+                ReservationId = Context.ReservationId,
+                ActorType = "AI",
+                ActorId = Context.AgentSessionId.ToString(),
+            },
             Result.Failure<GuestStayOperationResult>(new Error("GuestStayOperationAlreadyCheckedOut", "GuestStayOperationAlreadyCheckedOut")));
         var tool = new RequestGuestAccessDeliveryTool(dispatcher);
 

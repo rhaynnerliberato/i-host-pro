@@ -10,9 +10,17 @@ namespace IHostPro.Contexts.GuestOperations.Contracts;
 /// <c>GuestCheckedIn</c>, no scheduler infers timing (CP6.2 mandate item 9).
 /// <see cref="IntegrationEvent.AggregateId"/>/<see cref="IntegrationEvent.AggregateType"/>
 /// are the GuestStayOperation's id/<c>"GuestStayOperation"</c>.
-/// <see cref="IntegrationEvent.ActorType"/> is always <c>"System"</c> — the
-/// human actor (the requesting Administrator) is captured only in this
-/// process's own HTTP audit trail, never republished here.
+///
+/// Fase 12, Checkpoint 4 (Security/Secrets/LGPD Hardening) — corrected: this
+/// request genuinely has two real triggers (an administrator via the Api, or
+/// the AI Agent acting on the guest's own explicit request), so
+/// <see cref="IntegrationEvent.ActorType"/> is <c>"User"</c> or <c>"AI"/</c>
+/// accordingly, never a hardcoded <c>"System"</c> — the previous
+/// documentation here describing it as always <c>"System"</c> with the real
+/// actor "captured only in the HTTP audit trail" understated the loss: no
+/// such trail actually recorded which administrator triggered a given
+/// resend. <see cref="IntegrationEvent.ActorId"/> is the administrator's id
+/// or the AI Agent's own session id — never a fabricated human user.
 ///
 /// Deliberately provider-neutral and minimal — no credential, no credential
 /// reference, no instructions content, no GuestName, no GuestPhone (CP6.2

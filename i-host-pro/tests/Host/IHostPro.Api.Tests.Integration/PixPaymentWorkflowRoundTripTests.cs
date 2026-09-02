@@ -960,7 +960,7 @@ public sealed class PixPaymentWorkflowRoundTripTests : IClassFixture<PixPaymentW
         scope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(tenantId);
         var dispatcher = scope.ServiceProvider.GetRequiredService<IGuestOperationsRequestDispatcher>();
 
-        var result = await dispatcher.Send(new RecordGuestCheckedInCommand { TenantId = tenantId, ReservationId = reservationId });
+        var result = await dispatcher.Send(new RecordGuestCheckedInCommand { TenantId = tenantId, ReservationId = reservationId, ActorId = Guid.NewGuid() });
         result.IsSuccess.Should().BeTrue("the auto-created GuestStayOperation must be Active and therefore eligible for check-in");
     }
 

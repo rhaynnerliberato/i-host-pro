@@ -108,7 +108,8 @@ public sealed class RequestGuestAccessDeliveryCommandHandler : ICommandHandler<R
                 AggregateId = operation.Id,
                 AggregateType = "GuestStayOperation",
                 CorrelationId = Guid.NewGuid(),
-                ActorType = "System",
+                ActorType = command.ActorType,
+                ActorId = command.ActorId,
                 ReservationId = command.ReservationId,
                 PropertyId = operation.PropertyId,
             });

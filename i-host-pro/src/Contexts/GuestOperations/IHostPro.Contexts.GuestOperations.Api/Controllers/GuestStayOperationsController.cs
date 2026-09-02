@@ -46,7 +46,7 @@ public sealed class GuestStayOperationsController : ControllerBase
         if (!GuestOperationsIdentityReader.TryRead(User, out var identity))
             return Unauthorized();
 
-        var command = new RecordGuestCheckedInCommand { TenantId = identity.TenantId, ReservationId = reservationId };
+        var command = new RecordGuestCheckedInCommand { TenantId = identity.TenantId, ReservationId = reservationId, ActorId = identity.UserId };
         var result = await _sender.Send(command, cancellationToken);
 
         return result.IsSuccess
@@ -67,7 +67,7 @@ public sealed class GuestStayOperationsController : ControllerBase
         if (!GuestOperationsIdentityReader.TryRead(User, out var identity))
             return Unauthorized();
 
-        var command = new RecordGuestCheckedOutCommand { TenantId = identity.TenantId, ReservationId = reservationId };
+        var command = new RecordGuestCheckedOutCommand { TenantId = identity.TenantId, ReservationId = reservationId, ActorId = identity.UserId };
         var result = await _sender.Send(command, cancellationToken);
 
         return result.IsSuccess
@@ -144,7 +144,13 @@ public sealed class GuestStayOperationsController : ControllerBase
         if (!GuestOperationsIdentityReader.TryRead(User, out var identity))
             return Unauthorized();
 
-        var command = new RequestGuestAccessDeliveryCommand { TenantId = identity.TenantId, ReservationId = reservationId };
+        var command = new RequestGuestAccessDeliveryCommand
+        {
+            TenantId = identity.TenantId,
+            ReservationId = reservationId,
+            ActorType = "User",
+            ActorId = identity.UserId.ToString(),
+        };
         var result = await _sender.Send(command, cancellationToken);
 
         return result.IsSuccess

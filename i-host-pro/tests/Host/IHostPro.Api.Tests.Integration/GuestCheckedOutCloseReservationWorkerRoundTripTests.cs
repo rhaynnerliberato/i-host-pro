@@ -208,6 +208,7 @@ public sealed class GuestCheckedOutCloseReservationWorkerRoundTripTests : IAsync
                 {
                     TenantId = tenantId,
                     ReservationId = reservationId,
+                    ActorId = Guid.NewGuid(),
                 }, CancellationToken.None);
                 checkInResult.IsSuccess.Should().BeTrue("the auto-created GuestStayOperation must be Active and therefore eligible for check-in");
             }
@@ -221,6 +222,7 @@ public sealed class GuestCheckedOutCloseReservationWorkerRoundTripTests : IAsync
                 {
                     TenantId = tenantId,
                     ReservationId = reservationId,
+                    ActorId = Guid.NewGuid(),
                 }, CancellationToken.None);
                 checkOutResult.IsSuccess.Should().BeTrue("the just-CheckedIn GuestStayOperation must be eligible for checkout");
             }

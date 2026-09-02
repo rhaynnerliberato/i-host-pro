@@ -106,7 +106,8 @@ public sealed class RecordGuestCheckedOutCommandHandler : ICommandHandler<Record
                 AggregateId = operation.Id,
                 AggregateType = "GuestStayOperation",
                 CorrelationId = Guid.NewGuid(),
-                ActorType = "System",
+                ActorType = "User",
+                ActorId = command.ActorId.ToString(),
                 ReservationId = command.ReservationId,
             });
 

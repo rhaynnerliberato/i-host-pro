@@ -23,6 +23,7 @@ public class RecordGuestCheckedInCommandHandlerTests
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly Guid ReservationId = Guid.NewGuid();
     private static readonly Guid PropertyId = Guid.NewGuid();
+    private static readonly Guid ActorId = Guid.NewGuid();
     private static readonly DateTimeOffset Now = new(2026, 8, 26, 12, 0, 0, TimeSpan.Zero);
 
     private static GuestStayOperation CreateActiveOperation() =>
@@ -32,6 +33,7 @@ public class RecordGuestCheckedInCommandHandlerTests
     {
         TenantId = TenantId,
         ReservationId = ReservationId,
+        ActorId = ActorId,
     };
 
     private static RecordGuestCheckedInCommandHandler CreateHandler(
@@ -55,7 +57,8 @@ public class RecordGuestCheckedInCommandHandlerTests
         repository.UpdateCallCount.Should().Be(1);
         var published = collector.EnqueuedEvents.Should().ContainSingle().Which.Should().BeOfType<GuestCheckedIn>().Which;
         published.ReservationId.Should().Be(ReservationId);
-        published.ActorType.Should().Be("System");
+        published.ActorType.Should().Be("User");
+        published.ActorId.Should().Be(ActorId.ToString());
     }
 
     [Fact]

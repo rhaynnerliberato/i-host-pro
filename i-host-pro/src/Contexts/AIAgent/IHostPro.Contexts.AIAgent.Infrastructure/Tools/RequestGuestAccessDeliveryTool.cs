@@ -43,6 +43,8 @@ public sealed class RequestGuestAccessDeliveryTool : IAgentTool
             {
                 TenantId = context.TenantId,
                 ReservationId = context.ReservationId,
+                ActorType = "AI",
+                ActorId = context.AgentSessionId.ToString(),
             },
             cancellationToken);
         if (result.IsFailure)
