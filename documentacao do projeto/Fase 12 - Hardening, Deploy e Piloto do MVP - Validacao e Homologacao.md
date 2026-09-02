@@ -230,3 +230,86 @@ Consequência prática: a classificação de saúde `Redis = Degraded` (§4.4) j
 - ~~Correção do achado residual do Redis/`CachedPolicyValueResolver`~~ — retirado: a validação final do CP2 (§4.8) comprovou que o achado original era factualmente incorreto (o fallback para Postgres já existe e funciona); nenhuma correção de código pendente, nenhum débito de resiliência registrado.
 
 `Cp2CommitCount`: registrado no relatório final da conversa de homologação.
+
+## 5. Checkpoint 3 — Resilience & Rate Limiting
+
+### 5.1 Auditoria prévia — o que já existia vs. o que faltava
+
+Confirmado por auditoria direta (grep/leitura de código, nunca presumido): retries HTTP outbound (Anthropic 1 retry de aplicação já existente desde CP5, WhatsApp zero retry deliberado), circuit breaking já existente no nível Wolverine (`CircuitBreaking(1)` em toda rota de publish, Api e Worker), lockout de Identity já existente (por usuário, apenas no login, nunca por IP, nunca no refresh), idempotência já implementada (Outbox/Inbox Wolverine + índice único `TenantId+InboundMessageId`). Rate limiting: **zero implementação em qualquer lugar da plataforma** (confirmado — Fase 1 já registrara isso como fora de escopo explícito). Bulkhead/concorrência: nada configurado (Kestrel default, sem `MaximumParallelMessages`). DLQ: mecanismo padrão do Wolverine já existe (`wolverine_dead_letters` por schema), zero observabilidade construída sobre ele.
+
+### 5.2 Rate limiting — design e implementação
+
+Backend: **Redis** (`ADR-006` já designa Redis para isso — decisão não inventada), reaproveitando `StackExchange.Redis` já existente na solução (nenhuma dependência nova). Núcleo host-agnóstico em `IHostPro.BuildingBlocks.Infrastructure.RateLimiting` (`IDistributedRateLimiter`/`RedisFixedWindowRateLimiter`) — fixed-window por `(policyName, partitionKey)`, operação atômica via script Lua único (`INCR` + `PEXPIRE` condicional, evita a race condition entre as duas operações separadas). Nenhuma tabela SQL nova. Configuração 100% externa (`RateLimiting:*`), nunca hardcoded.
+
+Cinco políticas nomeadas, aprovadas no Decision Gate:
+
+| Política | Partição | Redis-down | Onde é aplicada |
+|---|---|---|---|
+| `Authentication` | IP do cliente (`HttpContext.Connection.RemoteIpAddress` — nunca `X-Forwarded-For`, sem proxy confiável configurado) | **FailClosed** | `[EnableRateLimiting]` em `AuthController.Login`/`Refresh` |
+| `Webhook` | `phone_number_id` (identificador técnico do provider — nunca telefone/remetente/corpo do hóspede) | **FailOpen** | Chamada direta a `IWebhookRateLimiter` dentro de `WhatsAppWebhookController.Receive`, após verificação de assinatura |
+| `TenantApi` | `TenantId` (claim JWT) | FailOpen | Default de toda rota controller-routed sem override próprio |
+| `AdminApi` | `TenantId+UserId` (internos, nunca PII externa) | FailOpen | `[EnableRateLimiting("AdminApi")]` em `UserAdministrationController`/`RolesController`/`PermissionsController` |
+| `AiExpensiveOperation` | `TenantId` | FailOpen | Chamada direta a `IAiAgentRateLimiter` dentro de `ConversationMessageReceivedProcessor.HandleAsync`, ANTES do context builder/chamada real ao provider |
+
+Defaults técnicos conservadores para dev/homologação (nunca definidos como requisito de Produção — `ProductionRateLimitThresholdsRequired=true`): Authentication 30/min, Webhook 600/min, TenantApi 1000/min, AdminApi 500/min, AiExpensiveOperation 60/min — todos em `appsettings.json` (Api e Worker), 100% sobrescrevíveis.
+
+**Achado real durante a implementação, corrigido**: a abordagem inicial (`MapControllers().RequireRateLimiting("TenantApi")` como default, esperando que `[EnableRateLimiting("Authentication")]` de `Login` sobrepusesse) provou-se **empiricamente errada** — um teste E2E real mostrou que a convenção de grupo (`RequireRateLimiting`) é composta DEPOIS do metadata do próprio Controller/Action e por isso VENCE silenciosamente, ignorando o atributo mais específico. Corrigido com `RequireRateLimitingByDefault` (`ApiRateLimitingExtensions.cs`), uma convenção customizada que só aplica a política default a endpoints que ainda não declaram a própria `[EnableRateLimiting]` — reconfirmado pelo mesmo teste E2E após a correção.
+
+**Boundary arquitetural preservado**: nenhum projeto `.Api`/`.Application` passou a referenciar `BuildingBlocks.Infrastructure` diretamente (regra já documentada em cada `.csproj`, "API não pode depender de tipos concretos de Infrastructure"). Onde a política precisava ser consultada fora do Host (`WhatsAppWebhookController`, `ConversationMessageReceivedProcessor`), uma interface fina foi criada em `.Application` (`IWebhookRateLimiter`, `IAiAgentRateLimiter`), implementada em `.Infrastructure`, delegando ao `IDistributedRateLimiter` compartilhado — mesmo padrão já usado pelo restante da plataforma para toda dependência cross-cutting.
+
+### 5.3 AI cost guard — boundary real, não um endpoint HTTP inventado
+
+Confirmado por auditoria: o AI Agent nunca é acionado por um endpoint HTTP — é disparado exclusivamente pelo consumo Wolverine de `ConversationMessageReceived`, hospedado somente em `IHostPro.Worker`. O guard (`AiExpensiveOperation`) foi aplicado exatamente nesse boundary real, dentro de `ConversationMessageReceivedProcessor.HandleAsync`, após a checagem de idempotência/sessão/escalonamento (trabalho local barato, deve sempre rodar) e ANTES do context builder e da chamada real ao provider (o trabalho caro que o guard existe para proteger). Um tenant rejeitado é tratado exatamente como uma falha técnica do model provider já existente — mesmo outcome `Failure`, mesma resposta de fallback genérica (`"Desculpe, não consegui processar sua mensagem agora..."`), nunca um novo estado de negócio, nunca billing/planos/entitlements (fora de escopo, reservado à futura auditoria de SaaS Commercial Readiness).
+
+### 5.4 Context Budget — fecha `ProductionContextBudgetStrategyRequired` (Fase 11 CP7)
+
+Algoritmo aprovado no Decision Gate, implementado em `AgentContextBuilder.ApplyContextBudget`: o system prompt (`AI_AGENT_BEHAVIOR`, policies, fato de hora atual/timezone) é montado inteiramente à parte (`ComposeSystemPrompt`) e NUNCA sujeito a este budget. O budget aplica-se somente ao histórico de conversa: percorrido do mais recente para o mais antigo, mantendo mensagens enquanto couberem no orçamento configurável (`AIAgent:ContextBudget:MaxHistoryTokens`, default 8000, nunca definido como número final de Produção — `ProductionContextBudgetFinalThresholdRequired=true`); ao exceder, as mensagens MAIS ANTIGAS são descartadas primeiro. A mensagem mais recente (sempre a mensagem-gatilho) é sempre preservada mesmo que sozinha exceda o orçamento.
+
+Contagem de tokens: nenhum tokenizer oficial da Anthropic está disponível no stack sem adicionar uma dependência nova e desnecessária (confirmado — nenhum pacote desse tipo é referenciado em nenhum lugar da solução). Estimativa determinística e conservadora por caracteres (`CharsPerTokenEstimate`, default 3.5 — um valor MENOR gera uma contagem estimada MAIOR, conservador na direção seguro-para-truncar-antes), documentada explicitamente como estimativa, nunca uma contagem exata.
+
+`AgentPendingAction`/estado de handoff: confirmado por leitura direta do código que `AgentContextBuilder` nunca monta nenhum dos dois em seu retorno (tratados inteiramente a jusante, em `ConversationMessageReceivedProcessor`) — não há, portanto, nada ali que o budget pudesse truncar; nenhum teste dedicado a isso se aplica a esta classe especificamente, por construção.
+
+Testes (`AgentContextBuilderTests.cs`, 7 novos): conversa pequena não é truncada; conversa grande descarta as mais antigas primeiro; mensagens mais recentes sempre preservadas; a mensagem-gatilho sozinha é preservada mesmo excedendo o orçamento; system prompt/fato estruturado nunca truncados mesmo com orçamento de 1 token; `Enabled=false` retorna o histórico completo; ordenação cronológica sempre preservada nos sobreviventes. `UnlimitedConversationContext=false` provado diretamente pelo teste de conversa grande.
+
+### 5.5 Circuit Breaker HTTP — investigação e Decision Gate específico
+
+Investigação solicitada concluída com evidência direta de código: a decisão "sem Polly" foi tomada na Fase 9 (Checkpoint 2.2/2.3.3, mandato §12/§13, WhatsApp) e reaplicada por precedência documentado na Fase 11 CP7 (Anthropic) — mas é **testada e reforçada por uma ArchitectureTest real e específica**: `ExternalIntegrationsDependencyTests.Infrastructure_References_No_Resilience_Or_Polly_Package()` falha se qualquer assembly referenciado por `ExternalIntegrations.Infrastructure` contiver "Polly" ou "Resilience" no nome — uma checagem categórica de PACOTE, não apenas "não usar retry automático". A justificativa original documentada é especificamente sobre retry automático ("zero automatic retry framework"), mas a checagem implementada é mais ampla que isso.
+
+Adicionar `Microsoft.Extensions.Http.Resilience` (ou Polly diretamente) — mesmo somente para circuit breaking, nunca para retry — introduziria exatamente os pacotes que esse teste já proíbe para `ExternalIntegrations.Infrastructure`, e reabriria por precedência a mesma decisão para `AIAgent.Infrastructure`. Corrigir isso exigiria modificar/enfraquecer um teste arquitetural já homologado — que é, pela própria definição do mandato deste checkpoint, uma reabertura de decisão/ADR, não algo a decidir unilateralmente.
+
+**Resultado**: `HandRolledHttpCircuitBreaker=false` (rejeitado pelo Decision Gate). `CircuitBreakerAdditionalImplementation=BLOCKED_PENDING_DECISION_GATE` — nem "não necessário" (existe um argumento operacional real para Anthropic: sem circuit breaker, uma indisponibilidade real do provider custa um timeout de 30s completo por mensagem, repetidamente), nem implementado. Trazido de volta como uma pergunta específica e isolada: **o usuário quer formalmente emendar a ArchitectureTest existente para permitir `Microsoft.Extensions.Http.Resilience` apenas para circuit breaking (nunca retry), dado que a justificativa original era especificamente sobre um framework de retry automático — ou manter a decisão totalmente fechada e aceitar operar sem circuit breaker adicional para Anthropic/WhatsApp neste checkpoint?** Todo o restante do CP3 prosseguiu independentemente, conforme autorizado.
+
+### 5.6 DLQ Observability
+
+`DeadLetterObservable=true`. Implementado como `DeadLetterMetricsBackgroundService` (Worker), um `BackgroundService` que consulta `count(*)` de `wolverine_dead_letters` por schema ancilar a cada 60s, cacheado em memória e exposto via `ObservableGauge` OTel (`wolverine.dead_letters`, label único de baixa cardinalidade: nome do schema — nunca `TenantId`/`MessageId`/payload). `DlqPayloadExposed=false` — a query nunca lê `body`/`message_type`, apenas `count(*)`. Nunca escrito em nenhum health check (`DlqHealthThreshold=TBD_FOR_PRODUCTION` — uma contagem histórica de dead-letters nunca vira `Unhealthy` automaticamente). `DlqReplayAdministrativeCapability=DEFERRED` — nenhuma ferramenta de replay construída, permitido explicitamente pelo mandato dado que a observabilidade mínima já existe.
+
+### 5.7 Pricing — configuração operacional explícita
+
+`AnthropicPricingOptions` já era `IOptions`-bound (portanto já tecnicamente configurável sem recompilar) mas nunca aparecia em nenhum `appsettings.json` — só existia como default C#, invisível a quem não lê o código-fonte. Corrigido: `AIAgent:Anthropic:Pricing:*` agora explícito em `IHostPro.Worker/appsettings.json` (valores idênticos aos defaults atuais — `PricingOperationalConfigurationImproved=true`, sem mudança de comportamento). Coberto por teste já existente (`AnthropicModelProviderTests.GenerateAsync_computes_EstimatedCostUsd_from_real_usage_and_configured_pricing`) mais a garantia estrutural do próprio domínio: `AgentInteraction.EstimatedCostUsd`/`CostPricingReference` são gravados uma única vez na criação e nunca recalculados — uma interação histórica é estruturalmente imune a uma mudança de configuração posterior.
+
+### 5.8 `WolverineClusterAgentAssignmentDebt` — auditoria aprofundada (correção estrutural NÃO autorizada)
+
+Investigação com evidência direta: origem em Fase 9 CP2.3.4, reafirmada Fase 10/11, manifestação observada exclusivamente durante SHUTDOWN do Worker (nunca em steady-state), relacionada ao "durability agent" do Wolverine para o schema `dashboard_messaging`. Achado adicional confirmado pela auditoria (não estava em nenhum documento anterior): `IHostPro.Api` e `IHostPro.Worker` compartilham o MESMO Main store (`platform_messaging`) e 5 schemas ancilares em comum — ou seja, todo teste E2E já roda, sem saber, um cluster Wolverine de 2 nós (Api+Worker) contra stores compartilhados; o ruído de rebalanceamento é plausivelmente a reatribuição de ownership quando o Worker sai. Confirmado por busca direta de código: nenhum teste no repositório jamais rodou 2+ instâncias de Worker concorrentes — a única topologia já exercitada é (1 Api + 1 Worker).
+
+**Classificação**: `NON_BLOCKING_SINGLE_NODE — UNVERIFIED_FOR_HORIZONTAL_SCALE_OUT`. Não é `BLOCKS_PRODUCTION` (a topologia de produção/piloto é single-instance e ainda indefinida quanto a multi-node, adiada para CP5). Não é um "multi-node confirmado seguro" — a plataforma nunca testou o cenário real de escala horizontal (2+ réplicas do Worker), então essa lacuna permanece genuinamente desconhecida, não apenas teórica. `WolverineProductionImpactClassified=true`. **Nenhuma correção estrutural foi implementada** (não autorizado pelo mandato) — recomendação registrada para uma futura Decision Gate dedicada: um teste real com 2 instâncias concorrentes de Worker antes de certificar escala horizontal como segura.
+
+### 5.9 Testes — evidência
+
+| Suíte | Resultado |
+|---|---|
+| `IHostPro.Contexts.Configuration.Tests.Integration` (novo `DistributedRateLimiterTests`, Redis real via Testcontainers) | 6/6 — abaixo do limite, acima do limite com Retry-After, fairness multi-tenant (`MultiTenantFairnessProven=true`), isolamento entre políticas, FailOpen/FailClosed sob Redis real derrubado, política não configurada = ilimitada |
+| `IHostPro.Api.Tests.Integration` (novo `AuthenticationRateLimitWorkflowRoundTripTests`) | 1/1 — 429 real através do pipeline HTTP completo após 30 chamadas, `Retry-After` presente |
+| `IHostPro.Contexts.AIAgent.Tests.Unit` (novo `AgentContextBuilderTests` + 1 novo teste em `ConversationMessageReceivedProcessorTests`) | 202/202 (todo o projeto) — budget de contexto (7 cenários) + guard de custo de IA tratado como falha técnica |
+| `IHostPro.ArchitectureTests` | 304/304 — nenhuma fronteira arquitetural violada pelas novas interfaces `IWebhookRateLimiter`/`IAiAgentRateLimiter`/`IContextBudgetPolicy` |
+| `IHostPro.Contexts.ExternalIntegrations.Tests.Unit` | 131/131 |
+
+**Limitação de escopo assumida, por tempo**: a partição real por IP (`Authentication`: IP A bloqueado, IP B não afetado) e o comportamento de Redis-down atravessando o pipeline HTTP real (`Webhook`) não foram re-provados em um teste E2E dedicado — `WebApplicationFactory`'s `TestServer` reporta o mesmo `RemoteIpAddress` sintético para toda chamada simulada, tornando esse cenário específico não simulável nesse nível; a correção de partição/fairness já está provada genericamente no nível `IDistributedRateLimiter` (`DistributedRateLimiterTests`), e a fiação HTTP (`DistributedRateLimiterAdapter`, extração de partição) foi verificada por revisão de código + compilação + o teste de threshold real do item acima.
+
+### 5.10 Escopo explicitamente não implementado (por decisão do gate, não por omissão)
+
+- Circuit breaker HTTP adicional para Anthropic/WhatsApp — `CircuitBreakerAdditionalImplementation=BLOCKED_PENDING_DECISION_GATE` (§5.5), aguardando resposta específica do usuário.
+- Ferramenta de replay de DLQ — `DlqReplayAdministrativeCapability=DEFERRED`, permitido explicitamente dado que a observabilidade mínima existe.
+- Correção estrutural do `WolverineClusterAgentAssignmentDebt` — auditado e classificado (§5.8), correção seria uma Decision Gate própria.
+- Billing/planos/assinaturas/entitlements comerciais — pertence à futura auditoria de SaaS Commercial Readiness, nunca a este checkpoint.
+- Thresholds numéricos finais de Produção para rate limiting e context budget — `ProductionRateLimitThresholdsRequired=true`/`ProductionContextBudgetFinalThresholdRequired=true`, dependem de dados reais do piloto.
+- Manifestos Kubernetes/probes reais — decisão já registrada no CP2, mantida.
