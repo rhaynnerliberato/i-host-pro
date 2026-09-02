@@ -236,6 +236,13 @@ jobs:
   api-integration-tests:
     needs: build
     runs-on: ubuntu-latest
+    # Fase 12, Checkpoint 4 (Security/Secrets/LGPD Hardening) — without this,
+    # a hung run (observed locally: a Testcontainers fixture whose containers
+    # sat idle for over an hour with no active dotnet test process) falls
+    # back to GitHub Actions' own 360-minute job default before anything
+    # stops it. 90 minutes is ~65% over the normal observed duration (~54
+    # minutes for this exact suite), not an arbitrary figure.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
