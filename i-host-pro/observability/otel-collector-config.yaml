@@ -22,6 +22,14 @@ exporters:
   prometheus:
     endpoint: 0.0.0.0:8889
 
+  # Fase 12, Checkpoint 2 — fecha o item pendente do ADR-007: traces agora são
+  # encaminhados a um backend real (Grafana Tempo, resolução via nome de
+  # serviço do próprio docker-compose), não apenas registrados/descartados.
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
   debug:
     verbosity: basic
 
@@ -34,4 +42,4 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [debug]
+      exporters: [otlp/tempo, debug]

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -39,6 +40,22 @@ public sealed class AnthropicModelProvider : IModelProvider
 {
     /// <summary>Named <see cref="IHttpClientFactory"/> client — see <c>AIAgentModuleExtensions</c> for its registration (base address, timeout).</summary>
     public const string HttpClientName = "AIAgent.Anthropic";
+
+    /// <summary>
+    /// Fase 12, Checkpoint 2 (Observability Finalization, Documento 21 §16 —
+    /// "IA" is one of the explicitly required metric categories). Registered
+    /// with <c>.AddMeter("IHostPro.AIAgent")</c> only in <c>IHostPro.Worker</c>
+    /// (the only process that ever constructs this class) — never in
+    /// IHostPro.Api, which never calls a model provider. Every tag below is
+    /// a bounded, low-cardinality enum (provider name, model name, a fixed
+    /// outcome string, or "input"/"output") — never tenant/reservation/
+    /// conversation id, phone, or any other unbounded/PII-adjacent value
+    /// (mandate item 13's own explicit prohibition).
+    /// </summary>
+    private static readonly Meter Meter = new("IHostPro.AIAgent");
+    private static readonly Counter<long> ModelCallsCounter = Meter.CreateCounter<long>("ai_agent.model_calls");
+    private static readonly Counter<long> TokensCounter = Meter.CreateCounter<long>("ai_agent.tokens");
+    private static readonly Counter<double> CostCounter = Meter.CreateCounter<double>("ai_agent.cost_usd");
 
     private const string RespondToGuestToolName = "respond_to_guest";
     private const string ApiKeyHeaderName = "x-api-key";
@@ -366,5 +383,34 @@ public sealed class AnthropicModelProvider : IModelProvider
             "AIAgent Anthropic call {Result} for model {Model} (InputTokens {InputTokens}, OutputTokens {OutputTokens}, " +
             "EstimatedCostUsd {EstimatedCostUsd}, {DurationMs}ms)",
             result, ModelName, inputTokens, outputTokens, estimatedCostUsd, stopwatch.ElapsedMilliseconds);
+
+        // Fase 12, Checkpoint 2 — the single choke point every code path
+        // above already funnels through, success or failure alike, so
+        // "calls"/"errors" (both covered by ModelCallsCounter's own
+        // "outcome" tag — a non-"Success" outcome IS the error) and
+        // "tokens"/"cost" (recorded only on Success, mirroring
+        // ModelResult's own "null = not applicable" convention) never need a
+        // second instrumentation point anywhere else in this class.
+        ModelCallsCounter.Add(1,
+            new KeyValuePair<string, object?>("provider", ProviderName),
+            new KeyValuePair<string, object?>("model", ModelName),
+            new KeyValuePair<string, object?>("outcome", result));
+
+        if (inputTokens is int input)
+            TokensCounter.Add(input,
+                new KeyValuePair<string, object?>("provider", ProviderName),
+                new KeyValuePair<string, object?>("model", ModelName),
+                new KeyValuePair<string, object?>("direction", "input"));
+
+        if (outputTokens is int output)
+            TokensCounter.Add(output,
+                new KeyValuePair<string, object?>("provider", ProviderName),
+                new KeyValuePair<string, object?>("model", ModelName),
+                new KeyValuePair<string, object?>("direction", "output"));
+
+        if (estimatedCostUsd is decimal cost)
+            CostCounter.Add((double)cost,
+                new KeyValuePair<string, object?>("provider", ProviderName),
+                new KeyValuePair<string, object?>("model", ModelName));
     }
 }

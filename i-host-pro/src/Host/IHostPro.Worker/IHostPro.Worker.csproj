@@ -7,13 +7,29 @@
     <UserSecretsId>dotnet-IHostPro.Worker-cc769433-0535-453a-bbdf-17f44d398b0c</UserSecretsId>
   </PropertyGroup>
 
+  <!-- Fase 12, Checkpoint 2 (Observability Finalization) — the ONLY reason
+       Worker references Microsoft.AspNetCore.App at all: a minimal Kestrel
+       listener exists exclusively to expose /health/live and /health/ready.
+       Never adds controllers/Swagger/any business HTTP surface — Worker
+       stays a background message-processing host, never a second Api. -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Explicit pin — see IHostPro.Contexts.Identity.Api.csproj for the MSB3277 rationale. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.17.0" />
+    <!-- Same rationale as IHostPro.Api.csproj — real dependency health
+         checks (Documento 21 §18) and Npgsql's own first-party OTLP
+         instrumentation. -->
+    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
+    <PackageReference Include="AspNetCore.HealthChecks.Rabbitmq" Version="9.0.0" />
+    <PackageReference Include="AspNetCore.HealthChecks.Redis" Version="9.0.0" />
+    <PackageReference Include="Npgsql.OpenTelemetry" Version="10.0.3" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Serilog.Settings.Configuration" Version="10.0.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />

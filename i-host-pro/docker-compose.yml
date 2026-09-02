@@ -87,6 +87,29 @@ services:
       - "4317:4317"   # OTLP gRPC (recebe telemetria das aplicações)
       - "4318:4318"   # OTLP HTTP
       - "8889:8889"   # Métricas expostas em formato Prometheus (scrape)
+    depends_on:
+      - tempo
+
+  # Fase 12, Checkpoint 2 (Observability Finalization) — closes the open item
+  # ADR-007 explicitly left pending ("backend de tracing distribuído ainda não
+  # escolhido"). Tempo chosen over Jaeger/Zipkin: native OTLP ingestion (zero
+  # translation layer), a single small Go binary (same operational footprint
+  # as Prometheus, already accepted), and — the deciding factor — it renders
+  # INSIDE the Grafana instance already provisioned for metrics, rather than
+  # standing up a second, separate trace-viewer UI. Also the only one of the
+  # three with an official Grafana Cloud hosted equivalent, easing a future
+  # migration once ADR-011's cloud-provider decision (CP5) is made — never
+  # locking this checkpoint into any specific cloud vendor today.
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: ihostpro-tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo-config.yaml"]
+    volumes:
+      - ./observability/tempo-config.yaml:/etc/tempo-config.yaml:ro
+      - ihostpro-tempo-data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo's own query API (consumed by Grafana's datasource, never called directly by the applications)
 
   prometheus:
     image: prom/prometheus:v3.1.0
@@ -114,9 +137,11 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
+      - tempo
 
 volumes:
   ihostpro-postgres-data:
   ihostpro-minio-data:
   ihostpro-prometheus-data:
   ihostpro-grafana-data:
+  ihostpro-tempo-data:

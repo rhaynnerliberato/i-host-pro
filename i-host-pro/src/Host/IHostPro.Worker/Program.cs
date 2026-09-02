@@ -1,5 +1,9 @@
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using IHostPro.Worker.Observability;
+using Npgsql;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.BuildingBlocks.Messaging.Abstractions;
@@ -58,13 +62,62 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
-    var builder = Host.CreateApplicationBuilder(args);
+    // Fase 12, Checkpoint 2 (Observability Finalization) — WebApplicationBuilder
+    // instead of Host.CreateApplicationBuilder is the ONLY change this
+    // checkpoint makes to how Worker boots. WebApplicationBuilder implements
+    // the exact same IHostApplicationBuilder every line below already
+    // targets (builder.Services/builder.Configuration/builder.Environment
+    // are unchanged) — it exists solely so a minimal Kestrel listener can
+    // expose /health/live and /health/ready (Documento 21 §18: "cada serviço
+    // deverá expor endpoints de health check"), which Worker had none of
+    // before. Never adds controllers, Swagger, or any business HTTP surface
+    // — Worker remains a background message-processing host, never a second
+    // Api (mandate item 6's own explicit caution).
+    var builder = WebApplication.CreateBuilder(args);
+
+    // Never hardcoded as the ONLY option — ASPNETCORE_URLS/"urls" config,
+    // when explicitly set, still wins (standard ASP.NET Core precedence).
+    // This is only the fallback for the common case (local dev, CI, every
+    // existing E2E Fixture) where nothing sets it, so Worker's new health
+    // listener doesn't silently default to port 5000 and collide with
+    // whatever else might already be using it. 5141 — one past IHostPro.Api's
+    // own established 5140 (see WebE2EFixture) — never the same port.
+    if (string.IsNullOrEmpty(builder.Configuration["urls"]) && Environment.GetEnvironmentVariable("ASPNETCORE_URLS") is null)
+        builder.WebHost.UseUrls("http://localhost:5141");
 
     builder.Services.AddSerilog((services, configuration) => configuration
         .ReadFrom.Configuration(builder.Configuration)
         .ReadFrom.Services(services)
         .Enrich.FromLogContext()
         .WriteTo.Console());
+
+    // Same dependency-criticality reasoning as IHostPro.Api/Program.cs:
+    // Postgres/RabbitMQ are hard dependencies for every consumer this
+    // process hosts (Unhealthy when down); Redis backs only Configuration &
+    // Policy's cache-invalidation consumer — a Redis outage degrades that
+    // one reaction (stale cache reads on the Api side, never a Worker
+    // crash), never the whole process, so it is reported as Degraded.
+    var rabbitMqConnectionForHealth = new Lazy<Task<RabbitMQ.Client.IConnection>>(() => new RabbitMQ.Client.ConnectionFactory
+    {
+        HostName = builder.Configuration["RabbitMq:Host"] ?? "localhost",
+        VirtualHost = builder.Configuration["RabbitMq:VirtualHost"] ?? "/",
+        UserName = builder.Configuration["RabbitMq:Username"] ?? "guest",
+        Password = builder.Configuration["RabbitMq:Password"] ?? "guest",
+    }.CreateConnectionAsync());
+
+    builder.Services.AddHealthChecks()
+        .AddNpgSql(
+            builder.Configuration.GetConnectionString("Platform")
+                ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Platform'."),
+            name: "postgres",
+            tags: ["ready"])
+        .AddRabbitMQ(_ => rabbitMqConnectionForHealth.Value, name: "rabbitmq", tags: ["ready"])
+        .AddRedis(
+            builder.Configuration["Configuration:PolicyCache:ConnectionString"]
+                ?? throw new InvalidOperationException("Missing configuration 'Configuration:PolicyCache:ConnectionString'."),
+            name: "redis",
+            failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded,
+            tags: ["ready"]);
 
     // Multi-tenant: for HTTP requests (IHostPro.Api) the tenant is resolved by an
     // authentication middleware; here, it is resolved once per consumed message by
@@ -1162,15 +1215,45 @@ try
     // -> Grafana (ADR-007). "OpenTelemetry__OtlpEndpoint" overrides it per environment.
     var otlpEndpoint = new Uri(builder.Configuration["OpenTelemetry:OtlpEndpoint"] ?? "http://localhost:4317");
 
+    // Fase 12, Checkpoint 2 — same rationale as IHostPro.Api/Program.cs:
+    // Wolverine's own ActivitySource was never captured before this
+    // checkpoint (AddSource("Wolverine") is required, not automatic — every
+    // real message-handling span for every consumer in this process was
+    // invisible until now); AddHttpClientInstrumentation() covers
+    // AnthropicModelProvider's and the WhatsApp connector's real outbound
+    // HTTP calls; AddNpgsql() covers every DbContext's real SQL calls.
     builder.Services.AddOpenTelemetry()
         .ConfigureResource(resource => resource.AddService(serviceName: "IHostPro.Worker"))
-        .WithTracing(tracing => tracing.AddOtlpExporter(o => o.Endpoint = otlpEndpoint))
+        .WithTracing(tracing => tracing
+            .AddSource("Wolverine")
+            .AddHttpClientInstrumentation()
+            .AddNpgsql()
+            .AddOtlpExporter(o => o.Endpoint = otlpEndpoint))
         .WithMetrics(metrics => metrics
+            .AddHttpClientInstrumentation()
             .AddRuntimeInstrumentation()
+            .AddNpgsqlInstrumentation()
+            // Fase 12, Checkpoint 2 (Documento 21 §16 — "IA" is one of the
+            // explicitly required metric categories) — AnthropicModelProvider's
+            // own Meter, the only class in the solution that constructs it;
+            // never registered in IHostPro.Api, which never calls a model
+            // provider.
+            .AddMeter("IHostPro.AIAgent")
             .AddOtlpExporter(o => o.Endpoint = otlpEndpoint));
 
-    var host = builder.Build();
-    host.Run();
+    var app = builder.Build();
+
+    // Fase 12, Checkpoint 2 — the only two routes this process will ever
+    // serve. Same safe response shape as IHostPro.Api (component name/
+    // status/duration only, never HealthReportEntry.Description/Exception).
+    app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions { Predicate = _ => false });
+    app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready"),
+        ResponseWriter = IHostPro.Worker.Observability.ObservabilityHealthCheckResponseWriter.WriteAsync,
+    });
+
+    app.Run();
 }
 catch (Exception ex) when (ex is not HostAbortedException)
 {

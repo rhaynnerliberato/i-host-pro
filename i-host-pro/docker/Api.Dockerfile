@@ -21,4 +21,12 @@ RUN dotnet publish src/Host/IHostPro.Api/IHostPro.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
+
+# Fase 12, Checkpoint 2 (Observability Finalization, Documento 21 §18) — the
+# real dependency-aware readiness endpoint the Api now exposes. curl adds a
+# small, standard layer for this alone; no other tool in this image needs it.
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:8080/health/ready || exit 1
+
 ENTRYPOINT ["dotnet", "IHostPro.Api.dll"]

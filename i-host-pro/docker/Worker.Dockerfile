@@ -18,7 +18,17 @@ RUN dotnet publish src/Host/IHostPro.Worker/IHostPro.Worker.csproj \
     -o /app/publish \
     --no-restore
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
+# Fase 12, Checkpoint 2 (Observability Finalization) — the aspnet image, not
+# the plain runtime image used before this checkpoint: Worker now carries a
+# minimal Kestrel listener (FrameworkReference Microsoft.AspNetCore.App,
+# added this checkpoint, exclusively for /health/live and /health/ready) —
+# the shared framework it depends on isn't present in dotnet/runtime.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:5141/health/ready || exit 1
+
 ENTRYPOINT ["dotnet", "IHostPro.Worker.dll"]

@@ -1,12 +1,29 @@
-# Provisiona automaticamente o Prometheus como datasource do Grafana,
-# preservando a integração descrita no ADR-007 sem passo manual na UI.
+# Provisiona automaticamente o Prometheus e o Tempo como datasources do
+# Grafana, preservando a integração descrita no ADR-007 sem passo manual na
+# UI (Tempo adicionado na Fase 12, Checkpoint 2 — Observability Finalization,
+# fechando o backend de tracing que o ADR-007 deixara pendente).
 
 apiVersion: 1
 
 datasources:
   - name: Prometheus
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
     isDefault: true
     editable: true
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: true
+    jsonData:
+      # Lets a metric exemplar (already emitted by the OTLP metrics pipeline)
+      # jump straight to its originating trace in Tempo's own UI — the
+      # standard Grafana metrics<->traces correlation pattern, free once both
+      # datasources share one Grafana instance.
+      tracesToMetrics:
+        datasourceUid: prometheus

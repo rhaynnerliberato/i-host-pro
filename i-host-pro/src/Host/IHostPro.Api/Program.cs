@@ -37,7 +37,11 @@ using IHostPro.Contexts.AIAgent.Infrastructure.Persistence;
 using IHostPro.Contexts.Communication.Application;
 using IHostPro.Contexts.Communication.Infrastructure;
 using IHostPro.Contexts.Communication.Infrastructure.Persistence;
+using IHostPro.Api.Observability;
 using JasperFx;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Npgsql;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -111,7 +115,39 @@ try
     // Etapa 9.
     builder.Services.AddScoped<ICurrentTenantProvider, TenantContextCurrentTenantProvider>();
 
-    builder.Services.AddHealthChecks();
+    // Fase 12, Checkpoint 2 (Observability Finalization) — real dependency
+    // checks (Documento 21 §18), replacing the bare AddHealthChecks() that
+    // reported "Healthy" regardless of whether Postgres/RabbitMQ/Redis were
+    // actually reachable. Tagged "ready" so /health/ready (mapped after
+    // app.Build() below) reflects genuine readiness; /health/live never
+    // touches any dependency at all. Postgres and RabbitMQ are hard
+    // dependencies for every write path this Api serves — Unhealthy when
+    // down. Redis backs only Configuration & Policy's read-through cache
+    // (CachedPolicyValueResolver has no fallback to Postgres on a Redis
+    // failure — confirmed by direct source read), so only policy-dependent
+    // reads are impaired, never the whole Api — reported as Degraded, never
+    // Unhealthy, so a Redis blip alone never flips readiness off entirely.
+    var rabbitMqConnectionForHealth = new Lazy<Task<RabbitMQ.Client.IConnection>>(() => new RabbitMQ.Client.ConnectionFactory
+    {
+        HostName = builder.Configuration["RabbitMq:Host"] ?? "localhost",
+        VirtualHost = builder.Configuration["RabbitMq:VirtualHost"] ?? "/",
+        UserName = builder.Configuration["RabbitMq:Username"] ?? "guest",
+        Password = builder.Configuration["RabbitMq:Password"] ?? "guest",
+    }.CreateConnectionAsync());
+
+    builder.Services.AddHealthChecks()
+        .AddNpgSql(
+            builder.Configuration.GetConnectionString("Platform")
+                ?? throw new InvalidOperationException("Missing connection string 'ConnectionStrings:Platform'."),
+            name: "postgres",
+            tags: ["ready"])
+        .AddRabbitMQ(_ => rabbitMqConnectionForHealth.Value, name: "rabbitmq", tags: ["ready"])
+        .AddRedis(
+            builder.Configuration["Configuration:PolicyCache:ConnectionString"]
+                ?? throw new InvalidOperationException("Missing configuration 'Configuration:PolicyCache:ConnectionString'."),
+            name: "redis",
+            failureStatus: HealthStatus.Degraded,
+            tags: ["ready"]);
 
     // Tenant-aware transactional pipeline (TenantTransactionBehavior /
     // TenantBootstrapBehavior + ITenantAwareUnitOfWork) — foundation
@@ -743,14 +779,32 @@ try
     // -> Grafana (ADR-007). "OpenTelemetry__OtlpEndpoint" overrides it per environment.
     var otlpEndpoint = new Uri(builder.Configuration["OpenTelemetry:OtlpEndpoint"] ?? "http://localhost:4317");
 
+    // Fase 12, Checkpoint 2 (Observability Finalization) — three boundaries
+    // that were structurally invisible to tracing before this checkpoint,
+    // despite the OTel SDK already being registered: Wolverine's own
+    // ActivitySource is a third-party library source, never captured unless
+    // explicitly listened to (AddSource("Wolverine") — confirmed against
+    // Wolverine's own documentation, verified missing beforehand); outbound
+    // HTTP (AnthropicModelProvider's real REST calls, WhatsApp's real
+    // outbound calls) had no instrumentation at all; Npgsql's own first-party
+    // OTLP integration (AddNpgsql()) covers every DbContext's real SQL calls
+    // uniformly, without touching any of the 11 per-context Infrastructure
+    // projects individually. Never a custom span added to any application
+    // method — only these three library-boundary instrumentations, per the
+    // mandate's own "instrument boundaries, not every method" scope.
     builder.Services.AddOpenTelemetry()
         .ConfigureResource(resource => resource.AddService(serviceName: "IHostPro.Api"))
         .WithTracing(tracing => tracing
+            .AddSource("Wolverine")
             .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddNpgsql()
             .AddOtlpExporter(o => o.Endpoint = otlpEndpoint))
         .WithMetrics(metrics => metrics
             .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
             .AddRuntimeInstrumentation()
+            .AddNpgsqlInstrumentation()
             .AddOtlpExporter(o => o.Endpoint = otlpEndpoint));
 
     var app = builder.Build();
@@ -767,7 +821,27 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
     app.MapControllers();
-    app.MapHealthChecks("/health");
+    // Fase 12, Checkpoint 2 — liveness (process is up, checks nothing) vs
+    // readiness (checks every "ready"-tagged dependency) are now distinct,
+    // matching Documento 21 §18's Healthy/Degraded/Unhealthy model instead
+    // of a single endpoint that only ever said "the process didn't crash".
+    // The response body is a minimal, explicitly-safe JSON shape (component
+    // name + status + duration only) — never HealthReportEntry.Description/
+    // Exception, which could otherwise surface a connection string or a raw
+    // driver exception message.
+    app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+    app.MapHealthChecks("/health/ready", new HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready"),
+        ResponseWriter = ObservabilityHealthCheckResponseWriter.WriteAsync,
+    });
+    // Preserved for backward compatibility with anything already polling
+    // the original single endpoint — identical to /health/ready.
+    app.MapHealthChecks("/health", new HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready"),
+        ResponseWriter = ObservabilityHealthCheckResponseWriter.WriteAsync,
+    });
 
     app.Run();
 }

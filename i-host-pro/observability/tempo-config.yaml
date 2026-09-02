@@ -1,0 +1,38 @@
+# Grafana Tempo — minimal single-binary config for local dev/homologação.
+# Fase 12, Checkpoint 2 (Observability Finalization). Receives traces
+# exclusively from the OpenTelemetry Collector (never directly from
+# IHostPro.Api/IHostPro.Worker) via OTLP gRPC — same "apps never talk to the
+# backend directly" boundary ADR-007 already established for metrics.
+#
+# Local-disk storage only (no S3/GCS/blob backend configured) — matches the
+# same dev-environment scope as every other observability/*.yaml file here;
+# a real Production storage backend is a Fase 12, Checkpoint 5 (Cloud
+# Provider & Production Deploy Target) decision, never made here.
+
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  trace_idle_period: 10s
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 24h
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal
