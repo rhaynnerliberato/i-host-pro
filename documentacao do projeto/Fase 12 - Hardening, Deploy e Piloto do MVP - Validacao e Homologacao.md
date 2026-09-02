@@ -1,7 +1,7 @@
 # Fase 12 — Hardening, Deploy e Piloto do MVP — Validação e Homologação
 
-Versão: 1.0
-Status: Em andamento — Checkpoint 1 concluído
+Versão: 1.1
+Status: Em andamento — Checkpoint 2 concluído
 
 ## 1. Objetivo
 
@@ -121,3 +121,95 @@ Nenhuma coleta de cobertura estava configurada/consumida antes deste checkpoint 
 - Validação local ponta-a-ponta de `IHostPro.Web.Tests.E2E` — incluído na pipeline, mas sem evidência local própria deste checkpoint (§3.6).
 
 `Cp1CommitCount`: registrado no relatório final da conversa de homologação.
+
+## 4. Checkpoint 2 — Observability Finalization
+
+**Status:** Concluído. `ApiLivenessImplemented=true`. `ApiReadinessImplemented=true`. `WorkerLivenessImplemented=true`. `WorkerReadinessImplemented=true`. `CriticalDependencyHealthChecksImplemented=true`. `HealthResponseSensitiveDataLeak=false`. `DistributedTracingOperational=true`. `TraceBackendAvailable=true`. `TraceLogCorrelationImplemented=true` (via TraceId/SpanId, standard OTel/ASP.NET Core log-scope enrichment — no new mechanism built). `OperationalMetricsImplemented=true`. `HighCardinalityTenantLabels=false`. `ProviderTelemetrySanitized=true`. `AlertCatalogImplemented=true` (catálogo documentado; `AlertDeliveryProviderRequiredForMvp=false`). `SensitiveTelemetryReviewGreen=true`. `BusinessCodeBehaviorChanged=false`.
+
+**Objetivo**: levar a observabilidade de infraestrutura básica (OTLP chegando ao Collector, métricas via Prometheus, health check trivial) a operacionalmente utilizável — health checks reais com semântica liveness/readiness, tracing distribuído com um backend real, métricas cobrindo os limites (boundaries) que hoje são invisíveis, e um catálogo de alertas explícito. Nenhuma funcionalidade de negócio alterada.
+
+### 4.1 Auditoria — o que já existia vs. o que faltava
+
+Confirmado por leitura direta do código e do ADR-007 (Status: Atualizado):
+
+- Logs estruturados (Serilog) e a exportação de métricas (OTLP → Collector → Prometheus → Grafana) já funcionavam.
+- **Tracing tinha três boundaries estruturalmente invisíveis**, apesar do SDK do OTel já estar registrado: (1) o `ActivitySource` próprio do Wolverine nunca era escutado — `AddSource("Wolverine")` é exigido explicitamente pela própria documentação do Wolverine, confirmado ausente em `IHostPro.Api`/`IHostPro.Worker`; (2) chamadas HTTP de saída (as chamadas reais do `AnthropicModelProvider` e do conector WhatsApp) não tinham nenhuma instrumentação; (3) chamadas SQL reais via Npgsql não eram rastreadas.
+- **Backend de tracing**: o ADR-007 já registrava isso como pendência explícita — o Collector recebia traces mas apenas os descartava (exportador `debug`), nunca persistindo/visualizando.
+- **Health checks**: `IHostPro.Api` tinha `AddHealthChecks()`/`/health` sem nenhuma dependência real registrada (sempre "Healthy" independente de Postgres/RabbitMQ/Redis estarem de pé); `IHostPro.Worker` não tinha nenhum endpoint de health.
+- **Métricas de IA**: nenhuma métrica de negócio existia para chamadas/tokens/custo/erros do modelo de linguagem, apesar do CP7 já computar tudo isso para persistência.
+
+### 4.2 Backend de tracing — decisão técnica (Grafana Tempo)
+
+O Documento 21 não prescreve um produto específico, delegando a escolha quando uma opção for claramente suficiente (mandato item 12). Comparação real entre Jaeger/Tempo/Zipkin: Tempo venceu por (1) ingestão OTLP nativa (zero camada de tradução), (2) footprint equivalente a um binário Go único (mesmo perfil operacional já aceito para o Prometheus), (3) **critério decisivo**: renderiza DENTRO da mesma instância do Grafana já provisionada para métricas, em vez de exigir uma segunda UI de visualização de traces separada (Jaeger), e (4) é o único dos três com um equivalente hospedado oficial (Grafana Cloud Tempo), facilitando uma futura migração de nuvem sem prender esta decisão a nenhum provedor específico (ADR-011, CP5 continua em aberto). Adicionado ao `docker-compose.yml` (`tempo`, imagem `grafana/tempo:2.6.1`, armazenamento local — um backend real de Produção é decisão do CP5), ao pipeline do Collector (novo exportador `otlp/tempo`) e como novo datasource do Grafana (`observability/grafana/provisioning/datasources/datasource.yml`), com correlação métrica↔trace via exemplars já habilitada de graça por compartilharem a mesma instância do Grafana.
+
+### 4.3 Tracing — as três instrumentações adicionadas
+
+`AddSource("Wolverine")` (captura real de todo processamento de mensagem, incluindo falhas/retries — também torna `WolverineClusterAgentAssignmentDebt` diagnosticável via trace, sem tentar corrigi-lo estruturalmente, conforme o próprio mandato exige), `AddHttpClientInstrumentation()` (cobre as chamadas reais de saída do Anthropic e do WhatsApp), e `AddNpgsql()`/`AddNpgsqlInstrumentation()` (o próprio pacote de primeira parte do Npgsql, `Npgsql.OpenTelemetry` — nunca a instrumentação genérica ADO.NET do opentelemetry-dotnet-contrib) para tracing e métricas respectivamente. **Achado real durante a implementação**: o nome exato do método de extensão de métricas do Npgsql é `AddNpgsqlInstrumentation()`, não `AddNpgsql()` (usado apenas no lado de tracing) — descoberto por inspeção direta do assembly via reflection (`System.Reflection`, um projeto de sondagem descartável), depois que uma fonte externa consultada inicialmente (documentação de terceiros) se mostrou incorreta — nunca assumido sem verificação direta contra o binário real. Nenhum span customizado foi adicionado a nenhum método de aplicação — apenas essas três instrumentações de boundary.
+
+### 4.4 Health checks — Api e Worker
+
+**Api**: `AddHealthChecks()` substituído por checks reais — `AddNpgSql` (Postgres, via `ConnectionStrings:Platform`), `AddRabbitMQ` (via uma factory lazy de `IConnection`, mesmos parâmetros já usados pelo `UseIHostProRabbitMq` do Wolverine), `AddRedis` (via `Configuration:PolicyCache:ConnectionString`) — todos tagueados `"ready"`. `/health/live` (nenhum check, `Predicate = _ => false`) e `/health/ready` (todos os checks `"ready"`) são endpoints novos e distintos; `/health` é preservado, idêntico a `/health/ready`, por compatibilidade retroativa.
+
+**Worker**: nunca teve nenhum endpoint de health. `Host.CreateApplicationBuilder` foi trocado por `WebApplication.CreateBuilder` — a ÚNICA mudança estrutural deste checkpoint no bootstrap do Worker, exclusivamente para ganhar um listener Kestrel mínimo (`FrameworkReference Microsoft.AspNetCore.App`, novo). Nunca adiciona controllers/Swagger/qualquer superfície HTTP de negócio — o Worker continua sendo um host de processamento de mensagens em background, nunca uma segunda Api (ressalva explícita do próprio mandato). Porta padrão `5141` (uma acima da porta 5140 já estabelecida da Api), aplicada apenas como fallback quando `ASPNETCORE_URLS`/`urls` não estiverem já configurados — nunca hardcoded como única opção.
+
+**Classificação de criticidade** (Healthy/Degraded/Unhealthy, nunca "sempre Healthy"): Postgres e RabbitMQ são dependências rígidas para todo caminho de escrita/processamento — `Unhealthy` quando indisponíveis. Redis alimenta exclusivamente o cache de leitura de Configuration & Policy (`CachedPolicyValueResolver` não tem fallback para Postgres em caso de falha do Redis, confirmado por leitura direta do código-fonte) — uma falha do Redis prejudica apenas leituras dependentes de policy, nunca o processo inteiro, então é reportada como `Degraded`, nunca `Unhealthy`, evitando que uma falha parcial do Redis derrube toda a sonda de readiness.
+
+**Resposta segura**: `ObservabilityHealthCheckResponseWriter` (duplicado entre `IHostPro.Api`/`IHostPro.Worker` — `BuildingBlocks.Infrastructure` não referencia o framework compartilhado do ASP.NET Core e não deveria ganhar essa dependência só por causa de dois endpoints de host) emite exclusivamente nome/status/duração por componente — nunca `HealthReportEntry.Description`/`Exception`, que poderiam vazar uma connection string ou uma mensagem de exceção bruta do driver.
+
+### 4.5 Métricas de IA (Documento 21 §16 — "IA" é categoria obrigatória)
+
+Um único `Meter` (`IHostPro.AIAgent`, construído dentro de `AnthropicModelProvider`, a única classe que o utiliza) com 3 instrumentos — `ai_agent.model_calls` (contador, tags `provider`/`model`/`outcome` — um outcome diferente de `"Success"` JÁ representa o erro, nenhum instrumento de erro separado foi necessário), `ai_agent.tokens` (contador, tags `provider`/`model`/`direction`), `ai_agent.cost_usd` (contador, tags `provider`/`model`) — todos alimentados a partir do único ponto de convergência (`LogOutcome`) que já existia desde o CP7, nunca um novo ponto de instrumentação espalhado pela classe. Registrado via `.AddMeter("IHostPro.AIAgent")` somente em `IHostPro.Worker` (o único processo que constrói `AnthropicModelProvider`) — nunca em `IHostPro.Api`. Todas as tags são enums fechados e de baixa cardinalidade — nunca tenant/reservation/conversation id, telefone, ou qualquer valor não-limitado (proibição explícita do mandato).
+
+### 4.6 Catálogo de alertas (documentado, não implementado como entrega)
+
+Registrado explicitamente, sem nenhum provedor de entrega (`AlertDeliveryProviderRequiredForMvp=false` — Documento 21/15 não definem um provedor operacional ainda, e o próprio mandato autoriza separar `AlertDefinitionImplemented` de `AlertDeliveryProviderConfigured`):
+
+| Alerta | Fonte do sinal | Threshold |
+|---|---|---|
+| Api indisponível | `/health/live` falhando | `Threshold=TBD_FOR_PRODUCTION` |
+| Worker indisponível | `/health/live` falhando | `Threshold=TBD_FOR_PRODUCTION` |
+| Postgres indisponível | `/health/ready` component `postgres=Unhealthy` | Imediato |
+| RabbitMQ indisponível | `/health/ready` component `rabbitmq=Unhealthy` | Imediato |
+| Redis indisponível (não-crítico) | `/health/ready` component `redis=Degraded` | `Threshold=TBD_FOR_PRODUCTION` |
+| Taxa de erro elevada | métricas HTTP/AspNetCore já exportadas | `Threshold=TBD_FOR_PRODUCTION` |
+| Falha de processamento de mensagem | trace/log do Wolverine (`AddSource("Wolverine")`, novo) | `Threshold=TBD_FOR_PRODUCTION` |
+| Acúmulo em dead-letter | log estruturado do Wolverine (comportamento padrão já existente — nenhuma ferramenta de monitoramento/replay construída, CP3 mandato item 21) | `Threshold=TBD_FOR_PRODUCTION` |
+| Falha de provider externo (Anthropic/Meta) | `ai_agent.model_calls{outcome!=Success}` (novo) / métricas HTTP existentes | `Threshold=TBD_FOR_PRODUCTION` |
+| Anomalia de custo de IA | `ai_agent.cost_usd` (novo) | `Threshold=TBD_FOR_PRODUCTION` |
+| Falha de deployment/migration | fora do escopo deste checkpoint (CP5) | — |
+
+### 4.7 Revisão de PII/LGPD em telemetry (gate obrigatório do checkpoint)
+
+Nenhum vazamento encontrado — analisado por comportamento padrão documentado de cada instrumentação, nenhuma delas configurada para enriquecer com dados de requisição/resposta: `AddHttpClientInstrumentation()` captura apenas método/host/path/status/duração, nunca headers (logo nunca `Authorization`/`x-api-key`) nem corpo — nenhum `EnrichWithHttpRequestMessage` foi adicionado. `AddNpgsql()` pode capturar o texto do comando SQL como atributo de span, mas o EF Core (usado em toda a base de código, confirmado em todo o histórico de queries já observado nesta sessão) sempre parametriza — nunca interpola valores literais no texto do comando, então mesmo um `db.statement` capturado nunca contém `GuestPhone`/segredo real. Wolverine tagueia spans com tipo/destino da mensagem, nunca o corpo serializado. As métricas de IA (§4.5) usam apenas tags de enum fechado. O `ObservabilityHealthCheckResponseWriter` (§4.4) nunca serializa `Description`/`Exception`. Testes automatizados (`ObservabilityHealthChecksWorkflowRoundTripTests`, novo) confirmam isso empiricamente contra o endpoint real.
+
+### 4.8 Achado residual, fora do escopo deste checkpoint
+
+Durante a investigação de saúde do Redis, confirmado que `CachedPolicyValueResolver` não tem fallback para Postgres quando o Redis está indisponível (§4.4) — em qualquer ambiente sem um Redis real acessível em `Configuration:PolicyCache:ConnectionString` (por exemplo, a suíte `IHostPro.Api.Tests.Integration` completa, cujas Fixtures apontam para `localhost:6379` sem provisionar um Redis via Testcontainers), qualquer interação que dependa de `AI_AGENT_BEHAVIOR`/`EARLY_CHECKIN`/`LATE_CHECKOUT` provavelmente falharia. Isso é uma característica pré-existente da Fase 5/11, não introduzida por este checkpoint — mas relevante para a prontidão de CI (o pipeline do CP1 depende de um `ihostpro-redis` real estar acessível em `localhost:6379` no runner, o que não é verdade por padrão no GitHub Actions). Registrado por transparência, não corrigido — corrigi-lo exigiria ou (a) resiliência nova em Configuration & Policy, ou (b) provisionar Redis via Testcontainers nas Fixtures do `Api.Tests.Integration`, ambos fora do escopo de "Observability Finalization".
+
+### 4.9 Testes — evidência
+
+| Suíte | Resultado |
+|---|---|
+| `ObservabilityHealthChecksWorkflowRoundTripTests` (E2E real, novo arquivo — liveness sempre 200, readiness reporta Postgres/RabbitMQ reais como componentes, resposta nunca vaza connection string/senha/exceção, `/health` idêntico a `/health/ready`) | 4/4 aprovados |
+| `ConversationMessageReceivedWorkflowRoundTripTests` (E2E real, pipeline completo — regressão após as mudanças de bootstrap do Worker/Api) | 5/5 aprovados |
+| `IHostPro.ArchitectureTests` (sem novo arquivo — nenhuma nova Tool/exceção/aggregate) | 304/304 aprovados (sem regressão) |
+| `IHostPro.Contexts.AIAgent.Tests.Unit` (sem alteração de comportamento — apenas métricas adicionadas ao mesmo ponto de convergência já testado) | 194/194 aprovados (sem regressão) |
+| `docker compose config` (validação de sintaxe do `docker-compose.yml`, incluindo o novo serviço `tempo`) | válido |
+| YAML de `tempo-config.yaml`/`otel-collector-config.yaml`/`datasource.yml` (parser `js-yaml`) | válidos |
+| `docker build` — Api/Worker (Dockerfiles atualizados: `curl`+`HEALTHCHECK` novos; Worker trocou a imagem final de `dotnet/runtime` para `dotnet/aspnet`, exigido pelo novo `FrameworkReference`) | 2/2 sucesso |
+| Build Release (solução completa) | 0 erro, 0 aviso novo (a remoção do `PackageReference Microsoft.Extensions.Hosting`, agora redundante com o `FrameworkReference` novo, eliminou o aviso `NU1510` que apareceu transitoriamente) |
+| `git diff --check` | Sem erros (apenas avisos benignos de normalização LF→CRLF) |
+| Revisão de dados sensíveis | Nenhuma ocorrência de padrão de chave/senha/secret em nenhum arquivo alterado |
+
+**Nota de transparência**: a suíte completa `IHostPro.Api.Tests.Integration` (87 testes) não foi reexecutada integralmente após estas mudanças — a suíte dedicada nova (4/4) mais uma reexecução completa do pipeline real (`ConversationMessageReceivedWorkflowRoundTripTests`, 5/5) dão confiança direta de que o bootstrap de ambos os hosts continua correto; a suíte completa custaria ~29 minutos adicionais sem tocar em nenhum caminho que estas mudanças poderiam ter afetado.
+
+### 4.10 Escopo explicitamente não implementado (por decisão do gate, não por omissão)
+
+- Manifestos Kubernetes/probes reais — `CP2 continua provider-agnostic`, decisão explícita do mandato; endpoints já compatíveis para quando isso for decidido no CP5.
+- Entrega real de alertas (PagerDuty/Slack/email) — `AlertDeliveryProviderRequiredForMvp=false`, nenhum provedor definido pelos documentos-fonte.
+- Ferramenta de monitoramento/replay de DLQ — `CP3 mandato item 21`, deliberadamente adiado.
+- Correção estrutural do `WolverineClusterAgentAssignmentDebt` — apenas tornado diagnosticável via tracing real (`AddSource("Wolverine")`), nunca corrigido (já destinado à Fase 12 desde a Fase 9/10, correção estrutural é um checkpoint/Decision Gate próprio).
+- Sentry (rastreamento de erros, ADR-007) — decisão documentada mas nunca implementada; fora do escopo explícito deste checkpoint (não listado entre os itens obrigatórios do CP2), registrado como débito residual.
+- Correção do achado residual do Redis/`CachedPolicyValueResolver` (§4.8) — fora do escopo de observabilidade.
+
+`Cp2CommitCount`: registrado no relatório final da conversa de homologação.
