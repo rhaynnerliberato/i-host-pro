@@ -57,9 +57,20 @@ public static class ExternalIntegrationsCommandDispatchExtensions
 
         // Fase 9, Checkpoint 2.2 — WhatsAppTemplateMapping admin commands/
         // queries, same TenantTransactionBehavior wiring as WhatsAppIntegration
-        // above. No audit behavior: a template mapping carries no secret and
-        // the CP2.1.1 audit gate was scoped specifically to credential/config
-        // mutation (WhatsAppIntegration) — not reused speculatively here.
+        // above.
+        //
+        // Fase 12, Checkpoint 4 (Security/Secrets/LGPD Hardening) — the "no
+        // audit behavior" note that used to be here is corrected:
+        // ActorUserId was always carried by the command but never read
+        // anywhere. AuditConfigureWhatsAppTemplateMappingBehavior closes that
+        // gap by cloning AuditConfigureWhatsAppIntegrationBehavior's own
+        // pattern exactly (same registration order — outermost, wrapping
+        // TenantTransactionBehavior below — for the same reason: "Success"
+        // must log only after the inner transaction genuinely commits).
+        services.AddScoped<
+            IPipelineBehavior<ConfigureWhatsAppTemplateMappingCommand, Result<WhatsAppTemplateMappingResult>>,
+            AuditConfigureWhatsAppTemplateMappingBehavior>();
+
         services.AddScoped<
             IPipelineBehavior<ConfigureWhatsAppTemplateMappingCommand, Result<WhatsAppTemplateMappingResult>>,
             TenantTransactionBehavior<ConfigureWhatsAppTemplateMappingCommand, Result<WhatsAppTemplateMappingResult>, ExternalIntegrationsDbContext>>();
