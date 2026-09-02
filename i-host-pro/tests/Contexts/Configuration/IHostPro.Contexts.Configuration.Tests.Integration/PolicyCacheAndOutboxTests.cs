@@ -300,6 +300,98 @@ public class PolicyCacheAndOutboxTests : IClassFixture<PolicyCacheAndOutboxTests
             "invalidation is deliberately per (tenantId, policyCode), not per exact scope — a Tenant-level change can affect every Property that inherits it, and those cache entries cannot be enumerated individually");
     }
 
+    // ---- Redis outage resilience (Fase 12, CP2 final-validation Gate 2) ----
+
+    /// <summary>
+    /// Empirical proof — not just a reading of <see cref="RedisPolicyValueCache"/>'s
+    /// own doc comment — that <see cref="CachedPolicyValueResolver"/>'s claimed
+    /// fallback to PostgreSQL actually works end to end: resolves a real policy
+    /// through a real Redis cache (populating it), stops that Redis container
+    /// mid-test (a genuine, controlled outage, not a mock), then resolves the
+    /// very same policy again and asserts <see cref="IEarlyCheckInPolicyReader"/>
+    /// still returns the correct value. Uses its own dedicated Redis container
+    /// (never the fixture's shared one) so this destructive action cannot affect
+    /// any other test in this class — mirrors <see cref="BuildHostWithRabbitMqAsync"/>'s
+    /// own per-test-method container technique for exactly the same reason.
+    /// </summary>
+    [Fact]
+    public async Task A_policy_resolution_still_succeeds_through_Postgres_after_its_dedicated_Redis_is_stopped_mid_test()
+    {
+        var redisContainer = new RedisBuilder().WithImage("redis:7-alpine").Build();
+        await redisContainer.StartAsync();
+        try
+        {
+            var host = await BuildHostWithDedicatedRedisAsync(redisContainer);
+            try
+            {
+                var tenantId = Guid.NewGuid();
+                var created = await CreateEarlyCheckInVersionAsync(host, tenantId, expectedVersion: null, allowed: true);
+                created.IsSuccess.Should().BeTrue();
+
+                var beforeStop = await ResolveAsync(host, tenantId);
+                beforeStop.Status.Should().Be(PolicyReadStatus.Resolved);
+                beforeStop.Value!.Allowed.Should().BeTrue("this first resolution should populate the dedicated Redis cache");
+
+                await redisContainer.StopAsync();
+
+                var afterStop = await ResolveAsync(host, tenantId);
+                afterStop.Status.Should().Be(
+                    PolicyReadStatus.Resolved,
+                    "RedisPolicyValueCache swallows the connection failure and reports a cache miss, which CachedPolicyValueResolver falls through to PostgreSQL for — resolution must still succeed with Redis down");
+                afterStop.Value!.Allowed.Should().BeTrue();
+            }
+            finally
+            {
+                await host.StopAsync();
+                host.Dispose();
+            }
+        }
+        finally
+        {
+            await redisContainer.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// Same Postgres connection/schema as the fixture's own shared host (already
+    /// migrated/provisioned by <see cref="Fixture.InitializeAsync"/>), but its own
+    /// dedicated Redis — mirrors <see cref="BuildHostWithRabbitMqAsync"/> exactly,
+    /// minus the RabbitMQ wiring (this test never publishes anything, same as the
+    /// fixture's own shared host).
+    /// </summary>
+    private async Task<IHost> BuildHostWithDedicatedRedisAsync(RedisContainer redisContainer)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:Configuration"] = _fixture.AppConnectionString,
+            ["Configuration:PolicyCache:ConnectionString"] = redisContainer.GetConnectionString(),
+        }).Build();
+
+        var hostBuilder = Host.CreateApplicationBuilder();
+        hostBuilder.Services.AddScoped<ITenantContext, TenantContext>();
+        hostBuilder.Services.AddConfigurationModule(configuration);
+        hostBuilder.Services.AddConfigurationCommandDispatch();
+        hostBuilder.UseWolverine(opts =>
+        {
+            opts.PersistMessagesWithPostgresql(_fixture.AppConnectionString, MainSchema);
+            opts.EnrollAncillaryPostgresqlOutbox(_fixture.AppConnectionString, ConfigurationOutboxSchema, typeof(ConfigurationDbContext));
+            opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+            opts.UseEntityFrameworkCoreTransactions();
+        });
+
+        var host = hostBuilder.Build();
+        await host.StartAsync();
+        return host;
+    }
+
+    private static async Task<PolicyReadResult<EarlyCheckInPolicy>> ResolveAsync(IHost host, Guid tenantId, Guid? propertyId = null)
+    {
+        using var scope = host.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(tenantId);
+        var reader = scope.ServiceProvider.GetRequiredService<IEarlyCheckInPolicyReader>();
+        return await reader.GetEffectiveAsync(tenantId, propertyId);
+    }
+
     // ---- Outbox ----
 
     private const string ConfigurationEventsExchange = "configuration-events-test";

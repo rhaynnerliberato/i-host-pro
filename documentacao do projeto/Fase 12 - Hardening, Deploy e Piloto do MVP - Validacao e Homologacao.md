@@ -182,9 +182,26 @@ Registrado explicitamente, sem nenhum provedor de entrega (`AlertDeliveryProvide
 
 Nenhum vazamento encontrado — analisado por comportamento padrão documentado de cada instrumentação, nenhuma delas configurada para enriquecer com dados de requisição/resposta: `AddHttpClientInstrumentation()` captura apenas método/host/path/status/duração, nunca headers (logo nunca `Authorization`/`x-api-key`) nem corpo — nenhum `EnrichWithHttpRequestMessage` foi adicionado. `AddNpgsql()` pode capturar o texto do comando SQL como atributo de span, mas o EF Core (usado em toda a base de código, confirmado em todo o histórico de queries já observado nesta sessão) sempre parametriza — nunca interpola valores literais no texto do comando, então mesmo um `db.statement` capturado nunca contém `GuestPhone`/segredo real. Wolverine tagueia spans com tipo/destino da mensagem, nunca o corpo serializado. As métricas de IA (§4.5) usam apenas tags de enum fechado. O `ObservabilityHealthCheckResponseWriter` (§4.4) nunca serializa `Description`/`Exception`. Testes automatizados (`ObservabilityHealthChecksWorkflowRoundTripTests`, novo) confirmam isso empiricamente contra o endpoint real.
 
-### 4.8 Achado residual, fora do escopo deste checkpoint
+### 4.8 Correção factual (validação final do CP2) — o fallback para Postgres existe e foi comprovado empiricamente
 
-Durante a investigação de saúde do Redis, confirmado que `CachedPolicyValueResolver` não tem fallback para Postgres quando o Redis está indisponível (§4.4) — em qualquer ambiente sem um Redis real acessível em `Configuration:PolicyCache:ConnectionString` (por exemplo, a suíte `IHostPro.Api.Tests.Integration` completa, cujas Fixtures apontam para `localhost:6379` sem provisionar um Redis via Testcontainers), qualquer interação que dependa de `AI_AGENT_BEHAVIOR`/`EARLY_CHECKIN`/`LATE_CHECKOUT` provavelmente falharia. Isso é uma característica pré-existente da Fase 5/11, não introduzida por este checkpoint — mas relevante para a prontidão de CI (o pipeline do CP1 depende de um `ihostpro-redis` real estar acessível em `localhost:6379` no runner, o que não é verdade por padrão no GitHub Actions). Registrado por transparência, não corrigido — corrigi-lo exigiria ou (a) resiliência nova em Configuration & Policy, ou (b) provisionar Redis via Testcontainers nas Fixtures do `Api.Tests.Integration`, ambos fora do escopo de "Observability Finalization".
+A afirmação original desta seção — que `CachedPolicyValueResolver` não tem fallback para Postgres quando o Redis está indisponível — estava **incorreta**. Foi baseada em uma investigação incompleta durante o CP2 (apenas `CachedPolicyValueResolver.cs` foi inspecionado por try/catch; a camada abaixo, `RedisPolicyValueCache.cs`, não foi lida).
+
+Uma revalidação final (Gate 2 da validação de encerramento do CP2) confirmou, por leitura de código E por prova empírica, que o fallback **existe e funciona**: `RedisPolicyValueCache.TryGetAsync`/`SetAsync` envolvem toda operação Redis em `try/catch (Exception ex) when (ex is not OperationCanceledException)`, registram um `LogWarning` e retornam "cache miss" em vez de propagar a exceção — o próprio comentário XML da classe já documentava esse comportamento como deliberado. `CachedPolicyValueResolver` interpreta esse "miss" normalmente e recorre ao resolvedor real, apoiado em PostgreSQL, que permanece autoritativo mesmo com o Redis fora do ar.
+
+A prova empírica (não apenas leitura de código) foi feita em `PolicyCacheAndOutboxTests.A_policy_resolution_still_succeeds_through_Postgres_after_its_dedicated_Redis_is_stopped_mid_test` (novo teste, Testcontainers Redis dedicado — nunca o compartilhado pela fixture da classe): resolve uma política real (populando o cache), para o container Redis dedicado em pleno teste (indisponibilidade real e controlada, não um mock), e resolve a mesma política novamente — a segunda resolução continua retornando o valor correto, através do PostgreSQL. Teste aprovado (1/1).
+
+Complementarmente, um experimento controlado único (não commitado — manipula o container de desenvolvimento `ihostpro-redis` pelo nome fixo, não portável a CI) confirmou os quatro endpoints reais de health sob indisponibilidade real do Redis:
+
+| Endpoint | Redis up | Redis down |
+|---|---|---|
+| Api `/health/live` | 200 Healthy | 200 Healthy (nunca toca dependência) |
+| Api `/health/ready` | 200 Healthy (postgres/rabbitmq/redis Healthy) | 200 **Degraded** (postgres/rabbitmq Healthy, redis Degraded) |
+| Worker `/health/live` | 200 Healthy | 200 Healthy |
+| Worker `/health/ready` | 200 Healthy | 200 **Degraded** |
+
+Nunca `Unhealthy`/503 em nenhum dos quatro casos — confirma que a classificação `failureStatus: Degraded` do Redis (§4.4) é semanticamente coerente com o comportamento real: Api e Worker continuam operacionais e servindo os casos de uso principais com o Redis fora do ar, apenas sem a otimização de cache.
+
+Consequência prática: a classificação de saúde `Redis = Degraded` (§4.4) já estava correta — Redis é, de fato, apenas uma otimização de latência, nunca uma dependência rígida para `EARLY_CHECKIN`/`LATE_CHECKOUT`/`AI_AGENT_BEHAVIOR`. O risco de prontidão de CI mencionado na versão anterior desta seção (pipeline do CP1 sem um `ihostpro-redis` real acessível em `localhost:6379` no runner) também não se sustenta: sem Redis alcançável, toda leitura de cache vira "miss" e cai no PostgreSQL — mais lento (sem cache), nunca funcionalmente quebrado. Nenhum código de produção foi alterado por esta correção — apenas o registro factual desta seção. Nenhum débito de resiliência (`RedisPolicyCacheResilienceDebt`) é registrado para a Fase 12/CP3, pois a investigação não encontrou uma lacuna real a resolver.
 
 ### 4.9 Testes — evidência
 
@@ -201,7 +218,7 @@ Durante a investigação de saúde do Redis, confirmado que `CachedPolicyValueRe
 | `git diff --check` | Sem erros (apenas avisos benignos de normalização LF→CRLF) |
 | Revisão de dados sensíveis | Nenhuma ocorrência de padrão de chave/senha/secret em nenhum arquivo alterado |
 
-**Nota de transparência**: a suíte completa `IHostPro.Api.Tests.Integration` (87 testes) não foi reexecutada integralmente após estas mudanças — a suíte dedicada nova (4/4) mais uma reexecução completa do pipeline real (`ConversationMessageReceivedWorkflowRoundTripTests`, 5/5) dão confiança direta de que o bootstrap de ambos os hosts continua correto; a suíte completa custaria ~29 minutos adicionais sem tocar em nenhum caminho que estas mudanças poderiam ter afetado.
+**Atualização (validação final do CP2)**: a suíte completa `IHostPro.Api.Tests.Integration` foi reexecutada integralmente (não apenas o subconjunto focado citado acima) como regressão final antes de declarar o CP2 definitivamente homologado — `FullApiIntegrationTotal=93`, `Passed=93`, `Failed=0`, `Skipped=0`, duração 20m27s, `ihostpro-rabbitmq` temporariamente parado e restaurado ao final (mesma disciplina de porta 5672 já documentada nesta sessão). Os três testes reais gated a credencial externa (`AnthropicRealProofTests`, `MetaWhatsAppSandboxProofTests`, `AnthropicRealAgentWorkflowRoundTripTests`) foram incluídos na execução mas retornaram trivialmente (sem nenhuma chamada de rede real) por ausência de credencial configurada neste ambiente — nunca reexecutados de fato, conforme instruído.
 
 ### 4.10 Escopo explicitamente não implementado (por decisão do gate, não por omissão)
 
@@ -210,6 +227,6 @@ Durante a investigação de saúde do Redis, confirmado que `CachedPolicyValueRe
 - Ferramenta de monitoramento/replay de DLQ — `CP3 mandato item 21`, deliberadamente adiado.
 - Correção estrutural do `WolverineClusterAgentAssignmentDebt` — apenas tornado diagnosticável via tracing real (`AddSource("Wolverine")`), nunca corrigido (já destinado à Fase 12 desde a Fase 9/10, correção estrutural é um checkpoint/Decision Gate próprio).
 - Sentry (rastreamento de erros, ADR-007) — decisão documentada mas nunca implementada; fora do escopo explícito deste checkpoint (não listado entre os itens obrigatórios do CP2), registrado como débito residual.
-- Correção do achado residual do Redis/`CachedPolicyValueResolver` (§4.8) — fora do escopo de observabilidade.
+- ~~Correção do achado residual do Redis/`CachedPolicyValueResolver`~~ — retirado: a validação final do CP2 (§4.8) comprovou que o achado original era factualmente incorreto (o fallback para Postgres já existe e funciona); nenhuma correção de código pendente, nenhum débito de resiliência registrado.
 
 `Cp2CommitCount`: registrado no relatório final da conversa de homologação.
