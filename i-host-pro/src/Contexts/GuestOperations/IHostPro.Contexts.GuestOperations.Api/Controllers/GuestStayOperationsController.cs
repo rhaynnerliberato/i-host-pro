@@ -149,7 +149,7 @@ public sealed class GuestStayOperationsController : ControllerBase
             TenantId = identity.TenantId,
             ReservationId = reservationId,
             ActorType = "User",
-            ActorId = identity.UserId.ToString(),
+            ActorId = identity.UserId,
         };
         var result = await _sender.Send(command, cancellationToken);
 

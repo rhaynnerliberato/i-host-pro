@@ -46,8 +46,10 @@ public class RecordGuestCheckedOutCommandHandlerTests
     };
 
     private static RecordGuestCheckedOutCommandHandler CreateHandler(
-        FakeGuestStayOperationReader reader, RecordingGuestStayOperationRepository repository, FakeIntegrationEventCollector collector) =>
-        new(reader, repository, collector, new PassThroughGuestOperationsTransactionExecutor(), new FixedTimeProvider(Now.AddMinutes(5)),
+        FakeGuestStayOperationReader reader, RecordingGuestStayOperationRepository repository, FakeIntegrationEventCollector collector,
+        RecordingGuestStayOperationAuditWriter? auditWriter = null) =>
+        new(reader, repository, collector, auditWriter ?? new RecordingGuestStayOperationAuditWriter(),
+            new PassThroughGuestOperationsTransactionExecutor(), new FixedTimeProvider(Now.AddMinutes(5)),
             NullLogger<RecordGuestCheckedOutCommandHandler>.Instance);
 
     [Fact]
@@ -57,7 +59,8 @@ public class RecordGuestCheckedOutCommandHandlerTests
         var reader = FakeGuestStayOperationReader.WithOperationIdResult(operation.Id);
         var repository = RecordingGuestStayOperationRepository.WithOperation(operation);
         var collector = new FakeIntegrationEventCollector();
-        var handler = CreateHandler(reader, repository, collector);
+        var auditWriter = new RecordingGuestStayOperationAuditWriter();
+        var handler = CreateHandler(reader, repository, collector, auditWriter);
 
         var result = await handler.Handle(BuildCommand(), CancellationToken.None);
 
@@ -68,6 +71,12 @@ public class RecordGuestCheckedOutCommandHandlerTests
         published.ReservationId.Should().Be(ReservationId);
         published.ActorType.Should().Be("User");
         published.ActorId.Should().Be(ActorId.ToString());
+
+        var audit = auditWriter.RecordedEntries.Should().ContainSingle().Which;
+        audit.GuestStayOperationId.Should().Be(operation.Id);
+        audit.Action.Should().Be(GuestStayOperationAuditAction.CheckedOut);
+        audit.ActorType.Should().Be("User");
+        audit.ActorId.Should().Be(ActorId);
     }
 
     [Fact]

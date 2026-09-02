@@ -34,13 +34,15 @@ public class RequestGuestAccessDeliveryCommandHandlerTests
         TenantId = TenantId,
         ReservationId = ReservationId,
         ActorType = "User",
-        ActorId = ActorId.ToString(),
+        ActorId = ActorId,
     };
 
     private static RequestGuestAccessDeliveryCommandHandler CreateHandler(
         FakeGuestStayOperationReader reader, RecordingGuestStayOperationRepository repository,
-        FakeReservationScheduleReader scheduleReader, FakeIntegrationEventCollector collector) =>
-        new(reader, repository, scheduleReader, collector, new PassThroughGuestOperationsTransactionExecutor(),
+        FakeReservationScheduleReader scheduleReader, FakeIntegrationEventCollector collector,
+        RecordingGuestStayOperationAuditWriter? auditWriter = null) =>
+        new(reader, repository, scheduleReader, collector, auditWriter ?? new RecordingGuestStayOperationAuditWriter(),
+            new PassThroughGuestOperationsTransactionExecutor(), new FixedTimeProvider(Now.AddMinutes(5)),
             NullLogger<RequestGuestAccessDeliveryCommandHandler>.Instance);
 
     [Fact]
@@ -51,7 +53,8 @@ public class RequestGuestAccessDeliveryCommandHandlerTests
         var repository = RecordingGuestStayOperationRepository.WithOperation(operation);
         var scheduleReader = FakeReservationScheduleReader.WithSchedule(ConfirmedSchedule());
         var collector = new FakeIntegrationEventCollector();
-        var handler = CreateHandler(reader, repository, scheduleReader, collector);
+        var auditWriter = new RecordingGuestStayOperationAuditWriter();
+        var handler = CreateHandler(reader, repository, scheduleReader, collector, auditWriter);
 
         var result = await handler.Handle(BuildCommand(), CancellationToken.None);
 
@@ -64,6 +67,37 @@ public class RequestGuestAccessDeliveryCommandHandlerTests
         published.AggregateType.Should().Be("GuestStayOperation");
         published.ActorType.Should().Be("User");
         published.ActorId.Should().Be(ActorId.ToString());
+
+        var audit = auditWriter.RecordedEntries.Should().ContainSingle().Which;
+        audit.GuestStayOperationId.Should().Be(operation.Id);
+        audit.Action.Should().Be(GuestStayOperationAuditAction.AccessDeliveryRequested);
+        audit.ActorType.Should().Be("User");
+        audit.ActorId.Should().Be(ActorId);
+    }
+
+    [Fact]
+    public async Task Handle_records_ActorType_AI_when_the_AI_Agent_triggers_the_request()
+    {
+        var operation = CreateActiveOperation();
+        var reader = FakeGuestStayOperationReader.WithOperationIdResult(operation.Id);
+        var repository = RecordingGuestStayOperationRepository.WithOperation(operation);
+        var scheduleReader = FakeReservationScheduleReader.WithSchedule(ConfirmedSchedule());
+        var collector = new FakeIntegrationEventCollector();
+        var auditWriter = new RecordingGuestStayOperationAuditWriter();
+        var handler = CreateHandler(reader, repository, scheduleReader, collector, auditWriter);
+        var agentSessionId = Guid.NewGuid();
+        var command = BuildCommand() with { ActorType = "AI", ActorId = agentSessionId };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var published = collector.EnqueuedEvents.Should().ContainSingle().Which.Should().BeOfType<GuestAccessDeliveryRequested>().Which;
+        published.ActorType.Should().Be("AI");
+        published.ActorId.Should().Be(agentSessionId.ToString());
+
+        var audit = auditWriter.RecordedEntries.Should().ContainSingle().Which;
+        audit.ActorType.Should().Be("AI");
+        audit.ActorId.Should().Be(agentSessionId, "never a fabricated human UserId — the AI Agent's own session id");
     }
 
     [Fact]

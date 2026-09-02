@@ -65,6 +65,8 @@ public static class GuestOperationsModuleExtensions
         services.AddScoped<IGuestOperationsTransactionExecutor, GuestOperationsOutboxTransactionExecutor>();
         services.AddScoped<IRepository<GuestStayOperation, Guid>, GuestStayOperationRepository>();
         services.AddScoped<IGuestStayOperationReader, GuestStayOperationReader>();
+        // Fase 12, Checkpoint 4 — Guest Access Durable Audit Decision Gate.
+        services.AddScoped<IGuestStayOperationAuditWriter, GuestStayOperationAuditWriter>();
 
         services.AddScoped<IRepository<EarlyCheckInRequest, Guid>, EarlyCheckInRequestRepository>();
         services.AddScoped<IEarlyCheckInRequestReader, EarlyCheckInRequestReader>();

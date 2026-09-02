@@ -30,7 +30,7 @@ public class RequestGuestAccessDeliveryToolTests
                 TenantId = Context.TenantId,
                 ReservationId = Context.ReservationId,
                 ActorType = "AI",
-                ActorId = Context.AgentSessionId.ToString(),
+                ActorId = Context.AgentSessionId,
             },
             Result.Success(new GuestStayOperationResult(
                 Guid.NewGuid(), Context.ReservationId, Guid.NewGuid(), "active", null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)));
@@ -52,7 +52,7 @@ public class RequestGuestAccessDeliveryToolTests
                 TenantId = Context.TenantId,
                 ReservationId = Context.ReservationId,
                 ActorType = "AI",
-                ActorId = Context.AgentSessionId.ToString(),
+                ActorId = Context.AgentSessionId,
             },
             Result.Success(new GuestStayOperationResult(
                 Guid.NewGuid(), Context.ReservationId, Guid.NewGuid(), "active", null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)));
@@ -76,7 +76,7 @@ public class RequestGuestAccessDeliveryToolTests
                 TenantId = Context.TenantId,
                 ReservationId = Context.ReservationId,
                 ActorType = "AI",
-                ActorId = Context.AgentSessionId.ToString(),
+                ActorId = Context.AgentSessionId,
             },
             Result.Success(new GuestStayOperationResult(
                 Guid.NewGuid(), Context.ReservationId, Guid.NewGuid(), "active", null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow)));
@@ -97,7 +97,7 @@ public class RequestGuestAccessDeliveryToolTests
                 TenantId = Context.TenantId,
                 ReservationId = Context.ReservationId,
                 ActorType = "AI",
-                ActorId = Context.AgentSessionId.ToString(),
+                ActorId = Context.AgentSessionId,
             },
             Result.Failure<GuestStayOperationResult>(new Error("GuestStayOperationAlreadyCheckedOut", "GuestStayOperationAlreadyCheckedOut")));
         var tool = new RequestGuestAccessDeliveryTool(dispatcher);

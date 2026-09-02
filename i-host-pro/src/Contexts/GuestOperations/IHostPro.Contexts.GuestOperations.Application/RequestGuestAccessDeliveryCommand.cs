@@ -28,6 +28,6 @@ public sealed record RequestGuestAccessDeliveryCommand : ICommand<GuestStayOpera
     /// <summary>"User" or "AI" — the two real callers of this command (mandate CP4 §8).</summary>
     public required string ActorType { get; init; }
 
-    /// <summary>The authenticated administrator's id (ActorType "User") or the AI Agent's own session id (ActorType "AI") — never a fabricated human user.</summary>
-    public string? ActorId { get; init; }
+    /// <summary>The authenticated administrator's id (ActorType "User") or the AI Agent's own session id (ActorType "AI") — never a fabricated human user, always required.</summary>
+    public required Guid ActorId { get; init; }
 }

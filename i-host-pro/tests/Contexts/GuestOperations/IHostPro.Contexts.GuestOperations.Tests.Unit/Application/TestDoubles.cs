@@ -56,6 +56,13 @@ internal sealed class FakeIntegrationEventCollector : IIntegrationEventCollector
     }
 }
 
+internal sealed class RecordingGuestStayOperationAuditWriter : IGuestStayOperationAuditWriter
+{
+    public List<GuestStayOperationAuditEntry> RecordedEntries { get; } = [];
+
+    public void Record(GuestStayOperationAuditEntry entry) => RecordedEntries.Add(entry);
+}
+
 /// <summary>No real transaction/outbox — this unit test exercises handler logic only; the real executor is covered by the integration/E2E suite.</summary>
 internal sealed class PassThroughGuestOperationsTransactionExecutor : IGuestOperationsTransactionExecutor
 {

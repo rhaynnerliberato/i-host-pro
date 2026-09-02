@@ -37,6 +37,7 @@ public sealed class RecordGuestCheckedOutCommandHandler : ICommandHandler<Record
     private readonly IGuestStayOperationReader _reader;
     private readonly IRepository<GuestStayOperation, Guid> _repository;
     private readonly IIntegrationEventCollector _eventCollector;
+    private readonly IGuestStayOperationAuditWriter _auditWriter;
     private readonly IGuestOperationsTransactionExecutor _transactionExecutor;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<RecordGuestCheckedOutCommandHandler> _logger;
@@ -45,6 +46,7 @@ public sealed class RecordGuestCheckedOutCommandHandler : ICommandHandler<Record
         IGuestStayOperationReader reader,
         IRepository<GuestStayOperation, Guid> repository,
         IIntegrationEventCollector eventCollector,
+        IGuestStayOperationAuditWriter auditWriter,
         IGuestOperationsTransactionExecutor transactionExecutor,
         TimeProvider timeProvider,
         ILogger<RecordGuestCheckedOutCommandHandler> logger)
@@ -52,6 +54,7 @@ public sealed class RecordGuestCheckedOutCommandHandler : ICommandHandler<Record
         _reader = reader;
         _repository = repository;
         _eventCollector = eventCollector;
+        _auditWriter = auditWriter;
         _transactionExecutor = transactionExecutor;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -110,6 +113,10 @@ public sealed class RecordGuestCheckedOutCommandHandler : ICommandHandler<Record
                 ActorId = command.ActorId.ToString(),
                 ReservationId = command.ReservationId,
             });
+
+            _auditWriter.Record(GuestStayOperationAuditEntry.Record(
+                Guid.NewGuid(), command.TenantId, operation.Id, GuestStayOperationAuditAction.CheckedOut,
+                "User", command.ActorId, now));
 
             _logger.LogInformation(
                 "Guest checked out for tenant {TenantId} reservationId {ReservationId}",

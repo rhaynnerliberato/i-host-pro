@@ -43,7 +43,9 @@ public sealed class RequestGuestAccessDeliveryCommandHandler : ICommandHandler<R
     private readonly IRepository<GuestStayOperation, Guid> _repository;
     private readonly IReservationScheduleReader _scheduleReader;
     private readonly IIntegrationEventCollector _eventCollector;
+    private readonly IGuestStayOperationAuditWriter _auditWriter;
     private readonly IGuestOperationsTransactionExecutor _transactionExecutor;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<RequestGuestAccessDeliveryCommandHandler> _logger;
 
     public RequestGuestAccessDeliveryCommandHandler(
@@ -51,14 +53,18 @@ public sealed class RequestGuestAccessDeliveryCommandHandler : ICommandHandler<R
         IRepository<GuestStayOperation, Guid> repository,
         IReservationScheduleReader scheduleReader,
         IIntegrationEventCollector eventCollector,
+        IGuestStayOperationAuditWriter auditWriter,
         IGuestOperationsTransactionExecutor transactionExecutor,
+        TimeProvider timeProvider,
         ILogger<RequestGuestAccessDeliveryCommandHandler> logger)
     {
         _reader = reader;
         _repository = repository;
         _scheduleReader = scheduleReader;
         _eventCollector = eventCollector;
+        _auditWriter = auditWriter;
         _transactionExecutor = transactionExecutor;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -109,10 +115,14 @@ public sealed class RequestGuestAccessDeliveryCommandHandler : ICommandHandler<R
                 AggregateType = "GuestStayOperation",
                 CorrelationId = Guid.NewGuid(),
                 ActorType = command.ActorType,
-                ActorId = command.ActorId,
+                ActorId = command.ActorId.ToString(),
                 ReservationId = command.ReservationId,
                 PropertyId = operation.PropertyId,
             });
+
+            _auditWriter.Record(GuestStayOperationAuditEntry.Record(
+                Guid.NewGuid(), command.TenantId, operation.Id, GuestStayOperationAuditAction.AccessDeliveryRequested,
+                command.ActorType, command.ActorId, _timeProvider.GetUtcNow()));
 
             _logger.LogInformation(
                 "Guest access delivery requested for tenant {TenantId} reservationId {ReservationId}",
