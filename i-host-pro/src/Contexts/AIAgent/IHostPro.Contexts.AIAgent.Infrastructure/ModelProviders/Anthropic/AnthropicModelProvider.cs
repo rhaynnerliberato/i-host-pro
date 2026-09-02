@@ -149,6 +149,17 @@ public sealed class AnthropicModelProvider : IModelProvider
             LogOutcome("NetworkError", stopwatch, null, null, null);
             throw new ModelProviderException("Anthropic network error.");
         }
+        catch (Polly.CircuitBreaker.BrokenCircuitException)
+        {
+            // Fase 12, Checkpoint 3 — the circuit breaker rejected this call
+            // locally, without a real HTTP attempt (repeated recent failures
+            // already exceeded the configured threshold). Transient, exactly
+            // like Timeout/NetworkError above — the existing single
+            // application-level retry (ConversationMessageReceivedProcessor)
+            // may still succeed once the breaker recovers.
+            LogOutcome("CircuitOpen", stopwatch, null, null, null);
+            throw new ModelProviderException("Anthropic circuit breaker is open.");
+        }
 
         if (!response.IsSuccessStatusCode)
         {

@@ -496,19 +496,46 @@ public class ExternalIntegrationsDependencyTests
         }
     }
 
-    /// <summary>Mandate §12/§13: zero automatic retry — no resilience/Polly package is referenced by Infrastructure.</summary>
+    /// <summary>
+    /// Fase 12, Checkpoint 3, Decision Gate amendment (ADR-031) — narrows,
+    /// never removes, the original Fase 9 rule. Polly/Microsoft.Extensions.Http.Resilience
+    /// is now permitted in ExternalIntegrations.Infrastructure and
+    /// AIAgent.Infrastructure STRICTLY for HTTP circuit breaking (Meta,
+    /// Anthropic) — but every OTHER layer of EVERY Bounded Context in the
+    /// solution (Domain/Application/Contracts/Api — business code, never
+    /// Infrastructure/Host) must still never reference it. This is a
+    /// STRONGER assertion than the original single-project rule it
+    /// replaces: solution-wide, not just ExternalIntegrations.Infrastructure.
+    /// "No automatic retry" itself is proven behaviorally, not by assembly
+    /// reference (see <c>MetaWhatsAppMessagingProviderCircuitBreakerTests</c>/
+    /// <c>AnthropicModelProviderCircuitBreakerTests</c>: one simulated
+    /// failure produces exactly one real HTTP attempt).
+    /// </summary>
     [Fact]
-    public void Infrastructure_References_No_Resilience_Or_Polly_Package()
+    public void Only_The_Two_Approved_Infrastructure_Projects_May_Reference_Resilience_Or_Polly()
     {
-        var referencedAssemblyNames = typeof(ExternalIntegrationsDbContext).Assembly
-            .GetReferencedAssemblies()
-            .Select(a => a.Name)
-            .Where(name => name is not null)
+        const string reason =
+            "Fase 12 CP3 Decision Gate (ADR-031) permits Polly/Microsoft.Extensions.Http.Resilience ONLY in " +
+            "AIAgent.Infrastructure and ExternalIntegrations.Infrastructure, strictly for HTTP circuit breaking — " +
+            "never in any Domain/Application/Contracts/Api project, never in any other Bounded Context's Infrastructure.";
+
+        var approvedAssemblyNames = new[]
+        {
+            "IHostPro.Contexts.AIAgent.Infrastructure",
+            "IHostPro.Contexts.ExternalIntegrations.Infrastructure",
+        };
+
+        var offendingAssemblies = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(a => a.GetName().Name is { } name && name.StartsWith("IHostPro.", StringComparison.Ordinal))
+            .Where(a => !approvedAssemblyNames.Contains(a.GetName().Name))
+            .Where(a => a.GetReferencedAssemblies().Any(r =>
+                r.Name is { } refName &&
+                (refName.Contains("Polly", StringComparison.OrdinalIgnoreCase) ||
+                 refName.Contains("Resilience", StringComparison.OrdinalIgnoreCase))))
+            .Select(a => a.GetName().Name)
             .ToList();
 
-        referencedAssemblyNames.Should().NotContain(name =>
-            name!.Contains("Polly", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("Resilience", StringComparison.OrdinalIgnoreCase));
+        offendingAssemblies.Should().BeEmpty(reason + " Found: " + string.Join(", ", offendingAssemblies));
     }
 
     /// <summary>Mandate §16: no entity anywhere in External Integrations declares a raw access-token-shaped property outside the established secret-REFERENCE naming.</summary>

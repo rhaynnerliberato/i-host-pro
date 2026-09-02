@@ -316,6 +316,29 @@ public class AnthropicModelProviderTests
         thrown.Which.IsPermanent.Should().BeFalse();
     }
 
+    /// <summary>
+    /// Fase 12, Checkpoint 3, Decision Gate amendment — proves
+    /// <see cref="AnthropicModelProvider"/>'s own catch/map logic in
+    /// isolation (a real <see cref="Polly.CircuitBreaker.BrokenCircuitException"/>,
+    /// simulated directly via <see cref="RecordingHttpMessageHandler.Throwing"/> —
+    /// decoupled from whether the real resilience pipeline actually throws
+    /// it, which <c>AnthropicCircuitBreakerTests</c> proves separately).
+    /// Transient, exactly like Timeout/NetworkError above — the existing
+    /// single application-level retry may still succeed once the breaker
+    /// recovers.
+    /// </summary>
+    [Fact]
+    public async Task GenerateAsync_throws_a_transient_exception_when_the_circuit_breaker_is_open()
+    {
+        var handler = RecordingHttpMessageHandler.Throwing(new Polly.CircuitBreaker.BrokenCircuitException());
+        var provider = BuildProvider(handler);
+
+        var act = async () => await provider.GenerateAsync(SimpleRequest, CancellationToken.None);
+
+        var thrown = await act.Should().ThrowAsync<ModelProviderException>();
+        thrown.Which.IsPermanent.Should().BeFalse();
+    }
+
     [Fact]
     public async Task GenerateAsync_propagates_a_caller_initiated_cancellation_instead_of_reclassifying_it()
     {

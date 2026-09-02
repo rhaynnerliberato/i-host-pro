@@ -43,7 +43,7 @@
     <!-- Structured logging in the command handlers (no-op/success/failure) —
          same abstractions-only package every other context's Application
          project uses, never the concrete logging implementation. -->
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
     <!-- RecordGuestCheckedInCommand/RecordGuestCheckedOutCommand are now
          HTTP-exposed (Checkpoint 2) — dispatched through Mediator like every
          other HTTP-facing command in this codebase (ICommand/ICommandHandler,

@@ -33,7 +33,7 @@
          structured logging (no-op/success outcomes) — same
          abstractions-only package every other context's Application project
          uses. -->
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
   </ItemGroup>
 
   <PropertyGroup>

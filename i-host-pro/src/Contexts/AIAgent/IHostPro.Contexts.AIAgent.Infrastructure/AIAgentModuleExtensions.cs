@@ -8,6 +8,8 @@ using IHostPro.Contexts.AIAgent.Infrastructure.ModelProviders.Anthropic;
 using IHostPro.Contexts.AIAgent.Infrastructure.Persistence;
 using IHostPro.Contexts.AIAgent.Infrastructure.ResponseDelivery;
 using IHostPro.Contexts.AIAgent.Infrastructure.Tools;
+using Polly;
+using Polly.CircuitBreaker;
 using IHostPro.Contexts.Communication.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -91,13 +93,64 @@ public static class AIAgentModuleExtensions
         {
             services.Configure<AnthropicOptions>(configuration.GetSection("AIAgent:Anthropic"));
 
-            services.AddHttpClient(AnthropicModelProvider.HttpClientName, (serviceProvider, client) =>
+            // Fase 12, Checkpoint 3 — circuit breaker options bound directly
+            // from IConfiguration here (never via DI/IOptions inside the
+            // resilience pipeline builder below, which runs at pipeline-build
+            // time, not per-request) — this checkpoint has no hot-reload
+            // requirement for these values.
+            var circuitBreakerOptions = configuration.GetSection("AIAgent:Anthropic:CircuitBreaker").Get<HttpCircuitBreakerOptions>()
+                ?? new HttpCircuitBreakerOptions();
+
+            var anthropicHttpClientBuilder = services.AddHttpClient(AnthropicModelProvider.HttpClientName, (serviceProvider, client) =>
             {
                 var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AnthropicOptions>>().Value;
                 var baseUrl = options.BaseUrl.EndsWith('/') ? options.BaseUrl : options.BaseUrl + "/";
                 client.BaseAddress = new Uri(baseUrl);
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
+
+            // Fase 12, Checkpoint 3, Decision Gate amendment — official
+            // Microsoft.Extensions.Http.Resilience circuit breaker ONLY
+            // (AddCircuitBreaker is the one stage added; no AddRetry/
+            // AddHedging/AddTimeout — never a second, competing retry
+            // mechanism alongside ConversationMessageReceivedProcessor's own
+            // already-homologated single application-level retry). Never
+            // opens for a permanent failure (400/401/403/404 — the exact
+            // same IsPermanentFailure classification AnthropicModelProvider
+            // itself already uses, reused here rather than duplicated) —
+            // only for network errors, timeouts, 429, and 5xx.
+            if (circuitBreakerOptions.Enabled)
+            {
+                anthropicHttpClientBuilder.AddResilienceHandler("anthropic-circuit-breaker", builder =>
+                {
+                    builder.AddCircuitBreaker(new CircuitBreakerStrategyOptions<HttpResponseMessage>
+                    {
+                        FailureRatio = circuitBreakerOptions.FailureRatio,
+                        MinimumThroughput = circuitBreakerOptions.MinimumThroughput,
+                        SamplingDuration = circuitBreakerOptions.SamplingDuration,
+                        BreakDuration = circuitBreakerOptions.BreakDuration,
+                        ShouldHandle = args => ValueTask.FromResult(
+                            args.Outcome.Exception is HttpRequestException or TaskCanceledException ||
+                            (args.Outcome.Result is { } response &&
+                                (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500))),
+                        OnOpened = _ =>
+                        {
+                            IHostPro.BuildingBlocks.Infrastructure.Resilience.CircuitBreakerTelemetry.RecordStateChange("Anthropic", "Opened");
+                            return ValueTask.CompletedTask;
+                        },
+                        OnClosed = _ =>
+                        {
+                            IHostPro.BuildingBlocks.Infrastructure.Resilience.CircuitBreakerTelemetry.RecordStateChange("Anthropic", "Closed");
+                            return ValueTask.CompletedTask;
+                        },
+                        OnHalfOpened = _ =>
+                        {
+                            IHostPro.BuildingBlocks.Infrastructure.Resilience.CircuitBreakerTelemetry.RecordStateChange("Anthropic", "HalfOpened");
+                            return ValueTask.CompletedTask;
+                        },
+                    });
+                });
+            }
 
             services.AddScoped<IModelProvider, AnthropicModelProvider>();
 

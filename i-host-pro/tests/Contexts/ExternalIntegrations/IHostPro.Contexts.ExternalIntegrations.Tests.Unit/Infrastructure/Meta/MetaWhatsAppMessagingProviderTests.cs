@@ -229,6 +229,26 @@ public class MetaWhatsAppMessagingProviderTests
         handler.Requests.Should().ContainSingle();
     }
 
+    /// <summary>
+    /// Fase 12, Checkpoint 3, Decision Gate amendment — a circuit-open
+    /// rejection is NOT DeliveryOutcomeUnknown, unlike Timeout/NetworkError
+    /// above: no HTTP attempt was made at all, so there is zero risk this
+    /// was actually delivered. TransientProviderFailure is the same
+    /// category MetaFailureCodes already uses for a real 5xx.
+    /// </summary>
+    [Fact]
+    public async Task SendAsync_maps_an_open_circuit_to_TransientProviderFailure_without_a_real_HTTP_attempt()
+    {
+        var handler = RecordingHttpMessageHandler.Throwing(new Polly.CircuitBreaker.BrokenCircuitException());
+        var provider = BuildProvider(handler, BuildIntegration(), BuildMapping());
+
+        var result = await provider.SendAsync(BuildRequest(), CancellationToken.None);
+
+        result.Accepted.Should().BeFalse();
+        result.FailureCategory.Should().Be(ProviderFailureCategory.TransientProviderFailure);
+        result.FailureCode.Should().Be("circuit_open");
+    }
+
     [Fact]
     public async Task SendAsync_propagates_a_caller_initiated_cancellation_instead_of_reclassifying_it_as_DeliveryOutcomeUnknown()
     {

@@ -55,7 +55,7 @@
     </PackageReference>
     <!-- Structured, PII-safe audit logging — same package/pattern already
          used by Identity.Application/Workflow.Application. -->
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
   </ItemGroup>
 
   <PropertyGroup>

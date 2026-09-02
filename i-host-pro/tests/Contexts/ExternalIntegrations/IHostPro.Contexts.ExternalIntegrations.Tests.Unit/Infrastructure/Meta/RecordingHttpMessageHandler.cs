@@ -20,6 +20,10 @@ internal sealed class RecordingHttpMessageHandler : HttpMessageHandler
     public static RecordingHttpMessageHandler Throwing(Exception exception) =>
         new(_ => throw exception);
 
+    /// <summary>Fase 12, Checkpoint 3 — for circuit breaker tests that need a different response per call.</summary>
+    public static RecordingHttpMessageHandler With(Func<HttpRequestMessage, Task<HttpResponseMessage>> responder) =>
+        new(responder);
+
     public List<RecordedRequest> Requests { get; } = [];
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

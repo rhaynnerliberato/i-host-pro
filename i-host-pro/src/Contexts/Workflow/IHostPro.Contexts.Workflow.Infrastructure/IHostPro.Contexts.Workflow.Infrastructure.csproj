@@ -26,7 +26,7 @@
     <!-- Fase 8, Checkpoint 2.1: narrow, transport-level failure logging in
          WolverineWorkflowCommandDispatcher — never a duplicate of the
          business-level audit Workflow.Application already emits. -->
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
   </ItemGroup>
 
   <PropertyGroup>

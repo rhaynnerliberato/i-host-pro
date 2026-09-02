@@ -33,6 +33,37 @@ public sealed class AnthropicOptions
     public int MaxTokens { get; set; } = 2048;
 
     public AnthropicPricingOptions Pricing { get; set; } = new();
+
+    /// <summary>
+    /// Fase 12, Checkpoint 3 (Resilience &amp; Rate Limiting) — Decision Gate
+    /// amendment: HTTP circuit breaking via the official
+    /// <c>Microsoft.Extensions.Http.Resilience</c> package (never a
+    /// hand-rolled implementation, never a retry/hedging/fallback/timeout
+    /// stage — see <c>AIAgentModuleExtensions</c>'s own wiring comment).
+    /// </summary>
+    public HttpCircuitBreakerOptions CircuitBreaker { get; set; } = new();
+}
+
+/// <summary>
+/// No production-grade threshold is decided by this checkpoint — every
+/// default here is conservative for dev/homologation
+/// (<c>ProductionCircuitBreakerThresholdsRequired=true</c>, mirroring every
+/// other CP3 threshold's own reasoning).
+/// </summary>
+public sealed class HttpCircuitBreakerOptions
+{
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Fraction of calls (within <see cref="SamplingDuration"/>) that must be classified a failure before the circuit opens.</summary>
+    public double FailureRatio { get; set; } = 0.5;
+
+    /// <summary>Minimum number of calls within <see cref="SamplingDuration"/> before the failure ratio is even evaluated — avoids opening the circuit on a tiny, statistically meaningless sample.</summary>
+    public int MinimumThroughput { get; set; } = 4;
+
+    public TimeSpan SamplingDuration { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>How long the circuit stays OPEN before a single probe call (HALF-OPEN) is allowed through.</summary>
+    public TimeSpan BreakDuration { get; set; } = TimeSpan.FromSeconds(15);
 }
 
 /// <summary>

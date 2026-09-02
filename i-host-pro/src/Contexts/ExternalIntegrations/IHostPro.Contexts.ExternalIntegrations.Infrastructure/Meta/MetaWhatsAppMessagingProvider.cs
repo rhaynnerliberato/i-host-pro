@@ -105,6 +105,17 @@ public sealed class MetaWhatsAppMessagingProvider : IMessagingProvider
         {
             return OutcomeUnknown(request, stopwatch, "network_error");
         }
+        catch (Polly.CircuitBreaker.BrokenCircuitException)
+        {
+            // Fase 12, Checkpoint 3 — the circuit breaker rejected this call
+            // locally; unlike Timeout/NetworkError above, this is NOT
+            // DeliveryOutcomeUnknown — no HTTP attempt was made at all, so
+            // there is zero risk this was actually delivered.
+            // TransientProviderFailure is the same category MetaFailureCodes
+            // already uses for a real 5xx — semantically identical ("Meta is
+            // currently unavailable, safe/expected to recover").
+            return Reject(request, stopwatch, "circuit_open", ProviderFailureCategory.TransientProviderFailure);
+        }
 
         if (response.IsSuccessStatusCode)
         {

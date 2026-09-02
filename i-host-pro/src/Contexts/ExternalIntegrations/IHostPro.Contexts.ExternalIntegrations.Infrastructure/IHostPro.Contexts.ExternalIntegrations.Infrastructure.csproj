@@ -25,10 +25,17 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <!-- Fase 9, Checkpoint 2.2 — IHttpClientFactory for the real Meta Cloud
          API outbound connector (mandate §11: never `new HttpClient()` per
-         call). No Polly/Microsoft.Extensions.Http.Resilience package —
-         zero automatic retry is a deliberate design decision (mandate
-         §12/§13), not a gap to fill later. -->
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
+         call). -->
+    <!-- 10.0.11, not 10.0.10 — Microsoft.Extensions.Http.Resilience's own
+         transitive dependency requires >= 10.0.11; NU1605 otherwise. -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
+    <!-- Fase 12, Checkpoint 3 — Decision Gate amendment to the Fase 9 "no
+         Polly" decision, scoped STRICTLY to HTTP circuit breaking (see
+         ADR-031). Only AddCircuitBreaker is ever called against this
+         package — automatic retry remains false (Meta had none before this
+         checkpoint and still has none — a timeout/circuit-open still always
+         maps to DeliveryOutcomeUnknown, never a resend). -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.9.0" />
   </ItemGroup>
 
   <PropertyGroup>

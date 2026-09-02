@@ -12,6 +12,8 @@ using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Pix;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Polly;
+using Polly.CircuitBreaker;
 
 namespace IHostPro.Contexts.ExternalIntegrations.Infrastructure;
 
@@ -136,12 +138,61 @@ public static class ExternalIntegrationsModuleExtensions
         {
             services.Configure<MetaWhatsAppOptions>(configuration.GetSection("ExternalIntegrations:WhatsApp:Meta"));
 
-            services.AddHttpClient(MetaWhatsAppMessagingProvider.HttpClientName, (serviceProvider, client) =>
+            var metaHttpClientBuilder = services.AddHttpClient(MetaWhatsAppMessagingProvider.HttpClientName, (serviceProvider, client) =>
             {
                 var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<MetaWhatsAppOptions>>().Value;
                 client.BaseAddress = new Uri("https://graph.facebook.com/");
                 client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             });
+
+            // Fase 12, Checkpoint 3, Decision Gate amendment — same official
+            // Microsoft.Extensions.Http.Resilience circuit breaker ONLY
+            // shape as AIAgent.Infrastructure's own Anthropic wiring (see
+            // its doc comment) — AddCircuitBreaker alone, never
+            // AddRetry/AddHedging/AddTimeout. Meta already has
+            // AutomaticMetaRetry=false (no retry of any kind existed before
+            // this checkpoint, application-level or otherwise) — this stays
+            // true; the circuit breaker only ever short-circuits a FUTURE
+            // call, it never causes a second attempt of the current one.
+            var metaCircuitBreakerOptions = configuration.GetSection("ExternalIntegrations:WhatsApp:Meta:CircuitBreaker").Get<MetaHttpCircuitBreakerOptions>()
+                ?? new MetaHttpCircuitBreakerOptions();
+            if (metaCircuitBreakerOptions.Enabled)
+            {
+                metaHttpClientBuilder.AddResilienceHandler("meta-circuit-breaker", builder =>
+                {
+                    builder.AddCircuitBreaker(new CircuitBreakerStrategyOptions<HttpResponseMessage>
+                    {
+                        FailureRatio = metaCircuitBreakerOptions.FailureRatio,
+                        MinimumThroughput = metaCircuitBreakerOptions.MinimumThroughput,
+                        SamplingDuration = metaCircuitBreakerOptions.SamplingDuration,
+                        BreakDuration = metaCircuitBreakerOptions.BreakDuration,
+                        // Same permanent-vs-transient split as MetaFailureCodes'
+                        // own classification (never duplicated differently
+                        // here): network errors/timeouts/429/5xx count;
+                        // 400/401/403/404 (a permanently malformed/unauthorized
+                        // request) never open the circuit.
+                        ShouldHandle = args => ValueTask.FromResult(
+                            args.Outcome.Exception is HttpRequestException or TaskCanceledException ||
+                            (args.Outcome.Result is { } response &&
+                                (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500))),
+                        OnOpened = _ =>
+                        {
+                            IHostPro.BuildingBlocks.Infrastructure.Resilience.CircuitBreakerTelemetry.RecordStateChange("Meta", "Opened");
+                            return ValueTask.CompletedTask;
+                        },
+                        OnClosed = _ =>
+                        {
+                            IHostPro.BuildingBlocks.Infrastructure.Resilience.CircuitBreakerTelemetry.RecordStateChange("Meta", "Closed");
+                            return ValueTask.CompletedTask;
+                        },
+                        OnHalfOpened = _ =>
+                        {
+                            IHostPro.BuildingBlocks.Infrastructure.Resilience.CircuitBreakerTelemetry.RecordStateChange("Meta", "HalfOpened");
+                            return ValueTask.CompletedTask;
+                        },
+                    });
+                });
+            }
 
             services.AddScoped<IMessagingProvider, MetaWhatsAppMessagingProvider>();
         }

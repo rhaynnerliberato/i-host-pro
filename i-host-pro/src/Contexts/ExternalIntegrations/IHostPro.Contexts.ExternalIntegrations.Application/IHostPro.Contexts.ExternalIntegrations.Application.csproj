@@ -15,7 +15,7 @@
          package Identity.Application/Workflow.Application already use for
          their own Application-layer logging — never the concrete logging
          implementation. -->
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
   </ItemGroup>
 
   <PropertyGroup>
