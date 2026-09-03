@@ -30,6 +30,9 @@ public static class WolverineConfigurationExtensions
             .Get<RabbitMqClientTimeoutOptions>() ?? new RabbitMqClientTimeoutOptions();
         RabbitMqClientTimeoutOptionsValidator.ValidateAndThrow(clientTimeouts);
 
+        var useTls = bool.TryParse(configuration["RabbitMq:UseTls"], out var useTlsFlag) && useTlsFlag;
+        var configuredPort = int.TryParse(configuration["RabbitMq:Port"], out var parsedPort) ? parsedPort : (int?)null;
+
         var transport = opts.UseRabbitMq(rabbit =>
         {
             rabbit.HostName = configuration["RabbitMq:Host"] ?? "localhost";
@@ -48,6 +51,28 @@ public static class WolverineConfigurationExtensions
             // doc comment.
             rabbit.RequestedConnectionTimeout = clientTimeouts.ConnectTimeout;
             rabbit.ContinuationTimeout = clientTimeouts.ContinuationTimeout;
+
+            // Fase 12, Checkpoint 5.1: Amazon MQ for RabbitMQ (the AWS pilot's
+            // managed broker target) accepts TLS-only connections — there is
+            // no plaintext AMQP endpoint. Local/dev brokers (docker-compose's
+            // rabbitmq:3-management-alpine image) stay on the plaintext
+            // default by omitting RabbitMq:UseTls entirely (defaults to
+            // false, preserving every existing Testcontainers-based test's
+            // "no port override" assumption); only Homologação/Production —
+            // pointed at Amazon MQ — set RabbitMq:UseTls=true. Server
+            // certificate validation is never bypassed; RabbitMq:Port lets an
+            // environment override the port independently of UseTls when
+            // needed, but is never required for either shape described here.
+            if (useTls)
+            {
+                rabbit.Ssl.Enabled = true;
+                rabbit.Ssl.ServerName = rabbit.HostName;
+                rabbit.Port = configuredPort ?? 5671;
+            }
+            else if (configuredPort is { } explicitPort)
+            {
+                rabbit.Port = explicitPort;
+            }
         });
 
         // IHostPro.Api only publishes Integration Events; it never consumes
