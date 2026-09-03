@@ -28,3 +28,24 @@ variable "rabbitmq_rotation_image_tag" {
   description = "Immutable git-SHA tag of the rabbitmq-credential-rotation image already pushed to ECR."
   type        = string
 }
+
+# CP5.3D-A Decision Gate item 33: Api/Worker source code is causally
+# unchanged since 4c3f6c5 - no rebuild for aesthetics. No default: still
+# requires an explicit, deliberate value at plan/apply time.
+variable "api_image_tag" {
+  description = "Immutable git-SHA tag of the api image already pushed to ECR."
+  type        = string
+}
+
+variable "worker_image_tag" {
+  description = "Immutable git-SHA tag of the worker image already pushed to ECR."
+  type        = string
+}
+
+# CP5.3D-A Decision Gate item 3/42: empty until BaseDomain is decided and a
+# real ACM certificate exists - the alb module creates zero listeners while
+# this is empty (never a fake certificate).
+variable "alb_certificate_arn" {
+  type    = string
+  default = ""
+}

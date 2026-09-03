@@ -182,3 +182,52 @@ module "ecs" {
   rds_port          = module.rds.port
   rds_database_name = module.rds.database_name
 }
+
+# CP5.3D-A Decision Gate: ALB (item 24/44) - creates the load balancer and
+# target group regardless, but ZERO listeners while alb_certificate_arn is
+# empty (BaseDomain/ACM not yet decided - see item 3/42). No apply this
+# checkpoint (TerraformApplyAuthorized=false).
+module "alb" {
+  source = "../../modules/alb"
+
+  environment       = "homolog"
+  vpc_id            = module.network.vpc_id
+  public_subnet_ids = module.network.public_subnet_ids
+  security_group_id = module.network.alb_security_group_id
+  certificate_arn   = var.alb_certificate_arn
+}
+
+# CP5.3D-A Decision Gate: Api/Worker ECS services (item 47). DESIGN ONLY -
+# TerraformApplyAuthorized=false. Reuses the Api/Worker SGs already created
+# in CP5.2 (modules/network) and the task roles already created in CP5.3A
+# (modules/ecs-iam) - only the service/task-definition resources themselves
+# are new.
+module "ecs_services" {
+  source = "../../modules/ecs-services"
+
+  environment = "homolog"
+  aws_region  = var.region
+  cluster_arn = module.ecs.cluster_arn
+
+  execution_role_arn   = module.ecs_iam.execution_role_arn
+  api_task_role_arn    = module.ecs_iam.api_task_role_arn
+  worker_task_role_arn = module.ecs_iam.worker_task_role_arn
+
+  api_image_tag             = var.api_image_tag
+  worker_image_tag          = var.worker_image_tag
+  api_ecr_repository_url    = module.ecr.repository_urls["api"]
+  worker_ecr_repository_url = module.ecr.repository_urls["worker"]
+
+  api_security_group_id    = module.network.api_security_group_id
+  worker_security_group_id = module.network.worker_security_group_id
+  public_subnet_ids        = module.network.public_subnet_ids
+  alb_target_group_arn     = module.alb.target_group_arn
+
+  database_app_secret_arn              = module.credentials.secret_arns["database/app"]
+  rabbitmq_secret_arn                  = module.credentials.secret_arns["rabbitmq"]
+  redis_secret_arn                     = module.credentials.secret_arns["redis"]
+  jwt_signing_key_secret_arn           = module.credentials.secret_arns["jwt/signing-key"]
+  anthropic_secret_arn                 = module.credentials.secret_arns["anthropic"]
+  meta_webhook_app_secret_arn          = module.credentials.secret_arns["meta/webhook/app-secret"]
+  meta_webhook_verify_token_secret_arn = module.credentials.secret_arns["meta/webhook/verify-token"]
+}

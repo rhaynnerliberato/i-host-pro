@@ -185,8 +185,17 @@ resource "aws_iam_role_policy" "rabbitmq_rotation_task" {
 }
 
 locals {
+  # CP5.3D-A corrective audit: the tenant WhatsApp wildcard was originally
+  # granted to BOTH task roles (CP5.3A) on the assumption that an outbound
+  # send could originate from either host. Re-auditing the real DI
+  # composition (IHostPro.Worker.csproj's own comment: only
+  # AddExternalIntegrationsPixProvider is called from Worker - never the
+  # full AddExternalIntegrationsModule that registers the WhatsApp
+  # messaging/tenant-credential providers) confirms Worker never resolves
+  # IWhatsAppCredentialProvider at all - the grant was over-privileged.
+  # Api keeps it (ExternalIntegrations lives there); Worker no longer does.
   api_secret_arns    = concat(var.api_task_secret_arns, var.tenant_secret_arn_pattern != "" ? [var.tenant_secret_arn_pattern] : [])
-  worker_secret_arns = concat(var.worker_task_secret_arns, var.tenant_secret_arn_pattern != "" ? [var.tenant_secret_arn_pattern] : [])
+  worker_secret_arns = var.worker_task_secret_arns
 }
 
 data "aws_iam_policy_document" "api_task_permissions" {
