@@ -85,6 +85,13 @@ module "rds" {
     module.network.migrationrunner_security_group_id,
   ]
 
+  # Homolog-only exception (CP5.3B corrective Decision Gate item 1): the AWS
+  # Free Plan rejected the module's own default of 7 with a real
+  # FreeTierRestrictionError. This override is scoped to this environment
+  # file only - the module default stays at 7, the Production minimum, so a
+  # future Production environment never silently inherits this 1-day value.
+  backup_retention_days = 1
+
   app_secret_arn      = module.credentials.secret_arns["database/app"]
   migrator_secret_arn = module.credentials.secret_arns["database/migrator"]
 }

@@ -27,8 +27,9 @@ variable "engine_version" {
 }
 
 variable "instance_type" {
-  type    = string
-  default = "mq.t3.micro"
+  description = "mq.t3.micro does not exist for the RABBITMQ engine type - confirmed via a real CreateBroker rejection (`BadRequestException: Broker engine type [RabbitMQ] does not support host instance type [mq.t3.micro]`) and via `aws mq describe-broker-instance-options --engine-type RABBITMQ`, which lists no t3 family at all. mq.m7g.medium is the smallest real option (AWS classifies it as \"Evaluation\": ~1 vCPU/4 GiB) and supports engine 3.13. PilotOnly=true / ProductionSizingApproved=false - Production HA sizing is a separate, not-yet-made decision (CP5.3B corrective Decision Gate)."
+  type        = string
+  default     = "mq.m7g.medium"
 }
 
 variable "broker_username" {

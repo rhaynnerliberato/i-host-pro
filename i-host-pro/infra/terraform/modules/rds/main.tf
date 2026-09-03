@@ -39,6 +39,17 @@ resource "aws_db_parameter_group" "this" {
   parameter {
     name  = "rds.force_ssl"
     value = "1"
+    # ApplyType=dynamic (confirmed via `aws rds describe-db-parameters`) -
+    # the setting is genuinely active immediately, no reboot required
+    # (ParameterApplyStatus=in-sync, verified against the real instance).
+    # apply_method is declared as "pending-reboot" anyway, matching what the
+    # AWS API always echoes back for this parameter regardless of what was
+    # submitted - declaring "immediate" here produced a perpetual (non-
+    # converging) diff on every subsequent plan, since the API's read value
+    # never matches it. This is the provider/API's canonical representation
+    # for this attribute, not a functional statement about when the value
+    # takes effect (CP5.3B corrective Decision Gate, round 2).
+    apply_method = "pending-reboot"
   }
 
   tags = {

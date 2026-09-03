@@ -51,7 +51,12 @@ resource "random_password" "bootstrap" {
 resource "aws_mq_broker" "this" {
   broker_name = "ihostpro-${var.environment}"
 
-  engine_type        = "RABBITMQ"
+  # Provider-canonical casing (hashicorp/aws docs list "RabbitMQ", not
+  # "RABBITMQ") - the AWS API accepts either at CreateBroker time but always
+  # echoes back "RabbitMQ" on read, which made engine_type (ForceNew) look
+  # like a real diff and forced a spurious destroy+recreate plan against a
+  # healthy, RUNNING broker (CP5.3B corrective Decision Gate, round 2).
+  engine_type        = "RabbitMQ"
   engine_version     = var.engine_version
   host_instance_type = var.instance_type
   deployment_mode    = "SINGLE_INSTANCE" # RabbitMqPilotHA=false, RabbitMqPilotSinglePointOfFailure=true - accepted baseline
