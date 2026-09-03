@@ -36,6 +36,11 @@
          checkpoint and still has none — a timeout/circuit-open still always
          maps to DeliveryOutcomeUnknown, never a resend). -->
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.9.0" />
+    <!-- Fase 12, Checkpoint 5.3A — AWS Secrets Manager-backed
+         IWhatsAppCredentialProvider/IWhatsAppWebhookCredentialProvider for
+         Homolog/Production. Only the specific package, never the AWSSDK
+         meta-package. -->
+    <PackageReference Include="AWSSDK.SecretsManager" Version="4.0.100.11" />
   </ItemGroup>
 
   <PropertyGroup>

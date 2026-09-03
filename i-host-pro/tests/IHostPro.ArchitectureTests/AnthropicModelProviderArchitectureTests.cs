@@ -62,7 +62,13 @@ public class AnthropicModelProviderArchitectureTests
     public void No_Api_Key_Field_Exists_Outside_The_Credential_Provider_Itself()
     {
         var offenders = typeof(AnthropicModelProvider).Assembly.GetTypes()
-            .Where(t => t != typeof(DevelopmentAnthropicCredentialProvider))
+            // Fase 12, CP5.3A: excludes ANY IAnthropicCredentialProvider
+            // implementation (not just DevelopmentAnthropicCredentialProvider
+            // by name) — the rule's intent is "only the credential provider
+            // itself may hold the key", which now also covers
+            // SecretsManagerAnthropicCredentialProvider without needing a
+            // manual edit here for every future implementation.
+            .Where(t => !typeof(IAnthropicCredentialProvider).IsAssignableFrom(t))
             // Excludes compiler-generated async state machines (e.g.
             // AnthropicModelProvider's own `d__NN` nested type) — an
             // `apiKey` local variable hoisted there for the lifetime of one

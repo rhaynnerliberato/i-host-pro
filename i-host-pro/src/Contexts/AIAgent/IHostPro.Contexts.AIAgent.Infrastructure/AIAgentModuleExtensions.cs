@@ -30,14 +30,11 @@ public static class AIAgentModuleExtensions
     /// (Fase 11, Checkpoint 7) — passed explicitly, never resolved via
     /// <c>IHostEnvironment</c> inside this method, mirroring
     /// <c>AddExternalIntegrationsModule</c>'s own precedent exactly. Gates
-    /// registration of <see cref="DevelopmentAnthropicCredentialProvider"/>
-    /// only: outside Development, no <see cref="IAnthropicCredentialProvider"/>
-    /// implementation is registered at all, so selecting
-    /// <c>AIAgent:ModelProvider=Anthropic</c> there fails DI resolution at
-    /// startup — the mandate's own fail-closed requirement (item 9/46),
-    /// never a silent fallback to <c>FakeModelProvider</c>.
-    /// <c>ProductionAnthropicSecretBackend=false</c> — no real secret store
-    /// exists yet for any provider in this codebase.
+    /// which <see cref="IAnthropicCredentialProvider"/> is registered:
+    /// <see cref="DevelopmentAnthropicCredentialProvider"/> (User Secrets/
+    /// environment variables) in Development, <see cref="SecretsManagerAnthropicCredentialProvider"/>
+    /// (AWS Secrets Manager, Fase 12 CP5.3A) everywhere else — never a
+    /// silent fallback between the two.
     /// </param>
     public static IServiceCollection AddAIAgentModule(
         this IServiceCollection services, IConfiguration configuration, bool isDevelopmentEnvironment)
@@ -154,8 +151,20 @@ public static class AIAgentModuleExtensions
 
             services.AddScoped<IModelProvider, AnthropicModelProvider>();
 
+            // Fase 12, CP5.3A: outside Development, IAnthropicCredentialProvider
+            // is now backed by AWS Secrets Manager instead of being left
+            // unregistered - HomologRealAnthropicRequired=true. AmazonSecretsManagerClient
+            // uses the default AWS credential chain (the ECS task role in
+            // Homolog/Production), never a key configured here.
             if (isDevelopmentEnvironment)
                 services.AddScoped<IAnthropicCredentialProvider, DevelopmentAnthropicCredentialProvider>();
+            else
+            {
+                services.AddSingleton<Amazon.SecretsManager.IAmazonSecretsManager>(
+                    new Amazon.SecretsManager.AmazonSecretsManagerClient());
+                services.AddSingleton<ISecretValueReader, AwsSecretsManagerValueReader>();
+                services.AddScoped<IAnthropicCredentialProvider, SecretsManagerAnthropicCredentialProvider>();
+            }
         }
         else
         {
