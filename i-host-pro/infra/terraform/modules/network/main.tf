@@ -130,7 +130,7 @@ resource "aws_security_group" "alb" {
 
 resource "aws_security_group" "api" {
   name        = "ihostpro-${var.environment}-api"
-  description = "Api Fargate tasks — inbound ONLY from the ALB security group. Task has a public IP (PUBLIC_TASK_ENI_LOCKED_SECURITY_GROUP) but this SG is what actually prevents public reachability — never add a 0.0.0.0/0 ingress rule here."
+  description = "Api Fargate tasks - inbound ONLY from the ALB security group. Task has a public IP (PUBLIC_TASK_ENI_LOCKED_SECURITY_GROUP) but this SG is what actually prevents public reachability - never add a 0.0.0.0/0 ingress rule here."
   vpc_id      = aws_vpc.this.id
 
   ingress {
@@ -159,7 +159,7 @@ resource "aws_security_group" "api" {
 
 resource "aws_security_group" "worker" {
   name        = "ihostpro-${var.environment}-worker"
-  description = "Worker Fargate tasks — zero inbound rules, outbound only. Also has a public IP under PUBLIC_TASK_ENI_LOCKED_SECURITY_GROUP, but with no ingress rule at all it is unreachable from anywhere, including the ALB."
+  description = "Worker Fargate tasks - zero inbound rules, outbound only. Also has a public IP under PUBLIC_TASK_ENI_LOCKED_SECURITY_GROUP, but with no ingress rule at all it is unreachable from anywhere, including the ALB."
   vpc_id      = aws_vpc.this.id
 
   egress {
