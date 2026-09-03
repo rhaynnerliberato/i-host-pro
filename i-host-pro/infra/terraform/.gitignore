@@ -5,6 +5,9 @@
 *.tfstate
 *.tfstate.*
 
+# Saved plan files — may embed resource attribute values, never committed.
+*.tfplan
+
 # Per-developer variable overrides (may contain environment-specific,
 # non-repo values) — pass values explicitly via -var/-var-file instead.
 *.auto.tfvars

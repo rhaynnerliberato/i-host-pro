@@ -4,9 +4,10 @@ variable "region" {
   default     = "sa-east-1"
 }
 
-variable "state_bucket_name" {
-  description = "Globally unique S3 bucket name for Terraform remote state (S3 bucket names are unique across ALL AWS accounts, not just this one) — must be provided explicitly, never defaulted."
+variable "state_bucket_prefix" {
+  description = "Prefix for the Terraform remote state bucket name. A random suffix is appended by this root module (via random_id, stored in this root's own local state) to satisfy S3's globally-unique-bucket-name requirement without asking for a manually chosen name or using the AWS Account ID as a suffix."
   type        = string
+  default     = "ihostpro-terraform-state"
 }
 
 variable "project" {

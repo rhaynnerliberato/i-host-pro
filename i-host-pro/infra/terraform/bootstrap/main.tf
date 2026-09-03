@@ -1,5 +1,12 @@
+# Generated once and then kept stable by this root's own local state — never
+# regenerated on subsequent applies (random_id only changes if its inputs
+# change, which they never do here).
+resource "random_id" "state_bucket_suffix" {
+  byte_length = 4
+}
+
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = var.state_bucket_name
+  bucket = "${var.state_bucket_prefix}-${random_id.state_bucket_suffix.hex}"
 
   # Guards against an accidental `terraform destroy` run inside this
   # bootstrap root from ever deleting the state bucket every other root
