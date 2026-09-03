@@ -13,3 +13,7 @@ output "database_bootstrap_task_definition_arn" {
 output "migrationrunner_task_definition_arn" {
   value = aws_ecs_task_definition.migrationrunner.arn
 }
+
+output "rabbitmq_rotation_task_definition_arn" {
+  value = aws_ecs_task_definition.rabbitmq_rotation.arn
+}

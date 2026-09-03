@@ -9,7 +9,22 @@ variable "region" {
 # default on purpose - a task definition built from a placeholder tag would
 # reference an image that doesn't exist, which is worse than an explicit
 # "you must supply this" plan-time error.
-variable "image_tag" {
-  description = "Immutable git-SHA tag of the images already pushed to ECR (Api/Worker/MigrationRunner/DatabaseBootstrap all share one tag per release)."
+#
+# Split per one-off task (runtime-proof correction) rather than one shared
+# tag - the DatabaseBootstrap fix needed a rebuild+republish under a new SHA
+# while MigrationRunner's image was genuinely unaffected and must NOT be
+# forced through an unnecessary rebuild just to share a single variable.
+variable "database_bootstrap_image_tag" {
+  description = "Immutable git-SHA tag of the database-bootstrap image already pushed to ECR."
+  type        = string
+}
+
+variable "migrationrunner_image_tag" {
+  description = "Immutable git-SHA tag of the migrationrunner image already pushed to ECR."
+  type        = string
+}
+
+variable "rabbitmq_rotation_image_tag" {
+  description = "Immutable git-SHA tag of the rabbitmq-credential-rotation image already pushed to ECR."
   type        = string
 }

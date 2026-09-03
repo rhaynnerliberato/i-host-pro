@@ -74,6 +74,10 @@ module "ecs_iam" {
     module.credentials.secret_arns["database/app"],
     module.credentials.secret_arns["database/migrator"],
   ]
+
+  # CP5.3C RabbitMQ credential rotation subgate: EXACTLY the rabbitmq
+  # secret, nothing else.
+  rabbitmq_secret_arn = module.credentials.secret_arns["rabbitmq"]
 }
 
 # CP5.3B: RDS PostgreSQL + ElastiCache Valkey. Amazon MQ's module exists
@@ -136,7 +140,8 @@ module "amazon_mq" {
     module.network.migrationrunner_security_group_id,
   ]
 
-  rabbitmq_secret_arn = module.credentials.secret_arns["rabbitmq"]
+  rabbitmq_secret_arn        = module.credentials.secret_arns["rabbitmq"]
+  rotation_security_group_id = module.network.rabbitmq_rotation_security_group_id
 }
 
 # CP5.3C corrective Decision Gate items 20-21: ECS cluster + the two one-off
@@ -155,12 +160,15 @@ module "ecs" {
   execution_role_arn               = module.ecs_iam.execution_role_arn
   database_bootstrap_task_role_arn = module.ecs_iam.database_bootstrap_task_role_arn
   migrationrunner_task_role_arn    = module.ecs_iam.migrationrunner_task_role_arn
+  rabbitmq_rotation_task_role_arn  = module.ecs_iam.rabbitmq_rotation_task_role_arn
 
-  database_bootstrap_image = "${module.ecr.repository_urls["database-bootstrap"]}:${var.image_tag}"
-  migrationrunner_image    = "${module.ecr.repository_urls["migrationrunner"]}:${var.image_tag}"
+  database_bootstrap_image = "${module.ecr.repository_urls["database-bootstrap"]}:${var.database_bootstrap_image_tag}"
+  migrationrunner_image    = "${module.ecr.repository_urls["migrationrunner"]}:${var.migrationrunner_image_tag}"
+  rabbitmq_rotation_image  = "${module.ecr.repository_urls["rabbitmq-credential-rotation"]}:${var.rabbitmq_rotation_image_tag}"
 
   database_bootstrap_security_group_id = module.network.database_bootstrap_security_group_id
   migrationrunner_security_group_id    = module.network.migrationrunner_security_group_id
+  rabbitmq_rotation_security_group_id  = module.network.rabbitmq_rotation_security_group_id
   public_subnet_ids                    = module.network.public_subnet_ids
 
   rds_master_user_secret_arn   = module.rds.master_user_secret_arn

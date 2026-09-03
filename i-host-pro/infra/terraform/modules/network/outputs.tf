@@ -29,3 +29,7 @@ output "migrationrunner_security_group_id" {
 output "database_bootstrap_security_group_id" {
   value = aws_security_group.database_bootstrap.id
 }
+
+output "rabbitmq_rotation_security_group_id" {
+  value = aws_security_group.rabbitmq_rotation.id
+}

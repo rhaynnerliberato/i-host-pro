@@ -36,3 +36,9 @@ variable "database_bootstrap_task_secret_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "rabbitmq_secret_arn" {
+  description = "The rabbitmq secret ARN the credential rotation task role may Get/PutSecretValue - nothing else. Left empty (no statement added) if not supplied."
+  type        = string
+  default     = ""
+}

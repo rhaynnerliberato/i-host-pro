@@ -17,3 +17,7 @@ output "migrationrunner_task_role_arn" {
 output "database_bootstrap_task_role_arn" {
   value = aws_iam_role.database_bootstrap_task.arn
 }
+
+output "rabbitmq_rotation_task_role_arn" {
+  value = aws_iam_role.rabbitmq_rotation_task.arn
+}

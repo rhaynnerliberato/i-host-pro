@@ -154,3 +154,54 @@ resource "aws_ecs_task_definition" "migrationrunner" {
     ManagedBy   = "Terraform"
   }
 }
+
+# --- RabbitMQ credential rotation one-off task (CP5.3C RabbitMQ credential
+# rotation subgate). Only the secret ARN is passed as plain config - the
+# tool reads/writes that one secret itself via its task role (Get+Put),
+# same "resolves its own secrets via the SDK" shape as DatabaseBootstrap,
+# not the execution-role env-var-injection shape MigrationRunner uses. ---
+resource "aws_cloudwatch_log_group" "rabbitmq_rotation" {
+  name              = "/ecs/ihostpro-${var.environment}-rabbitmq-rotation"
+  retention_in_days = var.log_retention_days
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_ecs_task_definition" "rabbitmq_rotation" {
+  family                   = "ihostpro-${var.environment}-rabbitmq-rotation"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 512
+  memory                   = 1024
+  execution_role_arn       = var.execution_role_arn
+  task_role_arn            = var.rabbitmq_rotation_task_role_arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "rabbitmq-rotation"
+      image     = var.rabbitmq_rotation_image
+      essential = true
+      environment = [
+        { name = "RabbitMqCredentialRotation__RabbitMqSecretArn", value = var.rabbitmq_secret_arn },
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.rabbitmq_rotation.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "rabbitmq-rotation"
+        }
+      }
+    }
+  ])
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}

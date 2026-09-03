@@ -149,6 +149,41 @@ resource "aws_iam_role_policy" "database_bootstrap_task" {
   policy = data.aws_iam_policy_document.database_bootstrap_task_permissions.json
 }
 
+# CP5.3C RabbitMQ credential rotation subgate: dedicated task role, scoped
+# to GetSecretValue + PutSecretValue on EXACTLY the rabbitmq secret ARN -
+# nothing else. Unlike the DatabaseBootstrap task (read-only), this one
+# must also write the rotated credential back.
+resource "aws_iam_role" "rabbitmq_rotation_task" {
+  name               = "ihostpro-${var.environment}-rabbitmq-rotation-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    Service     = "rabbitmq-rotation"
+    ManagedBy   = "Terraform"
+  }
+}
+
+data "aws_iam_policy_document" "rabbitmq_rotation_task_permissions" {
+  dynamic "statement" {
+    for_each = var.rabbitmq_secret_arn != "" ? [1] : []
+    content {
+      sid       = "SecretsManagerRabbitMqReadWrite"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"]
+      resources = [var.rabbitmq_secret_arn]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "rabbitmq_rotation_task" {
+  count  = var.rabbitmq_secret_arn != "" ? 1 : 0
+  name   = "ihostpro-${var.environment}-rabbitmq-rotation-task-permissions"
+  role   = aws_iam_role.rabbitmq_rotation_task.id
+  policy = data.aws_iam_policy_document.rabbitmq_rotation_task_permissions.json
+}
+
 locals {
   api_secret_arns    = concat(var.api_task_secret_arns, var.tenant_secret_arn_pattern != "" ? [var.tenant_secret_arn_pattern] : [])
   worker_secret_arns = concat(var.worker_task_secret_arns, var.tenant_secret_arn_pattern != "" ? [var.tenant_secret_arn_pattern] : [])

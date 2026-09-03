@@ -20,6 +20,11 @@ variable "allowed_security_group_ids" {
   type        = list(string)
 }
 
+variable "rotation_security_group_id" {
+  description = "The single SG allowed tcp/443 (Management API) inbound - the credential rotation task's own SG, never the broader allowed_security_group_ids list."
+  type        = string
+}
+
 variable "engine_version" {
   description = "Confirmed available in sa-east-1 via `aws mq describe-broker-engine-types --engine-type RABBITMQ` (CP5.3B Decision Gate): only 4.2 and 3.13 exist. 3.13 selected - matches the rabbitmq:3-management-alpine image already used in local dev, minimizing drift on the first cloud cutover."
   type        = string

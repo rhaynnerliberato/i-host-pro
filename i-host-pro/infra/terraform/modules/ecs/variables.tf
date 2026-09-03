@@ -19,6 +19,10 @@ variable "database_bootstrap_task_role_arn" {
   type = string
 }
 
+variable "rabbitmq_rotation_task_role_arn" {
+  type = string
+}
+
 variable "migrationrunner_task_role_arn" {
   type = string
 }
@@ -38,11 +42,20 @@ variable "migrationrunner_image" {
   type        = string
 }
 
+variable "rabbitmq_rotation_image" {
+  description = "Full ECR image reference (repository URL + immutable git-SHA tag) for the RabbitMqCredentialRotation image."
+  type        = string
+}
+
 variable "database_bootstrap_security_group_id" {
   type = string
 }
 
 variable "migrationrunner_security_group_id" {
+  type = string
+}
+
+variable "rabbitmq_rotation_security_group_id" {
   type = string
 }
 

@@ -1,6 +1,6 @@
 resource "aws_security_group" "this" {
   name        = "ihostpro-${var.environment}-amazon-mq"
-  description = "Amazon MQ RabbitMQ - inbound tcp/5671 (AMQPS) only from Api/Worker/MigrationRunner task SGs, never a public CIDR."
+  description = "Amazon MQ RabbitMQ - inbound tcp/5671 (AMQPS) from application tasks, tcp/443 (Management API) from the credential rotation task only, never a public CIDR."
   vpc_id      = var.vpc_id
 
   ingress {
@@ -9,6 +9,19 @@ resource "aws_security_group" "this" {
     to_port         = 5671
     protocol        = "tcp"
     security_groups = var.allowed_security_group_ids
+  }
+
+  # CP5.3C RabbitMQ credential rotation subgate: the Management API
+  # (PUT /api/users/{username}) is HTTPS/443, not the AMQPS/5671 above -
+  # scoped to exactly the rotation task's own SG, not the broader
+  # allowed_security_group_ids list (MigrationRunner/Api/Worker never need
+  # Management API access).
+  ingress {
+    description     = "Management API (HTTPS) from the credential rotation task only"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [var.rotation_security_group_id]
   }
 
   tags = {

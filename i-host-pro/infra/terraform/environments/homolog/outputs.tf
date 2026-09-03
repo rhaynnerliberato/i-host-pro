@@ -102,3 +102,11 @@ output "migrationrunner_task_definition_arn" {
 output "database_bootstrap_security_group_id" {
   value = module.network.database_bootstrap_security_group_id
 }
+
+output "rabbitmq_rotation_task_definition_arn" {
+  value = module.ecs.rabbitmq_rotation_task_definition_arn
+}
+
+output "rabbitmq_rotation_security_group_id" {
+  value = module.network.rabbitmq_rotation_security_group_id
+}

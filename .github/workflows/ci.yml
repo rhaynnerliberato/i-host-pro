@@ -338,6 +338,7 @@ jobs:
           - { name: Worker, dockerfile: "docker/Worker.Dockerfile" }
           - { name: MigrationRunner, dockerfile: "docker/MigrationRunner.Dockerfile" }
           - { name: DatabaseBootstrap, dockerfile: "docker/DatabaseBootstrap.Dockerfile" }
+          - { name: RabbitMqCredentialRotation, dockerfile: "docker/RabbitMqCredentialRotation.Dockerfile" }
     steps:
       - uses: actions/checkout@v4
       - name: Docker build — ${{ matrix.image.name }}

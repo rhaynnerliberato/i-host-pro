@@ -229,3 +229,31 @@ resource "aws_security_group" "database_bootstrap" {
     ManagedBy   = "Terraform"
   }
 }
+
+# CP5.3C RabbitMQ credential rotation subgate: same PUBLIC_TASK_ENI_LOCKED_
+# SECURITY_GROUP model, dedicated SG for the same independent-auditability
+# reason as database_bootstrap above. This is the only one-off task that
+# needs Amazon MQ's Management API (HTTPS/443, not the AMQPS/5671 the other
+# tasks use) - kept as its own SG so that inbound grant on the broker's SG
+# is scoped to exactly this task, not shared with MigrationRunner's AMQPS
+# access.
+resource "aws_security_group" "rabbitmq_rotation" {
+  name        = "ihostpro-${var.environment}-rabbitmq-rotation"
+  description = "RabbitMQ credential rotation one-off Fargate task - zero inbound rules, outbound only. Public subnet + public IP (no NAT), same PUBLIC_TASK_ENI_LOCKED_SECURITY_GROUP model as MigrationRunner/DatabaseBootstrap."
+  vpc_id      = aws_vpc.this.id
+
+  egress {
+    description = "Outbound to Amazon MQ Management API, AWS APIs (ECR/CloudWatch/Secrets Manager)"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "ihostpro-${var.environment}-rabbitmq-rotation-sg"
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
