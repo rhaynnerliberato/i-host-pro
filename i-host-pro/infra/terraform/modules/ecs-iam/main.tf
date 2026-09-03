@@ -1,0 +1,156 @@
+data "aws_iam_policy_document" "ecs_tasks_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
+# --- Execution role: used by the ECS agent itself (image pull, secret
+# injection into environment variables, CloudWatch Logs) - never by
+# application code directly. ---
+resource "aws_iam_role" "execution" {
+  name               = "ihostpro-${var.environment}-ecs-execution"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
+
+data "aws_iam_policy_document" "execution_permissions" {
+  statement {
+    sid       = "EcrAuth"
+    effect    = "Allow"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"] # ecr:GetAuthorizationToken does not support resource-level restriction (real AWS IAM limitation).
+  }
+
+  statement {
+    sid    = "EcrPull"
+    effect = "Allow"
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+    ]
+    resources = ["arn:aws:ecr:*:*:repository/ihostpro-${var.environment}-*"]
+  }
+
+  statement {
+    sid    = "Logs"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
+    ]
+    resources = ["arn:aws:logs:*:*:log-group:/ecs/ihostpro-${var.environment}-*:*"]
+  }
+
+  dynamic "statement" {
+    for_each = length(var.execution_role_secret_arns) > 0 ? [1] : []
+    content {
+      sid       = "SecretInjection"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = var.execution_role_secret_arns
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "execution" {
+  name   = "ihostpro-${var.environment}-ecs-execution-permissions"
+  role   = aws_iam_role.execution.id
+  policy = data.aws_iam_policy_document.execution_permissions.json
+}
+
+# --- Task roles: used by application code at runtime (never
+# AdministratorAccess; each service gets only what it actually calls). ---
+resource "aws_iam_role" "api_task" {
+  name               = "ihostpro-${var.environment}-api-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    Service     = "api"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_iam_role" "worker_task" {
+  name               = "ihostpro-${var.environment}-worker-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    Service     = "worker"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_iam_role" "migrationrunner_task" {
+  name               = "ihostpro-${var.environment}-migrationrunner-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    Service     = "migrationrunner"
+    ManagedBy   = "Terraform"
+  }
+}
+# migrationrunner_task has no attached policy: it consumes database/migrator
+# and rabbitmq via IConfiguration (execution-role-injected environment
+# variables), never an AWS SDK call of its own - confirmed by reading its
+# actual runtime configuration, not assumed.
+
+locals {
+  api_secret_arns    = concat(var.api_task_secret_arns, var.tenant_secret_arn_pattern != "" ? [var.tenant_secret_arn_pattern] : [])
+  worker_secret_arns = concat(var.worker_task_secret_arns, var.tenant_secret_arn_pattern != "" ? [var.tenant_secret_arn_pattern] : [])
+}
+
+data "aws_iam_policy_document" "api_task_permissions" {
+  dynamic "statement" {
+    for_each = length(local.api_secret_arns) > 0 ? [1] : []
+    content {
+      sid       = "SecretsManagerRuntimeReads"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = local.api_secret_arns
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "api_task" {
+  count  = length(local.api_secret_arns) > 0 ? 1 : 0
+  name   = "ihostpro-${var.environment}-api-task-permissions"
+  role   = aws_iam_role.api_task.id
+  policy = data.aws_iam_policy_document.api_task_permissions.json
+}
+
+data "aws_iam_policy_document" "worker_task_permissions" {
+  dynamic "statement" {
+    for_each = length(local.worker_secret_arns) > 0 ? [1] : []
+    content {
+      sid       = "SecretsManagerRuntimeReads"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = local.worker_secret_arns
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "worker_task" {
+  count  = length(local.worker_secret_arns) > 0 ? 1 : 0
+  name   = "ihostpro-${var.environment}-worker-task-permissions"
+  role   = aws_iam_role.worker_task.id
+  policy = data.aws_iam_policy_document.worker_task_permissions.json
+}
