@@ -54,6 +54,21 @@ variable "rds_master_user_secret_arn" {
   type = string
 }
 
+# NON_SECRET_CONFIG (CP5.3C runtime-proof correction): the real,
+# AWS-managed master secret carries only username/password - endpoint
+# identity was never secret and must never be inferred from it.
+variable "rds_host" {
+  type = string
+}
+
+variable "rds_port" {
+  type = number
+}
+
+variable "rds_database_name" {
+  type = string
+}
+
 variable "database_app_secret_arn" {
   type = string
 }

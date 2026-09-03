@@ -66,6 +66,13 @@ public static class DatabaseRoleReconciler
     public static string QuoteLiteral(string value) => $"'{value.Replace("'", "''")}'";
 }
 
+// Real, verified shape (CP5.3C runtime proof, first DatabaseBootstrap
+// execution): the AWS-managed master secret for this RDS instance carries
+// ONLY username/password - NOT host/port/dbname, despite AWS's own general
+// documentation describing a wider shape. Endpoint/database identity are
+// NON_SECRET_CONFIG (module.rds.endpoint/port, var.database_name are all
+// plain Terraform outputs already) and must never be inferred from this
+// secret - only Username/Password are required here.
 public sealed class RdsMasterSecret
 {
     [JsonPropertyName("username")]
@@ -73,13 +80,4 @@ public sealed class RdsMasterSecret
 
     [JsonPropertyName("password")]
     public required string Password { get; init; }
-
-    [JsonPropertyName("host")]
-    public required string Host { get; init; }
-
-    [JsonPropertyName("port")]
-    public required int Port { get; init; }
-
-    [JsonPropertyName("dbname")]
-    public required string Dbname { get; init; }
 }

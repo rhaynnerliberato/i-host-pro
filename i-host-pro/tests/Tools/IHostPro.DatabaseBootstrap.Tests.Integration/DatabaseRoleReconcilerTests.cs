@@ -213,10 +213,48 @@ public sealed class DatabaseRoleReconcilerTests : IAsyncLifetime
         var act = () => System.Text.Json.JsonSerializer.Deserialize<RdsMasterSecret>("{ \"username\": \"only-this-field\" }");
 
         // `required` members make System.Text.Json throw JsonException when
-        // the payload is missing any of them, rather than silently leaving
-        // Host/Password/etc. at a default - a malformed/unexpected secret
+        // the payload is missing any of them (here, password), rather than
+        // silently leaving it at a default - a malformed/unexpected secret
         // shape must fail loudly, never connect with a half-built target.
         act.Should().Throw<System.Text.Json.JsonException>();
+    }
+
+    // CP5.3C runtime-proof correction: the real, AWS-managed master secret
+    // for this RDS instance was found (via a real DatabaseBootstrap
+    // execution that failed) to carry ONLY username/password - not
+    // host/port/dbname, despite AWS's general documentation describing a
+    // wider shape. This is the regression test proving the tool now works
+    // against that minimal, real shape, with endpoint/database identity
+    // coming from NON_SECRET_CONFIG instead (see Program.cs).
+    [Fact]
+    public void RdsMasterSecret_minimal_aws_managed_shape_deserializes_successfully()
+    {
+        const string minimalShape = """{"username":"ihostpro_master","password":"SomePassword123"}""";
+
+        var act = () => System.Text.Json.JsonSerializer.Deserialize<RdsMasterSecret>(minimalShape);
+
+        act.Should().NotThrow();
+        var secret = System.Text.Json.JsonSerializer.Deserialize<RdsMasterSecret>(minimalShape)!;
+        secret.Username.Should().Be("ihostpro_master");
+        secret.Password.Should().Be("SomePassword123");
+    }
+
+    // Item 11: "missing host/port/database name must fail clearly" - proven
+    // generically by RequireConfig_missing_or_empty_value_throws_a_clear_error
+    // above (BootstrapConfiguration.RequireConfig has no special-casing per
+    // key), demonstrated here explicitly for the 3 real key names Program.cs
+    // actually reads, so the coverage is traceable rather than implied.
+    [Theory]
+    [InlineData("DatabaseBootstrap:RdsHost")]
+    [InlineData("DatabaseBootstrap:RdsPort")]
+    [InlineData("DatabaseBootstrap:RdsDatabaseName")]
+    public void RequireConfig_missing_rds_endpoint_config_fails_clearly(string key)
+    {
+        var configuration = new ConfigurationBuilder().Build();
+
+        var act = () => BootstrapConfiguration.RequireConfig(configuration, key);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage($"*{key}*");
     }
 
     [Fact]

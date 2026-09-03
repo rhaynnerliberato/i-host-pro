@@ -30,6 +30,15 @@ try
     var appSecretArn = BootstrapConfiguration.RequireConfig(configuration, "DatabaseBootstrap:AppSecretArn");
     var migratorSecretArn = BootstrapConfiguration.RequireConfig(configuration, "DatabaseBootstrap:MigratorSecretArn");
 
+    // NON_SECRET_CONFIG (CP5.3C runtime-proof correction): the real,
+    // AWS-managed master secret carries only username/password - endpoint
+    // identity was never secret to begin with (module.rds.endpoint/port,
+    // var.database_name are all plain Terraform outputs) and must never be
+    // inferred from the secret.
+    var rdsHost = BootstrapConfiguration.RequireConfig(configuration, "DatabaseBootstrap:RdsHost");
+    var rdsPort = int.Parse(BootstrapConfiguration.RequireConfig(configuration, "DatabaseBootstrap:RdsPort"));
+    var rdsDatabaseName = BootstrapConfiguration.RequireConfig(configuration, "DatabaseBootstrap:RdsDatabaseName");
+
     using var secretsClient = new AmazonSecretsManagerClient();
 
     Log.Information("Reading RDS master credential and target role connection strings from Secrets Manager.");
@@ -54,9 +63,9 @@ try
     // database/app and database/migrator (see modules/rds/main.tf).
     var masterConnectionString = new NpgsqlConnectionStringBuilder
     {
-        Host = master.Host,
-        Port = master.Port,
-        Database = master.Dbname,
+        Host = rdsHost,
+        Port = rdsPort,
+        Database = rdsDatabaseName,
         Username = master.Username,
         Password = master.Password,
         SslMode = SslMode.VerifyFull,
@@ -70,7 +79,7 @@ try
 
     await DatabaseRoleReconciler.CreateOrUpdateLoginRoleAsync(connection, migratorRole.Username!, migratorRole.Password!);
     await DatabaseRoleReconciler.CreateOrUpdateLoginRoleAsync(connection, appRole.Username!, appRole.Password!);
-    await DatabaseRoleReconciler.GrantCreateOnDatabaseAsync(connection, master.Dbname, migratorRole.Username!);
+    await DatabaseRoleReconciler.GrantCreateOnDatabaseAsync(connection, rdsDatabaseName, migratorRole.Username!);
 
     Log.Information("Database bootstrap completed successfully. Roles {MigratorRole} and {AppRole} are ready.",
         migratorRole.Username, appRole.Username);

@@ -167,4 +167,10 @@ module "ecs" {
   database_app_secret_arn      = module.credentials.secret_arns["database/app"]
   database_migrator_secret_arn = module.credentials.secret_arns["database/migrator"]
   rabbitmq_secret_arn          = module.credentials.secret_arns["rabbitmq"]
+
+  # NON_SECRET_CONFIG (CP5.3C runtime-proof correction) - already-known,
+  # non-secret RDS endpoint identity, never inferred from the master secret.
+  rds_host          = module.rds.endpoint
+  rds_port          = module.rds.port
+  rds_database_name = module.rds.database_name
 }

@@ -67,6 +67,9 @@ resource "aws_ecs_task_definition" "database_bootstrap" {
         { name = "DatabaseBootstrap__RdsMasterSecretArn", value = var.rds_master_user_secret_arn },
         { name = "DatabaseBootstrap__AppSecretArn", value = var.database_app_secret_arn },
         { name = "DatabaseBootstrap__MigratorSecretArn", value = var.database_migrator_secret_arn },
+        { name = "DatabaseBootstrap__RdsHost", value = var.rds_host },
+        { name = "DatabaseBootstrap__RdsPort", value = tostring(var.rds_port) },
+        { name = "DatabaseBootstrap__RdsDatabaseName", value = var.rds_database_name },
       ]
       logConfiguration = {
         logDriver = "awslogs"
