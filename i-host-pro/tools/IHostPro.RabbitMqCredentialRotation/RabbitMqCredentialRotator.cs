@@ -145,6 +145,40 @@ public sealed class RabbitMqCredentialRotator(HttpClient httpClient, ISecretsMan
         return response.StatusCode == System.Net.HttpStatusCode.Unauthorized;
     }
 
+    // Verify-only mode (never rotates again): confirms the CURRENT secret
+    // value (AWSCURRENT) authenticates successfully, and the version it
+    // superseded (AWSPREVIOUS - the bootstrap credential, still retained by
+    // Secrets Manager's own versioning, never deleted by this tool) is
+    // genuinely rejected. Never logs either credential value - only the two
+    // booleans.
+    public async Task<(bool FinalCredentialAccepted, bool BootstrapCredentialRejected)> VerifyRotationAsync(
+        string rabbitMqSecretArn, CancellationToken cancellationToken = default)
+    {
+        var currentJson = await secretsManager.GetSecretStringAsync(rabbitMqSecretArn, "AWSCURRENT", cancellationToken);
+        var current = JsonSerializer.Deserialize<RabbitMqCredential>(currentJson)
+            ?? throw new InvalidOperationException("RabbitMQ secret (AWSCURRENT) did not deserialize to the expected shape.");
+
+        using var currentRequest = new HttpRequestMessage(HttpMethod.Get, BuildUserUri(current))
+        {
+            Headers = { Authorization = BasicAuth(current.Username, current.Password) },
+        };
+        using var currentResponse = await httpClient.SendAsync(currentRequest, cancellationToken);
+        var finalCredentialAccepted = currentResponse.IsSuccessStatusCode;
+
+        var previousJson = await secretsManager.GetSecretStringAsync(rabbitMqSecretArn, "AWSPREVIOUS", cancellationToken);
+        var previous = JsonSerializer.Deserialize<RabbitMqCredential>(previousJson)
+            ?? throw new InvalidOperationException("RabbitMQ secret (AWSPREVIOUS) did not deserialize to the expected shape.");
+
+        var bootstrapCredentialRejected = await VerifyOldCredentialRejectedAsync(
+            previous.Host, previous.Username, previous.Password, cancellationToken);
+
+        Log.Information(
+            "Rotation verification: FinalCredentialAccepted={FinalCredentialAccepted}, BootstrapCredentialRejected={BootstrapCredentialRejected}.",
+            finalCredentialAccepted, bootstrapCredentialRejected);
+
+        return (finalCredentialAccepted, bootstrapCredentialRejected);
+    }
+
     private static Uri BuildUserUri(RabbitMqCredential credential) =>
         new($"https://{credential.Host}/api/users/{Uri.EscapeDataString(credential.Username)}");
 
@@ -158,7 +192,7 @@ public sealed class RabbitMqCredentialRotator(HttpClient httpClient, ISecretsMan
         RandomNumberGenerator.GetString("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", 32);
 
     private Task<string> GetSecretStringAsync(string secretArn, CancellationToken cancellationToken) =>
-        secretsManager.GetSecretStringAsync(secretArn, cancellationToken);
+        secretsManager.GetSecretStringAsync(secretArn, "AWSCURRENT", cancellationToken);
 }
 
 // Minimal abstraction over the two Secrets Manager operations this tool
@@ -170,7 +204,7 @@ public sealed class RabbitMqCredentialRotator(HttpClient httpClient, ISecretsMan
 // share code with each other" precedent used throughout this codebase.
 public interface ISecretsManagerClient
 {
-    Task<string> GetSecretStringAsync(string secretId, CancellationToken cancellationToken);
+    Task<string> GetSecretStringAsync(string secretId, string versionStage, CancellationToken cancellationToken);
     Task PutSecretStringAsync(string secretId, string secretString, CancellationToken cancellationToken);
 }
 

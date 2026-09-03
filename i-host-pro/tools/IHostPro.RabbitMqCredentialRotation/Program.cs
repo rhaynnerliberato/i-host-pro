@@ -22,14 +22,26 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var rabbitMqSecretArn = RequireConfig(configuration, "RabbitMqCredentialRotation:RabbitMqSecretArn");
+    // Default "Rotate" (unchanged behavior) - "Verify" runs a read-only
+    // check confirming the current secret authenticates and the version it
+    // superseded no longer does, without rotating again. Selected via a
+    // container command/environment override at RunTask time, not a
+    // separate image/task definition.
+    var mode = configuration["RabbitMqCredentialRotation:Mode"] ?? "Rotate";
 
     using var secretsClient = new AmazonSecretsManagerClient();
     using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
     var secretsManagerClient = new AwsSecretsManagerClient(secretsClient);
 
     var rotator = new RabbitMqCredentialRotator(httpClient, secretsManagerClient);
-    await rotator.RotateAsync(rabbitMqSecretArn);
 
+    if (string.Equals(mode, "Verify", StringComparison.OrdinalIgnoreCase))
+    {
+        var (finalCredentialAccepted, bootstrapCredentialRejected) = await rotator.VerifyRotationAsync(rabbitMqSecretArn);
+        return finalCredentialAccepted && bootstrapCredentialRejected ? 0 : 1;
+    }
+
+    await rotator.RotateAsync(rabbitMqSecretArn);
     return 0;
 }
 catch (Exception ex)

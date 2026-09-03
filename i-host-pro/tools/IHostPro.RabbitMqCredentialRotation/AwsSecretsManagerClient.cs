@@ -5,9 +5,10 @@ namespace IHostPro.RabbitMqCredentialRotation;
 
 public sealed class AwsSecretsManagerClient(IAmazonSecretsManager client) : ISecretsManagerClient
 {
-    public async Task<string> GetSecretStringAsync(string secretId, CancellationToken cancellationToken)
+    public async Task<string> GetSecretStringAsync(string secretId, string versionStage, CancellationToken cancellationToken)
     {
-        var response = await client.GetSecretValueAsync(new GetSecretValueRequest { SecretId = secretId }, cancellationToken);
+        var response = await client.GetSecretValueAsync(
+            new GetSecretValueRequest { SecretId = secretId, VersionStage = versionStage }, cancellationToken);
         return response.SecretString
             ?? throw new InvalidOperationException($"Secret {secretId} has no SecretString value.");
     }

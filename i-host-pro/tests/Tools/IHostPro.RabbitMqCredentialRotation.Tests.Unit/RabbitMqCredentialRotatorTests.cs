@@ -146,4 +146,35 @@ public sealed class RabbitMqCredentialRotatorTests
         rejected.Should().BeTrue();
         stillValid.Should().BeFalse();
     }
+
+    // 9. VerifyRotationAsync (post-rotation, non-mutating check): reads
+    // AWSCURRENT and AWSPREVIOUS, authenticates with each - simulates a
+    // broker that accepts only the current password and rejects the
+    // previous one, exactly the state a successful rotation should leave.
+    [Fact]
+    public async Task VerifyRotationAsync_reports_true_true_when_current_works_and_previous_is_rejected()
+    {
+        const string currentSecret = """
+            {"host":"b-fake.mq.sa-east-1.on.aws","port":5671,"virtualHost":"/","username":"ihostpro","password":"NewPassword456","useTls":true}
+            """;
+        const string previousSecret = """
+            {"host":"b-fake.mq.sa-east-1.on.aws","port":5671,"virtualHost":"/","username":"ihostpro","password":"OldPassword123","useTls":true}
+            """;
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            var authHeader = request.Headers.Authorization!.Parameter!;
+            var decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(authHeader));
+            var usedNewPassword = decoded.EndsWith("NewPassword456", StringComparison.Ordinal);
+            return Task.FromResult(usedNewPassword
+                ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") }
+                : new HttpResponseMessage(HttpStatusCode.Unauthorized));
+        });
+        var secrets = new FakeSecretsManagerClient(currentSecret, previousSecret);
+        var rotator = new RabbitMqCredentialRotator(new HttpClient(handler), secrets);
+
+        var (finalCredentialAccepted, bootstrapCredentialRejected) = await rotator.VerifyRotationAsync("arn:fake");
+
+        finalCredentialAccepted.Should().BeTrue();
+        bootstrapCredentialRejected.Should().BeTrue();
+    }
 }
