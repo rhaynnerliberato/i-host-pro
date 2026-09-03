@@ -66,3 +66,40 @@ module "ecs_iam" {
   # scoped to our own namespace only, never a bare secretsmanager:* wildcard.
   tenant_secret_arn_pattern = "arn:aws:secretsmanager:*:*:secret:ihostpro/homolog/tenants/*"
 }
+
+# CP5.3B: RDS PostgreSQL + ElastiCache Valkey. Amazon MQ's module exists
+# (../../modules/amazon-mq) but is deliberately NOT wired in here yet - its
+# broker user password has no write-only alternative in the installed
+# provider and is a required argument (unlike Valkey's optional auth_token),
+# so creating it would force a Terraform-state-exposure decision that has
+# not been made yet (see the CP5.3B report).
+module "rds" {
+  source = "../../modules/rds"
+
+  environment        = "homolog"
+  vpc_id             = module.network.vpc_id
+  private_subnet_ids = module.network.private_subnet_ids
+  allowed_security_group_ids = [
+    module.network.api_security_group_id,
+    module.network.worker_security_group_id,
+    module.network.migrationrunner_security_group_id,
+  ]
+
+  app_secret_arn      = module.credentials.secret_arns["database/app"]
+  migrator_secret_arn = module.credentials.secret_arns["database/migrator"]
+}
+
+module "valkey" {
+  source = "../../modules/valkey"
+
+  environment        = "homolog"
+  vpc_id             = module.network.vpc_id
+  private_subnet_ids = module.network.private_subnet_ids
+  allowed_security_group_ids = [
+    module.network.api_security_group_id,
+    module.network.worker_security_group_id,
+  ]
+
+  # auth_token intentionally omitted (module default = null) - see CP5.3B
+  # report's credential-generation matrix.
+}

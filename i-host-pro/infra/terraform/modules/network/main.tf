@@ -177,3 +177,24 @@ resource "aws_security_group" "worker" {
     ManagedBy   = "Terraform"
   }
 }
+
+resource "aws_security_group" "migrationrunner" {
+  name        = "ihostpro-${var.environment}-migrationrunner"
+  description = "MigrationRunner one-off Fargate task - zero inbound rules, outbound only. Public subnet + public IP (no NAT), same PUBLIC_TASK_ENI_LOCKED_SECURITY_GROUP model as Api/Worker - it must reach ECR/CloudWatch/AWS APIs to run at all."
+  vpc_id      = aws_vpc.this.id
+
+  egress {
+    description = "Outbound to RDS, Amazon MQ, AWS APIs (ECR/CloudWatch/Secrets Manager)"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "ihostpro-${var.environment}-migrationrunner-sg"
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
