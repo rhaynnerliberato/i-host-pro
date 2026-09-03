@@ -11,6 +11,18 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+# CP5.3C corrective Decision Gate: bake in the AWS RDS global trust bundle
+# for SSL Mode=VerifyFull (never Trust Server Certificate=true) - downloaded
+# only from the official AWS domain, validated as a non-empty, parseable
+# certificate bundle before it ships in any image. curl/openssl are already
+# present in this base image (confirmed) - no extra apt-get install needed.
+# This tool needs it too: it connects as the RDS master credential, which
+# must never use a weaker TLS mode than the runtime app/migrator roles do.
+RUN mkdir -p /app/rds-ca \
+    && curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o /app/rds-ca/global-bundle.pem \
+    && test -s /app/rds-ca/global-bundle.pem \
+    && openssl x509 -in /app/rds-ca/global-bundle.pem -noout
+
 COPY . .
 RUN dotnet restore tools/IHostPro.DatabaseBootstrap/IHostPro.DatabaseBootstrap.csproj
 RUN dotnet publish tools/IHostPro.DatabaseBootstrap/IHostPro.DatabaseBootstrap.csproj \
@@ -28,6 +40,7 @@ RUN dotnet publish tools/IHostPro.DatabaseBootstrap/IHostPro.DatabaseBootstrap.c
 FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
 WORKDIR /app
 COPY --from=build --chown=$APP_UID:$APP_UID /app/publish .
+COPY --from=build --chown=$APP_UID:$APP_UID /app/rds-ca /app/rds-ca
 
 # Runs as the official image's own built-in non-root user (never root),
 # same as every other image in this project.

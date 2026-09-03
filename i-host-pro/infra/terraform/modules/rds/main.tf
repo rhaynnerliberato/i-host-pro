@@ -126,10 +126,16 @@ resource "aws_db_instance" "this" {
 # ConnectionStrings:<Context> shape exactly - zero application code change),
 # built from Terraform-known, non-secret pieces (RDS endpoint/port/db name)
 # plus an ephemeral-generated password that Terraform never stores in state
-# or plan output. TLS is required (Require) at minimum; upgrading to
-# VerifyFull with the RDS CA bundle is a CP5.3C follow-up (needs the
-# container image to carry the CA cert - not decided in this checkpoint,
-# per item 15). ---
+# or plan output.
+#
+# CP5.3C corrective Decision Gate: upgraded from SSL Mode=Require to
+# VerifyFull with the RDS CA bundle - every one of docker/{Api,Worker,
+# MigrationRunner,DatabaseBootstrap}.Dockerfile now bakes in the official
+# AWS global trust bundle at this exact path. Never Trust Server
+# Certificate=true. ---
+locals {
+  rds_ca_bundle_path = "/app/rds-ca/global-bundle.pem"
+}
 
 ephemeral "random_password" "app" {
   length  = 32
@@ -142,13 +148,16 @@ ephemeral "random_password" "migrator" {
 }
 
 resource "aws_secretsmanager_secret_version" "app" {
-  secret_id                = var.app_secret_arn
-  secret_string_wo         = "Host=${aws_db_instance.this.address};Port=${aws_db_instance.this.port};Database=${var.database_name};Username=${var.app_role_name};Password=${ephemeral.random_password.app.result};SSL Mode=Require"
-  secret_string_wo_version = 1
+  secret_id        = var.app_secret_arn
+  secret_string_wo = "Host=${aws_db_instance.this.address};Port=${aws_db_instance.this.port};Database=${var.database_name};Username=${var.app_role_name};Password=${ephemeral.random_password.app.result};SSL Mode=VerifyFull;Root Certificate=${local.rds_ca_bundle_path}"
+  # Bumped from 1 - secret_string_wo has no persisted value for Terraform to
+  # diff against, so only a version bump (not a content change alone) tells
+  # it to actually rewrite the secret on the next apply.
+  secret_string_wo_version = 2
 }
 
 resource "aws_secretsmanager_secret_version" "migrator" {
   secret_id                = var.migrator_secret_arn
-  secret_string_wo         = "Host=${aws_db_instance.this.address};Port=${aws_db_instance.this.port};Database=${var.database_name};Username=${var.migrator_role_name};Password=${ephemeral.random_password.migrator.result};SSL Mode=Require"
-  secret_string_wo_version = 1
+  secret_string_wo         = "Host=${aws_db_instance.this.address};Port=${aws_db_instance.this.port};Database=${var.database_name};Username=${var.migrator_role_name};Password=${ephemeral.random_password.migrator.result};SSL Mode=VerifyFull;Root Certificate=${local.rds_ca_bundle_path}"
+  secret_string_wo_version = 2
 }

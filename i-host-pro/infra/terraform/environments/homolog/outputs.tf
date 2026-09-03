@@ -86,3 +86,19 @@ output "amazon_mq_hostname" {
 output "amazon_mq_security_group_id" {
   value = module.amazon_mq.security_group_id
 }
+
+output "ecs_cluster_name" {
+  value = module.ecs.cluster_name
+}
+
+output "database_bootstrap_task_definition_arn" {
+  value = module.ecs.database_bootstrap_task_definition_arn
+}
+
+output "migrationrunner_task_definition_arn" {
+  value = module.ecs.migrationrunner_task_definition_arn
+}
+
+output "database_bootstrap_security_group_id" {
+  value = module.network.database_bootstrap_security_group_id
+}

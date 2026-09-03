@@ -13,3 +13,7 @@ output "worker_task_role_arn" {
 output "migrationrunner_task_role_arn" {
   value = aws_iam_role.migrationrunner_task.arn
 }
+
+output "database_bootstrap_task_role_arn" {
+  value = aws_iam_role.database_bootstrap_task.arn
+}

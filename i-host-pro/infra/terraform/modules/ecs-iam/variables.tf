@@ -30,3 +30,9 @@ variable "tenant_secret_arn_pattern" {
   type        = string
   default     = ""
 }
+
+variable "database_bootstrap_task_secret_arns" {
+  description = "Secret ARNs the DatabaseBootstrap task role may GetSecretValue at runtime - EXACTLY the RDS master secret plus database/app and database/migrator, never RabbitMQ/Redis/Anthropic/Meta/JWT/Grafana (CP5.3C corrective Decision Gate item 5)."
+  type        = list(string)
+  default     = []
+}

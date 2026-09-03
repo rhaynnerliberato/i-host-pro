@@ -65,6 +65,15 @@ module "ecs_iam" {
   # WhatsApp-configuration time), never enumerable as fixed ARNs up front -
   # scoped to our own namespace only, never a bare secretsmanager:* wildcard.
   tenant_secret_arn_pattern = "arn:aws:secretsmanager:*:*:secret:ihostpro/homolog/tenants/*"
+
+  # CP5.3C corrective Decision Gate item 5/24: EXACTLY these 3 - the RDS
+  # master credential plus the two role connection strings it bootstraps.
+  # Never RabbitMQ/Redis/Anthropic/Meta/JWT/Grafana.
+  database_bootstrap_task_secret_arns = [
+    module.rds.master_user_secret_arn,
+    module.credentials.secret_arns["database/app"],
+    module.credentials.secret_arns["database/migrator"],
+  ]
 }
 
 # CP5.3B: RDS PostgreSQL + ElastiCache Valkey. Amazon MQ's module exists
@@ -83,6 +92,7 @@ module "rds" {
     module.network.api_security_group_id,
     module.network.worker_security_group_id,
     module.network.migrationrunner_security_group_id,
+    module.network.database_bootstrap_security_group_id,
   ]
 
   # Homolog-only exception (CP5.3B corrective Decision Gate item 1): the AWS
@@ -127,4 +137,34 @@ module "amazon_mq" {
   ]
 
   rabbitmq_secret_arn = module.credentials.secret_arns["rabbitmq"]
+}
+
+# CP5.3C corrective Decision Gate items 20-21: ECS cluster + the two one-off
+# task definitions (DatabaseBootstrap, MigrationRunner). No Api/Worker ECS
+# services, no ALB - those remain out of scope. Neither one-off task is run
+# by this apply - task definitions only describe how `aws ecs run-task`
+# would launch them, under a SEPARATE, still-not-granted execution
+# authorization (DatabaseBootstrapExecutionAuthorized=false,
+# MigrationExecutionAuthorized=false).
+module "ecs" {
+  source = "../../modules/ecs"
+
+  environment = "homolog"
+  aws_region  = var.region
+
+  execution_role_arn               = module.ecs_iam.execution_role_arn
+  database_bootstrap_task_role_arn = module.ecs_iam.database_bootstrap_task_role_arn
+  migrationrunner_task_role_arn    = module.ecs_iam.migrationrunner_task_role_arn
+
+  database_bootstrap_image = "${module.ecr.repository_urls["database-bootstrap"]}:${var.image_tag}"
+  migrationrunner_image    = "${module.ecr.repository_urls["migrationrunner"]}:${var.image_tag}"
+
+  database_bootstrap_security_group_id = module.network.database_bootstrap_security_group_id
+  migrationrunner_security_group_id    = module.network.migrationrunner_security_group_id
+  public_subnet_ids                    = module.network.public_subnet_ids
+
+  rds_master_user_secret_arn   = module.rds.master_user_secret_arn
+  database_app_secret_arn      = module.credentials.secret_arns["database/app"]
+  database_migrator_secret_arn = module.credentials.secret_arns["database/migrator"]
+  rabbitmq_secret_arn          = module.credentials.secret_arns["rabbitmq"]
 }

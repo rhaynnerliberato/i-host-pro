@@ -198,3 +198,34 @@ resource "aws_security_group" "migrationrunner" {
     ManagedBy   = "Terraform"
   }
 }
+
+# CP5.3C corrective Decision Gate item 22-23: same PUBLIC_TASK_ENI_LOCKED_
+# SECURITY_GROUP model as MigrationRunner (zero inbound, public subnet, no
+# NAT) - a dedicated SG rather than reusing MigrationRunner's, so the two
+# one-off tasks stay independently auditable/revocable at the network layer,
+# matching how they already have independent IAM task roles. Egress is
+# broad (-1/0.0.0.0/0), not narrowed to the four named AWS service ports -
+# deliberately consistent with the existing MigrationRunner/Api/Worker SGs,
+# which all rely on zero inbound rules for protection, not restricted
+# egress (AWS service endpoints have no small, stable CIDR list to enumerate
+# without a NAT/VPC-endpoint redesign, out of scope here).
+resource "aws_security_group" "database_bootstrap" {
+  name        = "ihostpro-${var.environment}-database-bootstrap"
+  description = "DatabaseBootstrap one-off Fargate task - zero inbound rules, outbound only. Public subnet + public IP (no NAT), same PUBLIC_TASK_ENI_LOCKED_SECURITY_GROUP model as MigrationRunner/Api/Worker."
+  vpc_id      = aws_vpc.this.id
+
+  egress {
+    description = "Outbound to RDS, AWS APIs (ECR/CloudWatch/Secrets Manager)"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "ihostpro-${var.environment}-database-bootstrap-sg"
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}

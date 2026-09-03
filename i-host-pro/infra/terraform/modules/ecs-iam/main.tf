@@ -112,6 +112,43 @@ resource "aws_iam_role" "migrationrunner_task" {
 # variables), never an AWS SDK call of its own - confirmed by reading its
 # actual runtime configuration, not assumed.
 
+# CP5.3C corrective Decision Gate item 24: dedicated task role for the
+# one-off Database Bootstrap task. Unlike Api/Worker/MigrationRunner, this
+# tool calls the AWS SDK directly (GetSecretValueAsync) rather than
+# consuming execution-role-injected environment variables - it needs the
+# RDS master secret, which is deliberately never wired into the shared
+# execution role's SecretInjection statement.
+resource "aws_iam_role" "database_bootstrap_task" {
+  name               = "ihostpro-${var.environment}-database-bootstrap-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    Service     = "database-bootstrap"
+    ManagedBy   = "Terraform"
+  }
+}
+
+data "aws_iam_policy_document" "database_bootstrap_task_permissions" {
+  dynamic "statement" {
+    for_each = length(var.database_bootstrap_task_secret_arns) > 0 ? [1] : []
+    content {
+      sid       = "SecretsManagerBootstrapReads"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = var.database_bootstrap_task_secret_arns
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "database_bootstrap_task" {
+  count  = length(var.database_bootstrap_task_secret_arns) > 0 ? 1 : 0
+  name   = "ihostpro-${var.environment}-database-bootstrap-task-permissions"
+  role   = aws_iam_role.database_bootstrap_task.id
+  policy = data.aws_iam_policy_document.database_bootstrap_task_permissions.json
+}
+
 locals {
   api_secret_arns    = concat(var.api_task_secret_arns, var.tenant_secret_arn_pattern != "" ? [var.tenant_secret_arn_pattern] : [])
   worker_secret_arns = concat(var.worker_task_secret_arns, var.tenant_secret_arn_pattern != "" ? [var.tenant_secret_arn_pattern] : [])

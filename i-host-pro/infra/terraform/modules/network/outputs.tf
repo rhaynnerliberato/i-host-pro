@@ -25,3 +25,7 @@ output "worker_security_group_id" {
 output "migrationrunner_security_group_id" {
   value = aws_security_group.migrationrunner.id
 }
+
+output "database_bootstrap_security_group_id" {
+  value = aws_security_group.database_bootstrap.id
+}
