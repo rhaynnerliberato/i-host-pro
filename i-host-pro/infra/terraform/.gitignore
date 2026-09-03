@@ -1,0 +1,19 @@
+# Provider binaries/plugins — large, re-downloaded by `terraform init`.
+**/.terraform/
+
+# Local/remote state and its backups — state is sensitive, never committed.
+*.tfstate
+*.tfstate.*
+
+# Per-developer variable overrides (may contain environment-specific,
+# non-repo values) — pass values explicitly via -var/-var-file instead.
+*.auto.tfvars
+*.auto.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform crash logs.
+crash.log
+crash.*.log
