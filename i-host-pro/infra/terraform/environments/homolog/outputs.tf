@@ -78,3 +78,11 @@ output "valkey_port" {
 output "valkey_security_group_id" {
   value = module.valkey.security_group_id
 }
+
+output "amazon_mq_hostname" {
+  value = module.amazon_mq.amqps_hostname
+}
+
+output "amazon_mq_security_group_id" {
+  value = module.amazon_mq.security_group_id
+}

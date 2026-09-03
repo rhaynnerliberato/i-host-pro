@@ -100,6 +100,24 @@ module "valkey" {
     module.network.worker_security_group_id,
   ]
 
-  # auth_token intentionally omitted (module default = null) - see CP5.3B
-  # report's credential-generation matrix.
+  redis_secret_arn = module.credentials.secret_arns["redis"]
+}
+
+# ACCEPTED_PILOT_SECURITY_EXCEPTION (CP5.3B revised Decision Gate): the
+# broker's bootstrap user password has no write-only path in the installed
+# provider and is required at creation time - see modules/amazon-mq/main.tf
+# for the full reasoning and the mandatory CP5.3C rotation plan.
+module "amazon_mq" {
+  source = "../../modules/amazon-mq"
+
+  environment        = "homolog"
+  vpc_id             = module.network.vpc_id
+  private_subnet_ids = module.network.private_subnet_ids
+  allowed_security_group_ids = [
+    module.network.api_security_group_id,
+    module.network.worker_security_group_id,
+    module.network.migrationrunner_security_group_id,
+  ]
+
+  rabbitmq_secret_arn = module.credentials.secret_arns["rabbitmq"]
 }

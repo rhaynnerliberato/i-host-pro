@@ -31,9 +31,7 @@ variable "node_type" {
   default = "cache.t4g.micro"
 }
 
-variable "auth_token" {
-  description = "AUTH token value. CP5.3B Decision Gate finding: aws_elasticache_replication_group.auth_token has NO write-only variant in the installed hashicorp/aws 5.100.0 provider (confirmed via `terraform providers schema -json`) - setting this WILL persist the plaintext value in Terraform state. Left null (AUTH disabled) until an explicit decision is made among the alternatives in the CP5.3B report. Never pass a real value here without that decision."
+variable "redis_secret_arn" {
+  description = "ARN of the pre-existing (CP5.3A) empty ihostpro/<environment>/redis secret container - this module writes the generated AUTH token/connection string into it via a write-only argument."
   type        = string
-  default     = null
-  sensitive   = true
 }

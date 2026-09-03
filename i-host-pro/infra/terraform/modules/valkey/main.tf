@@ -30,11 +30,17 @@ resource "aws_security_group" "this" {
   }
 }
 
-# Single-node replication group (aws_elasticache_replication_group, not
-# aws_elasticache_cluster - only the replication_group resource exposes
-# auth_token/transit encryption at all, confirmed via the installed
-# provider's schema). num_cache_clusters=1 = pilot single-node baseline,
-# RedisPilotHA=false, a known/accepted SPOF.
+# CP5.3B (revised): AWS provider upgraded to 6.62.0 specifically because
+# aws_elasticache_replication_group.auth_token_wo (write-only) only exists
+# from 6.x onward - confirmed via `terraform providers schema -json` against
+# the real downloaded provider before upgrading. The same ephemeral password
+# feeds both this resource's auth_token_wo AND the ihostpro/homolog/redis
+# secret below - neither ever touches Terraform state or plan output.
+ephemeral "random_password" "valkey_auth" {
+  length  = 32
+  special = false # AUTH token must not contain characters StackExchange.Redis's connection-string parser would need escaping
+}
+
 resource "aws_elasticache_replication_group" "this" {
   replication_group_id = "ihostpro-${var.environment}-valkey"
   description          = "iHostPro ${var.environment} Valkey (rate limiting, session revocation, policy cache)"
@@ -50,10 +56,20 @@ resource "aws_elasticache_replication_group" "this" {
 
   at_rest_encryption_enabled = true
   transit_encryption_enabled = true
-  # CP5.3B Decision Gate: AUTH intentionally left unset (see variables.tf) -
-  # setting a real value here requires resolving the state-exposure finding
-  # first. Transit + at-rest encryption are both already enabled regardless.
-  auth_token = var.auth_token
+
+  # ValkeyPasswordlessAccessAllowed=false: SET (not ROTATE) on this first
+  # activation - ROTATE keeps the old (nonexistent) token valid alongside
+  # the new one during a transition window, which for a brand-new
+  # replication group would mean a real passwordless-equivalent gap. SET
+  # applies the token as the only valid credential immediately.
+  #
+  # auth_token_wo (write-only), not auth_token - the plain auth_token
+  # attribute is persisted to state and rejects ephemeral values outright
+  # (confirmed by Terraform's own validation error when this was first
+  # tried against the wrong attribute name).
+  auth_token_wo              = ephemeral.random_password.valkey_auth.result
+  auth_token_wo_version      = 1
+  auth_token_update_strategy = "SET"
 
   auto_minor_version_upgrade = true
 
@@ -68,4 +84,16 @@ resource "aws_elasticache_replication_group" "this" {
     Environment = var.environment
     ManagedBy   = "Terraform"
   }
+}
+
+# StackExchange.Redis connection-string shape (matches every existing
+# Configuration:PolicyCache/RateLimiting:Redis/Identity:SessionRevocationCache
+# ConnectionString config value exactly - zero application code change).
+resource "aws_secretsmanager_secret_version" "redis" {
+  secret_id = var.redis_secret_arn
+  # Port is the well-known Redis/Valkey default (6379, never overridden by
+  # this module) - aws_elasticache_replication_group has no top-level
+  # computed `port` attribute to read back.
+  secret_string_wo         = "${aws_elasticache_replication_group.this.primary_endpoint_address}:6379,password=${ephemeral.random_password.valkey_auth.result},ssl=true,abortConnect=false"
+  secret_string_wo_version = 1
 }

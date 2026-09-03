@@ -36,8 +36,7 @@ variable "broker_username" {
   default = "ihostpro"
 }
 
-variable "broker_password" {
-  description = "CP5.3B Decision Gate finding: aws_mq_broker's nested user block has NO write-only password variant in the installed hashicorp/aws 5.100.0 provider, and the attribute is REQUIRED (unlike ElastiCache's optional auth_token, this resource cannot even be created without a value). This module is written but deliberately NOT wired into environments/homolog/main.tf yet - creating it requires resolving the same state-exposure decision as Valkey's auth_token first. No default - must never be silently invented."
+variable "rabbitmq_secret_arn" {
+  description = "ARN of the pre-existing (CP5.3A) empty ihostpro/<environment>/rabbitmq secret container - populated with the BOOTSTRAP credential this module generates (see main.tf's ACCEPTED_PILOT_SECURITY_EXCEPTION note)."
   type        = string
-  sensitive   = true
 }
