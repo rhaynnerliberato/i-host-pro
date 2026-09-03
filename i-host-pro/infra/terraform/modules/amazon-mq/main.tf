@@ -1,6 +1,15 @@
 resource "aws_security_group" "this" {
-  name        = "ihostpro-${var.environment}-amazon-mq"
-  description = "Amazon MQ RabbitMQ - inbound tcp/5671 (AMQPS) from application tasks, tcp/443 (Management API) from the credential rotation task only, never a public CIDR."
+  name = "ihostpro-${var.environment}-amazon-mq"
+  # NOTE: this description string is intentionally left unchanged from its
+  # original text (still only mentions 5671/AMQPS) even though a 443/
+  # Management API ingress rule now exists below - aws_security_group's
+  # `description` is immutable at the AWS API level (ForceNew), so editing
+  # it would replace this SG, which is attached to the live, already-
+  # provisioned Amazon MQ broker (CP5.3C RabbitMQ rotation subgate: caught
+  # via a real `terraform plan` showing "must be replaced" before applying,
+  # not applied). The real ingress rules (visible in state/console) are the
+  # authoritative description of what's actually allowed.
+  description = "Amazon MQ RabbitMQ - inbound tcp/5671 (AMQPS) only from Api/Worker/MigrationRunner task SGs, never a public CIDR."
   vpc_id      = var.vpc_id
 
   ingress {
