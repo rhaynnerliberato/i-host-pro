@@ -343,3 +343,74 @@ jobs:
       - name: Docker build — ${{ matrix.image.name }}
         working-directory: i-host-pro
         run: docker build -f ${{ matrix.image.dockerfile }} -t ihostpro-${{ matrix.image.name }}-ci .
+
+  # ---- Publish (CP5.3C corrective Decision Gate items 2-7). Builds and
+  # pushes the 4 images to Homolog's ECR under an immutable git-SHA tag,
+  # authenticating via the pre-existing (CP5.2) ihostpro-homolog-deploy IAM
+  # role over GitHub OIDC - zero long-lived AWS credentials as GitHub
+  # Secrets. Gated on every quality job that exists today (not just
+  # packaging), master-only, and the "homolog" GitHub Environment so its
+  # own protection rules (if any are configured there) apply too.
+  #
+  # Never executed by this checkpoint (DockerPushExecuted=false,
+  # EcrPushExecuted=false) - authoring/validating the YAML only.
+  publish:
+    needs:
+      [
+        build,
+        architecture-tests,
+        unit-tests,
+        integration-tests,
+        api-integration-tests,
+        frontend-e2e-tests,
+        packaging,
+      ]
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment: homolog
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - { name: Api, dockerfile: "docker/Api.Dockerfile", repository: ihostpro-homolog-api }
+          - { name: Worker, dockerfile: "docker/Worker.Dockerfile", repository: ihostpro-homolog-worker }
+          - { name: MigrationRunner, dockerfile: "docker/MigrationRunner.Dockerfile", repository: ihostpro-homolog-migrationrunner }
+          - { name: DatabaseBootstrap, dockerfile: "docker/DatabaseBootstrap.Dockerfile", repository: ihostpro-homolog-database-bootstrap }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::816435462760:role/ihostpro-homolog-deploy
+          aws-region: sa-east-1
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr-login
+
+      # ECR repositories are IMMUTABLE (CP5.2) - a second push to the same
+      # tag is rejected outright. A re-run of the same commit (e.g. retrying
+      # a failed downstream step) must not fail here just because the image
+      # was already published; skip it instead of trying to delete/force an
+      # existing tag.
+      - name: Check if this SHA is already published — ${{ matrix.image.name }}
+        id: check
+        run: |
+          if aws ecr describe-images --repository-name ${{ matrix.image.repository }} --image-ids imageTag=${{ github.sha }} >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push — ${{ matrix.image.name }}
+        if: steps.check.outputs.already_published == 'false'
+        working-directory: i-host-pro
+        run: |
+          docker build -f ${{ matrix.image.dockerfile }} -t ${{ steps.ecr-login.outputs.registry }}/${{ matrix.image.repository }}:${{ github.sha }} .
+          docker push ${{ steps.ecr-login.outputs.registry }}/${{ matrix.image.repository }}:${{ github.sha }}
+
+      - name: Already published — ${{ matrix.image.name }}
+        if: steps.check.outputs.already_published == 'true'
+        run: echo "::notice::${{ matrix.image.repository }}:${{ github.sha }} already exists in ECR (repository is IMMUTABLE) - skipping push. Expected on a re-run of the same commit."
