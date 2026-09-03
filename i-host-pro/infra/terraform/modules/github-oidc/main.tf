@@ -112,16 +112,53 @@ data "aws_iam_policy_document" "deploy_permissions" {
   }
 
   statement {
-    sid       = "PassEcsTaskRoles"
-    effect    = "Allow"
-    actions   = ["iam:PassRole"]
-    resources = ["arn:aws:iam::*:role/ihostpro-${each.key}-ecs-*"]
+    sid     = "PassEcsTaskRoles"
+    effect  = "Allow"
+    actions = ["iam:PassRole"]
+    # CP5.3C corrective Decision Gate item 8-12 audit: ihostpro-<env>-ecs-*
+    # matches only the shared execution role - none of the individual task
+    # roles (modules/ecs-iam) are named that way. Extended narrowly to
+    # exactly the two CP5.3C one-off task roles (MigrationRunner,
+    # DatabaseBootstrap) - api-task/worker-task stay out until CP5.3D
+    # actually authorizes their services.
+    resources = [
+      "arn:aws:iam::*:role/ihostpro-${each.key}-ecs-*",
+      "arn:aws:iam::*:role/ihostpro-${each.key}-migrationrunner-task",
+      "arn:aws:iam::*:role/ihostpro-${each.key}-database-bootstrap-task",
+    ]
 
     condition {
       test     = "StringEquals"
       variable = "iam:PassedToService"
       values   = ["ecs-tasks.amazonaws.com"]
     }
+  }
+
+  # CP5.3C corrective Decision Gate item 11 audit: ecs:RunTask/DescribeTasks
+  # were entirely absent - the two one-off task definitions this checkpoint
+  # creates would otherwise be unusable by this deploy role. Scoped to
+  # exactly those two task-definition families and the one cluster.
+  statement {
+    sid     = "EcsRunOneOffTasks"
+    effect  = "Allow"
+    actions = ["ecs:RunTask"]
+    resources = [
+      "arn:aws:ecs:*:*:task-definition/ihostpro-${each.key}-migrationrunner:*",
+      "arn:aws:ecs:*:*:task-definition/ihostpro-${each.key}-database-bootstrap:*",
+    ]
+
+    condition {
+      test     = "ArnEquals"
+      variable = "ecs:cluster"
+      values   = ["arn:aws:ecs:*:*:cluster/ihostpro-${each.key}-cluster"]
+    }
+  }
+
+  statement {
+    sid       = "EcsDescribeOneOffTasks"
+    effect    = "Allow"
+    actions   = ["ecs:DescribeTasks"]
+    resources = ["arn:aws:ecs:*:*:task/ihostpro-${each.key}-cluster/*"]
   }
 }
 

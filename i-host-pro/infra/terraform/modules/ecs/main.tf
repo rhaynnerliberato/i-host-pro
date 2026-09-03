@@ -3,7 +3,12 @@
 # service Homolog will ever need (the natural minimal design - nothing about
 # an ECS cluster itself is per-workload).
 resource "aws_ecs_cluster" "this" {
-  name = "ihostpro-${var.environment}"
+  # CP5.3C corrective Decision Gate item 8 audit: the pre-existing (CP5.2)
+  # ihostpro-<env>-deploy IAM role's EcsServiceUpdate statement already
+  # scopes its resource to service/ihostpro-<env>-cluster/* - naming the
+  # cluster to match avoids touching that already-applied policy at all,
+  # rather than the other way around.
+  name = "ihostpro-${var.environment}-cluster"
 
   setting {
     name  = "containerInsights"
