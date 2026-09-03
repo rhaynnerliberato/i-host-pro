@@ -337,6 +337,7 @@ jobs:
           - { name: Api, dockerfile: "docker/Api.Dockerfile" }
           - { name: Worker, dockerfile: "docker/Worker.Dockerfile" }
           - { name: MigrationRunner, dockerfile: "docker/MigrationRunner.Dockerfile" }
+          - { name: DatabaseBootstrap, dockerfile: "docker/DatabaseBootstrap.Dockerfile" }
     steps:
       - uses: actions/checkout@v4
       - name: Docker build — ${{ matrix.image.name }}

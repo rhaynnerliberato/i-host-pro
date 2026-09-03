@@ -247,6 +247,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IHostPro.Contexts.AIAgent.T
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IHostPro.Contexts.AIAgent.Tests.Integration", "tests\Contexts\AIAgent\IHostPro.Contexts.AIAgent.Tests.Integration\IHostPro.Contexts.AIAgent.Tests.Integration.csproj", "{55592E3F-B73D-4D31-8336-2433AFCD5443}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IHostPro.DatabaseBootstrap", "tools\IHostPro.DatabaseBootstrap\IHostPro.DatabaseBootstrap.csproj", "{11364CDC-E540-4EDE-8041-087B00274C75}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1313,6 +1315,18 @@ Global
 		{55592E3F-B73D-4D31-8336-2433AFCD5443}.Release|x64.Build.0 = Release|Any CPU
 		{55592E3F-B73D-4D31-8336-2433AFCD5443}.Release|x86.ActiveCfg = Release|Any CPU
 		{55592E3F-B73D-4D31-8336-2433AFCD5443}.Release|x86.Build.0 = Release|Any CPU
+		{11364CDC-E540-4EDE-8041-087B00274C75}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{11364CDC-E540-4EDE-8041-087B00274C75}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{11364CDC-E540-4EDE-8041-087B00274C75}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{11364CDC-E540-4EDE-8041-087B00274C75}.Debug|x64.Build.0 = Debug|Any CPU
+		{11364CDC-E540-4EDE-8041-087B00274C75}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{11364CDC-E540-4EDE-8041-087B00274C75}.Debug|x86.Build.0 = Debug|Any CPU
+		{11364CDC-E540-4EDE-8041-087B00274C75}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{11364CDC-E540-4EDE-8041-087B00274C75}.Release|Any CPU.Build.0 = Release|Any CPU
+		{11364CDC-E540-4EDE-8041-087B00274C75}.Release|x64.ActiveCfg = Release|Any CPU
+		{11364CDC-E540-4EDE-8041-087B00274C75}.Release|x64.Build.0 = Release|Any CPU
+		{11364CDC-E540-4EDE-8041-087B00274C75}.Release|x86.ActiveCfg = Release|Any CPU
+		{11364CDC-E540-4EDE-8041-087B00274C75}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1432,5 +1446,6 @@ Global
 		{14A1D625-4BFC-D571-F89A-C4FC471063DE} = {2697D308-4EF5-08F9-7EB0-CAE42DB50B82}
 		{BBDA097B-1E1A-4FF6-8767-0E002DF55FE4} = {14A1D625-4BFC-D571-F89A-C4FC471063DE}
 		{55592E3F-B73D-4D31-8336-2433AFCD5443} = {14A1D625-4BFC-D571-F89A-C4FC471063DE}
+		{11364CDC-E540-4EDE-8041-087B00274C75} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 	EndGlobalSection
 EndGlobal
