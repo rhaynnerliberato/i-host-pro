@@ -263,3 +263,54 @@ resource "aws_ecs_task_definition" "tenant_provisioning" {
     ManagedBy   = "Terraform"
   }
 }
+
+# --- Homolog test-fixture provisioning one-off task (CP5.3D-D corrective
+# Decision Gate, HomologScenarioProvisioning=TEST_FIXTURE_ONLY). Resolves
+# database/app itself via the AWS SDK (task role) - only config it needs is
+# the target TenantId (a plain, non-secret identifier). ---
+resource "aws_cloudwatch_log_group" "homolog_scenario_provisioning" {
+  name              = "/ecs/ihostpro-${var.environment}-homolog-scenario-provisioning"
+  retention_in_days = var.log_retention_days
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_ecs_task_definition" "homolog_scenario_provisioning" {
+  family                   = "ihostpro-${var.environment}-homolog-scenario-provisioning"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 512
+  memory                   = 1024
+  execution_role_arn       = var.execution_role_arn
+  task_role_arn            = var.homolog_scenario_provisioning_task_role_arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "homolog-scenario-provisioning"
+      image     = var.homolog_scenario_provisioning_image
+      essential = true
+      environment = [
+        { name = "HomologScenarioProvisioning__AppSecretArn", value = var.database_app_secret_arn },
+        { name = "HomologScenarioProvisioning__TenantId", value = var.homolog_scenario_provisioning_tenant_id },
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.homolog_scenario_provisioning.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "homolog-scenario-provisioning"
+        }
+      }
+    }
+  ])
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}

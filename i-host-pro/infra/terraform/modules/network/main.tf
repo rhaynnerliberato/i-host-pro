@@ -299,3 +299,28 @@ resource "aws_security_group" "tenant_provisioning" {
     ManagedBy   = "Terraform"
   }
 }
+
+# CP5.3D-D corrective Decision Gate: same PUBLIC_TASK_ENI_LOCKED_SECURITY_
+# GROUP model - HomologScenarioProvisioning=TEST_FIXTURE_ONLY, only ever
+# talks to RDS (as ihostpro_app) and AWS APIs, same shape as
+# tenant_provisioning above.
+resource "aws_security_group" "homolog_scenario_provisioning" {
+  name        = "ihostpro-${var.environment}-homolog-scenario-provisioning"
+  description = "Homolog test-fixture provisioning one-off Fargate task - zero inbound rules, outbound only. Public subnet + public IP (no NAT), same PUBLIC_TASK_ENI_LOCKED_SECURITY_GROUP model as the other one-off tools."
+  vpc_id      = aws_vpc.this.id
+
+  egress {
+    description = "Outbound to RDS, AWS APIs (ECR/CloudWatch/Secrets Manager)"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "ihostpro-${var.environment}-homolog-scenario-provisioning-sg"
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}

@@ -89,6 +89,10 @@ module "ecs_iam" {
   # it). Never database/migrator or the RDS master secret.
   tenant_provisioning_read_secret_arns          = [module.credentials.secret_arns["database/app"]]
   tenant_provisioning_admin_password_secret_arn = module.credentials.secret_arns["identity/bootstrap-admin-password"]
+
+  # CP5.3D-D corrective Decision Gate: EXACTLY database/app, nothing else -
+  # same reasoning as tenant_provisioning above.
+  homolog_scenario_provisioning_read_secret_arns = [module.credentials.secret_arns["database/app"]]
 }
 
 # CP5.3B: RDS PostgreSQL + ElastiCache Valkey. Amazon MQ's module exists
@@ -113,6 +117,10 @@ module "rds" {
     # real Npgsql connection timeout (RDS's own SG had no ingress rule for
     # this SG, so packets were silently dropped, not actively refused).
     module.network.tenant_provisioning_security_group_id,
+    # CP5.3D-D corrective Decision Gate: learned from the exact same class of
+    # bug above - grant this the moment the SG is introduced, not after a
+    # real failed RunTask.
+    module.network.homolog_scenario_provisioning_security_group_id,
   ]
 
   # Homolog-only exception (CP5.3B corrective Decision Gate item 1): the AWS
@@ -173,16 +181,18 @@ module "ecs" {
   environment = "homolog"
   aws_region  = var.region
 
-  execution_role_arn                = module.ecs_iam.execution_role_arn
-  database_bootstrap_task_role_arn  = module.ecs_iam.database_bootstrap_task_role_arn
-  migrationrunner_task_role_arn     = module.ecs_iam.migrationrunner_task_role_arn
-  rabbitmq_rotation_task_role_arn   = module.ecs_iam.rabbitmq_rotation_task_role_arn
-  tenant_provisioning_task_role_arn = module.ecs_iam.tenant_provisioning_task_role_arn
+  execution_role_arn                          = module.ecs_iam.execution_role_arn
+  database_bootstrap_task_role_arn            = module.ecs_iam.database_bootstrap_task_role_arn
+  migrationrunner_task_role_arn               = module.ecs_iam.migrationrunner_task_role_arn
+  rabbitmq_rotation_task_role_arn             = module.ecs_iam.rabbitmq_rotation_task_role_arn
+  tenant_provisioning_task_role_arn           = module.ecs_iam.tenant_provisioning_task_role_arn
+  homolog_scenario_provisioning_task_role_arn = module.ecs_iam.homolog_scenario_provisioning_task_role_arn
 
-  database_bootstrap_image  = "${module.ecr.repository_urls["database-bootstrap"]}:${var.database_bootstrap_image_tag}"
-  migrationrunner_image     = "${module.ecr.repository_urls["migrationrunner"]}:${var.migrationrunner_image_tag}"
-  rabbitmq_rotation_image   = "${module.ecr.repository_urls["rabbitmq-credential-rotation"]}:${var.rabbitmq_rotation_image_tag}"
-  tenant_provisioning_image = "${module.ecr.repository_urls["tenant-provisioning"]}:${var.tenant_provisioning_image_tag}"
+  database_bootstrap_image            = "${module.ecr.repository_urls["database-bootstrap"]}:${var.database_bootstrap_image_tag}"
+  migrationrunner_image               = "${module.ecr.repository_urls["migrationrunner"]}:${var.migrationrunner_image_tag}"
+  rabbitmq_rotation_image             = "${module.ecr.repository_urls["rabbitmq-credential-rotation"]}:${var.rabbitmq_rotation_image_tag}"
+  tenant_provisioning_image           = "${module.ecr.repository_urls["tenant-provisioning"]}:${var.tenant_provisioning_image_tag}"
+  homolog_scenario_provisioning_image = "${module.ecr.repository_urls["homolog-scenario-provisioning"]}:${var.homolog_scenario_provisioning_image_tag}"
 
   database_bootstrap_security_group_id = module.network.database_bootstrap_security_group_id
   migrationrunner_security_group_id    = module.network.migrationrunner_security_group_id
@@ -208,6 +218,10 @@ module "ecs" {
   tenant_provisioning_tenant_name               = var.tenant_provisioning_tenant_name
   tenant_provisioning_admin_email               = var.tenant_provisioning_admin_email
   tenant_provisioning_admin_full_name           = var.tenant_provisioning_admin_full_name
+
+  # CP5.3D-D corrective Decision Gate: always the same real tenant
+  # CP5.3D-C already provisioned - never a second/invented tenant.
+  homolog_scenario_provisioning_tenant_id = var.homolog_scenario_provisioning_tenant_id
 }
 
 # CP5.3D-B Decision Gate item 37/38: the apply must be split into two

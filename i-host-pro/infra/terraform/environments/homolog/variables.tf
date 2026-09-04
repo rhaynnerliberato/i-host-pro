@@ -34,6 +34,11 @@ variable "tenant_provisioning_image_tag" {
   type        = string
 }
 
+variable "homolog_scenario_provisioning_image_tag" {
+  description = "Immutable git-SHA tag of the homolog-scenario-provisioning image already pushed to ECR."
+  type        = string
+}
+
 # CP5.3D-A Decision Gate item 33: Api/Worker source code is causally
 # unchanged since 4c3f6c5 - no rebuild for aesthetics. No default: still
 # requires an explicit, deliberate value at plan/apply time.
@@ -110,5 +115,16 @@ variable "tenant_provisioning_admin_email" {
 
 variable "tenant_provisioning_admin_full_name" {
   description = "Full name for the initial Homolog admin user."
+  type        = string
+}
+
+# CP5.3D-D corrective Decision Gate: the real tenant to seed the synthetic
+# fixture into - always the same ihostpro-homolog tenant CP5.3D-C already
+# provisioned, never a second/invented tenant. No default: an empty value
+# would silently provision the fixture into a meaningless tenant, worse than
+# an explicit plan-time error (same principle as every other real-decision
+# variable in this file).
+variable "homolog_scenario_provisioning_tenant_id" {
+  description = "TenantId (GUID) of the real ihostpro-homolog tenant the synthetic homolog fixture data belongs to."
   type        = string
 }

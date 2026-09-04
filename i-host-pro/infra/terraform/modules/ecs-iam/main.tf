@@ -231,6 +231,42 @@ resource "aws_iam_role_policy" "tenant_provisioning_task" {
   policy = data.aws_iam_policy_document.tenant_provisioning_task_permissions.json
 }
 
+# CP5.3D-D corrective Decision Gate: dedicated task role for the one-off
+# Homolog test-fixture provisioning task (HomologScenarioProvisioning=
+# TEST_FIXTURE_ONLY). Read-only - EXACTLY the database/app connection
+# string, same secret Api/Worker/TenantProvisioning use - never
+# database/migrator, never RDS master, never any other secret.
+resource "aws_iam_role" "homolog_scenario_provisioning_task" {
+  name               = "ihostpro-${var.environment}-homolog-scenario-provisioning-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    Service     = "homolog-scenario-provisioning"
+    ManagedBy   = "Terraform"
+  }
+}
+
+data "aws_iam_policy_document" "homolog_scenario_provisioning_task_permissions" {
+  dynamic "statement" {
+    for_each = length(var.homolog_scenario_provisioning_read_secret_arns) > 0 ? [1] : []
+    content {
+      sid       = "SecretsManagerAppConnectionRead"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = var.homolog_scenario_provisioning_read_secret_arns
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "homolog_scenario_provisioning_task" {
+  count  = length(var.homolog_scenario_provisioning_read_secret_arns) > 0 ? 1 : 0
+  name   = "ihostpro-${var.environment}-homolog-scenario-provisioning-task-permissions"
+  role   = aws_iam_role.homolog_scenario_provisioning_task.id
+  policy = data.aws_iam_policy_document.homolog_scenario_provisioning_task_permissions.json
+}
+
 locals {
   # CP5.3D-A corrective audit: the tenant WhatsApp wildcard was originally
   # granted to BOTH task roles (CP5.3A) on the assumption that an outbound

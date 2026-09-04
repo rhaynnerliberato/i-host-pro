@@ -25,3 +25,7 @@ output "rabbitmq_rotation_task_role_arn" {
 output "tenant_provisioning_task_role_arn" {
   value = aws_iam_role.tenant_provisioning_task.arn
 }
+
+output "homolog_scenario_provisioning_task_role_arn" {
+  value = aws_iam_role.homolog_scenario_provisioning_task.arn
+}

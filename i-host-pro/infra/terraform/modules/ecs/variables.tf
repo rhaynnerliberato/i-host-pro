@@ -27,6 +27,10 @@ variable "tenant_provisioning_task_role_arn" {
   type = string
 }
 
+variable "homolog_scenario_provisioning_task_role_arn" {
+  type = string
+}
+
 variable "migrationrunner_task_role_arn" {
   type = string
 }
@@ -53,6 +57,11 @@ variable "rabbitmq_rotation_image" {
 
 variable "tenant_provisioning_image" {
   description = "Full ECR image reference (repository URL + immutable git-SHA tag) for the TenantProvisioning image."
+  type        = string
+}
+
+variable "homolog_scenario_provisioning_image" {
+  description = "Full ECR image reference (repository URL + immutable git-SHA tag) for the HomologScenarioProvisioning image."
   type        = string
 }
 
@@ -131,5 +140,14 @@ variable "tenant_provisioning_admin_email" {
 }
 
 variable "tenant_provisioning_admin_full_name" {
+  type = string
+}
+
+# CP5.3D-D corrective Decision Gate: the real tenant to seed the test
+# fixture into (HomologSyntheticBusinessFixture=true) - never a second
+# tenant, always the same ihostpro-homolog tenant CP5.3D-C already
+# provisioned. No default: an empty/placeholder value would silently
+# provision the fixture into a meaningless tenant.
+variable "homolog_scenario_provisioning_tenant_id" {
   type = string
 }

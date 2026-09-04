@@ -54,3 +54,9 @@ variable "tenant_provisioning_admin_password_secret_arn" {
   type        = string
   default     = ""
 }
+
+variable "homolog_scenario_provisioning_read_secret_arns" {
+  description = "Secret ARNs the homolog-scenario-provisioning task role may GetSecretValue - EXACTLY database/app (CP5.3D-D corrective Decision Gate), never database/migrator or RDS master."
+  type        = list(string)
+  default     = []
+}

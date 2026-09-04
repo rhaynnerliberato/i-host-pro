@@ -37,3 +37,7 @@ output "rabbitmq_rotation_security_group_id" {
 output "tenant_provisioning_security_group_id" {
   value = aws_security_group.tenant_provisioning.id
 }
+
+output "homolog_scenario_provisioning_security_group_id" {
+  value = aws_security_group.homolog_scenario_provisioning.id
+}

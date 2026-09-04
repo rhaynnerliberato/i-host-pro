@@ -21,3 +21,7 @@ output "rabbitmq_rotation_task_definition_arn" {
 output "tenant_provisioning_task_definition_arn" {
   value = aws_ecs_task_definition.tenant_provisioning.arn
 }
+
+output "homolog_scenario_provisioning_task_definition_arn" {
+  value = aws_ecs_task_definition.homolog_scenario_provisioning.arn
+}
