@@ -42,3 +42,15 @@ variable "rabbitmq_secret_arn" {
   type        = string
   default     = ""
 }
+
+variable "tenant_provisioning_read_secret_arns" {
+  description = "Secret ARNs the tenant-provisioning task role may GetSecretValue - EXACTLY database/app (CP5.3D-C corrective Decision Gate), never database/migrator or RDS master."
+  type        = list(string)
+  default     = []
+}
+
+variable "tenant_provisioning_admin_password_secret_arn" {
+  description = "The identity/bootstrap-admin-password secret ARN the tenant-provisioning task role may Get/PutSecretValue - nothing else. Left empty (no statement added) if not supplied."
+  type        = string
+  default     = ""
+}

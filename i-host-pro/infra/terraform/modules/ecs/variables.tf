@@ -23,6 +23,10 @@ variable "rabbitmq_rotation_task_role_arn" {
   type = string
 }
 
+variable "tenant_provisioning_task_role_arn" {
+  type = string
+}
+
 variable "migrationrunner_task_role_arn" {
   type = string
 }
@@ -44,6 +48,11 @@ variable "migrationrunner_image" {
 
 variable "rabbitmq_rotation_image" {
   description = "Full ECR image reference (repository URL + immutable git-SHA tag) for the RabbitMqCredentialRotation image."
+  type        = string
+}
+
+variable "tenant_provisioning_image" {
+  description = "Full ECR image reference (repository URL + immutable git-SHA tag) for the TenantProvisioning image."
   type        = string
 }
 
@@ -97,4 +106,30 @@ variable "rabbitmq_secret_arn" {
 variable "log_retention_days" {
   type    = number
   default = 30
+}
+
+# CP5.3D-C corrective Decision Gate: the exact tenant/admin identity to
+# provision - never hardcoded in code, never invented here either. No
+# default on any of these: an empty/placeholder value would silently
+# provision a meaningless tenant, which is worse than an explicit
+# "you must supply this" plan-time error (same principle already applied to
+# every image_tag variable in this codebase).
+variable "tenant_provisioning_admin_password_secret_arn" {
+  type = string
+}
+
+variable "tenant_provisioning_tenant_slug" {
+  type = string
+}
+
+variable "tenant_provisioning_tenant_name" {
+  type = string
+}
+
+variable "tenant_provisioning_admin_email" {
+  type = string
+}
+
+variable "tenant_provisioning_admin_full_name" {
+  type = string
 }

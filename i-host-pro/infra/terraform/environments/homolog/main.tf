@@ -82,6 +82,13 @@ module "ecs_iam" {
   # CP5.3C RabbitMQ credential rotation subgate: EXACTLY the rabbitmq
   # secret, nothing else.
   rabbitmq_secret_arn = module.credentials.secret_arns["rabbitmq"]
+
+  # CP5.3D-C corrective Decision Gate: EXACTLY database/app (read-only, the
+  # same connection string Api/Worker use) plus the new admin-password
+  # secret (read+write - this tool is the only thing that ever populates
+  # it). Never database/migrator or the RDS master secret.
+  tenant_provisioning_read_secret_arns          = [module.credentials.secret_arns["database/app"]]
+  tenant_provisioning_admin_password_secret_arn = module.credentials.secret_arns["identity/bootstrap-admin-password"]
 }
 
 # CP5.3B: RDS PostgreSQL + ElastiCache Valkey. Amazon MQ's module exists
@@ -161,14 +168,16 @@ module "ecs" {
   environment = "homolog"
   aws_region  = var.region
 
-  execution_role_arn               = module.ecs_iam.execution_role_arn
-  database_bootstrap_task_role_arn = module.ecs_iam.database_bootstrap_task_role_arn
-  migrationrunner_task_role_arn    = module.ecs_iam.migrationrunner_task_role_arn
-  rabbitmq_rotation_task_role_arn  = module.ecs_iam.rabbitmq_rotation_task_role_arn
+  execution_role_arn                = module.ecs_iam.execution_role_arn
+  database_bootstrap_task_role_arn  = module.ecs_iam.database_bootstrap_task_role_arn
+  migrationrunner_task_role_arn     = module.ecs_iam.migrationrunner_task_role_arn
+  rabbitmq_rotation_task_role_arn   = module.ecs_iam.rabbitmq_rotation_task_role_arn
+  tenant_provisioning_task_role_arn = module.ecs_iam.tenant_provisioning_task_role_arn
 
-  database_bootstrap_image = "${module.ecr.repository_urls["database-bootstrap"]}:${var.database_bootstrap_image_tag}"
-  migrationrunner_image    = "${module.ecr.repository_urls["migrationrunner"]}:${var.migrationrunner_image_tag}"
-  rabbitmq_rotation_image  = "${module.ecr.repository_urls["rabbitmq-credential-rotation"]}:${var.rabbitmq_rotation_image_tag}"
+  database_bootstrap_image  = "${module.ecr.repository_urls["database-bootstrap"]}:${var.database_bootstrap_image_tag}"
+  migrationrunner_image     = "${module.ecr.repository_urls["migrationrunner"]}:${var.migrationrunner_image_tag}"
+  rabbitmq_rotation_image   = "${module.ecr.repository_urls["rabbitmq-credential-rotation"]}:${var.rabbitmq_rotation_image_tag}"
+  tenant_provisioning_image = "${module.ecr.repository_urls["tenant-provisioning"]}:${var.tenant_provisioning_image_tag}"
 
   database_bootstrap_security_group_id = module.network.database_bootstrap_security_group_id
   migrationrunner_security_group_id    = module.network.migrationrunner_security_group_id
@@ -185,6 +194,15 @@ module "ecs" {
   rds_host          = module.rds.endpoint
   rds_port          = module.rds.port
   rds_database_name = module.rds.database_name
+
+  # CP5.3D-C corrective Decision Gate: the exact tenant/admin identity to
+  # provision - real decisions, never invented here (see
+  # environments/homolog/variables.tf for why these have no default).
+  tenant_provisioning_admin_password_secret_arn = module.credentials.secret_arns["identity/bootstrap-admin-password"]
+  tenant_provisioning_tenant_slug               = var.tenant_provisioning_tenant_slug
+  tenant_provisioning_tenant_name               = var.tenant_provisioning_tenant_name
+  tenant_provisioning_admin_email               = var.tenant_provisioning_admin_email
+  tenant_provisioning_admin_full_name           = var.tenant_provisioning_admin_full_name
 }
 
 # CP5.3D-B Decision Gate item 37/38: the apply must be split into two

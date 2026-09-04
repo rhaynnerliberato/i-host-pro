@@ -205,3 +205,61 @@ resource "aws_ecs_task_definition" "rabbitmq_rotation" {
     ManagedBy   = "Terraform"
   }
 }
+
+# --- Tenant/Admin provisioning one-off task (CP5.3D-C corrective Decision
+# Gate). Resolves the database/app secret and reads/writes the
+# admin-password secret itself via the AWS SDK (task role) - same
+# "resolves its own secrets" shape as DatabaseBootstrap/RabbitMqRotation,
+# not MigrationRunner's execution-role env-var-injection shape. Tenant
+# slug/name/admin email/full name are NOT secrets - plain identifiers, same
+# NON_SECRET_CONFIG treatment as DatabaseBootstrap's RdsHost/RdsPort. ---
+resource "aws_cloudwatch_log_group" "tenant_provisioning" {
+  name              = "/ecs/ihostpro-${var.environment}-tenant-provisioning"
+  retention_in_days = var.log_retention_days
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_ecs_task_definition" "tenant_provisioning" {
+  family                   = "ihostpro-${var.environment}-tenant-provisioning"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 512
+  memory                   = 1024
+  execution_role_arn       = var.execution_role_arn
+  task_role_arn            = var.tenant_provisioning_task_role_arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "tenant-provisioning"
+      image     = var.tenant_provisioning_image
+      essential = true
+      environment = [
+        { name = "TenantProvisioning__AppSecretArn", value = var.database_app_secret_arn },
+        { name = "TenantProvisioning__AdminPasswordSecretArn", value = var.tenant_provisioning_admin_password_secret_arn },
+        { name = "TenantProvisioning__TenantSlug", value = var.tenant_provisioning_tenant_slug },
+        { name = "TenantProvisioning__TenantName", value = var.tenant_provisioning_tenant_name },
+        { name = "TenantProvisioning__AdminEmail", value = var.tenant_provisioning_admin_email },
+        { name = "TenantProvisioning__AdminFullName", value = var.tenant_provisioning_admin_full_name },
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.tenant_provisioning.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "tenant-provisioning"
+        }
+      }
+    }
+  ])
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}

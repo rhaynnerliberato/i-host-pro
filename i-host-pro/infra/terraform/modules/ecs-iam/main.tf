@@ -184,6 +184,53 @@ resource "aws_iam_role_policy" "rabbitmq_rotation_task" {
   policy = data.aws_iam_policy_document.rabbitmq_rotation_task_permissions.json
 }
 
+# CP5.3D-C corrective Decision Gate: dedicated task role for the one-off
+# Tenant/Admin provisioning task. Like DatabaseBootstrap/RabbitMqRotation,
+# calls the AWS SDK directly - reads the database/app connection string
+# (the same secret Api/Worker use, read-only) and both reads and writes the
+# NEW admin-password secret (read-only would be pointless: this tool is the
+# only thing that ever populates it).
+resource "aws_iam_role" "tenant_provisioning_task" {
+  name               = "ihostpro-${var.environment}-tenant-provisioning-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    Service     = "tenant-provisioning"
+    ManagedBy   = "Terraform"
+  }
+}
+
+data "aws_iam_policy_document" "tenant_provisioning_task_permissions" {
+  dynamic "statement" {
+    for_each = length(var.tenant_provisioning_read_secret_arns) > 0 ? [1] : []
+    content {
+      sid       = "SecretsManagerAppConnectionRead"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = var.tenant_provisioning_read_secret_arns
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.tenant_provisioning_admin_password_secret_arn != "" ? [1] : []
+    content {
+      sid       = "SecretsManagerAdminPasswordReadWrite"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"]
+      resources = [var.tenant_provisioning_admin_password_secret_arn]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "tenant_provisioning_task" {
+  count  = length(var.tenant_provisioning_read_secret_arns) > 0 || var.tenant_provisioning_admin_password_secret_arn != "" ? 1 : 0
+  name   = "ihostpro-${var.environment}-tenant-provisioning-task-permissions"
+  role   = aws_iam_role.tenant_provisioning_task.id
+  policy = data.aws_iam_policy_document.tenant_provisioning_task_permissions.json
+}
+
 locals {
   # CP5.3D-A corrective audit: the tenant WhatsApp wildcard was originally
   # granted to BOTH task roles (CP5.3A) on the assumption that an outbound

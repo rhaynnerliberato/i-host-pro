@@ -20,5 +20,11 @@ variable "secret_names" {
     "meta/webhook/verify-token",
     "jwt/signing-key",
     "observability/otlp",
+    # CP5.3D-C corrective Decision Gate: the initial admin's own generated
+    # password - written directly by IHostPro.TenantProvisioning
+    # (PutSecretValue) only when it creates a genuinely new admin, never by
+    # Terraform (SecretResourceCreated != SecretValuePopulated, same rule as
+    # every other secret here).
+    "identity/bootstrap-admin-password",
   ]
 }

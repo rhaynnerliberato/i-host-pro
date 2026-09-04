@@ -274,3 +274,28 @@ resource "aws_security_group" "rabbitmq_rotation" {
     ManagedBy   = "Terraform"
   }
 }
+
+# CP5.3D-C corrective Decision Gate: same PUBLIC_TASK_ENI_LOCKED_SECURITY_
+# GROUP model, dedicated SG for the same independent-auditability reason as
+# database_bootstrap/rabbitmq_rotation above - this one-off task only ever
+# talks to RDS (as ihostpro_app) and AWS APIs, never Amazon MQ/Redis.
+resource "aws_security_group" "tenant_provisioning" {
+  name        = "ihostpro-${var.environment}-tenant-provisioning"
+  description = "Tenant/admin provisioning one-off Fargate task - zero inbound rules, outbound only. Public subnet + public IP (no NAT), same PUBLIC_TASK_ENI_LOCKED_SECURITY_GROUP model as DatabaseBootstrap/MigrationRunner."
+  vpc_id      = aws_vpc.this.id
+
+  egress {
+    description = "Outbound to RDS, AWS APIs (ECR/CloudWatch/Secrets Manager)"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "ihostpro-${var.environment}-tenant-provisioning-sg"
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}

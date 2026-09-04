@@ -21,3 +21,7 @@ output "database_bootstrap_task_role_arn" {
 output "rabbitmq_rotation_task_role_arn" {
   value = aws_iam_role.rabbitmq_rotation_task.arn
 }
+
+output "tenant_provisioning_task_role_arn" {
+  value = aws_iam_role.tenant_provisioning_task.arn
+}

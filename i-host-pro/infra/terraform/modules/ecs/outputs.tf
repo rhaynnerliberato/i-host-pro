@@ -17,3 +17,7 @@ output "migrationrunner_task_definition_arn" {
 output "rabbitmq_rotation_task_definition_arn" {
   value = aws_ecs_task_definition.rabbitmq_rotation.arn
 }
+
+output "tenant_provisioning_task_definition_arn" {
+  value = aws_ecs_task_definition.tenant_provisioning.arn
+}

@@ -111,6 +111,14 @@ output "rabbitmq_rotation_security_group_id" {
   value = module.network.rabbitmq_rotation_security_group_id
 }
 
+output "tenant_provisioning_task_definition_arn" {
+  value = module.ecs.tenant_provisioning_task_definition_arn
+}
+
+output "tenant_provisioning_security_group_id" {
+  value = module.network.tenant_provisioning_security_group_id
+}
+
 # CP5.3D-B item 5/6/11: once B1 is applied, these are the exact 4
 # nameservers the user must set at Registro.br in place of
 # a.auto.dns.br/b.auto.dns.br - the only manual step left in the whole

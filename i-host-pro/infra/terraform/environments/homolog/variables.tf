@@ -29,6 +29,11 @@ variable "rabbitmq_rotation_image_tag" {
   type        = string
 }
 
+variable "tenant_provisioning_image_tag" {
+  description = "Immutable git-SHA tag of the tenant-provisioning image already pushed to ECR."
+  type        = string
+}
+
 # CP5.3D-A Decision Gate item 33: Api/Worker source code is causally
 # unchanged since 4c3f6c5 - no rebuild for aesthetics. No default: still
 # requires an explicit, deliberate value at plan/apply time.
@@ -80,4 +85,30 @@ variable "enable_runtime_edge" {
   description = "Explicit switch for the ACM/ALB/ECS services (Api/Worker) modules - CP5.3D-B2. True now that nameserver delegation to Route53 has propagated."
   type        = bool
   default     = true
+}
+
+# CP5.3D-C corrective Decision Gate: the real tenant/admin identity for
+# IHostPro.TenantProvisioning to provision - genuine business decisions
+# (item 10/11 of that gate: "não inventar formato de TenantId", "não
+# hardcode email"), never invented or defaulted here. No default on any of
+# these: an empty/placeholder value would silently provision a meaningless
+# tenant, worse than an explicit plan-time error.
+variable "tenant_provisioning_tenant_slug" {
+  description = "TenantSlug for the Homolog tenant (lowercase, 3-63 chars, [a-z0-9-] only - TenantSlug.Create's own validation)."
+  type        = string
+}
+
+variable "tenant_provisioning_tenant_name" {
+  description = "Display name for the Homolog tenant."
+  type        = string
+}
+
+variable "tenant_provisioning_admin_email" {
+  description = "Email address for the initial Homolog admin user."
+  type        = string
+}
+
+variable "tenant_provisioning_admin_full_name" {
+  description = "Full name for the initial Homolog admin user."
+  type        = string
 }

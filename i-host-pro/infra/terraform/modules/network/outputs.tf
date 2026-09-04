@@ -33,3 +33,7 @@ output "database_bootstrap_security_group_id" {
 output "rabbitmq_rotation_security_group_id" {
   value = aws_security_group.rabbitmq_rotation.id
 }
+
+output "tenant_provisioning_security_group_id" {
+  value = aws_security_group.tenant_provisioning.id
+}
