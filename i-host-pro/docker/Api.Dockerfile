@@ -33,12 +33,20 @@ WORKDIR /app
 COPY --from=build --chown=$APP_UID:$APP_UID /app/publish .
 COPY --from=build --chown=$APP_UID:$APP_UID /app/rds-ca /app/rds-ca
 
-# Fase 12, Checkpoint 2 (Observability Finalization, Documento 21 §18) — the
-# real dependency-aware readiness endpoint the Api now exposes. curl adds a
-# small, standard layer for this alone; no other tool in this image needs it.
+# Fase 12, Checkpoint 2 (Observability Finalization, Documento 21 §18) —
+# curl adds a small, standard layer for the healthcheck below; no other
+# tool in this image needs it.
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+# CP5.3D-A Decision Gate: the container-level healthcheck must use
+# /health/live (process/runtime alive), never /health/ready (dependency
+# diagnostics - Redis can legitimately be Degraded, per
+# RedisDownCorePolicyFlowWorks=true, without the Api itself being
+# unhealthy). Using /health/ready here would let ECS kill and replace a
+# perfectly healthy Api container over a transient Redis blip. /health/ready
+# remains exactly as it was - a diagnostic endpoint, never removed, never
+# changed - just no longer what decides this container's own liveness.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:8080/health/ready || exit 1
+    CMD curl -f http://localhost:8080/health/live || exit 1
 
 # Fase 12, Checkpoint 4 (Security/Secrets/LGPD Hardening) — runs as the
 # official image's own built-in non-root user (never root) from here on.

@@ -39,8 +39,15 @@ COPY --from=build --chown=$APP_UID:$APP_UID /app/publish .
 COPY --from=build --chown=$APP_UID:$APP_UID /app/rds-ca /app/rds-ca
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+# CP5.3D-A Decision Gate: same correction as Api.Dockerfile - the real
+# bug was found in both images, not just Api's. /health/live (process
+# alive), never /health/ready (Redis can legitimately be Degraded per
+# RedisDownCorePolicyFlowWorks=true without Worker itself being
+# unhealthy) - using /health/ready here would let ECS kill and replace a
+# perfectly healthy Worker container over a transient Redis blip.
+# /health/ready remains unchanged as a diagnostic endpoint.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:5141/health/ready || exit 1
+    CMD curl -f http://localhost:5141/health/live || exit 1
 
 # Fase 12, Checkpoint 4 (Security/Secrets/LGPD Hardening) — runs as the
 # official image's own built-in non-root user (never root) from here on.
