@@ -108,6 +108,11 @@ module "rds" {
     module.network.worker_security_group_id,
     module.network.migrationrunner_security_group_id,
     module.network.database_bootstrap_security_group_id,
+    # CP5.3D-C corrective Decision Gate: real, live-execution bug found and
+    # fixed - this was omitted when the tool was first designed, causing a
+    # real Npgsql connection timeout (RDS's own SG had no ingress rule for
+    # this SG, so packets were silently dropped, not actively refused).
+    module.network.tenant_provisioning_security_group_id,
   ]
 
   # Homolog-only exception (CP5.3B corrective Decision Gate item 1): the AWS
