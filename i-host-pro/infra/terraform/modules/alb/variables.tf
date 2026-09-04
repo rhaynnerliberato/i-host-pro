@@ -19,17 +19,16 @@ variable "security_group_id" {
   type = string
 }
 
-# CP5.3D-A Decision Gate item 42: no fake certificate is ever created here.
-# Empty (the default) means BaseDomain/ACM are not yet decided - the module
-# still creates the ALB and target group (so Api's real proof work isn't
-# blocked on the domain decision alone), but creates ZERO listeners until a
-# real certificate ARN is supplied. An ALB with no listeners is valid but
-# non-functional - acceptable for a DESIGN_ONLY gate that explicitly must
-# not apply anything yet.
+# CP5.3D-B: this module is only ever instantiated once BaseDomain/ACM are
+# decided (gated by the caller's enable_runtime_edge, not by this variable
+# any more) - a real certificate ARN is always expected here, usually the
+# not-yet-known output of a Terraform-managed aws_acm_certificate_validation
+# in the same apply. No default/empty-string sentinel: making the listeners
+# themselves conditional on "is this empty" broke plan-time evaluation once
+# the value became a computed (not literal) string - see CP5.3D-B report.
 variable "certificate_arn" {
-  description = "ACM certificate ARN for the HTTPS listener - empty until BaseDomain is decided and a real certificate exists. No listener (HTTP or HTTPS) is created while this is empty."
+  description = "ACM certificate ARN for the HTTPS listener - required, no fake/placeholder certificate is ever created."
   type        = string
-  default     = ""
 }
 
 variable "access_logs_enabled" {

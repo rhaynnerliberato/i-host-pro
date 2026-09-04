@@ -141,10 +141,10 @@ resource "aws_lb_target_group" "api" {
   }
 }
 
-# HTTPS listener - only created once a real ACM certificate exists
-# (BaseDomain decision). Never a fake/self-signed certificate.
+# HTTPS listener - never a fake/self-signed certificate. This module is
+# only instantiated once BaseDomain/ACM are decided (caller-side
+# enable_runtime_edge), so unconditional here - no per-listener count.
 resource "aws_lb_listener" "https" {
-  count             = var.certificate_arn != "" ? 1 : 0
   load_balancer_arn = aws_lb.this.arn
   port              = 443
   protocol          = "HTTPS"
@@ -158,11 +158,9 @@ resource "aws_lb_listener" "https" {
 }
 
 # HTTP listener - redirect-only, never a direct forward to the target group
-# (item 56: HTTP is never the final operational endpoint). Gated on the
-# same certificate_arn - a redirect to a port that has no listener yet
-# would just be a dead end, so it is created alongside HTTPS, not before.
+# (item 56: HTTP is never the final operational endpoint) - created
+# alongside HTTPS, same unconditional lifecycle.
 resource "aws_lb_listener" "http_redirect" {
-  count             = var.certificate_arn != "" ? 1 : 0
   load_balancer_arn = aws_lb.this.arn
   port              = 80
   protocol          = "HTTP"

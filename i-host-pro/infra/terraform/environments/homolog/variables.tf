@@ -42,23 +42,30 @@ variable "worker_image_tag" {
   type        = string
 }
 
-# CP5.3D-A Decision Gate item 3/42: empty until BaseDomain is decided and a
-# real ACM certificate exists - the alb module creates zero listeners while
-# this is empty (never a fake certificate).
-variable "alb_certificate_arn" {
-  type    = string
-  default = ""
+# CP5.3D-B Decision Gate: BaseDomain is now resolved - the user registered
+# and controls this domain at Registro.br (WHOIS-confirmed, status
+# "Publicado"). Real default now that this is a ratified decision, not a
+# placeholder - the ACM certificate/DNS alias below are derived from this,
+# never a separate hardcoded literal.
+variable "base_domain" {
+  description = "The registered apex domain whose DNS authority is delegated to this environment's Route53 zone."
+  type        = string
+  default     = "ihostpro.com.br"
 }
 
-# CP5.3D-A Decision Gate final decisions (item 13): BaseDomain is still
-# USER_DECISION_PENDING - an empty alb_certificate_arn alone must not be the
-# only thing standing between this plan and creating half of the runtime
-# edge (ALB, target group, log bucket, Api/Worker services). This flag gates
-# the module blocks themselves (main.tf), so while false the plan contains
-# ZERO resources from modules "alb" and "ecs_services" - not just gated
-# listeners inside an otherwise-created ALB.
+# CP5.3D-A Decision Gate final decisions (item 13): BaseDomain was
+# USER_DECISION_PENDING at the time - an empty certificate ARN alone must
+# not be the only thing standing between this plan and creating half of the
+# runtime edge (ALB, target group, log bucket, Api/Worker services). This
+# flag gates the module blocks themselves (main.tf), so while false the plan
+# contains ZERO resources from modules "route53", "acm_certificate", "alb"
+# and "ecs_services" - not just gated listeners inside an otherwise-created
+# ALB. CP5.3D-B Decision Gate item 32: BaseDomain is now resolved, so the
+# default flips to true - TerraformApplyAuthorized remains the separate,
+# standing procedural gate that actually controls whether `terraform apply`
+# runs (this flag only controls what's IN the plan).
 variable "enable_runtime_edge" {
-  description = "Explicit switch for the ALB and ECS services (Api/Worker) modules. Stays false until BaseDomain is decided - never inferred from alb_certificate_arn alone."
+  description = "Explicit switch for the Route53/ACM/ALB and ECS services (Api/Worker) modules. True now that BaseDomain is resolved (CP5.3D-B) - apply is still gated separately."
   type        = bool
-  default     = false
+  default     = true
 }

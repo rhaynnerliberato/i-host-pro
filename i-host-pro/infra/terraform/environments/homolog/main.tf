@@ -183,11 +183,39 @@ module "ecs" {
   rds_database_name = module.rds.database_name
 }
 
+# CP5.3D-B: one hosted zone for the whole registered apex domain (item 4 -
+# never a per-environment sub-zone). Registrar stays Registro.br - only DNS
+# authority moves here. Gated on enable_runtime_edge like everything else in
+# this section; the ONLY manual step this leaves the user (item 5/6) is
+# swapping Registro.br's current nameservers (a.auto.dns.br/b.auto.dns.br)
+# for this zone's 4 real ones, once applied.
+module "route53" {
+  count = var.enable_runtime_edge ? 1 : 0
+
+  source = "../../modules/route53"
+
+  domain_name = var.base_domain
+}
+
+# CP5.3D-B item 9/10: fully Terraform-managed DNS-validated certificate -
+# no manual CNAME creation. item 37/38: the validation resource inside this
+# module only completes once the zone's nameservers are actually live at
+# the registrar, which is why the future apply is meant to be split
+# (route53 zone first, user swaps NS, then this + alb + ecs_services).
+module "acm_certificate" {
+  count = var.enable_runtime_edge ? 1 : 0
+
+  source = "../../modules/acm-certificate"
+
+  domain_name = "api.homolog.${var.base_domain}"
+  zone_id     = module.route53[0].zone_id
+}
+
 # CP5.3D-A Decision Gate final decisions (item 13): gated on
-# var.enable_runtime_edge (default false), not merely on an empty
-# alb_certificate_arn - while false, this module contributes ZERO resources
-# to the plan (no ALB, no target group, no log bucket). BaseDomain is still
-# USER_DECISION_PENDING. No apply this checkpoint
+# var.enable_runtime_edge - while false, this module contributes ZERO
+# resources to the plan (no ALB, no target group, no log bucket). CP5.3D-B:
+# certificate_arn now sourced directly from the Terraform-managed ACM
+# module instead of a manually-supplied ARN - no apply this checkpoint
 # (TerraformApplyAuthorized=false).
 module "alb" {
   count = var.enable_runtime_edge ? 1 : 0
@@ -198,7 +226,7 @@ module "alb" {
   vpc_id            = module.network.vpc_id
   public_subnet_ids = module.network.public_subnet_ids
   security_group_id = module.network.alb_security_group_id
-  certificate_arn   = var.alb_certificate_arn
+  certificate_arn   = module.acm_certificate[0].certificate_arn
 }
 
 # CP5.3D-A Decision Gate final decisions (item 13): same enable_runtime_edge
@@ -240,4 +268,21 @@ module "ecs_services" {
   anthropic_secret_arn                 = module.credentials.secret_arns["anthropic"]
   meta_webhook_app_secret_arn          = module.credentials.secret_arns["meta/webhook/app-secret"]
   meta_webhook_verify_token_secret_arn = module.credentials.secret_arns["meta/webhook/verify-token"]
+}
+
+# CP5.3D-B item 36: the public DNS name for the Api - an alias record (no
+# separate hosted-zone charge, resolves directly to the ALB, tracks its IPs
+# automatically). Same enable_runtime_edge gate as the rest of this section.
+resource "aws_route53_record" "api_homolog" {
+  count = var.enable_runtime_edge ? 1 : 0
+
+  zone_id = module.route53[0].zone_id
+  name    = "api.homolog.${var.base_domain}"
+  type    = "A"
+
+  alias {
+    name                   = module.alb[0].alb_dns_name
+    zone_id                = module.alb[0].alb_zone_id
+    evaluate_target_health = true
+  }
 }

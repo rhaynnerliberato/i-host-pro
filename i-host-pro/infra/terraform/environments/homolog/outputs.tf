@@ -110,3 +110,18 @@ output "rabbitmq_rotation_task_definition_arn" {
 output "rabbitmq_rotation_security_group_id" {
   value = module.network.rabbitmq_rotation_security_group_id
 }
+
+# CP5.3D-B item 5/6: once applied, these are the exact 4 nameservers the
+# user must set at Registro.br in place of a.auto.dns.br/b.auto.dns.br -
+# the only manual step left in the whole domain/ACM/ALB flow.
+output "route53_name_servers" {
+  value = var.enable_runtime_edge ? module.route53[0].name_servers : null
+}
+
+output "acm_certificate_arn" {
+  value = var.enable_runtime_edge ? module.acm_certificate[0].certificate_arn : null
+}
+
+output "api_homolog_fqdn" {
+  value = var.enable_runtime_edge ? "api.homolog.${var.base_domain}" : null
+}

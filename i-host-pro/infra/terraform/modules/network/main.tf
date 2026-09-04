@@ -112,6 +112,18 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # CP5.3D-B item 13: port 80 exists only to be redirected to 443 by the
+  # ALB's own listener (modules/alb's aws_lb_listener.http_redirect) - never
+  # forwarded to a target group. Description text left unchanged (immutable/
+  # ForceNew on this resource - confirmed the hard way during CP5.3C).
+  ingress {
+    description = "HTTP from anywhere (redirect-only, see http_redirect listener)"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     description = "To Api tasks"
     from_port   = 0
