@@ -183,11 +183,15 @@ module "ecs" {
   rds_database_name = module.rds.database_name
 }
 
-# CP5.3D-A Decision Gate: ALB (item 24/44) - creates the load balancer and
-# target group regardless, but ZERO listeners while alb_certificate_arn is
-# empty (BaseDomain/ACM not yet decided - see item 3/42). No apply this
-# checkpoint (TerraformApplyAuthorized=false).
+# CP5.3D-A Decision Gate final decisions (item 13): gated on
+# var.enable_runtime_edge (default false), not merely on an empty
+# alb_certificate_arn - while false, this module contributes ZERO resources
+# to the plan (no ALB, no target group, no log bucket). BaseDomain is still
+# USER_DECISION_PENDING. No apply this checkpoint
+# (TerraformApplyAuthorized=false).
 module "alb" {
+  count = var.enable_runtime_edge ? 1 : 0
+
   source = "../../modules/alb"
 
   environment       = "homolog"
@@ -197,12 +201,18 @@ module "alb" {
   certificate_arn   = var.alb_certificate_arn
 }
 
-# CP5.3D-A Decision Gate: Api/Worker ECS services (item 47). DESIGN ONLY -
+# CP5.3D-A Decision Gate final decisions (item 13): same enable_runtime_edge
+# gate as module.alb above (item 47's design is unchanged, only now actually
+# absent from the plan while the flag is false) - Api/Worker ECS services
+# reference module.alb[0], which only exists when this module also does,
+# since both share the identical condition. DESIGN ONLY -
 # TerraformApplyAuthorized=false. Reuses the Api/Worker SGs already created
 # in CP5.2 (modules/network) and the task roles already created in CP5.3A
 # (modules/ecs-iam) - only the service/task-definition resources themselves
 # are new.
 module "ecs_services" {
+  count = var.enable_runtime_edge ? 1 : 0
+
   source = "../../modules/ecs-services"
 
   environment = "homolog"
@@ -221,7 +231,7 @@ module "ecs_services" {
   api_security_group_id    = module.network.api_security_group_id
   worker_security_group_id = module.network.worker_security_group_id
   public_subnet_ids        = module.network.public_subnet_ids
-  alb_target_group_arn     = module.alb.target_group_arn
+  alb_target_group_arn     = module.alb[0].target_group_arn
 
   database_app_secret_arn              = module.credentials.secret_arns["database/app"]
   rabbitmq_secret_arn                  = module.credentials.secret_arns["rabbitmq"]

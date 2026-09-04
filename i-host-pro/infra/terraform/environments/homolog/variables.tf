@@ -49,3 +49,16 @@ variable "alb_certificate_arn" {
   type    = string
   default = ""
 }
+
+# CP5.3D-A Decision Gate final decisions (item 13): BaseDomain is still
+# USER_DECISION_PENDING - an empty alb_certificate_arn alone must not be the
+# only thing standing between this plan and creating half of the runtime
+# edge (ALB, target group, log bucket, Api/Worker services). This flag gates
+# the module blocks themselves (main.tf), so while false the plan contains
+# ZERO resources from modules "alb" and "ecs_services" - not just gated
+# listeners inside an otherwise-created ALB.
+variable "enable_runtime_edge" {
+  description = "Explicit switch for the ALB and ECS services (Api/Worker) modules. Stays false until BaseDomain is decided - never inferred from alb_certificate_arn alone."
+  type        = bool
+  default     = false
+}
