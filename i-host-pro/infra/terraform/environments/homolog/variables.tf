@@ -53,19 +53,30 @@ variable "base_domain" {
   default     = "ihostpro.com.br"
 }
 
+# CP5.3D-B Decision Gate item 1/37/38 (subgate split, approved): the apply
+# is split into B1 (route53 hosted zone only) and B2 (everything that
+# depends on the zone's nameservers actually being live at the registrar -
+# ACM validation, ALB, ECS services, DNS alias). This flag gates B1 alone.
+variable "enable_route53_zone" {
+  description = "Switch for the Route53 hosted zone module (CP5.3D-B1). True - B1 is authorized."
+  type        = bool
+  default     = true
+}
+
 # CP5.3D-A Decision Gate final decisions (item 13): BaseDomain was
 # USER_DECISION_PENDING at the time - an empty certificate ARN alone must
 # not be the only thing standing between this plan and creating half of the
-# runtime edge (ALB, target group, log bucket, Api/Worker services). This
-# flag gates the module blocks themselves (main.tf), so while false the plan
-# contains ZERO resources from modules "route53", "acm_certificate", "alb"
-# and "ecs_services" - not just gated listeners inside an otherwise-created
-# ALB. CP5.3D-B Decision Gate item 32: BaseDomain is now resolved, so the
-# default flips to true - TerraformApplyAuthorized remains the separate,
-# standing procedural gate that actually controls whether `terraform apply`
-# runs (this flag only controls what's IN the plan).
+# runtime edge (ALB, target group, log bucket, Api/Worker services). CP5.3D-B
+# item 15: even with BaseDomain resolved and the hosted zone created (B1),
+# this flag (B2: ACM/ALB/ECS) stays false until the user has delegated the
+# domain's nameservers to Route53 AND that delegation has propagated -
+# creating the ACM certificate before then would hang the (future) apply on
+# aws_acm_certificate_validation waiting for DNS that isn't authoritative
+# yet. TerraformApplyAuthorized remains the separate, standing procedural
+# gate that actually controls whether `terraform apply` runs (this flag
+# only controls what's IN the plan).
 variable "enable_runtime_edge" {
-  description = "Explicit switch for the Route53/ACM/ALB and ECS services (Api/Worker) modules. True now that BaseDomain is resolved (CP5.3D-B) - apply is still gated separately."
+  description = "Explicit switch for the ACM/ALB/ECS services (Api/Worker) modules - CP5.3D-B2. False until nameserver delegation to Route53 has propagated."
   type        = bool
-  default     = true
+  default     = false
 }

@@ -3,10 +3,14 @@
 # Terraform). RDS/ElastiCache/Amazon MQ/ECS services/ALB/CloudFront are
 # still NOT created here — see ../../README.md for the full CP5 sequencing.
 
+# CP5.3D-B item 6/7: create_alb_http_ingress references local.runtime_edge_enabled,
+# declared further below - valid regardless of textual order (Terraform
+# resolves the dependency graph, not file position).
 module "network" {
   source = "../../modules/network"
 
-  environment = "homolog"
+  environment             = "homolog"
+  create_alb_http_ingress = local.runtime_edge_enabled
 }
 
 module "ecr" {
@@ -183,27 +187,39 @@ module "ecs" {
   rds_database_name = module.rds.database_name
 }
 
+# CP5.3D-B Decision Gate item 37/38: the apply must be split into two
+# subgates - B1 (this zone only) so the user can delegate nameservers at
+# Registro.br before anything tries to DNS-validate against them; B2
+# (everything below) blocked until that delegation has actually propagated.
+# runtime_edge_enabled is deliberately ANDed with the zone flag, not just
+# enable_runtime_edge alone - it must be structurally impossible for B2's
+# modules to reference a route53 zone that doesn't exist (item 7: a
+# declarative, reviewable gate, not a `-target` CLI trick).
+locals {
+  route53_zone_enabled = var.enable_route53_zone
+  runtime_edge_enabled = var.enable_runtime_edge && var.enable_route53_zone
+}
+
 # CP5.3D-B: one hosted zone for the whole registered apex domain (item 4 -
 # never a per-environment sub-zone). Registrar stays Registro.br - only DNS
-# authority moves here. Gated on enable_runtime_edge like everything else in
-# this section; the ONLY manual step this leaves the user (item 5/6) is
-# swapping Registro.br's current nameservers (a.auto.dns.br/b.auto.dns.br)
-# for this zone's 4 real ones, once applied.
+# authority moves here. The ONLY manual step this leaves the user (item
+# 5/6) is swapping Registro.br's current nameservers (a.auto.dns.br/
+# b.auto.dns.br) for this zone's 4 real ones, once applied (= B1).
 module "route53" {
-  count = var.enable_runtime_edge ? 1 : 0
+  count = local.route53_zone_enabled ? 1 : 0
 
   source = "../../modules/route53"
 
   domain_name = var.base_domain
 }
 
-# CP5.3D-B item 9/10: fully Terraform-managed DNS-validated certificate -
-# no manual CNAME creation. item 37/38: the validation resource inside this
-# module only completes once the zone's nameservers are actually live at
-# the registrar, which is why the future apply is meant to be split
-# (route53 zone first, user swaps NS, then this + alb + ecs_services).
+# CP5.3D-B item 9/10/16: fully Terraform-managed DNS-validated certificate -
+# no manual CNAME creation. Gated on runtime_edge_enabled (= B2), never
+# created before the zone's nameservers are actually live at the registrar
+# (item 37/38) - the validation resource inside this module would otherwise
+# hang waiting on DNS that isn't authoritative yet.
 module "acm_certificate" {
-  count = var.enable_runtime_edge ? 1 : 0
+  count = local.runtime_edge_enabled ? 1 : 0
 
   source = "../../modules/acm-certificate"
 
@@ -212,13 +228,13 @@ module "acm_certificate" {
 }
 
 # CP5.3D-A Decision Gate final decisions (item 13): gated on
-# var.enable_runtime_edge - while false, this module contributes ZERO
+# runtime_edge_enabled (= B2) - while false, this module contributes ZERO
 # resources to the plan (no ALB, no target group, no log bucket). CP5.3D-B:
 # certificate_arn now sourced directly from the Terraform-managed ACM
 # module instead of a manually-supplied ARN - no apply this checkpoint
-# (TerraformApplyAuthorized=false).
+# (TerraformApplyAuthorized=false for B2).
 module "alb" {
-  count = var.enable_runtime_edge ? 1 : 0
+  count = local.runtime_edge_enabled ? 1 : 0
 
   source = "../../modules/alb"
 
@@ -229,17 +245,17 @@ module "alb" {
   certificate_arn   = module.acm_certificate[0].certificate_arn
 }
 
-# CP5.3D-A Decision Gate final decisions (item 13): same enable_runtime_edge
-# gate as module.alb above (item 47's design is unchanged, only now actually
-# absent from the plan while the flag is false) - Api/Worker ECS services
-# reference module.alb[0], which only exists when this module also does,
-# since both share the identical condition. DESIGN ONLY -
-# TerraformApplyAuthorized=false. Reuses the Api/Worker SGs already created
-# in CP5.2 (modules/network) and the task roles already created in CP5.3A
-# (modules/ecs-iam) - only the service/task-definition resources themselves
-# are new.
+# CP5.3D-A Decision Gate final decisions (item 13): same runtime_edge_enabled
+# (= B2) gate as module.alb above (item 47's design is unchanged, only now
+# actually absent from the plan while the flag is false) - Api/Worker ECS
+# services reference module.alb[0], which only exists when this module also
+# does, since both share the identical condition. DESIGN ONLY -
+# TerraformApplyAuthorized=false for B2. Reuses the Api/Worker SGs already
+# created in CP5.2 (modules/network) and the task roles already created in
+# CP5.3A (modules/ecs-iam) - only the service/task-definition resources
+# themselves are new.
 module "ecs_services" {
-  count = var.enable_runtime_edge ? 1 : 0
+  count = local.runtime_edge_enabled ? 1 : 0
 
   source = "../../modules/ecs-services"
 
@@ -272,9 +288,10 @@ module "ecs_services" {
 
 # CP5.3D-B item 36: the public DNS name for the Api - an alias record (no
 # separate hosted-zone charge, resolves directly to the ALB, tracks its IPs
-# automatically). Same enable_runtime_edge gate as the rest of this section.
+# automatically). Same runtime_edge_enabled (= B2) gate as the rest of this
+# section.
 resource "aws_route53_record" "api_homolog" {
-  count = var.enable_runtime_edge ? 1 : 0
+  count = local.runtime_edge_enabled ? 1 : 0
 
   zone_id = module.route53[0].zone_id
   name    = "api.homolog.${var.base_domain}"

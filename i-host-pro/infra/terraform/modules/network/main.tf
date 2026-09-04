@@ -116,12 +116,17 @@ resource "aws_security_group" "alb" {
   # ALB's own listener (modules/alb's aws_lb_listener.http_redirect) - never
   # forwarded to a target group. Description text left unchanged (immutable/
   # ForceNew on this resource - confirmed the hard way during CP5.3C).
-  ingress {
-    description = "HTTP from anywhere (redirect-only, see http_redirect listener)"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+  # Gated on create_alb_http_ingress (item 6/7: false during the B1-isolated
+  # Route53-zone-only plan/apply, true once B2/the ALB actually exists).
+  dynamic "ingress" {
+    for_each = var.create_alb_http_ingress ? [1] : []
+    content {
+      description = "HTTP from anywhere (redirect-only, see http_redirect listener)"
+      from_port   = 80
+      to_port     = 80
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
   }
 
   egress {

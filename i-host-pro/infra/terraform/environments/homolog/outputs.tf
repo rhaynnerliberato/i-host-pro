@@ -111,17 +111,20 @@ output "rabbitmq_rotation_security_group_id" {
   value = module.network.rabbitmq_rotation_security_group_id
 }
 
-# CP5.3D-B item 5/6: once applied, these are the exact 4 nameservers the
-# user must set at Registro.br in place of a.auto.dns.br/b.auto.dns.br -
-# the only manual step left in the whole domain/ACM/ALB flow.
+# CP5.3D-B item 5/6/11: once B1 is applied, these are the exact 4
+# nameservers the user must set at Registro.br in place of
+# a.auto.dns.br/b.auto.dns.br - the only manual step left in the whole
+# domain/ACM/ALB flow. Gated on the zone flag alone (B1), not the full
+# runtime edge (B2) - these must be readable right after B1's isolated
+# apply, before B2 exists at all.
 output "route53_name_servers" {
-  value = var.enable_runtime_edge ? module.route53[0].name_servers : null
+  value = var.enable_route53_zone ? module.route53[0].name_servers : null
 }
 
 output "acm_certificate_arn" {
-  value = var.enable_runtime_edge ? module.acm_certificate[0].certificate_arn : null
+  value = local.runtime_edge_enabled ? module.acm_certificate[0].certificate_arn : null
 }
 
 output "api_homolog_fqdn" {
-  value = var.enable_runtime_edge ? "api.homolog.${var.base_domain}" : null
+  value = local.runtime_edge_enabled ? "api.homolog.${var.base_domain}" : null
 }

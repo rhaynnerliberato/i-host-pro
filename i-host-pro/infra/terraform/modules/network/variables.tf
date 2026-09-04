@@ -31,3 +31,12 @@ variable "availability_zone_count" {
   type        = number
   default     = 2
 }
+
+# CP5.3D-B item 6/7: kept false while only the Route53 zone (B1) is being
+# applied, so a B1-isolated plan shows nothing here - the ALB's HTTP
+# redirect listener (which this rule exists for) doesn't exist until B2.
+variable "create_alb_http_ingress" {
+  description = "Whether to add the ALB security group's port-80 ingress rule (redirect-only, paired with the ALB's http_redirect listener in B2)."
+  type        = bool
+  default     = false
+}
