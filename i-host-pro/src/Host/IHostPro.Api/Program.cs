@@ -165,13 +165,18 @@ try
     // homologation document §4.8), so only a caching optimization is lost,
     // never a whole read path — reported as Degraded, never Unhealthy, so a
     // Redis blip alone never flips readiness off entirely.
-    var rabbitMqConnectionForHealth = new Lazy<Task<RabbitMQ.Client.IConnection>>(() => new RabbitMQ.Client.ConnectionFactory
+    // CP5.3D-B2 corrective Decision Gate: this factory must go through the
+    // exact same ApplyIHostProRabbitMqSettings helper UseIHostProRabbitMq
+    // uses below, or it silently diverges on TLS/port - which it did,
+    // deterministically failing this health check against Amazon MQ's
+    // TLS-only endpoint (always attempting the client library's default
+    // plaintext port 5672) while Wolverine's own connection worked fine.
+    var rabbitMqConnectionForHealth = new Lazy<Task<RabbitMQ.Client.IConnection>>(() =>
     {
-        HostName = builder.Configuration["RabbitMq:Host"] ?? "localhost",
-        VirtualHost = builder.Configuration["RabbitMq:VirtualHost"] ?? "/",
-        UserName = builder.Configuration["RabbitMq:Username"] ?? "guest",
-        Password = builder.Configuration["RabbitMq:Password"] ?? "guest",
-    }.CreateConnectionAsync());
+        var factory = new RabbitMQ.Client.ConnectionFactory();
+        factory.ApplyIHostProRabbitMqSettings(builder.Configuration);
+        return factory.CreateConnectionAsync();
+    });
 
     builder.Services.AddHealthChecks()
         .AddNpgSql(

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using RabbitMQ.Client;
 using Wolverine;
 using Wolverine.Persistence.Durability;
 using Wolverine.Postgresql;
@@ -16,6 +17,51 @@ namespace IHostPro.BuildingBlocks.Infrastructure.Messaging;
 public static class WolverineConfigurationExtensions
 {
     /// <summary>
+    /// Applies the shared host/vhost/user/password/TLS/port settings to a
+    /// RabbitMQ.Client.ConnectionFactory from IConfiguration - the ONE place
+    /// both Wolverine's own transport (via UseIHostProRabbitMq below) and any
+    /// other RabbitMQ.Client.ConnectionFactory a process creates (e.g. a
+    /// health check) must go through, so the two can never diverge on
+    /// TLS/port again (CP5.3D-B2 corrective Decision Gate: the health check's
+    /// own hand-rolled factory had never applied UseTls/Port, so it always
+    /// attempted the client library's default plaintext port 5672 against
+    /// Amazon MQ's TLS-only endpoint - deterministically Unhealthy in every
+    /// environment that actually sets UseTls=true).
+    /// </summary>
+    public static void ApplyIHostProRabbitMqSettings(this ConnectionFactory factory, IConfiguration configuration)
+    {
+        factory.HostName = configuration["RabbitMq:Host"] ?? "localhost";
+        factory.VirtualHost = configuration["RabbitMq:VirtualHost"] ?? "/";
+        factory.UserName = configuration["RabbitMq:Username"] ?? "guest";
+        factory.Password = configuration["RabbitMq:Password"] ?? "guest";
+
+        var useTls = bool.TryParse(configuration["RabbitMq:UseTls"], out var useTlsFlag) && useTlsFlag;
+        var configuredPort = int.TryParse(configuration["RabbitMq:Port"], out var parsedPort) ? parsedPort : (int?)null;
+
+        // Fase 12, Checkpoint 5.1: Amazon MQ for RabbitMQ (the AWS pilot's
+        // managed broker target) accepts TLS-only connections — there is
+        // no plaintext AMQP endpoint. Local/dev brokers (docker-compose's
+        // rabbitmq:3-management-alpine image) stay on the plaintext
+        // default by omitting RabbitMq:UseTls entirely (defaults to
+        // false, preserving every existing Testcontainers-based test's
+        // "no port override" assumption); only Homologação/Production —
+        // pointed at Amazon MQ — set RabbitMq:UseTls=true. Server
+        // certificate validation is never bypassed; RabbitMq:Port lets an
+        // environment override the port independently of UseTls when
+        // needed, but is never required for either shape described here.
+        if (useTls)
+        {
+            factory.Ssl.Enabled = true;
+            factory.Ssl.ServerName = factory.HostName;
+            factory.Port = configuredPort ?? 5671;
+        }
+        else if (configuredPort is { } explicitPort)
+        {
+            factory.Port = explicitPort;
+        }
+    }
+
+    /// <summary>
     /// Returns the transport expression (widened from <c>void</c> for
     /// Checkpoint 6 homologação's messaging-topology provisioning fix) so
     /// <c>IHostPro.MigrationRunner</c> can chain <c>.DeclareExchange(...)</c>
@@ -30,15 +76,9 @@ public static class WolverineConfigurationExtensions
             .Get<RabbitMqClientTimeoutOptions>() ?? new RabbitMqClientTimeoutOptions();
         RabbitMqClientTimeoutOptionsValidator.ValidateAndThrow(clientTimeouts);
 
-        var useTls = bool.TryParse(configuration["RabbitMq:UseTls"], out var useTlsFlag) && useTlsFlag;
-        var configuredPort = int.TryParse(configuration["RabbitMq:Port"], out var parsedPort) ? parsedPort : (int?)null;
-
         var transport = opts.UseRabbitMq(rabbit =>
         {
-            rabbit.HostName = configuration["RabbitMq:Host"] ?? "localhost";
-            rabbit.VirtualHost = configuration["RabbitMq:VirtualHost"] ?? "/";
-            rabbit.UserName = configuration["RabbitMq:Username"] ?? "guest";
-            rabbit.Password = configuration["RabbitMq:Password"] ?? "guest";
+            rabbit.ApplyIHostProRabbitMqSettings(configuration);
 
             // Confirmed empirically (Incremento 2 plan, homologação real) that
             // RabbitMQ.Client's own defaults (30s / 20s) make an outbox
@@ -51,28 +91,6 @@ public static class WolverineConfigurationExtensions
             // doc comment.
             rabbit.RequestedConnectionTimeout = clientTimeouts.ConnectTimeout;
             rabbit.ContinuationTimeout = clientTimeouts.ContinuationTimeout;
-
-            // Fase 12, Checkpoint 5.1: Amazon MQ for RabbitMQ (the AWS pilot's
-            // managed broker target) accepts TLS-only connections — there is
-            // no plaintext AMQP endpoint. Local/dev brokers (docker-compose's
-            // rabbitmq:3-management-alpine image) stay on the plaintext
-            // default by omitting RabbitMq:UseTls entirely (defaults to
-            // false, preserving every existing Testcontainers-based test's
-            // "no port override" assumption); only Homologação/Production —
-            // pointed at Amazon MQ — set RabbitMq:UseTls=true. Server
-            // certificate validation is never bypassed; RabbitMq:Port lets an
-            // environment override the port independently of UseTls when
-            // needed, but is never required for either shape described here.
-            if (useTls)
-            {
-                rabbit.Ssl.Enabled = true;
-                rabbit.Ssl.ServerName = rabbit.HostName;
-                rabbit.Port = configuredPort ?? 5671;
-            }
-            else if (configuredPort is { } explicitPort)
-            {
-                rabbit.Port = explicitPort;
-            }
         });
 
         // IHostPro.Api only publishes Integration Events; it never consumes
