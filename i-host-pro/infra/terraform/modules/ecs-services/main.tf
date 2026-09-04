@@ -138,6 +138,13 @@ resource "aws_ecs_task_definition" "worker" {
       environment = [
         { name = "ASPNETCORE_ENVIRONMENT", value = "Production" },
         { name = "AIAgent__Anthropic__Secrets__SecretsManagerSecretId", value = var.anthropic_secret_arn },
+        # CP5.3D-D corrective Decision Gate: AIAgentModuleExtensions selects
+        # FakeModelProvider whenever this key is absent/empty - never
+        # implicitly derived from ASPNETCORE_ENVIRONMENT. Discovered live in
+        # Homolog (real webhook proof reached the model step and got a Fake
+        # response instead of a real Anthropic call) - this was the missing
+        # switch, not a code bug.
+        { name = "AIAgent__ModelProvider", value = "Anthropic" },
       ]
       # No jwt_signing_key here - AddIdentityJwtIssuance is never called
       # from IHostPro.Worker (confirmed in Program.cs). No Meta webhook
