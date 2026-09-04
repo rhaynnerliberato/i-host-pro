@@ -67,16 +67,17 @@ variable "enable_route53_zone" {
 # USER_DECISION_PENDING at the time - an empty certificate ARN alone must
 # not be the only thing standing between this plan and creating half of the
 # runtime edge (ALB, target group, log bucket, Api/Worker services). CP5.3D-B
-# item 15: even with BaseDomain resolved and the hosted zone created (B1),
-# this flag (B2: ACM/ALB/ECS) stays false until the user has delegated the
-# domain's nameservers to Route53 AND that delegation has propagated -
-# creating the ACM certificate before then would hang the (future) apply on
-# aws_acm_certificate_validation waiting for DNS that isn't authoritative
-# yet. TerraformApplyAuthorized remains the separate, standing procedural
-# gate that actually controls whether `terraform apply` runs (this flag
-# only controls what's IN the plan).
+# item 15 held this false until nameserver delegation to Route53 had
+# propagated (creating the ACM certificate before then would hang on
+# aws_acm_certificate_validation waiting for DNS that wasn't authoritative
+# yet). CP5.3D-B2 kickoff (2026-09-04): delegation confirmed propagated -
+# authoritative .br, Google DNS and Cloudflare all independently return the
+# 4 real Route53 nameservers - so the default flips to true. This only
+# controls what's IN the plan; TerraformApplyAuthorized remains the
+# separate, standing procedural gate that actually controls whether
+# `terraform apply` runs.
 variable "enable_runtime_edge" {
-  description = "Explicit switch for the ACM/ALB/ECS services (Api/Worker) modules - CP5.3D-B2. False until nameserver delegation to Route53 has propagated."
+  description = "Explicit switch for the ACM/ALB/ECS services (Api/Worker) modules - CP5.3D-B2. True now that nameserver delegation to Route53 has propagated."
   type        = bool
-  default     = false
+  default     = true
 }
