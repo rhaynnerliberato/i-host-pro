@@ -56,10 +56,19 @@ using Wolverine.Postgresql;
 using Wolverine.RabbitMQ;
 using Wolverine.Runtime;
 
+// CP5.3E (Observability Architecture) corrective fix: Serilog's default
+// Console template has no {TraceId}/{SpanId} tokens, so TraceContextEnricher's
+// properties (proven correct by its own unit tests) never reached the actual
+// CloudWatch log text - confirmed empirically via a real signed webhook round
+// trip whose Api/Worker log lines carried no TraceId at all despite the
+// enricher running. This template is the fix; the enrichment itself is
+// unchanged.
+const string ConsoleOutputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] [TraceId={TraceId}] [SpanId={SpanId}] {Message:lj}{NewLine}{Exception}";
+
 Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
     .Enrich.With(new TraceContextEnricher())
-    .WriteTo.Console()
+    .WriteTo.Console(outputTemplate: ConsoleOutputTemplate)
     .CreateBootstrapLogger();
 
 try
@@ -92,7 +101,7 @@ try
         .ReadFrom.Services(services)
         .Enrich.FromLogContext()
         .Enrich.With(new TraceContextEnricher())
-        .WriteTo.Console());
+        .WriteTo.Console(outputTemplate: ConsoleOutputTemplate));
 
     // Same dependency-criticality reasoning as IHostPro.Api/Program.cs:
     // Postgres/RabbitMQ are hard dependencies for every consumer this

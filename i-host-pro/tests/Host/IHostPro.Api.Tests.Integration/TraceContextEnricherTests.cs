@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using FluentAssertions;
 using IHostPro.Api.Observability;
+using Serilog;
 using Serilog.Core;
 using Serilog.Events;
 using Serilog.Parsing;
@@ -64,6 +65,87 @@ public sealed class TraceContextEnricherTests
         act.Should().NotThrow();
         logEvent.Properties.Should().NotContainKey("TraceId");
         logEvent.Properties.Should().NotContainKey("SpanId");
+    }
+
+    /// <summary>
+    /// The exact literal console output template Api/Worker's Program.cs
+    /// configure (CP5.3E corrective fix). Duplicated here rather than shared
+    /// — top-level statement locals aren't visible to a test project, and
+    /// this mirrors the pre-existing convention of duplicating small
+    /// host-specific observability plumbing (e.g. TraceContextEnricher
+    /// itself exists once per host, not in a shared project).
+    /// </summary>
+    private const string ConsoleOutputTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] [TraceId={TraceId}] [SpanId={SpanId}] {Message:lj}{NewLine}{Exception}";
+
+    /// <summary>
+    /// Exercises the REAL Serilog pipeline (LoggerConfiguration -> Enrich ->
+    /// Console sink with the exact outputTemplate Program.cs configures) —
+    /// deliberately not the bare-LogEvent + FakePropertyFactory + direct
+    /// MessageTemplateTextFormatter construction the tests above use, which
+    /// was empirically found to not render named custom properties even when
+    /// logEvent.Properties genuinely contains them (an artifact of bypassing
+    /// the pipeline, not a real product bug). Redirects Console.Out to a
+    /// StringWriter for the duration of the test only, then restores it.
+    /// </summary>
+    [Fact]
+    public void ConsoleOutputTemplate_renders_the_real_TraceId_and_SpanId_when_enriched()
+    {
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = _ => true,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        using var activity = TestActivitySource.StartActivity("test-activity-render");
+        activity.Should().NotBeNull("the listener above must allow the source to actually create one");
+
+        var originalOut = Console.Out;
+        using var writer = new StringWriter();
+        string rendered;
+        try
+        {
+            Console.SetOut(writer);
+            using var logger = new LoggerConfiguration()
+                .Enrich.With(new TraceContextEnricher())
+                .WriteTo.Console(outputTemplate: ConsoleOutputTemplate)
+                .CreateLogger();
+
+            logger.Information("test");
+            rendered = writer.ToString();
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+
+        rendered.Should().Contain(Activity.Current!.TraceId.ToString());
+        rendered.Should().Contain(Activity.Current!.SpanId.ToString());
+    }
+
+    [Fact]
+    public void ConsoleOutputTemplate_renders_without_throwing_when_there_is_no_current_Activity()
+    {
+        Activity.Current = null;
+
+        var originalOut = Console.Out;
+        using var writer = new StringWriter();
+        try
+        {
+            Console.SetOut(writer);
+            using var logger = new LoggerConfiguration()
+                .Enrich.With(new TraceContextEnricher())
+                .WriteTo.Console(outputTemplate: ConsoleOutputTemplate)
+                .CreateLogger();
+
+            var act = () => logger.Information("test");
+
+            act.Should().NotThrow();
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
     }
 
     /// <summary>Minimal stand-in for the real factory Serilog's own pipeline supplies — this test exercises the enricher in isolation, never a full logging pipeline.</summary>
