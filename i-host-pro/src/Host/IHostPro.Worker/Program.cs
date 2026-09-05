@@ -278,15 +278,16 @@ try
     // CommunicationDbContext/IMessageRepository/ICommunicationTransactionExecutor
     // in every environment, not just Development — Communication now has
     // real, always-on work to do, not just the CP1 fake-connector demo.
-    builder.Services.AddCommunicationModule(builder.Configuration);
+    builder.Services.AddCommunicationModule(builder.Configuration, builder.Environment.IsDevelopment());
 
     // Fase 11, Checkpoint 4/6: AddCommunicationModule now also registers
     // Communication's own Mediator unconditionally — SendAgentResponseCommand
     // (CP4) and SendHumanHandoffNotificationCommand (CP6) are the only two
     // handlers the Worker-hosted AI Agent orchestrator actually calls; both
-    // need IOutboundMessageConnector, resolved only where
-    // AddCommunicationReservationConsumer (Development-only) has also been
-    // called. UpsertAdministratorNotificationContactCommandHandler/
+    // need IOutboundMessageConnector, which AddCommunicationModule now
+    // registers in every environment (CP5.3E corrective fix: FakeWhatsAppConnector
+    // in Development, NotConfiguredOutboundMessageConnector otherwise — never
+    // a DI resolution crash). UpsertAdministratorNotificationContactCommandHandler/
     // GetAdministratorNotificationContactQueryHandler (CP6, Api-only —
     // administrator contact management) are deliberately excluded from the
     // Worker's own composition, mirroring every other promoted context's

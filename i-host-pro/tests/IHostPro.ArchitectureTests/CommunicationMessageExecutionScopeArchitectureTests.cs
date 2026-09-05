@@ -63,15 +63,17 @@ public class CommunicationMessageExecutionScopeArchitectureTests
             .DoNotHaveName(nameof(CommunicationMessageExecutionScope))
             .GetTypes();
 
-        adapterTypes.Should().HaveCount(10,
-            "ten types are expected in this namespace: ReservationCreatedHandler and " +
+        adapterTypes.Should().HaveCount(11,
+            "eleven types are expected in this namespace: ReservationCreatedHandler and " +
             "WhatsAppMessageStatusChangedHandler (the thin Wolverine adapters, Fase 9, Checkpoint 2.3.3), " +
             "GuestCheckedInHandler/EarlyCheckinApprovedHandler/LateCheckoutApprovedHandler (Fase 10, Checkpoint 4 — " +
             "Portaria Notification Foundation), PixChargeCreatedHandler (Fase 10, Checkpoint 5 — PIX/Payment " +
             "Deterministic Foundation), GuestAccessDeliveryRequestedHandler (Fase 10, Checkpoint 6.2 — Guest " +
             "Access Secure Delivery Corrective Implementation), InboundGuestMessageReceivedHandler (Fase 11, " +
             "Checkpoint 1 — Inbound Conversation Foundation), FakeWhatsAppConnector (the CP1 deterministic " +
-            "connector double), and ExternalIntegrationsWhatsAppConnector (Checkpoint 2.2's real " +
+            "connector double, Development-only), NotConfiguredOutboundMessageConnector (CP5.3E corrective fix — " +
+            "the IOutboundMessageConnector registered for every other environment, always an explicit failure, " +
+            "never a real send), and ExternalIntegrationsWhatsAppConnector (Checkpoint 2.2's real " +
             "IOutboundMessageConnector, not wired into this Wolverine-triggered flow — see its own doc comment)");
 
         var forbiddenDependencies = new[]

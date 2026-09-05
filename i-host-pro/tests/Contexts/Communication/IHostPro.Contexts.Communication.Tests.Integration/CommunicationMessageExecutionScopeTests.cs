@@ -151,7 +151,13 @@ public class CommunicationMessageExecutionScopeTests : IClassFixture<Communicati
         var hostBuilder = Host.CreateApplicationBuilder();
         hostBuilder.Services.AddScoped<ITenantContext, TenantContext>();
         hostBuilder.Services.AddLogging();
-        hostBuilder.Services.AddCommunicationModule(configuration);
+        // isDevelopmentEnvironment: true — this suite exercises ReservationCreatedCommunicationProcessor
+        // via AddCommunicationReservationConsumer, itself a Development-only flow in production
+        // (CP1 mandate §46-49), so simulating Development here is the correct, original intent
+        // (CP5.3E corrective fix: AddCommunicationModule now owns the IOutboundMessageConnector
+        // registration and needs this flag to select FakeWhatsAppConnector instead of
+        // NotConfiguredOutboundMessageConnector's default explicit failure).
+        hostBuilder.Services.AddCommunicationModule(configuration, isDevelopmentEnvironment: true);
         hostBuilder.Services.AddCommunicationReservationConsumer();
         hostBuilder.Services.AddScoped<ITemplateReader>(_ => FakeTemplateReader.Returning(template));
         hostBuilder.Services.AddScoped<IReservationGuestContactReader>(_ => FakeReservationGuestContactReader.Returning(guestContact));

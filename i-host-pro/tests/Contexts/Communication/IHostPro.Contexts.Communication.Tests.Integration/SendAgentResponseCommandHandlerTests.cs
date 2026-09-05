@@ -134,7 +134,58 @@ public class SendAgentResponseCommandHandlerTests : IClassFixture<CommunicationM
         result.Error.Code.Should().Be("provider_unavailable");
     }
 
+    /// <summary>
+    /// CP5.3E corrective fix: reproduces the real Homolog/production
+    /// composition — <see cref="AddCommunicationModule"/> called with
+    /// <c>isDevelopmentEnvironment: false</c> and NO connector override —
+    /// the exact shape that previously threw
+    /// <c>InvalidOperationException: Unable to resolve service for type
+    /// IOutboundMessageConnector</c> instead of resolving and failing
+    /// explicitly.
+    /// </summary>
+    [Fact]
+    public async Task Send_resolves_via_DI_and_fails_explicitly_when_no_real_connector_is_configured_for_a_non_Development_environment()
+    {
+        var tenantId = Guid.NewGuid();
+        var reservationId = Guid.NewGuid();
+        var conversationId = await SeedConversationAsync(tenantId, reservationId);
+        var guestContact = new ReservationGuestContact(reservationId, "+5511999998888", "Ana Silva");
+        using var host = BuildHostWithoutConnectorOverride(guestContact);
+
+        var result = await SendAsync(host, tenantId, conversationId, reservationId, Guid.NewGuid(), "Olá");
+
+        result.IsFailure.Should().BeTrue("DI resolution must succeed and the connector must fail explicitly, never throw");
+        result.Error.Code.Should().Be("outbound_channel_not_configured");
+
+        (await CountMessagesAsync(tenantId, conversationId)).Should().Be(1, "the Message row is still created before the connector call");
+        var message = await ReadOnlyMessageForConversationAsync(tenantId, conversationId);
+        message.Status.Should().Be(MessageStatus.Failed, "a failed dispatch must never be mistaken for Sent");
+    }
+
     // ---- Composition root -------------------------------------------------
+
+    /// <summary>Mirrors <see cref="BuildHost"/> but never overrides <see cref="IOutboundMessageConnector"/> and passes <c>isDevelopmentEnvironment: false</c> — the real non-Development composition.</summary>
+    private IHost BuildHostWithoutConnectorOverride(ReservationGuestContact? guestContact)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:Communication"] = _fixture.AppConnectionString })
+            .Build();
+
+        var hostBuilder = Host.CreateApplicationBuilder();
+        hostBuilder.Services.AddScoped<ITenantContext, TenantContext>();
+        hostBuilder.Services.AddLogging();
+        hostBuilder.Services.AddCommunicationModule(configuration, isDevelopmentEnvironment: false);
+        hostBuilder.Services.AddScoped<IReservationGuestContactReader>(_ => FakeReservationGuestContactReader.Returning(guestContact));
+
+        hostBuilder.UseWolverine(opts =>
+        {
+            opts.EnrollAncillaryPostgresqlOutbox(_fixture.AppConnectionString, MessagingSchema, typeof(CommunicationDbContext));
+            opts.AutoBuildMessageStorageOnStartup = AutoCreate.None;
+            opts.UseEntityFrameworkCoreTransactions();
+        });
+
+        return hostBuilder.Build();
+    }
 
     private IHost BuildHost(ReservationGuestContact? guestContact, IOutboundMessageConnector? connectorOverride = null)
     {
@@ -210,6 +261,16 @@ public class SendAgentResponseCommandHandlerTests : IClassFixture<CommunicationM
         await SetTenantAsync(dbContext, tenantId);
 
         return await dbContext.Messages.CountAsync(m => m.ConversationId == conversationId);
+    }
+
+    private async Task<Message> ReadOnlyMessageForConversationAsync(Guid tenantId, Guid conversationId)
+    {
+        var tenantContext = NewTenantScopedContext(tenantId);
+        await using var dbContext = CreateDbContext(tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        return await dbContext.Messages.AsNoTracking().SingleAsync(m => m.ConversationId == conversationId);
     }
 
     private static TenantContext NewTenantScopedContext(Guid tenantId)

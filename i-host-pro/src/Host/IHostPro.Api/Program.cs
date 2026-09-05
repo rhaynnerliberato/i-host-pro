@@ -387,11 +387,13 @@ try
     // (Get/UpsertAdministratorNotificationContact). AddCommunicationModule
     // also registers Communication's own Mediator unconditionally
     // (SendAgentResponseCommand/SendHumanHandoffNotificationCommand, both
-    // needing IOutboundMessageConnector, which this process never
-    // registers) — KeepOnlyMediatorHandlers keeps only the two handlers this
-    // host actually calls, mirroring the exact same discipline
-    // IHostPro.Worker applies in reverse.
-    builder.Services.AddCommunicationModule(builder.Configuration);
+    // needing IOutboundMessageConnector — AddCommunicationModule registers
+    // one for every environment, CP5.3E corrective fix, but this process
+    // never resolves it since neither handler is called here) —
+    // KeepOnlyMediatorHandlers keeps only the two handlers this host
+    // actually calls, mirroring the exact same discipline IHostPro.Worker
+    // applies in reverse.
+    builder.Services.AddCommunicationModule(builder.Configuration, builder.Environment.IsDevelopment());
     builder.Services.KeepOnlyMediatorHandlers(
         typeof(UpsertAdministratorNotificationContactCommandHandler), typeof(GetAdministratorNotificationContactQueryHandler));
 
