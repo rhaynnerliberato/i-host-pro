@@ -1270,6 +1270,12 @@ try
             // never registered in IHostPro.Api, which never calls a model
             // provider.
             .AddMeter("IHostPro.AIAgent")
+            // CP5.3E (Observability Architecture) — DependencyHealthMetricsBackgroundService's
+            // own Meter, same registration requirement as the two above (a
+            // Meter never emits to OTLP unless explicitly named here -
+            // confirmed missing empirically: the gauge was invisible in
+            // Grafana Cloud until this was added).
+            .AddMeter("IHostPro.DependencyHealth")
             .AddOtlpExporter(o => o.Endpoint = otlpEndpoint));
 
     var app = builder.Build();

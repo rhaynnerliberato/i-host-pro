@@ -866,6 +866,12 @@ try
             .AddHttpClientInstrumentation()
             .AddRuntimeInstrumentation()
             .AddNpgsqlInstrumentation()
+            // CP5.3E (Observability Architecture) — DependencyHealthMetricsBackgroundService's
+            // own Meter, same mandatory registration Worker's Wolverine/AIAgent
+            // meters already needed (a Meter never emits to OTLP unless
+            // explicitly named here — confirmed missing empirically: the
+            // gauge was invisible in Grafana Cloud until this was added).
+            .AddMeter("IHostPro.DependencyHealth")
             .AddOtlpExporter(o => o.Endpoint = otlpEndpoint));
 
     var app = builder.Build();
