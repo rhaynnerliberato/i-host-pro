@@ -56,6 +56,7 @@ using Wolverine.RabbitMQ;
 
 Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
+    .Enrich.With(new TraceContextEnricher())
     .WriteTo.Console()
     .CreateBootstrapLogger();
 
@@ -67,6 +68,7 @@ try
         .ReadFrom.Configuration(context.Configuration)
         .ReadFrom.Services(services)
         .Enrich.FromLogContext()
+        .Enrich.With(new TraceContextEnricher())
         .WriteTo.Console());
 
     builder.Services.AddControllers();
@@ -191,6 +193,12 @@ try
             name: "redis",
             failureStatus: HealthStatus.Degraded,
             tags: ["ready"]);
+
+    // Fase 12, Checkpoint 5.3E (Observability Architecture) — publishes the
+    // "ready"-tagged health checks above as an OTel gauge, closing the
+    // signal gap for the Postgres/RabbitMQ/Redis alerts in the already-
+    // approved catalogue (Fase 12 §4.6). See the class doc comment.
+    builder.Services.AddHostedService<DependencyHealthMetricsBackgroundService>();
 
     // Fase 12, Checkpoint 3 (Resilience & Rate Limiting) — Redis-backed,
     // centrally-configured rate limiting (ADR-006 already names Redis for

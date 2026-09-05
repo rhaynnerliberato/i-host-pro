@@ -15,3 +15,13 @@ output "alb_zone_id" {
 output "target_group_arn" {
   value = aws_lb_target_group.api.arn
 }
+
+# CP5.3E (Observability Architecture) - CloudWatch metric dimensions for
+# AWS/ApplicationELB use the short "arn_suffix" form, never the full ARN.
+output "alb_arn_suffix" {
+  value = aws_lb.this.arn_suffix
+}
+
+output "target_group_arn_suffix" {
+  value = aws_lb_target_group.api.arn_suffix
+}

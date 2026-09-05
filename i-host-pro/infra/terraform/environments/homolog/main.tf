@@ -54,6 +54,10 @@ module "ecs_iam" {
     module.credentials.secret_arns["rabbitmq"],
     module.credentials.secret_arns["redis"],
     module.credentials.secret_arns["jwt/signing-key"],
+    # CP5.3E (Observability Architecture) mandate item 38: the Collector
+    # (never Api/Worker) reads this via the SAME execution-role secret-
+    # injection mechanism as every other secret above.
+    module.credentials.secret_arns["observability/otlp"],
   ]
 
   api_task_secret_arns = [
@@ -300,19 +304,27 @@ module "ecs_services" {
   aws_region  = var.region
   cluster_arn = module.ecs.cluster_arn
 
-  execution_role_arn   = module.ecs_iam.execution_role_arn
-  api_task_role_arn    = module.ecs_iam.api_task_role_arn
-  worker_task_role_arn = module.ecs_iam.worker_task_role_arn
+  execution_role_arn      = module.ecs_iam.execution_role_arn
+  api_task_role_arn       = module.ecs_iam.api_task_role_arn
+  worker_task_role_arn    = module.ecs_iam.worker_task_role_arn
+  collector_task_role_arn = module.ecs_iam.collector_task_role_arn
 
   api_image_tag             = var.api_image_tag
   worker_image_tag          = var.worker_image_tag
   api_ecr_repository_url    = module.ecr.repository_urls["api"]
   worker_ecr_repository_url = module.ecr.repository_urls["worker"]
 
-  api_security_group_id    = module.network.api_security_group_id
-  worker_security_group_id = module.network.worker_security_group_id
-  public_subnet_ids        = module.network.public_subnet_ids
-  alb_target_group_arn     = module.alb[0].target_group_arn
+  # CP5.3E (Observability Architecture) mandate item 35: PINNED, never
+  # "latest" - real, verified latest stable opentelemetry-collector-contrib
+  # release at design time.
+  collector_image = "otel/opentelemetry-collector-contrib:0.160.0"
+
+  api_security_group_id       = module.network.api_security_group_id
+  worker_security_group_id    = module.network.worker_security_group_id
+  collector_security_group_id = module.network.collector_security_group_id
+  public_subnet_ids           = module.network.public_subnet_ids
+  vpc_id                      = module.network.vpc_id
+  alb_target_group_arn        = module.alb[0].target_group_arn
 
   database_app_secret_arn              = module.credentials.secret_arns["database/app"]
   rabbitmq_secret_arn                  = module.credentials.secret_arns["rabbitmq"]
@@ -321,6 +333,135 @@ module "ecs_services" {
   anthropic_secret_arn                 = module.credentials.secret_arns["anthropic"]
   meta_webhook_app_secret_arn          = module.credentials.secret_arns["meta/webhook/app-secret"]
   meta_webhook_verify_token_secret_arn = module.credentials.secret_arns["meta/webhook/verify-token"]
+  otlp_secret_arn                      = module.credentials.secret_arns["observability/otlp"]
+}
+
+# CP5.3E (Observability Architecture) mandate item 20/25/30/31/34: the 3
+# alerts from the already-approved 10-item catalogue (Fase 12 §4.6) that
+# have a reliable, native AWS CloudWatch signal - confirmed empirically
+# before writing these, never assumed:
+# - Api: the ALB target group's own HealthyHostCount (real, already
+#   exists - the ALB probes /health/live every deploy already).
+# - Worker: AWS/ECS's real "LiveTaskCount" metric for this exact service
+#   (confirmed present via `aws cloudwatch list-metrics`, NOT the commonly
+#   assumed RunningTaskCount, which requires Container Insights - disabled
+#   here - and does not appear in AWS/ECS without it).
+# - High error rate: metric math, never a bare threshold on
+#   HTTPCode_Target_5XX_Count alone - IF() forces the ratio to 0 (never
+#   breaches) whenever traffic in the window is below the minimum-traffic
+#   floor, so a single isolated error never fires this alarm.
+# The remaining 7 catalogue items (Postgres/RabbitMQ/Redis dependency
+# failures, Wolverine processing failure, DLQ accumulation, external
+# provider failure, AI cost anomaly) have no reliable AWS-native signal -
+# see DependencyHealthMetricsBackgroundService/existing OTel meters,
+# routed to Grafana Cloud alerting instead (mandate item 30), designed but
+# not created this round (mandate item 33 - no Grafana mutation yet).
+#
+# PilotConservativeDefaults=true (mandate item 19) - none of these
+# thresholds are a Production SLA/SLO. No alarm_actions/SNS target here -
+# AlertDeliveryProviderRequiredForMvp=false is an already-approved decision
+# (Fase 12 §4.6/§4.10), unchanged by this checkpoint.
+resource "aws_cloudwatch_metric_alarm" "api_unavailable" {
+  count = local.runtime_edge_enabled ? 1 : 0
+
+  alarm_name        = "ihostpro-homolog-api-unavailable"
+  alarm_description = "Api ALB target group has zero healthy hosts for 2 consecutive minutes. PilotConservativeDefault - not a Production SLA."
+  namespace         = "AWS/ApplicationELB"
+  metric_name       = "HealthyHostCount"
+  dimensions = {
+    TargetGroup  = module.alb[0].target_group_arn_suffix
+    LoadBalancer = module.alb[0].alb_arn_suffix
+  }
+  statistic           = "Minimum"
+  period              = 60
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  comparison_operator = "LessThanThreshold"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+
+  tags = {
+    Project     = "iHostPro"
+    Environment = "homolog"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_unavailable" {
+  count = local.runtime_edge_enabled ? 1 : 0
+
+  alarm_name        = "ihostpro-homolog-worker-unavailable"
+  alarm_description = "Worker ECS service has zero live tasks for 2 consecutive minutes. PilotConservativeDefault - not a Production SLA."
+  namespace         = "AWS/ECS"
+  metric_name       = "LiveTaskCount"
+  dimensions = {
+    ClusterName = module.ecs.cluster_name
+    ServiceName = module.ecs_services[0].worker_service_name
+  }
+  statistic           = "Minimum"
+  period              = 60
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  comparison_operator = "LessThanThreshold"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+
+  tags = {
+    Project     = "iHostPro"
+    Environment = "homolog"
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "high_error_rate" {
+  count = local.runtime_edge_enabled ? 1 : 0
+
+  alarm_name          = "ihostpro-homolog-high-error-rate"
+  alarm_description   = "Api ALB 5xx rate >= 10% over 5 minutes, only when there were >= 10 requests in the window (never a single isolated error). PilotConservativeDefault - not a Production SLA."
+  evaluation_periods  = 1
+  datapoints_to_alarm = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 10
+  treat_missing_data  = "notBreaching"
+
+  metric_query {
+    id          = "error_rate"
+    expression  = "IF(requests >= 10, (errors / requests) * 100, 0)"
+    label       = "5xx error rate (%), gated on minimum traffic"
+    return_data = true
+  }
+
+  metric_query {
+    id = "errors"
+    metric {
+      namespace   = "AWS/ApplicationELB"
+      metric_name = "HTTPCode_Target_5XX_Count"
+      dimensions = {
+        LoadBalancer = module.alb[0].alb_arn_suffix
+      }
+      period = 300
+      stat   = "Sum"
+    }
+  }
+
+  metric_query {
+    id = "requests"
+    metric {
+      namespace   = "AWS/ApplicationELB"
+      metric_name = "RequestCount"
+      dimensions = {
+        LoadBalancer = module.alb[0].alb_arn_suffix
+      }
+      period = 300
+      stat   = "Sum"
+    }
+  }
+
+  tags = {
+    Project     = "iHostPro"
+    Environment = "homolog"
+    ManagedBy   = "Terraform"
+  }
 }
 
 # CP5.3D-B item 36: the public DNS name for the Api - an alias record (no

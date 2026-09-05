@@ -195,6 +195,43 @@ resource "aws_security_group" "worker" {
   }
 }
 
+resource "aws_security_group" "collector" {
+  name        = "ihostpro-${var.environment}-collector"
+  description = "OpenTelemetry Collector Fargate task - zero public inbound. OTLP gRPC (4317) only from Api/Worker SGs, never 0.0.0.0/0/ALB/NLB. Public IP (no NAT) only for outbound to Grafana Cloud."
+  vpc_id      = aws_vpc.this.id
+
+  ingress {
+    description     = "OTLP gRPC from Api"
+    from_port       = 4317
+    to_port         = 4317
+    protocol        = "tcp"
+    security_groups = [aws_security_group.api.id]
+  }
+
+  ingress {
+    description     = "OTLP gRPC from Worker"
+    from_port       = 4317
+    to_port         = 4317
+    protocol        = "tcp"
+    security_groups = [aws_security_group.worker.id]
+  }
+
+  egress {
+    description = "Outbound to AWS APIs (ECR/CloudWatch/Secrets Manager) and Grafana Cloud OTLP ingestion"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "ihostpro-${var.environment}-collector-sg"
+    Project     = var.project
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
+
 resource "aws_security_group" "migrationrunner" {
   name        = "ihostpro-${var.environment}-migrationrunner"
   description = "MigrationRunner one-off Fargate task - zero inbound rules, outbound only. Public subnet + public IP (no NAT), same PUBLIC_TASK_ENI_LOCKED_SECURITY_GROUP model as Api/Worker - it must reach ECR/CloudWatch/AWS APIs to run at all."

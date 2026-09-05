@@ -13,3 +13,11 @@ output "api_task_definition_arn" {
 output "worker_task_definition_arn" {
   value = aws_ecs_task_definition.worker.arn
 }
+
+output "collector_service_name" {
+  value = aws_ecs_service.collector.name
+}
+
+output "collector_task_definition_arn" {
+  value = aws_ecs_task_definition.collector.arn
+}

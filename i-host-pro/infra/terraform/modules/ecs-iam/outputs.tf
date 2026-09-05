@@ -14,6 +14,10 @@ output "migrationrunner_task_role_arn" {
   value = aws_iam_role.migrationrunner_task.arn
 }
 
+output "collector_task_role_arn" {
+  value = aws_iam_role.collector_task.arn
+}
+
 output "database_bootstrap_task_role_arn" {
   value = aws_iam_role.database_bootstrap_task.arn
 }

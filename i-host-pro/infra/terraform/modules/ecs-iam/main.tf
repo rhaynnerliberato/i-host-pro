@@ -112,6 +112,24 @@ resource "aws_iam_role" "migrationrunner_task" {
 # variables), never an AWS SDK call of its own - confirmed by reading its
 # actual runtime configuration, not assumed.
 
+resource "aws_iam_role" "collector_task" {
+  name               = "ihostpro-${var.environment}-collector-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_trust.json
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+    Service     = "collector"
+    ManagedBy   = "Terraform"
+  }
+}
+# CP5.3E (Observability Architecture): collector_task has no attached
+# policy - the official OpenTelemetry Collector image reads its own
+# Grafana Cloud endpoint/credentials from plain environment variables
+# (execution-role-injected from the observability/otlp secret, same
+# mechanism as every other secret in this codebase), never an AWS SDK call
+# of its own. Never copy Api/Worker's task-role policies here.
+
 # CP5.3C corrective Decision Gate item 24: dedicated task role for the
 # one-off Database Bootstrap task. Unlike Api/Worker/MigrationRunner, this
 # tool calls the AWS SDK directly (GetSecretValueAsync) rather than

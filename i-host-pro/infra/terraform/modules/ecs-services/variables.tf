@@ -58,6 +58,11 @@ variable "public_subnet_ids" {
   type = list(string)
 }
 
+variable "vpc_id" {
+  description = "CP5.3E (Observability Architecture) - needed only for the Collector's private DNS namespace (aws_service_discovery_private_dns_namespace)."
+  type        = string
+}
+
 variable "alb_target_group_arn" {
   description = "Api service registers with this target group. No default - a service without one would be pointless."
   type        = string
@@ -92,6 +97,28 @@ variable "meta_webhook_app_secret_arn" {
 }
 
 variable "meta_webhook_verify_token_secret_arn" {
+  type = string
+}
+
+# CP5.3E (Observability Architecture)
+variable "collector_task_role_arn" {
+  type = string
+}
+
+variable "collector_security_group_id" {
+  type = string
+}
+
+# Public image (Docker Hub, otel/opentelemetry-collector-contrib) - no ECR
+# repository needed, Fargate pulls it directly given this task's public IP.
+# No default - PINNED, never "latest" (mandate item 35).
+variable "collector_image" {
+  type = string
+}
+
+# CP5.3E mandate item 8/9: consumed ONLY by the Collector task's execution-
+# role secret injection - Api/Worker never receive this ARN.
+variable "otlp_secret_arn" {
   type = string
 }
 

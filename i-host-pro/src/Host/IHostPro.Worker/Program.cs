@@ -58,6 +58,7 @@ using Wolverine.Runtime;
 
 Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
+    .Enrich.With(new TraceContextEnricher())
     .WriteTo.Console()
     .CreateBootstrapLogger();
 
@@ -90,6 +91,7 @@ try
         .ReadFrom.Configuration(builder.Configuration)
         .ReadFrom.Services(services)
         .Enrich.FromLogContext()
+        .Enrich.With(new TraceContextEnricher())
         .WriteTo.Console());
 
     // Same dependency-criticality reasoning as IHostPro.Api/Program.cs:
@@ -124,6 +126,12 @@ try
             name: "redis",
             failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded,
             tags: ["ready"]);
+
+    // Fase 12, Checkpoint 5.3E (Observability Architecture) — publishes the
+    // "ready"-tagged health checks above as an OTel gauge, closing the
+    // signal gap for the Postgres/RabbitMQ/Redis alerts in the already-
+    // approved catalogue (Fase 12 §4.6). See the class doc comment.
+    builder.Services.AddHostedService<DependencyHealthMetricsBackgroundService>();
 
     // Multi-tenant: for HTTP requests (IHostPro.Api) the tenant is resolved by an
     // authentication middleware; here, it is resolved once per consumed message by
