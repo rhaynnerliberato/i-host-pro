@@ -1,0 +1,67 @@
+name: Diagnostic - Housekeeping Hang
+
+# TEMPORARY, manual-only diagnostic workflow (Decision Gate: CI Stabilization
+# Bug #5). Investigates a real, reproduced hang in
+# `integration-tests (Housekeeping)` on ubuntu-latest (observed run
+# 33991429826: stuck in_progress for 1h30+ with zero console output past
+# "test files matched the pattern", eventually cancelled for diagnosis).
+#
+# Runs ONLY the Housekeeping integration test project, with VSTest's own
+# --blame-hang (real, confirmed-supported flag - see `dotnet test --help`)
+# to capture a hang dump and detailed diagnostic log if it reproduces here
+# too, without ever touching the main `ci.yml` pipeline. workflow_dispatch
+# only - never runs on push, never blocks/duplicates the real CI.
+#
+# Deliberately has NO id-token permission, no AWS role, no AWS/Meta/Grafana
+# secrets - this job never needs to publish anything, only to run one test
+# project and upload its own diagnostic artifacts.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose-housekeeping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: i-host-pro
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore tests/Contexts/Housekeeping/IHostPro.Contexts.Housekeeping.Tests.Integration/IHostPro.Contexts.Housekeeping.Tests.Integration.csproj
+
+      - name: Build
+        run: dotnet build tests/Contexts/Housekeeping/IHostPro.Contexts.Housekeeping.Tests.Integration/IHostPro.Contexts.Housekeeping.Tests.Integration.csproj --no-restore --configuration Release
+
+      # --blame-hang-timeout is PER-TEST (renewed after each test case for
+      # xUnit) - 15 minutes is generous for even a genuinely slow cold
+      # Testcontainers pull+start+migrate cycle, while still triggering well
+      # before this job's own 30-minute hard timeout-minutes above.
+      # --diag writes VSTest's own internal diagnostic log (test host
+      # startup/discovery/execution), which should show exactly where
+      # execution is stuck even if console/trx output never appears.
+      - name: Integration Tests — Housekeeping (diagnostic mode)
+        run: >
+          dotnet test tests/Contexts/Housekeeping/IHostPro.Contexts.Housekeeping.Tests.Integration/IHostPro.Contexts.Housekeeping.Tests.Integration.csproj
+          --no-build --configuration Release -m:1
+          --logger "console;verbosity=detailed"
+          --logger "trx;LogFileName=results.trx"
+          --blame-hang --blame-hang-timeout 15m --blame-hang-dump-type mini
+          --results-directory ./TestResults
+          --diag ./TestResults/vstest-diag.log
+
+      - name: Upload diagnostic artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: housekeeping-hang-diagnostics
+          path: i-host-pro/TestResults/**
+          if-no-files-found: warn
