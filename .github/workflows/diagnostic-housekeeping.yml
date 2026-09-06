@@ -9,14 +9,22 @@ name: Diagnostic - Housekeeping Hang
 # Runs ONLY the Housekeeping integration test project, with VSTest's own
 # --blame-hang (real, confirmed-supported flag - see `dotnet test --help`)
 # to capture a hang dump and detailed diagnostic log if it reproduces here
-# too, without ever touching the main `ci.yml` pipeline. workflow_dispatch
-# only - never runs on push, never blocks/duplicates the real CI.
+# too, without ever touching the main `ci.yml` pipeline.
+#
+# Trigger note: workflow_dispatch would be the natural choice, but GitHub
+# only lists/allows manual dispatch for a workflow file that already exists
+# on the repository's default branch (master) - a throwaway diagnostic
+# branch's own copy is invisible to that UI/API. Scoping `push` to this
+# exact branch name achieves the same "manual, isolated, on-demand" effect
+# without ever touching master: only a push to diagnostic/housekeeping-hang
+# itself can trigger this, never any other branch, never a PR.
 #
 # Deliberately has NO id-token permission, no AWS role, no AWS/Meta/Grafana
 # secrets - this job never needs to publish anything, only to run one test
 # project and upload its own diagnostic artifacts.
 on:
-  workflow_dispatch: {}
+  push:
+    branches: [diagnostic/housekeeping-hang]
 
 permissions:
   contents: read
