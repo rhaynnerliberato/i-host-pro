@@ -148,13 +148,13 @@ public class CreateCleaningForReservationCommandHandlerTests
     }
 
     [Fact]
-    public async Task An_unknown_or_inactive_property_throws_relying_on_Wolverines_default_redelivery()
+    public async Task An_unknown_or_inactive_property_throws_the_dedicated_transient_exception_for_Wolverines_bounded_retry()
     {
         var fixture = CreateFixture(propertyIsKnownActive: false);
 
         var act = async () => await fixture.Handler.HandleAsync(Command(), CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        await act.Should().ThrowAsync<PropertyNotYetKnownToHousekeepingException>();
         AssertNoSideEffect(fixture);
         fixture.CancellationGuard.AcquiredLocks.Should().BeEmpty(
             "the property check runs before the write transaction opens — the lock is never reached");

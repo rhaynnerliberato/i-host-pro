@@ -82,10 +82,12 @@ public sealed class CreateCleaningForReservationCommandHandler : ICreateCleaning
 
         if (!isKnownActiveProperty)
         {
-            throw new InvalidOperationException(
+            throw new PropertyNotYetKnownToHousekeepingException(
                 $"CreateCleaningForReservation: property '{command.PropertyId}' is not a known active property " +
-                $"for tenant '{command.TenantId}' — relies on Wolverine's own default redelivery behavior to " +
-                "recover from a transient Property Management projection lag; no custom retry policy introduced.");
+                $"for tenant '{command.TenantId}' yet — a potentially transient Property Management projection " +
+                "lag. CreateCleaningForReservationHandler.Configure applies a short, bounded Wolverine retry " +
+                "for exactly this exception type; if the property never becomes known within that window, this " +
+                "still terminates in Wolverine's own dead-letter handling, unchanged from before.");
         }
 
         await _executor.ExecuteAsync(async () =>
