@@ -185,6 +185,47 @@ public sealed class DashboardE2ETests
         response.Ok.Should().BeTrue($"test-data setup via the real API must succeed (status {response.Status})");
     }
 
+    /// <summary>
+    /// Bounded poll for Housekeeping's own automatic reservation-linked Cleaning
+    /// (created by <c>CreateCleaningForReservationCommandHandler</c> in reaction to
+    /// <c>ReservationCreated</c>, via Workflow Orchestration) to become visible for
+    /// a specific (propertyId, reservationId) pair. Housekeeping Workflow Command
+    /// Retry/Redelivery Production Gate: this now relies on a REAL, explicit
+    /// bounded Wolverine retry (<c>CreateCleaningForReservationHandler.Configure</c>,
+    /// 250ms/1s/3s cooldown) to resolve the transient race between this automatic
+    /// creation and Property Management's own PropertyActivated propagation to
+    /// Housekeeping's local projection — before that fix, this race could
+    /// permanently and silently fail (dead-lettered on the very first attempt,
+    /// zero retries). Waiting here first guarantees the automatic Cleaning always
+    /// exists before cancellation is requested, so the cancellation reaction always
+    /// finds it and cancels it, making the scenario's cancelled-cleaning count
+    /// deterministic.
+    /// </summary>
+    private async Task WaitUntilAutomaticCleaningExistsForReservationAsync(
+        IPage page, string bearerToken, string propertyId, string reservationId, int timeoutSeconds = 20)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(timeoutSeconds);
+        while (DateTime.UtcNow < deadline)
+        {
+            var response = await page.Context.APIRequest.GetAsync(
+                _fixture.ApiBaseUrl + $"/api/v1/cleanings?propertyId={propertyId}&pageSize=50",
+                new APIRequestContextOptions { Headers = new Dictionary<string, string> { ["Authorization"] = bearerToken } });
+            response.Ok.Should().BeTrue($"GET /api/v1/cleanings must succeed (status {response.Status})");
+            var body = await response.JsonAsync();
+            foreach (var item in body!.Value.GetProperty("items").EnumerateArray())
+            {
+                if (item.TryGetProperty("reservationId", out var rid) &&
+                    rid.ValueKind == JsonValueKind.String &&
+                    rid.GetString() == reservationId)
+                    return;
+            }
+            await Task.Delay(TimeSpan.FromMilliseconds(300));
+        }
+
+        throw new TimeoutException(
+            $"No automatic Cleaning ever appeared for reservation {reservationId} on property {propertyId} within {timeoutSeconds}s.");
+    }
+
     private async Task<string> CreateCleaningViaApiAsync(IPage page, string bearerToken, string propertyId, DateTimeOffset? scheduledAtUtc = null)
     {
         var response = await page.Context.APIRequest.PostAsync(
@@ -609,6 +650,10 @@ public sealed class DashboardE2ETests
         await CreateReservationViaApiAsync(page, token, propertyCheckIn, "Check-in Guest", now, now.AddDays(3));
         await CreateReservationViaApiAsync(page, token, propertyCheckOut, "Check-out Guest", now.AddDays(-2), now);
         var cancelledReservationId = await CreateReservationViaApiAsync(page, token, propertyCancelled, "Cancelled Guest", now.AddDays(1), now.AddDays(4));
+        // Deterministic ordering: wait for Housekeeping's own automatic reservation-linked
+        // Cleaning to exist BEFORE cancelling, so the cancellation reaction always finds and
+        // cancels it — see WaitUntilAutomaticCleaningExistsForReservationAsync's own doc comment.
+        await WaitUntilAutomaticCleaningExistsForReservationAsync(page, token, propertyCancelled, cancelledReservationId);
         await CancelReservationViaApiAsync(page, token, cancelledReservationId);
 
         // ---- Properties: active (the four above) / inactive / archived ----
@@ -659,9 +704,19 @@ public sealed class DashboardE2ETests
             json.GetProperty("reservations").GetProperty("cancelledInPeriod").GetInt32() == 1 &&
             json.GetProperty("reservations").GetProperty("futureReservations").GetInt32() == 1 &&
             json.GetProperty("housekeeping").GetProperty("completedInPeriod").GetInt32() == 1 &&
-            // 2, not 1: WaitUntilKnownToHousekeepingAsync's own probe cleaning (created+cancelled
-            // "now" to detect PropertyActivated propagation) also lands in today's cancelled count.
-            json.GetProperty("housekeeping").GetProperty("cancelledInPeriod").GetInt32() == 2 &&
+            // 3, not 1: WaitUntilKnownToHousekeepingAsync's own probe cleaning (created+cancelled
+            // "now" to detect PropertyActivated propagation) plus the automatic reservation-linked
+            // Cleaning for propertyCancelled/cancelledReservationId (deterministically created via
+            // WaitUntilAutomaticCleaningExistsForReservationAsync before cancellation, then cancelled
+            // by the real ReservationCancelled reaction) both also land in today's cancelled count.
+            json.GetProperty("housekeeping").GetProperty("cancelledInPeriod").GetInt32() == 3 &&
+            // 5, not 2: the retry fix (Housekeeping Workflow Command Retry/Redelivery
+            // Production Gate) now reliably creates an automatic reservation-linked Cleaning
+            // for EVERY reservation in this scenario, not only propertyCancelled's — the three
+            // never-cancelled ones (propertyFuture/propertyCheckIn/propertyCheckOut) stay
+            // Pending forever, on top of the two explicit Pending cleanings (cleaningPending,
+            // cleaningDelayed).
+            json.GetProperty("housekeeping").GetProperty("pending").GetInt32() == 5 &&
             json.GetProperty("housekeeping").GetProperty("waitingHelp").GetInt32() == 1 &&
             json.GetProperty("housekeeping").GetProperty("delayed").GetInt32() == 1 &&
             json.GetProperty("housekeeping").GetProperty("interrupted").GetInt32() == 1 &&
@@ -682,12 +737,12 @@ public sealed class DashboardE2ETests
         cards["Check-outs no período"].Should().Be("1");
         cards["Reservas canceladas no período"].Should().Be("1");
         cards["Faxinas concluídas no período"].Should().Be("1");
-        cards["Faxinas canceladas no período"].Should().Be("2", "the explicit cleaningCancelled plus WaitUntilKnownToHousekeepingAsync's own probe cleaning cancellation");
+        cards["Faxinas canceladas no período"].Should().Be("3", "the explicit cleaningCancelled, WaitUntilKnownToHousekeepingAsync's own probe cleaning cancellation, and the automatic reservation-linked Cleaning for propertyCancelled cancelled alongside its Reservation");
         cards["Ocorrências no período"].Should().Be("2");
 
         // Current-state metrics
         cards["Reservas futuras"].Should().Be("1");
-        cards["Faxinas pendentes"].Should().Be("2", "Pending bucket = Pending+Assigned: the plain Pending cleaning, plus the Delayed one (still Pending)");
+        cards["Faxinas pendentes"].Should().Be("5", "Pending bucket = Pending+Assigned: the plain Pending cleaning, the Delayed one (still Pending), plus the three automatic reservation-linked Cleanings for propertyFuture/propertyCheckIn/propertyCheckOut (never cancelled, so they remain Pending)");
         cards["Faxinas em andamento"].Should().Be("2", "InProgress bucket = InTransit/Started/InInspection/WaitingHelp/WaitingMaterials: the Started cleaning plus the WaitingHelp one");
         cards["Faxinas interrompidas"].Should().Be("1");
         cards["Faxinas atrasadas"].Should().Be("1");
