@@ -204,6 +204,64 @@ public sealed class ScheduleAgendaE2ETests
         throw new TimeoutException($"Item {sourceReferenceId} never appeared in GET /api/v1/schedule within 20s.");
     }
 
+    /// <summary>
+    /// Anchor for the four UI-rendering tests below (<see cref="Reservation_and_Cleaning_are_distinguishable_beyond_color"/>,
+    /// <see cref="Filtering_by_EventType_Reservation_hides_Cleaning_events"/>,
+    /// <see cref="Filtering_by_EventType_Cleaning_hides_Reservation_events"/>,
+    /// <see cref="Reservation_and_Cleaning_times_render_with_no_timezone_shift"/>)
+    /// — the only ones in this file that assert against
+    /// <c>.schedule-event-*</c> DOM locators and therefore depend on which
+    /// week the calendar UI is currently showing. Every other test here
+    /// (e.g. <see cref="A_real_Reservation_appears_using_CheckInAt_and_CheckOutAt"/>)
+    /// asserts purely against <c>GET /api/v1/schedule</c>'s JSON response,
+    /// which never depends on "today" — those were never affected and are
+    /// left with their own literal dates unchanged. Computed relative to
+    /// <see cref="DateTimeOffset.UtcNow"/> instead of this file's original
+    /// hardcoded 2026-08-17 Monday: that fixed date drifted into the past
+    /// once real time passed it, so "reload, click next once" no longer
+    /// reached it — 10 days out is comfortably beyond "this week" regardless
+    /// of the calendar's first-day-of-week convention, and
+    /// <see cref="NavigateUntilVisibleAsync"/> below clicks forward as many
+    /// times as actually needed rather than assuming exactly one.
+    /// </summary>
+    private static DateTimeOffset ScheduleWindowStartUtc =>
+        new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero).AddDays(10);
+
+    /// <summary>
+    /// Reloads the page, then clicks FullCalendar's own "next" button —
+    /// bounded, waiting for each click's own real GET /api/v1/schedule
+    /// response before checking again — until <paramref name="target"/>
+    /// becomes visible. Replaces a single blind "next" click, which assumed
+    /// a fixed relationship between "today" and this file's own (now
+    /// relative, see <see cref="ScheduleWindowStartUtc"/>) target week that
+    /// cannot be assumed to hold for exactly one click regardless of the
+    /// calendar's first-day-of-week convention. Never a fixed sleep between
+    /// attempts — each iteration's own bounded wait provides that.
+    /// </summary>
+    private static async Task NavigateUntilVisibleAsync(IPage page, ILocator target)
+    {
+        await page.ReloadAsync();
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                await target.WaitForAsync(new LocatorWaitForOptions { Timeout = 5_000 });
+                return;
+            }
+            catch (TimeoutException)
+            {
+                await page.RunAndWaitForResponseAsync(
+                    async () => await page.Locator(".fc-next-button").ClickAsync(),
+                    r => r.Url.Contains("/api/v1/schedule") && r.Request.Method == "GET");
+            }
+        }
+
+        // Final attempt — let it throw with Playwright's own real timeout
+        // message rather than swallowing the failure after 3 tries.
+        await target.WaitForAsync();
+    }
+
     // ---- 1/2/3: ADMIN/OPERATOR access, permission denial ----------------
 
     [Fact]
@@ -314,17 +372,15 @@ public sealed class ScheduleAgendaE2ETests
         var propertyId = await CreateActivePropertyViaApiAsync(page, token, "E2E-SCH-DIST-1", "E2E Schedule Distinguish Property");
         await WaitUntilKnownToHousekeepingAsync(page, token, propertyId);
 
-        var reservationId = await CreateReservationViaApiAsync(page, token, propertyId, "E2E Distinguish Guest", "2026-08-20T14:00:00Z", "2026-08-22T11:00:00Z");
-        var cleaningId = await CreateScheduledCleaningViaApiAsync(page, token, propertyId, "2026-08-21T18:00:00Z");
-        await WaitUntilVisibleInScheduleAsync(page, token, "2026-08-17T00:00:00Z", "2026-08-24T00:00:00Z", cleaningId);
+        var windowStart = ScheduleWindowStartUtc;
+        var reservationId = await CreateReservationViaApiAsync(page, token, propertyId, "E2E Distinguish Guest", windowStart.AddDays(3).AddHours(14).ToString("O"), windowStart.AddDays(5).AddHours(11).ToString("O"));
+        var cleaningId = await CreateScheduledCleaningViaApiAsync(page, token, propertyId, windowStart.AddDays(4).AddHours(18).ToString("O"));
+        await WaitUntilVisibleInScheduleAsync(page, token, windowStart.ToString("O"), windowStart.AddDays(7).ToString("O"), cleaningId);
         _ = reservationId;
-
-        await page.ReloadAsync();
-        await page.Locator(".fc-next-button").ClickAsync();
 
         var reservationEvent = page.Locator(".schedule-event-reservation").First;
         var cleaningEvent = page.Locator(".schedule-event-cleaning").First;
-        await reservationEvent.WaitForAsync();
+        await NavigateUntilVisibleAsync(page, reservationEvent);
         await cleaningEvent.WaitForAsync();
 
         (await reservationEvent.InnerTextAsync()).Should().Contain("Reserva", "type must be stated as text, never color alone");
@@ -402,12 +458,12 @@ public sealed class ScheduleAgendaE2ETests
         var (page, token) = await LoginAsAdminOnScheduleAsync();
         var propertyId = await CreateActivePropertyViaApiAsync(page, token, "E2E-SCH-FILT-1", "E2E Schedule Filter Property");
         await WaitUntilKnownToHousekeepingAsync(page, token, propertyId);
-        await CreateReservationViaApiAsync(page, token, propertyId, "E2E Filter Guest", "2026-08-20T14:00:00Z", "2026-08-22T11:00:00Z");
-        var cleaningId = await CreateScheduledCleaningViaApiAsync(page, token, propertyId, "2026-08-21T18:00:00Z");
-        await WaitUntilVisibleInScheduleAsync(page, token, "2026-08-17T00:00:00Z", "2026-08-24T00:00:00Z", cleaningId);
+        var windowStart = ScheduleWindowStartUtc;
+        await CreateReservationViaApiAsync(page, token, propertyId, "E2E Filter Guest", windowStart.AddDays(3).AddHours(14).ToString("O"), windowStart.AddDays(5).AddHours(11).ToString("O"));
+        var cleaningId = await CreateScheduledCleaningViaApiAsync(page, token, propertyId, windowStart.AddDays(4).AddHours(18).ToString("O"));
+        await WaitUntilVisibleInScheduleAsync(page, token, windowStart.ToString("O"), windowStart.AddDays(7).ToString("O"), cleaningId);
 
-        await page.ReloadAsync();
-        await page.Locator(".fc-next-button").ClickAsync();
+        await NavigateUntilVisibleAsync(page, page.Locator(".schedule-event-reservation, .schedule-event-cleaning").First);
         await page.GetByLabel("Tipo").ClickAsync();
         await page.RunAndWaitForResponseAsync(
             async () => await page.GetByRole(AriaRole.Option, new() { Name = "Reservas" }).ClickAsync(),
@@ -423,12 +479,12 @@ public sealed class ScheduleAgendaE2ETests
         var (page, token) = await LoginAsAdminOnScheduleAsync();
         var propertyId = await CreateActivePropertyViaApiAsync(page, token, "E2E-SCH-FILT-2", "E2E Schedule Filter Property 2");
         await WaitUntilKnownToHousekeepingAsync(page, token, propertyId);
-        await CreateReservationViaApiAsync(page, token, propertyId, "E2E Filter Guest 2", "2026-08-20T14:00:00Z", "2026-08-22T11:00:00Z");
-        var cleaningId = await CreateScheduledCleaningViaApiAsync(page, token, propertyId, "2026-08-21T18:00:00Z");
-        await WaitUntilVisibleInScheduleAsync(page, token, "2026-08-17T00:00:00Z", "2026-08-24T00:00:00Z", cleaningId);
+        var windowStart = ScheduleWindowStartUtc;
+        await CreateReservationViaApiAsync(page, token, propertyId, "E2E Filter Guest 2", windowStart.AddDays(3).AddHours(14).ToString("O"), windowStart.AddDays(5).AddHours(11).ToString("O"));
+        var cleaningId = await CreateScheduledCleaningViaApiAsync(page, token, propertyId, windowStart.AddDays(4).AddHours(18).ToString("O"));
+        await WaitUntilVisibleInScheduleAsync(page, token, windowStart.ToString("O"), windowStart.AddDays(7).ToString("O"), cleaningId);
 
-        await page.ReloadAsync();
-        await page.Locator(".fc-next-button").ClickAsync();
+        await NavigateUntilVisibleAsync(page, page.Locator(".schedule-event-reservation, .schedule-event-cleaning").First);
         await page.GetByLabel("Tipo").ClickAsync();
         await page.RunAndWaitForResponseAsync(
             async () => await page.GetByRole(AriaRole.Option, new() { Name = "Faxinas" }).ClickAsync(),
@@ -578,20 +634,18 @@ public sealed class ScheduleAgendaE2ETests
         var propertyId = await CreateActivePropertyViaApiAsync(page, token, "E2E-SCH-TZ-1", "E2E Schedule Timezone Property");
         await WaitUntilKnownToHousekeepingAsync(page, token, propertyId);
 
-        var reservationId = await CreateReservationViaApiAsync(page, token, propertyId, "E2E Timezone Guest", "2026-08-20T15:00:00Z", "2026-08-22T11:00:00Z");
-        var cleaningId = await CreateScheduledCleaningViaApiAsync(page, token, propertyId, "2026-08-21T15:00:00Z");
-        await WaitUntilVisibleInScheduleAsync(page, token, "2026-08-17T00:00:00Z", "2026-08-24T00:00:00Z", cleaningId);
+        var windowStart = ScheduleWindowStartUtc;
+        var reservationId = await CreateReservationViaApiAsync(page, token, propertyId, "E2E Timezone Guest", windowStart.AddDays(3).AddHours(15).ToString("O"), windowStart.AddDays(5).AddHours(11).ToString("O"));
+        var cleaningId = await CreateScheduledCleaningViaApiAsync(page, token, propertyId, windowStart.AddDays(4).AddHours(15).ToString("O"));
+        await WaitUntilVisibleInScheduleAsync(page, token, windowStart.ToString("O"), windowStart.AddDays(7).ToString("O"), cleaningId);
         _ = reservationId;
-
-        await page.ReloadAsync();
-        await page.Locator(".fc-next-button").ClickAsync();
 
         // Context timezone is explicitly UTC, so 15:00Z must render as "3:00"
         // local (FullCalendar's default 12-hour label) — never shifted by an
         // unrelated host machine's own timezone (mandate §18).
         var reservationEvent = page.Locator(".schedule-event-reservation").First;
         var cleaningEvent = page.Locator(".schedule-event-cleaning").First;
-        await reservationEvent.WaitForAsync();
+        await NavigateUntilVisibleAsync(page, reservationEvent);
         await cleaningEvent.WaitForAsync();
         (await reservationEvent.InnerTextAsync()).Should().Contain("3:00");
         (await cleaningEvent.InnerTextAsync()).Should().Contain("3:00");
