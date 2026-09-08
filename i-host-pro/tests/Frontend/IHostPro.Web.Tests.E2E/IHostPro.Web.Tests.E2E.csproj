@@ -51,6 +51,12 @@
     <ProjectReference Include="..\..\..\src\Contexts\Housekeeping\IHostPro.Contexts.Housekeeping.Infrastructure\IHostPro.Contexts.Housekeeping.Infrastructure.csproj" />
     <!-- Fase 7, Incremento 2, Checkpoint 4: Dashboard's own Infrastructure — for direct-EF schema migration/ancillary-outbox provisioning in WebE2EFixture, mirroring every other context's own reference above. -->
     <ProjectReference Include="..\..\..\src\Contexts\Dashboard\IHostPro.Contexts.Dashboard.Infrastructure\IHostPro.Contexts.Dashboard.Infrastructure.csproj" />
+    <!-- Same reason as Dashboard above — WebE2EFixture's own schema migration/ancillary-outbox provisioning for these five Bounded Contexts, added the same investigation this comment set was added in (TEST_FIXTURE_RUNTIME_CONFIG_GAP: the fixture had never learned about them). -->
+    <ProjectReference Include="..\..\..\src\Contexts\AIAgent\IHostPro.Contexts.AIAgent.Infrastructure\IHostPro.Contexts.AIAgent.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Contexts\Communication\IHostPro.Contexts.Communication.Infrastructure\IHostPro.Contexts.Communication.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Contexts\ExternalIntegrations\IHostPro.Contexts.ExternalIntegrations.Infrastructure\IHostPro.Contexts.ExternalIntegrations.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Contexts\GuestOperations\IHostPro.Contexts.GuestOperations.Infrastructure\IHostPro.Contexts.GuestOperations.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Contexts\Payments\IHostPro.Contexts.Payments.Infrastructure\IHostPro.Contexts.Payments.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\src\BuildingBlocks\IHostPro.BuildingBlocks.Infrastructure\IHostPro.BuildingBlocks.Infrastructure.csproj" />
   </ItemGroup>
 

@@ -331,6 +331,19 @@ public sealed class WebE2EFixture : IAsyncLifetime
         // mirroring IHostPro.MigrationRunner's own real declarations exactly.
         await using (var dashboardDbContext = CreateDashboardDbContext())
             await dashboardDbContext.Database.MigrateAsync();
+        // Same class of gap as Dashboard above — mirrors
+        // IHostPro.MigrationRunner's own module discovery exactly, which
+        // migrates every Bounded Context's DbContext unconditionally.
+        await using (var aiAgentDbContext = CreateAIAgentDbContext())
+            await aiAgentDbContext.Database.MigrateAsync();
+        await using (var communicationDbContext = CreateCommunicationDbContext())
+            await communicationDbContext.Database.MigrateAsync();
+        await using (var externalIntegrationsDbContext = CreateExternalIntegrationsDbContext())
+            await externalIntegrationsDbContext.Database.MigrateAsync();
+        await using (var guestOperationsDbContext = CreateGuestOperationsDbContext())
+            await guestOperationsDbContext.Database.MigrateAsync();
+        await using (var paymentsDbContext = CreatePaymentsDbContext())
+            await paymentsDbContext.Database.MigrateAsync();
     }
 
     /// <summary>Mirrors IHostPro.MigrationRunner exactly: platform_messaging (Main) first, then the five Ancillary outboxes.</summary>
@@ -348,6 +361,16 @@ public sealed class WebE2EFixture : IAsyncLifetime
         // needs this schema for IDbContextOutbox<DashboardDbContext> to
         // resolve at all inside the real Worker's TenantTransactionBehavior.
         await ProvisionMessageStoreSchemaAsync("dashboard_messaging", typeof(DashboardDbContext));
+        // Same class of gap as Dashboard above — mirrors
+        // IHostPro.MigrationRunner's own message-store provisioning exactly,
+        // which enrolls every Bounded Context's ancillary outbox
+        // unconditionally, regardless of which Integration Events it
+        // currently publishes.
+        await ProvisionMessageStoreSchemaAsync("external_integrations_messaging", typeof(IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.ExternalIntegrationsDbContext));
+        await ProvisionMessageStoreSchemaAsync("guest_operations_messaging", typeof(IHostPro.Contexts.GuestOperations.Infrastructure.Persistence.GuestOperationsDbContext));
+        await ProvisionMessageStoreSchemaAsync("payments_messaging", typeof(IHostPro.Contexts.Payments.Infrastructure.Persistence.PaymentsDbContext));
+        await ProvisionMessageStoreSchemaAsync("communication_messaging", typeof(IHostPro.Contexts.Communication.Infrastructure.Persistence.CommunicationDbContext));
+        await ProvisionMessageStoreSchemaAsync("ai_agent_messaging", typeof(IHostPro.Contexts.AIAgent.Infrastructure.Persistence.AIAgentDbContext));
     }
 
     private async Task ProvisionMessageStoreSchemaAsync(string schema, Type? dbContextType)
@@ -454,6 +477,13 @@ public sealed class WebE2EFixture : IAsyncLifetime
                     // checkpoint implements) — mirrors
                     // IHostPro.MigrationRunner's own declaration exactly.
                     exchange.BindQueue("workflow.reservation-created-trigger", "reservation_created");
+                    // Same class of gap as every other queue in this method —
+                    // mirrors IHostPro.MigrationRunner's own declaration
+                    // exactly (Development-only gate on the Communication
+                    // binding dropped here: this fixture always runs
+                    // Development, so it is bound unconditionally).
+                    exchange.BindQueue("guestoperations.reservation-created-trigger", "reservation_created");
+                    exchange.BindQueue("communication.reservation-created-trigger", "reservation_created");
                 })
                 // Fase 7, Incremento 1, Checkpoint 3: was declared with NO
                 // queue bound at all — the real Worker subprocess this
@@ -524,6 +554,78 @@ public sealed class WebE2EFixture : IAsyncLifetime
                 {
                     exchange.ExchangeType = ExchangeType.Direct;
                     exchange.BindQueue("housekeeping.workflow-commands", "create_cleaning_for_reservation");
+                    // Same class of gap as every other queue in this method —
+                    // mirrors IHostPro.MigrationRunner's own declaration
+                    // exactly (same exchange, three more routing keys, never
+                    // a second queue).
+                    exchange.BindQueue("reservations.workflow-commands", "close_reservation");
+                    exchange.BindQueue("reservations.workflow-commands", "reschedule_for_early_check_in");
+                    exchange.BindQueue("reservations.workflow-commands", "reschedule_for_late_checkout");
+                })
+                // Fase 9, Checkpoint 2.3.3 / 3.2, Fase 11 Checkpoint 1: this
+                // fixture predates External Integrations entirely — same
+                // class of gap as every exchange above. Mirrors
+                // IHostPro.MigrationRunner's own declaration exactly.
+                .DeclareExchange("external-integrations-events", exchange =>
+                {
+                    exchange.ExchangeType = ExchangeType.Topic;
+                    exchange.BindQueue("communication.whatsapp-status-projection", "whatsapp_message_status_changed");
+                    exchange.BindQueue("reservations.airbnb-import", "airbnb_reservation_imported");
+                    exchange.BindQueue("reservations.airbnb-import", "airbnb_reservation_updated");
+                    exchange.BindQueue("reservations.airbnb-import", "airbnb_reservation_cancelled");
+                    exchange.BindQueue("communication.inbound-guest-message-trigger", "inbound_guest_message_received");
+                })
+                // Fase 11, Checkpoint 2 (AI Agent Foundation): same class of
+                // gap as every exchange above. Mirrors
+                // IHostPro.MigrationRunner's own declaration exactly.
+                .DeclareExchange("communication-events", exchange =>
+                {
+                    exchange.ExchangeType = ExchangeType.Topic;
+                    exchange.BindQueue("aiagent.conversation-message-trigger", "conversation_message_received");
+                })
+                // Fase 10, Checkpoints 1/3/4: this fixture predates Guest
+                // Operations entirely — same class of gap as every exchange
+                // above. Mirrors IHostPro.MigrationRunner's own declaration
+                // exactly (Development-only gates on the Communication
+                // bindings dropped here: this fixture always runs
+                // Development, so they are bound unconditionally).
+                .DeclareExchange("guest-operations-events", exchange =>
+                {
+                    exchange.ExchangeType = ExchangeType.Topic;
+                    exchange.BindQueue("workflow.guest-checked-out-trigger", "guest_checked_out");
+                    exchange.BindQueue("workflow.early-checkin-approved-trigger", "early_checkin_approved");
+                    exchange.BindQueue("workflow.late-checkout-approved-trigger", "late_checkout_approved");
+                    exchange.BindQueue("housekeeping.late-checkout-approved-trigger", "late_checkout_approved");
+                    exchange.BindQueue("communication.guest-checked-in-trigger", "guest_checked_in");
+                    exchange.BindQueue("communication.early-checkin-approved-trigger", "early_checkin_approved");
+                    exchange.BindQueue("communication.late-checkout-approved-trigger", "late_checkout_approved");
+                    exchange.BindQueue("communication.guest-access-delivery-trigger", "guest_access_delivery_requested");
+                    exchange.BindQueue("payments.late-checkout-payment-required-trigger", "late_checkout_payment_required");
+                })
+                // Fase 10, Checkpoint 5 (PIX/Payment Deterministic
+                // Foundation): this fixture predates Payments entirely — same
+                // class of gap as every exchange above. Mirrors
+                // IHostPro.MigrationRunner's own declaration exactly
+                // (Development-only gate on the Communication binding
+                // dropped here, same reasoning as guest-operations-events
+                // above).
+                .DeclareExchange("payments-events", exchange =>
+                {
+                    exchange.ExchangeType = ExchangeType.Topic;
+                    exchange.BindQueue("guestoperations.pixcharge-confirmed-trigger", "pix_charge_confirmed");
+                    exchange.BindQueue("communication.pixcharge-created-trigger", "pix_charge_created");
+                })
+                // Same class of gap as payments-events above — mirrors
+                // IHostPro.MigrationRunner's own declaration exactly (a
+                // separate Direct exchange, never Topic, same reasoning as
+                // workflow-orchestration-commands above: exactly one
+                // destination queue per routing key, never a fan-out).
+                .DeclareExchange("payments-commands", exchange =>
+                {
+                    exchange.ExchangeType = ExchangeType.Direct;
+                    exchange.BindQueue("payments.confirmation-received", "pix_charge_confirmation_received");
+                    exchange.BindQueue("payments.failure-received", "pix_charge_failure_received");
+                    exchange.BindQueue("payments.expiration-received", "pix_charge_expiration_received");
                 });
         });
 
@@ -665,6 +767,57 @@ public sealed class WebE2EFixture : IAsyncLifetime
         return new DashboardDbContext(options, new TenantContext());
     }
 
+    // AIAgent/Communication/ExternalIntegrations/GuestOperations/Payments
+    // were never mirrored here — same class of gap as every other
+    // CreateXDbContext above, found by direct crash capture from this exact
+    // fixture's own real Worker/Api subprocesses (missing schemas surfaced
+    // as "relation ... does not exist" for their ancillary outbox tables).
+    // Mirrors IHostPro.MigrationRunner's own module discovery exactly.
+    private IHostPro.Contexts.AIAgent.Infrastructure.Persistence.AIAgentDbContext CreateAIAgentDbContext()
+    {
+        var options = new DbContextOptionsBuilder<IHostPro.Contexts.AIAgent.Infrastructure.Persistence.AIAgentDbContext>()
+            .UseNpgsql(_migratorConnectionString, npgsqlOptions =>
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "ai_agent"))
+            .Options;
+        return new IHostPro.Contexts.AIAgent.Infrastructure.Persistence.AIAgentDbContext(options, new TenantContext());
+    }
+
+    private IHostPro.Contexts.Communication.Infrastructure.Persistence.CommunicationDbContext CreateCommunicationDbContext()
+    {
+        var options = new DbContextOptionsBuilder<IHostPro.Contexts.Communication.Infrastructure.Persistence.CommunicationDbContext>()
+            .UseNpgsql(_migratorConnectionString, npgsqlOptions =>
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "communication"))
+            .Options;
+        return new IHostPro.Contexts.Communication.Infrastructure.Persistence.CommunicationDbContext(options, new TenantContext());
+    }
+
+    private IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.ExternalIntegrationsDbContext CreateExternalIntegrationsDbContext()
+    {
+        var options = new DbContextOptionsBuilder<IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.ExternalIntegrationsDbContext>()
+            .UseNpgsql(_migratorConnectionString, npgsqlOptions =>
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "external_integrations"))
+            .Options;
+        return new IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.ExternalIntegrationsDbContext(options, new TenantContext());
+    }
+
+    private IHostPro.Contexts.GuestOperations.Infrastructure.Persistence.GuestOperationsDbContext CreateGuestOperationsDbContext()
+    {
+        var options = new DbContextOptionsBuilder<IHostPro.Contexts.GuestOperations.Infrastructure.Persistence.GuestOperationsDbContext>()
+            .UseNpgsql(_migratorConnectionString, npgsqlOptions =>
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "guest_operations"))
+            .Options;
+        return new IHostPro.Contexts.GuestOperations.Infrastructure.Persistence.GuestOperationsDbContext(options, new TenantContext());
+    }
+
+    private IHostPro.Contexts.Payments.Infrastructure.Persistence.PaymentsDbContext CreatePaymentsDbContext()
+    {
+        var options = new DbContextOptionsBuilder<IHostPro.Contexts.Payments.Infrastructure.Persistence.PaymentsDbContext>()
+            .UseNpgsql(_migratorConnectionString, npgsqlOptions =>
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "payments"))
+            .Options;
+        return new IHostPro.Contexts.Payments.Infrastructure.Persistence.PaymentsDbContext(options, new TenantContext());
+    }
+
     /// <summary>Mirrors <see cref="CreateIdentityDbContext"/>'s exact pattern: with no tenantId, the migrator connection (schema DDL only, e.g. <see cref="MigrateSchemasAsync"/>); with one, the app connection and a tenant-scoped <see cref="TenantContext"/>.</summary>
     private IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext CreateReservationsDbContext(Guid? tenantId = null)
     {
@@ -748,6 +901,20 @@ public sealed class WebE2EFixture : IAsyncLifetime
         // (Checkpoint 2, Overview API), which needs ConnectionStrings:Dashboard
         // to point at THIS fixture's own ephemeral Postgres container.
         psi.Environment["ConnectionStrings__Dashboard"] = _appConnectionString;
+        // Same class of gap as Dashboard above, found by direct crash capture
+        // (temporary Debug-level diagnostic, since reverted): Program.cs's
+        // real Wolverine setup enrolls each of these bounded contexts' own
+        // ancillary Postgres outbox unconditionally at startup — the
+        // ExternalIntegrations one is what actually crashed the process, but
+        // this fixture's own env var list had never been audited end-to-end
+        // against every GetConnectionString(...) call Program.cs makes, so
+        // AIAgent/Communication/GuestOperations were equally missing even
+        // though only ExternalIntegrations happened to be next in Program.cs's
+        // own call order.
+        psi.Environment["ConnectionStrings__AIAgent"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__Communication"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__ExternalIntegrations"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__GuestOperations"] = _appConnectionString;
         psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";
         psi.Environment["Identity__Jwt__Audience"] = "ihostpro-api-test";
         psi.Environment["Identity__Jwt__AccessTokenLifetime"] = "00:15:00";
@@ -761,6 +928,14 @@ public sealed class WebE2EFixture : IAsyncLifetime
         psi.Environment["Identity__RefreshToken__ConcurrentRotationGraceWindow"] = "00:00:10";
         psi.Environment["Identity__SessionRevocationCache__ConnectionString"] = _redisContainer.GetConnectionString();
         psi.Environment["Configuration__PolicyCache__ConnectionString"] = _redisContainer.GetConnectionString();
+        // AddIHostProRateLimiting's own RateLimitingOptionsValidator requires
+        // this at startup (ValidateOnStart) regardless of any policy's
+        // FailureMode — a missing connection string crashes the host before
+        // Kestrel ever binds a port, not a per-request 429. Same fixture
+        // Redis as PolicyCache above; the "Authentication" policy's own
+        // FailClosed degradation behavior when Redis is actually unreachable
+        // is untouched here.
+        psi.Environment["RateLimiting__Redis__ConnectionString"] = _redisContainer.GetConnectionString();
         psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;
         psi.Environment["RabbitMq__VirtualHost"] = "/";
         psi.Environment["RabbitMq__Username"] = RabbitMqBuilder.DefaultUsername;
@@ -835,6 +1010,14 @@ public sealed class WebE2EFixture : IAsyncLifetime
         // which need ConnectionStrings:Dashboard to point at THIS fixture's
         // own ephemeral Postgres container.
         psi.Environment["ConnectionStrings__Dashboard"] = _appConnectionString;
+        // Same class of gap as Dashboard above — this env var list had never
+        // been audited end-to-end against every GetConnectionString(...) call
+        // the real Program.cs makes for this bounded-context-aware ancillary
+        // outbox enrollment, so these three were equally missing.
+        psi.Environment["ConnectionStrings__AIAgent"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__Communication"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__GuestOperations"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__Payments"] = _appConnectionString;
         psi.Environment["Identity__Jwt__Issuer"] = "https://identity.ihostpro.test";
         psi.Environment["Identity__Jwt__Audience"] = "ihostpro-api-test";
         psi.Environment["Identity__Jwt__AccessTokenLifetime"] = "00:15:00";
@@ -848,6 +1031,10 @@ public sealed class WebE2EFixture : IAsyncLifetime
         psi.Environment["Identity__RefreshToken__ConcurrentRotationGraceWindow"] = "00:00:10";
         psi.Environment["Identity__SessionRevocationCache__ConnectionString"] = _redisContainer.GetConnectionString();
         psi.Environment["Configuration__PolicyCache__ConnectionString"] = _redisContainer.GetConnectionString();
+        // Worker also calls AddIHostProRateLimiting (its own AI cost-guard
+        // policy) — same ValidateOnStart requirement as StartApiProcess
+        // above, same fixture Redis.
+        psi.Environment["RateLimiting__Redis__ConnectionString"] = _redisContainer.GetConnectionString();
         psi.Environment["RabbitMq__Host"] = _rabbitMqContainer.Hostname;
         psi.Environment["RabbitMq__VirtualHost"] = "/";
         psi.Environment["RabbitMq__Username"] = RabbitMqBuilder.DefaultUsername;
