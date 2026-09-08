@@ -65,11 +65,25 @@ public class WhatsAppIntegrationEndpointsAuthorizationTests : IClassFixture<What
         private const string MigratorRolePassword = "test_migrator_password";
 
         private PostgreSqlContainer _container = null!;
+        private string? _previousAwsRegion;
+        private string? _previousAwsDefaultRegion;
         public string MigratorConnectionString { get; private set; } = null!;
         public string AppConnectionString { get; private set; } = null!;
 
         public async Task InitializeAsync()
         {
+            // AddExternalIntegrationsModule(isDevelopmentEnvironment: false) - deliberate here,
+            // testing the real authorization path - constructs a real AmazonSecretsManagerClient(),
+            // which needs a resolvable region. In real ECS the SDK resolves it from the container's
+            // own metadata; no such metadata exists in a local/CI test process, so it must be set
+            // explicitly here. Test-environment-only - production never sets this, and never needs
+            // to. Captured/restored around this fixture's own lifetime so it never leaks into any
+            // other test class running concurrently in the same process.
+            _previousAwsRegion = Environment.GetEnvironmentVariable("AWS_REGION");
+            _previousAwsDefaultRegion = Environment.GetEnvironmentVariable("AWS_DEFAULT_REGION");
+            Environment.SetEnvironmentVariable("AWS_REGION", "sa-east-1");
+            Environment.SetEnvironmentVariable("AWS_DEFAULT_REGION", "sa-east-1");
+
             _container = new PostgreSqlBuilder()
                 .WithImage("postgres:16")
                 .WithDatabase("ihostpro_test")
@@ -105,7 +119,12 @@ public class WhatsAppIntegrationEndpointsAuthorizationTests : IClassFixture<What
                 await externalIntegrationsDbContext.Database.MigrateAsync();
         }
 
-        public async Task DisposeAsync() => await _container.DisposeAsync();
+        public async Task DisposeAsync()
+        {
+            await _container.DisposeAsync();
+            Environment.SetEnvironmentVariable("AWS_REGION", _previousAwsRegion);
+            Environment.SetEnvironmentVariable("AWS_DEFAULT_REGION", _previousAwsDefaultRegion);
+        }
 
         private static IdentityDbContext CreateIdentityDbContext(string connectionString)
         {
