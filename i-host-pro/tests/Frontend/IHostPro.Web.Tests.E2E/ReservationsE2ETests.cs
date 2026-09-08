@@ -367,6 +367,22 @@ public sealed class ReservationsE2ETests
         const string guestName = "E2E Repeated Cancel Guest";
         var reservationId = await CreateReservationViaApiAsync(page, token, propertyId, guestName, null, "2026-10-10T14:00:00Z", "2026-10-12T11:00:00Z", 2);
         await page.ReloadAsync();
+
+        // The reservations list is paginated (page size 10) and ordered by
+        // CheckInAt ascending — across this fixture's own full E2E suite
+        // (every test shares one Postgres/tenant, per WebE2EFixtureCollection),
+        // dozens of other reservations accumulate, which can push this one
+        // past the default first page long before it's ever visible. Filters
+        // by this test's own dedicated, real propertyId (the real UI filter
+        // already used elsewhere in this file/ReservationFormDialog, never a
+        // new one) instead of assuming page 1 — deterministic regardless of
+        // how much other data exists, since each test creates its own
+        // throwaway property.
+        await page.GetByLabel("ID do imóvel").FillAsync(propertyId);
+        await page.RunAndWaitForResponseAsync(
+            async () => await page.GetByRole(AriaRole.Button, new() { Name = "Filtrar" }).ClickAsync(),
+            r => r.Url.Contains("/api/v1/reservations") && r.Request.Method == "GET");
+
         var row = page.Locator("tr", new PageLocatorOptions { HasText = guestName });
         await row.WaitForAsync();
         await row.GetByRole(AriaRole.Button, new() { Name = $"Ações para {guestName}" }).ClickAsync();
