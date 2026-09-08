@@ -179,6 +179,21 @@ jobs:
   integration-tests:
     needs: build
     runs-on: ubuntu-latest
+    # CI Stabilization Gate (Bug #5): a real run (workflow run 33991429826,
+    # 2026-09-05) had the Housekeeping matrix entry hang indefinitely -
+    # in_progress for 1h30+ with zero progress past test discovery, on an
+    # otherwise-healthy runner (Docker/Testcontainers connected fine per its
+    # own logged output). A dedicated single-project diagnostic re-run of the
+    # exact same test code on a fresh ubuntu-latest runner completed
+    # successfully in ~1 minute, with all 4 of its parallel Testcontainers
+    # fixtures (Postgres x4, Ryuk) starting and becoming ready within
+    # seconds - strong evidence the hang was a transient, external runner
+    # issue, not a reproducible defect in this test project. This timeout is
+    # purely an operational guardrail against a repeat of that same
+    # transient failure mode consuming a runner for hours (GitHub's own
+    # default is 360 minutes) - a timeout here is still a real job FAILURE,
+    # never treated as success.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
