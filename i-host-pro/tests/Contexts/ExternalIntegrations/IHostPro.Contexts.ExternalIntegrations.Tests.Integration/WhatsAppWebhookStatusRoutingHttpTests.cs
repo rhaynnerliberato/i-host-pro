@@ -65,6 +65,12 @@ public sealed class WhatsAppWebhookStatusRoutingHttpTests : IAsyncDisposable
                     services.AddSingleton<IWhatsAppWebhookStatusEventPublisher>(_eventPublisher);
                     services.AddSingleton<IWhatsAppWebhookMessageProcessor>(new NoOpMessageProcessor());
                     services.AddSingleton<IWhatsAppWebhookMessageEventPublisher>(new NoOpMessageEventPublisher());
+                    // Fase 12, Checkpoint 3 added this dependency to WhatsAppWebhookController
+                    // (Decision Gate §2) - this file's own scope is route resolution/status
+                    // normalization, never rate limiting (already covered elsewhere), so an
+                    // always-allow fake stands in exactly like NoOpMessageProcessor/NoOpMessageEventPublisher
+                    // above, never the real Redis-backed WebhookRateLimiter.
+                    services.AddSingleton<IWebhookRateLimiter>(new AlwaysAllowWebhookRateLimiter());
                     services.AddLogging(logging => logging.AddProvider(_loggerProvider));
                 });
                 webHost.Configure(app =>
@@ -231,5 +237,11 @@ public sealed class WhatsAppWebhookStatusRoutingHttpTests : IAsyncDisposable
     {
         public Task PublishAsync(WebhookMessageProcessingOutcome outcome, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class AlwaysAllowWebhookRateLimiter : IWebhookRateLimiter
+    {
+        public Task<WebhookRateLimitDecision> CheckAsync(string partitionKey, CancellationToken cancellationToken) =>
+            Task.FromResult(new WebhookRateLimitDecision(Allowed: true, RetryAfter: null));
     }
 }

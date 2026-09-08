@@ -59,6 +59,11 @@ public sealed class WhatsAppWebhookInboundMessageRoutingHttpTests : IAsyncDispos
                     services.AddSingleton<IWhatsAppWebhookStatusEventPublisher>(_statusEventPublisher);
                     services.AddScoped<IWhatsAppWebhookMessageProcessor, MetaWebhookMessageProcessor>();
                     services.AddSingleton<IWhatsAppWebhookMessageEventPublisher>(_messageEventPublisher);
+                    // Fase 12, Checkpoint 3 added this dependency to WhatsAppWebhookController
+                    // (Decision Gate §2) - rate limiting is out of this file's own scope (inbound
+                    // message routing), so an always-allow fake stands in, never the real
+                    // Redis-backed WebhookRateLimiter.
+                    services.AddSingleton<IWebhookRateLimiter>(new AlwaysAllowWebhookRateLimiter());
                     services.AddLogging(logging => logging.AddProvider(_loggerProvider));
                 });
                 webHost.Configure(app =>
@@ -226,6 +231,12 @@ public sealed class WhatsAppWebhookInboundMessageRoutingHttpTests : IAsyncDispos
                 PublishedOutcomes.Add(outcome);
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class AlwaysAllowWebhookRateLimiter : IWebhookRateLimiter
+    {
+        public Task<WebhookRateLimitDecision> CheckAsync(string partitionKey, CancellationToken cancellationToken) =>
+            Task.FromResult(new WebhookRateLimitDecision(Allowed: true, RetryAfter: null));
     }
 
     private sealed class ListLoggerProvider : ILoggerProvider

@@ -72,6 +72,10 @@ public sealed class WhatsAppWebhookStatusEventPiiSafetyHttpTests : IAsyncDisposa
                     // this file's own statuses[]-only payloads — see NoOpMessageProcessor's own doc comment.
                     services.AddSingleton<IWhatsAppWebhookMessageProcessor>(new NoOpMessageProcessor());
                     services.AddSingleton<IWhatsAppWebhookMessageEventPublisher>(new NoOpMessageEventPublisher());
+                    // Fase 12, Checkpoint 3 added this dependency to the controller (Decision
+                    // Gate §2) - rate limiting is out of this file's own scope (PII safety), so
+                    // an always-allow fake stands in, never the real Redis-backed WebhookRateLimiter.
+                    services.AddSingleton<IWebhookRateLimiter>(new AlwaysAllowWebhookRateLimiter());
                     services.AddLogging();
                 });
                 webHost.Configure(app =>
@@ -167,6 +171,12 @@ public sealed class WhatsAppWebhookStatusEventPiiSafetyHttpTests : IAsyncDisposa
     {
         public Task PublishAsync(WebhookMessageProcessingOutcome outcome, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class AlwaysAllowWebhookRateLimiter : IWebhookRateLimiter
+    {
+        public Task<WebhookRateLimitDecision> CheckAsync(string partitionKey, CancellationToken cancellationToken) =>
+            Task.FromResult(new WebhookRateLimitDecision(Allowed: true, RetryAfter: null));
     }
 
     private sealed class PassThroughTransactionExecutor : IExternalIntegrationsTransactionExecutor

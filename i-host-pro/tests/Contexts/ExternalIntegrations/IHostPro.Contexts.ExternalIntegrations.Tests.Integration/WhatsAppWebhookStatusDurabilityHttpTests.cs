@@ -55,6 +55,11 @@ public sealed class WhatsAppWebhookStatusDurabilityHttpTests : IAsyncDisposable
                         new ThrowingStatusEventPublisher(new InvalidOperationException("simulated transient outbox failure")));
                     services.AddSingleton<IWhatsAppWebhookMessageProcessor>(new NoOpMessageProcessor());
                     services.AddSingleton<IWhatsAppWebhookMessageEventPublisher>(new NoOpMessageEventPublisher());
+                    // Fase 12, Checkpoint 3 added this dependency to WhatsAppWebhookController
+                    // (Decision Gate §2) - rate limiting is out of this file's own scope (status
+                    // durability), so an always-allow fake stands in, never the real
+                    // Redis-backed WebhookRateLimiter.
+                    services.AddSingleton<IWebhookRateLimiter>(new AlwaysAllowWebhookRateLimiter());
                     services.AddLogging();
                 });
                 webHost.Configure(app =>
@@ -148,5 +153,11 @@ public sealed class WhatsAppWebhookStatusDurabilityHttpTests : IAsyncDisposable
     {
         public Task PublishAsync(WebhookMessageProcessingOutcome outcome, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class AlwaysAllowWebhookRateLimiter : IWebhookRateLimiter
+    {
+        public Task<WebhookRateLimitDecision> CheckAsync(string partitionKey, CancellationToken cancellationToken) =>
+            Task.FromResult(new WebhookRateLimitDecision(Allowed: true, RetryAfter: null));
     }
 }

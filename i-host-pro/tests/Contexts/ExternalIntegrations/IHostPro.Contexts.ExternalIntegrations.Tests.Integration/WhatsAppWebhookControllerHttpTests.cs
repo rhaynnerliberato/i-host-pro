@@ -73,6 +73,11 @@ public sealed class WhatsAppWebhookControllerHttpTests : IAsyncDisposable
                     // file's own scope is signature verification, never message processing.
                     services.AddSingleton<IWhatsAppWebhookMessageProcessor>(new NoOpMessageProcessor());
                     services.AddSingleton<IWhatsAppWebhookMessageEventPublisher>(new NoOpMessageEventPublisher());
+                    // Fase 12, Checkpoint 3 added this dependency to the controller (Decision
+                    // Gate §2) - rate limiting is out of this file's own scope (signature
+                    // verification), so an always-allow fake stands in, never the real
+                    // Redis-backed WebhookRateLimiter.
+                    services.AddSingleton<IWebhookRateLimiter>(new AlwaysAllowWebhookRateLimiter());
                     services.AddLogging(logging => logging.AddProvider(_loggerProvider));
                 });
                 webHost.Configure(app =>
@@ -306,6 +311,12 @@ public sealed class WhatsAppWebhookControllerHttpTests : IAsyncDisposable
     {
         public Task PublishAsync(WebhookMessageProcessingOutcome outcome, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class AlwaysAllowWebhookRateLimiter : IWebhookRateLimiter
+    {
+        public Task<WebhookRateLimitDecision> CheckAsync(string partitionKey, CancellationToken cancellationToken) =>
+            Task.FromResult(new WebhookRateLimitDecision(Allowed: true, RetryAfter: null));
     }
 
     /// <summary>In-memory log sink — captures every formatted message so tests can assert on secret/PII absence.</summary>
