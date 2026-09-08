@@ -334,16 +334,19 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - { name: Api, dockerfile: "docker/Api.Dockerfile" }
-          - { name: Worker, dockerfile: "docker/Worker.Dockerfile" }
-          - { name: MigrationRunner, dockerfile: "docker/MigrationRunner.Dockerfile" }
-          - { name: DatabaseBootstrap, dockerfile: "docker/DatabaseBootstrap.Dockerfile" }
-          - { name: RabbitMqCredentialRotation, dockerfile: "docker/RabbitMqCredentialRotation.Dockerfile" }
+          # tag_name is a separate, explicit lowercase field - Docker repository
+          # names must be lowercase, and `name` stays PascalCase everywhere else
+          # (job display names, this file's own history) so it's never repurposed.
+          - { name: Api, tag_name: api, dockerfile: "docker/Api.Dockerfile" }
+          - { name: Worker, tag_name: worker, dockerfile: "docker/Worker.Dockerfile" }
+          - { name: MigrationRunner, tag_name: migrationrunner, dockerfile: "docker/MigrationRunner.Dockerfile" }
+          - { name: DatabaseBootstrap, tag_name: databasebootstrap, dockerfile: "docker/DatabaseBootstrap.Dockerfile" }
+          - { name: RabbitMqCredentialRotation, tag_name: rabbitmqcredentialrotation, dockerfile: "docker/RabbitMqCredentialRotation.Dockerfile" }
     steps:
       - uses: actions/checkout@v4
       - name: Docker build — ${{ matrix.image.name }}
         working-directory: i-host-pro
-        run: docker build -f ${{ matrix.image.dockerfile }} -t ihostpro-${{ matrix.image.name }}-ci .
+        run: docker build -f ${{ matrix.image.dockerfile }} -t ihostpro-${{ matrix.image.tag_name }}-ci .
 
   # ---- Publish (CP5.3C corrective Decision Gate items 2-7). Builds and
   # pushes the 4 images to Homolog's ECR under an immutable git-SHA tag,
