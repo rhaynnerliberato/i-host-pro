@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using FluentAssertions;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
+using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.Contexts.Dashboard.Infrastructure;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
 using IHostPro.Contexts.GuestOperations.Infrastructure;
@@ -180,6 +181,36 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
     private async Task<IHost> BuildMinimalWorkerSubsetHostAsync(bool applyStickyHandlers = false)
     {
         var hostBuilder = Host.CreateApplicationBuilder();
+
+        // This test intentionally builds a partial Worker host to inspect
+        // Wolverine handler-chain composition only (see this class's own
+        // doc comment). AddHousekeepingModule/AddReservationsModule/
+        // AddGuestOperationsModule below are each the SAME real module
+        // registration the full Worker uses — necessary here to wire up
+        // ReservationCreatedHandler/PropertyCreatedHandler/
+        // CleaningCreatedHandler's own dependencies (DbContexts,
+        // repositories) — but each also registers that whole bounded
+        // context's Mediator command/query handlers (e.g.
+        // AssignCleaningCommandHandler, CreateReservationCommandHandler),
+        // whose complete dependency graphs (Identity, Configuration,
+        // PropertyManagement...) belong to the real Worker/Api composition
+        // root, not to this deliberately narrow baseline. Confirmed by
+        // direct investigation that Wolverine's own opts.Discovery.
+        // DisableConventionalDiscovery()/IncludeType() (below) does not
+        // affect this at all — that only scopes Wolverine's own message
+        // handler discovery, never Mediator's separate command/query
+        // registration performed directly inside each AddXModule call, and
+        // there is no supported way to register only part of a module.
+        // Full DI-graph validation is therefore intentionally disabled for
+        // this partial host; the real composition root's completeness is
+        // covered by WolverineThreeStoreCompositionTests, which uses the
+        // actual WebApplicationFactory<Program> unmodified.
+        hostBuilder.ConfigureContainer(new DefaultServiceProviderFactory(new ServiceProviderOptions
+        {
+            ValidateOnBuild = false,
+            ValidateScopes = false,
+        }));
+
         hostBuilder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["ConnectionStrings:Housekeeping"] = _appConnectionString,
@@ -193,6 +224,11 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
             ["RabbitMq:Password"] = RabbitMqBuilder.DefaultPassword,
         });
 
+        // Real Program.cs registers this once, outside any specific AddXModule
+        // call - HousekeepingDbContext (RLS-protected) needs it. This minimal
+        // test host was missing it - a pure test-fixture gap, never a
+        // production one (Program.cs itself is correct).
+        hostBuilder.Services.AddScoped<ITenantContext, TenantContext>();
         hostBuilder.Services.AddHousekeepingModule(hostBuilder.Configuration);
         hostBuilder.Services.AddDashboardModule(hostBuilder.Configuration);
         hostBuilder.Services.AddDashboardProjectionConsumer();
@@ -221,22 +257,46 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
             opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.Reservations.Application.IReservationsMessageExecutionScope>();
             opts.CodeGeneration.AlwaysUseServiceLocationFor<IHostPro.Contexts.GuestOperations.Application.IGuestOperationsMessageExecutionScope>();
 
+            // This host intentionally disables conventional Wolverine
+            // discovery and includes only the handler types covered by this
+            // isolation baseline (the four ReservationCreated consumers
+            // below, plus the PropertyCreated/CleaningCreated fan-outs
+            // further down) — never a full duplicate of Program.cs. Without
+            // this, Wolverine's default conventional discovery scans
+            // WolverineOptions.ApplicationAssembly (the test assembly itself
+            // in-process) and everything it references, which pulls in every
+            // unrelated command/query handler from Housekeeping/Reservations/
+            // GuestOperations' Application assemblies too (e.g.
+            // AssignCleaningCommandHandler, CreateReservationCommandHandler)
+            // — each with its own cross-context dependencies this
+            // deliberately minimal subset was never meant to wire up. Real,
+            // documented Wolverine 6.22.0 API (HandlerDiscovery.
+            // DisableConventionalDiscovery/IncludeType), not an invented one
+            // — the non-generic IncludeType(Type) overload is used below
+            // since some of these handler classes are static, which cannot
+            // be used as a generic type argument. opts.Discovery.
+            // IncludeAssembly calls used to sit here instead — they were
+            // never the actual cause of the broad discovery (conventional
+            // discovery already covers those assemblies regardless), just
+            // redundant with it.
+            opts.Discovery.DisableConventionalDiscovery();
+
             // Four of the five real, already-published ReservationCreated
             // consumers on master — mirrors Program.cs's own
             // Discovery.IncludeAssembly + ListenToRabbitQueue calls for this
             // event, deliberately omitting Communication (see this class's
             // own doc comment) and every other module/queue not relevant to
             // this one message type.
-            opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Housekeeping.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
+            opts.Discovery.IncludeType(typeof(IHostPro.Contexts.Housekeeping.Infrastructure.Messaging.ReservationCreatedHandler));
             var housekeepingListener = opts.ListenToRabbitQueue("housekeeping.reservation-projection");
 
-            opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
+            opts.Discovery.IncludeType(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.ReservationCreatedHandler));
             var dashboardListener = opts.ListenToRabbitQueue("dashboard.reservation-projection");
 
-            opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
+            opts.Discovery.IncludeType(typeof(IHostPro.Contexts.Workflow.Infrastructure.Messaging.ReservationCreatedHandler));
             var workflowListener = opts.ListenToRabbitQueue("workflow.reservation-created-trigger");
 
-            opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.GuestOperations.Infrastructure.Messaging.ReservationCreatedHandler).Assembly);
+            opts.Discovery.IncludeType(typeof(IHostPro.Contexts.GuestOperations.Infrastructure.Messaging.ReservationCreatedHandler));
             var guestOperationsListener = opts.ListenToRabbitQueue("guestoperations.reservation-created-trigger");
 
             // ADR-020 spike, Candidate A: endpoint-specific sticky handler
@@ -259,10 +319,10 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
             // PropertyCreated fan-out (Housekeeping + Dashboard) — same
             // ADR-020 category, used by the Property/Cleaning fan-out gates
             // below.
-            opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Housekeeping.Infrastructure.Messaging.PropertyCreatedHandler).Assembly);
+            opts.Discovery.IncludeType(typeof(IHostPro.Contexts.Housekeeping.Infrastructure.Messaging.PropertyCreatedHandler));
             var housekeepingPropertyListener = opts.ListenToRabbitQueue("housekeeping.property-projection");
 
-            opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.PropertyCreatedHandler).Assembly);
+            opts.Discovery.IncludeType(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.PropertyCreatedHandler));
             var dashboardPropertyListener = opts.ListenToRabbitQueue("dashboard.property-projection");
 
             if (applyStickyHandlers)
@@ -272,10 +332,10 @@ public sealed class WolverineHandlerChainIsolationBaselineTests : IAsyncLifetime
             }
 
             // CleaningCreated fan-out (Reservations/Agenda + Dashboard).
-            opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Reservations.Infrastructure.Messaging.CleaningCreatedHandler).Assembly);
+            opts.Discovery.IncludeType(typeof(IHostPro.Contexts.Reservations.Infrastructure.Messaging.CleaningCreatedHandler));
             var reservationsCleaningListener = opts.ListenToRabbitQueue("reservations.cleaning-schedule-projection");
 
-            opts.Discovery.IncludeAssembly(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.CleaningCreatedHandler).Assembly);
+            opts.Discovery.IncludeType(typeof(IHostPro.Contexts.Dashboard.Infrastructure.Messaging.CleaningCreatedHandler));
             var dashboardCleaningListener = opts.ListenToRabbitQueue("dashboard.cleaning-projection");
 
             if (applyStickyHandlers)
