@@ -32,6 +32,7 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Testcontainers.RabbitMq;
+using Testcontainers.Redis;
 using Wolverine;
 using Wolverine.EntityFrameworkCore;
 using Wolverine.Persistence.Durability;
@@ -123,12 +124,26 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
 
         private PostgreSqlContainer _postgresContainer = null!;
         private RabbitMqContainer _rabbitMqContainer = null!;
+        private RedisContainer _redisContainer = null!;
         public string MigratorConnectionString { get; private set; } = null!;
         public string AppConnectionString { get; private set; } = null!;
         public RabbitMqContainer RabbitMq => _rabbitMqContainer;
+        public RedisContainer Redis => _redisContainer;
 
         public async Task InitializeAsync()
         {
+            // This test uses the real WebApplicationFactory<Program> (see
+            // BuildFactory below), so the real "Authentication" rate-limit
+            // policy is live - and it is deliberately FailClosed (appsettings.json)
+            // for security, so an unreachable Redis denies every login
+            // outright rather than failing open. This fixture must provision
+            // its own Redis exactly like it already does for Postgres/RabbitMQ,
+            // or every login in this test class fails with 429 the instant
+            // Redis isn't the local dev machine's own standing container
+            // (e.g. any clean CI runner).
+            _redisContainer = new RedisBuilder().WithImage("redis:7-alpine").Build();
+            await _redisContainer.StartAsync();
+
             _postgresContainer = new PostgreSqlBuilder()
                 .WithImage("postgres:16")
                 .WithDatabase("ihostpro_test")
@@ -215,6 +230,7 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         {
             await _rabbitMqContainer.DisposeAsync();
             await _postgresContainer.DisposeAsync();
+            await _redisContainer.DisposeAsync();
         }
 
         /// <summary>
@@ -324,23 +340,31 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
     /// output, never propagated to the test). Environment variables are
     /// loaded by <c>WebApplication.CreateBuilder()</c> itself, with the
     /// highest precedence of any default source, so this is immune to that
-    /// composition-timing issue. Removed in <see cref="ResetEnvironment"/> —
-    /// this test owns the process's environment for its own duration only
-    /// (this project has a single test class/method, run in its own
-    /// process).
+    /// composition-timing issue.
+    ///
+    /// <see cref="BuildFactory"/> captures each key's PRE-EXISTING process
+    /// value (normally null) the first time it sets it, and
+    /// <see cref="ResetEnvironment"/> restores exactly those captured values
+    /// — never blindly nulls — so a key is only ever left however it was
+    /// found. This matters because this project's whole
+    /// <c>IHostPro.Api.Tests.Integration.csproj</c> runs every test class in
+    /// ONE shared process (confirmed via <c>ci.yml</c>'s own single
+    /// <c>dotnet test</c> invocation for the project, and via
+    /// <c>[assembly: CollectionBehavior(DisableTestParallelization = true)]</c>,
+    /// which only serializes execution — it does not give each class its own
+    /// process): a key set here but not restored (an earlier version of this
+    /// method set <c>DOTNET_ENVIRONMENT</c> alongside <c>ASPNETCORE_ENVIRONMENT</c>
+    /// but only ever reset the latter) leaks into every other test built in
+    /// the same process afterward. That exact gap made
+    /// <c>WolverineHandlerChainIsolationBaselineTests</c>' own
+    /// <c>Host.CreateApplicationBuilder()</c> (whose default
+    /// <c>ValidateOnBuild</c>/<c>ValidateScopes</c> are gated on
+    /// <c>IsDevelopment()</c>, itself read from these same two process
+    /// variables) intermittently perform full DI-graph validation depending
+    /// entirely on whether this class had already run first in the same
+    /// process — never on anything about the handler-chain test itself.
     /// </summary>
-    private static readonly string[] EnvironmentKeys =
-    [
-        "ConnectionStrings__Identity", "ConnectionStrings__PropertyManagement", "ConnectionStrings__Reservations",
-        "ConnectionStrings__Configuration", "ConnectionStrings__Housekeeping", "ConnectionStrings__Platform",
-        "Identity__Jwt__Issuer", "Identity__Jwt__Audience", "Identity__Jwt__AccessTokenLifetime", "Identity__Jwt__ClockSkew",
-        "Identity__Jwt__SigningKey__PrivateKeyPem",
-        "Identity__AccountLockout__MaxFailedAccessAttempts", "Identity__AccountLockout__DefaultLockoutDuration", "Identity__AccountLockout__AllowedForNewUsers",
-        "Identity__RefreshToken__Lifetime", "Identity__RefreshToken__SecretSizeBytes", "Identity__RefreshToken__ConcurrentRotationGraceWindow",
-        "RabbitMq__Host", "RabbitMq__VirtualHost", "RabbitMq__Username", "RabbitMq__Password",
-        "OpenTelemetry__OtlpEndpoint",
-        "ASPNETCORE_ENVIRONMENT",
-    ];
+    private readonly Dictionary<string, string?> _previousEnvironmentValues = new();
 
     private WebApplicationFactory<Program> BuildFactory(string rabbitMqVirtualHost = "/")
     {
@@ -370,6 +394,16 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
             ["RabbitMq__VirtualHost"] = rabbitMqVirtualHost,
             ["RabbitMq__Username"] = RabbitMqBuilder.DefaultUsername,
             ["RabbitMq__Password"] = RabbitMqBuilder.DefaultPassword,
+            // Real Program.cs needs both of these Redis connection strings:
+            // Configuration:PolicyCache is required at startup (throws if
+            // missing), and RateLimiting:Redis backs the "Authentication"
+            // policy - deliberately FailClosed (appsettings.json) for
+            // security, so an unreachable Redis previously denied every
+            // login with 429 rather than failing open. A real Testcontainers
+            // Redis (this fixture's own, never a local dev machine's
+            // standing container) makes both genuinely work.
+            ["Configuration__PolicyCache__ConnectionString"] = _fixture.Redis.GetConnectionString(),
+            ["RateLimiting__Redis__ConnectionString"] = _fixture.Redis.GetConnectionString(),
             // Wolverine.RabbitMQ has no separate Port config key
             // (WolverineConfigurationExtensions.UseIHostProRabbitMq) — this
             // test fixes RabbitMQ's own container to the default AMQP host
@@ -381,15 +415,20 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
         };
 
         foreach (var (key, value) in values)
+        {
+            if (!_previousEnvironmentValues.ContainsKey(key))
+                _previousEnvironmentValues[key] = Environment.GetEnvironmentVariable(key);
             Environment.SetEnvironmentVariable(key, value);
+        }
 
         return new WebApplicationFactory<Program>();
     }
 
-    private static void ResetEnvironment()
+    private void ResetEnvironment()
     {
-        foreach (var key in EnvironmentKeys)
-            Environment.SetEnvironmentVariable(key, null);
+        foreach (var (key, previousValue) in _previousEnvironmentValues)
+            Environment.SetEnvironmentVariable(key, previousValue);
+        _previousEnvironmentValues.Clear();
     }
 
     // ---- Seeding (Identity) --------------------------------------------------
@@ -626,6 +665,12 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
     [Fact]
     public async Task MigrationRunner_provisions_rabbitmq_topology_idempotently_and_the_real_host_delivers_through_it()
     {
+        // Wraps the whole method (unlike this class's other three tests, this
+        // one was missing the try/finally entirely — BuildFactory()'s
+        // environment variables leaked into every later test in this shared
+        // process whenever this specific test ran, regardless of outcome).
+        try
+        {
         var tenantSlug = $"tenant-{Guid.NewGuid():N}"[..20];
         var tenantId = await SeedTenantAsync(tenantSlug);
         var (_, email) = await SeedAdminUserAsync(tenantId);
@@ -853,6 +898,11 @@ public class WolverineThreeStoreCompositionTests : IClassFixture<WolverineThreeS
                 await DeleteQueueIfExistsAsync(outageIdentityQueue);
                 await DeleteQueueIfExistsAsync(outagePmQueue);
             }
+        }
+        }
+        finally
+        {
+            ResetEnvironment();
         }
     }
 
