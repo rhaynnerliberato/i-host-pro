@@ -345,10 +345,17 @@ public sealed class FrontDeskNotificationWorkflowRoundTripTests : IClassFixture<
         await CheckInGuestAsync(tenantId, reservationId);
         await WaitForGuestStayOperationStatusAsync(tenantId, reservationId, "CheckedIn");
 
-        var messageCreated = await WaitUntilAsync(
-            () => GetMessageAsync(tenantId, reservationId, "FRONT_DESK_GUEST_CHECKED_IN"), m => m is not null, TimeSpan.FromSeconds(30));
-        messageCreated.Should().BeTrue(
-            "the real GuestCheckedIn -> Communication chain must create a Message within 30s. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+        // Waits for Status == "Sent" specifically, not just row existence:
+        // GuestCheckedInFrontDeskNotificationProcessor inserts the Message as
+        // Queued FIRST (durability before the connector call), then updates
+        // it to Sent/Failed in a SEPARATE write after FakeWhatsAppConnector
+        // resolves — a real race, confirmed by reading that processor's own
+        // source, between this poll returning the instant the row exists and
+        // that second write actually landing.
+        var messageSent = await WaitUntilAsync(
+            () => GetMessageAsync(tenantId, reservationId, "FRONT_DESK_GUEST_CHECKED_IN"), m => m is not null && m.Value.Status == "Sent", TimeSpan.FromSeconds(30));
+        messageSent.Should().BeTrue(
+            "the real GuestCheckedIn -> Communication chain must create a Message and dispatch it through FakeWhatsAppConnector to Sent within 30s. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
 
         var message = (await GetMessageAsync(tenantId, reservationId, "FRONT_DESK_GUEST_CHECKED_IN"))!.Value;
         message.Status.Should().Be("Sent", "FakeWhatsAppConnector always succeeds");
@@ -431,9 +438,11 @@ public sealed class FrontDeskNotificationWorkflowRoundTripTests : IClassFixture<
         rescheduled.Should().BeTrue("Workflow must still reschedule the real Reservation after Communication was added as a second consumer. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
 
         // Communication's own, SEPARATE reaction to the SAME event.
-        var messageCreated = await WaitUntilAsync(
-            () => GetMessageAsync(tenantId, reservationId, "FRONT_DESK_EARLY_CHECKIN_APPROVED"), m => m is not null, TimeSpan.FromSeconds(30));
-        messageCreated.Should().BeTrue("Communication's own Front Desk processor must independently react to the same EarlyCheckinApproved. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+        // Same Queued-then-Sent race as the GuestCheckedIn scenario above —
+        // wait for the terminal status, not just row existence.
+        var messageSent = await WaitUntilAsync(
+            () => GetMessageAsync(tenantId, reservationId, "FRONT_DESK_EARLY_CHECKIN_APPROVED"), m => m is not null && m.Value.Status == "Sent", TimeSpan.FromSeconds(30));
+        messageSent.Should().BeTrue("Communication's own Front Desk processor must independently react to the same EarlyCheckinApproved and dispatch it to Sent. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
 
         (await GetMessageAsync(tenantId, reservationId, "FRONT_DESK_EARLY_CHECKIN_APPROVED"))!.Value.Status.Should().Be("Sent");
     }
@@ -488,9 +497,11 @@ public sealed class FrontDeskNotificationWorkflowRoundTripTests : IClassFixture<
         (await CountCleaningAuditEntriesAsync(tenantId, cleaningId, "late_checkout_approved")).Should().Be(1,
             "exactly one audit entry — adding a third consumer must never duplicate Housekeeping's own side effect");
 
-        var messageCreated = await WaitUntilAsync(
-            () => GetMessageAsync(tenantId, reservationId, "FRONT_DESK_LATE_CHECKOUT_APPROVED"), m => m is not null, TimeSpan.FromSeconds(30));
-        messageCreated.Should().BeTrue("Communication's own Front Desk processor must independently react. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
+        // Same Queued-then-Sent race as the GuestCheckedIn scenario above —
+        // wait for the terminal status, not just row existence.
+        var messageSent = await WaitUntilAsync(
+            () => GetMessageAsync(tenantId, reservationId, "FRONT_DESK_LATE_CHECKOUT_APPROVED"), m => m is not null && m.Value.Status == "Sent", TimeSpan.FromSeconds(30));
+        messageSent.Should().BeTrue("Communication's own Front Desk processor must independently react and dispatch it to Sent. Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
         (await GetMessageAsync(tenantId, reservationId, "FRONT_DESK_LATE_CHECKOUT_APPROVED"))!.Value.Status.Should().Be("Sent");
     }
 
