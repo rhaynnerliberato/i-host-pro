@@ -322,11 +322,14 @@ jobs:
       - name: Restore solution
         run: dotnet restore IHostPro.sln
 
-      - name: Build solution (Release — provides MigrationRunner + Api)
+      - name: Build solution (Release — provides MigrationRunner)
         run: dotnet build IHostPro.sln --no-restore --configuration Release
 
       - name: Build Worker (Debug — the Fixture launches this exact build output as a subprocess)
         run: dotnet build src/Host/IHostPro.Worker/IHostPro.Worker.csproj --configuration Debug
+
+      - name: Build Api (Debug — WebE2EFixture.StartApiProcess launches this exact build output as a subprocess)
+        run: dotnet build src/Host/IHostPro.Api/IHostPro.Api.csproj --no-restore --configuration Debug
 
       - name: Frontend E2E Tests
         run: dotnet test tests/Frontend/IHostPro.Web.Tests.E2E/IHostPro.Web.Tests.E2E.csproj --no-build --configuration Release -m:1 --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
