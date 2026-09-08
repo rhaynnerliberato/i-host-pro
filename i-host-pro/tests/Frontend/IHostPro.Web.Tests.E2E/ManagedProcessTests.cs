@@ -22,11 +22,19 @@ namespace IHostPro.Web.Tests.E2E;
 /// </summary>
 public sealed class ManagedProcessTests
 {
+    // Windows ships "powershell" (Windows PowerShell); Linux/macOS CI runners
+    // (including GitHub's ubuntu-latest) ship "pwsh" (PowerShell Core) instead
+    // - same script syntax, just a different executable name. These tests'
+    // actual intent is "spawn/kill a real, controllable OS child process," not
+    // "exercise PowerShell specifically," so picking the right binary per
+    // platform is faithful to that intent, never a workaround.
+    private static readonly string PowerShellExecutable = OperatingSystem.IsWindows() ? "powershell" : "pwsh";
+
     private static ProcessStartInfo SleepProcess(TimeSpan duration) =>
-        new("powershell", $"-NoProfile -Command \"Start-Sleep -Seconds {(int)duration.TotalSeconds}\"");
+        new(PowerShellExecutable, $"-NoProfile -Command \"Start-Sleep -Seconds {(int)duration.TotalSeconds}\"");
 
     private static ProcessStartInfo PortListenerProcess(int port, TimeSpan duration) => new(
-        "powershell",
+        PowerShellExecutable,
         $"-NoProfile -Command \"$l=[System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,{port}); $l.Start(); Start-Sleep -Seconds {(int)duration.TotalSeconds}\"");
 
     private static bool IsPortInUse(int port) =>
@@ -78,7 +86,13 @@ public sealed class ManagedProcessTests
     [Fact]
     public async Task StopAsync_on_an_already_exited_process_is_a_no_op()
     {
-        var managed = ManagedProcess.Start(new ProcessStartInfo("cmd.exe", "/c exit 0"), "test-instant-exit");
+        // cmd.exe on Windows; "true" is the POSIX utility that does nothing
+        // and exits 0 immediately on Linux/macOS - same "process that exits
+        // instantly with success" intent on both platforms.
+        var instantExit = OperatingSystem.IsWindows()
+            ? new ProcessStartInfo("cmd.exe", "/c exit 0")
+            : new ProcessStartInfo("true");
+        var managed = ManagedProcess.Start(instantExit, "test-instant-exit");
         await WaitUntilAsync(() => false, TimeSpan.FromSeconds(2)); // Give it a moment to exit on its own first.
 
         var diagnostic = await managed.StopAsync(TimeSpan.FromSeconds(10));
