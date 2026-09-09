@@ -113,6 +113,22 @@ public sealed class PropertyManagementE2ETests
         return body!.Value.GetProperty("id").GetString()!;
     }
 
+    /// <summary>
+    /// Focused Condominium Form Validity Root Cause Gate: a page-level <c>page.GetByLabel(...).FillAsync(...)</c>
+    /// sequence was observed, across 3 separate focused reproductions, to misdeliver one field's text
+    /// elsewhere in the form (once landing concatenated onto an earlier field, twice leaving the intended
+    /// field empty) — not confined to one specific field. Extensive passive diagnostics (event timelines,
+    /// cross-field value snapshots, element-identity checks, a global document-level input-event capture)
+    /// ruled out a production cause with high confidence: the affected control always stayed ng-pristine
+    /// (Angular never observed a value-change event for it), no application code anywhere subscribes to
+    /// valueChanges/resets/patches this form during editing, and no cross-field contamination was ever
+    /// observed in 5 clean instrumented runs. The exact underlying mechanism (Playwright/browser-level)
+    /// was never captured with a full timeline despite the investigation — classified
+    /// TEST_INFRASTRUCTURE_FAILURE, never PRODUCTION_RELEVANT. Every field is filled through a dialog-scoped
+    /// locator (matching the sibling validation-guard test below); <see cref="FillAndVerifyAsync"/> verifies
+    /// the value landed and allows exactly one bounded, evidence-based retry — never a blind sleep/timeout
+    /// increase — since a genuine test-side delivery race warrants a second physical attempt, not a longer wait.
+    /// </summary>
     [Fact]
     public async Task Admin_lists_and_creates_a_condominium()
     {
@@ -120,17 +136,42 @@ public sealed class PropertyManagementE2ETests
         const string name = "E2E Edificio Sol";
 
         await page.GetByRole(AriaRole.Button, new() { Name = "Novo condomínio" }).ClickAsync();
-        await page.GetByLabel("Nome").FillAsync(name);
-        await page.GetByLabel("CEP").FillAsync("01000-000");
-        await page.GetByLabel("Rua").FillAsync("Rua das Flores");
-        await page.GetByLabel("Número").FillAsync("100");
-        await page.GetByLabel("Bairro").FillAsync("Centro");
-        await page.GetByLabel("Cidade").FillAsync("Sao Paulo");
-        await page.GetByLabel("Estado").FillAsync("SP");
-        await page.GetByRole(AriaRole.Button, new() { Name = "Salvar" }).ClickAsync();
+        var dialog = page.GetByRole(AriaRole.Dialog);
+
+        await FillAndVerifyAsync(dialog.GetByLabel("Nome"), name);
+        await FillAndVerifyAsync(dialog.GetByLabel("CEP"), "01000-000");
+        await FillAndVerifyAsync(dialog.GetByLabel("Rua"), "Rua das Flores");
+        await FillAndVerifyAsync(dialog.GetByLabel("Número"), "100");
+        await FillAndVerifyAsync(dialog.GetByLabel("Bairro"), "Centro");
+        await FillAndVerifyAsync(dialog.GetByLabel("Cidade"), "Sao Paulo");
+        await FillAndVerifyAsync(dialog.GetByLabel("Estado"), "SP");
+
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Salvar" }).ClickAsync();
 
         await page.GetByText("Condomínio criado com sucesso.").WaitForAsync();
         await page.Locator("table").GetByText(name).WaitForAsync();
+    }
+
+    /// <summary>
+    /// Fills a field and verifies the value landed on it, allowing exactly one bounded retry on the
+    /// SAME locator if the first attempt's own post-condition (the value it just set) fails to verify —
+    /// never a blind/timed retry, no sleep between attempts, no fallback to Keyboard/JS-value-assignment.
+    /// Recovery is logged, never hidden. If the second attempt also fails to verify, this fails immediately
+    /// with a precise "which field, what value" signal.
+    /// </summary>
+    private static async Task FillAndVerifyAsync(ILocator field, string value)
+    {
+        await field.FillAsync(value);
+        var firstAttemptValue = await field.InputValueAsync();
+        if (firstAttemptValue == value)
+            return;
+
+        await Console.Error.WriteLineAsync(
+            $"FillAndVerifyAsync recovered: first attempt delivered '{firstAttemptValue}' instead of the expected value; retrying the same fill once (Focused Condominium Form Validity Root Cause Gate — TEST_INFRASTRUCTURE_FAILURE, not a production defect).");
+
+        await field.FillAsync(value);
+        (await field.InputValueAsync()).Should().Be(
+            value, "the fill must land on this exact field, not a different one, even after one bounded recovery attempt");
     }
 
     /// <summary>
