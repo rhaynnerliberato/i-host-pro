@@ -94,7 +94,7 @@ public sealed class AIAgentReadToolsWorkflowRoundTripTests : IClassFixture<Conve
         var message = await WaitForInboundMessageAsync("wamid.AIAGENT-E2E-TOOL-RESERVATION");
         message.Should().NotBeNull(WorkerSnapshot());
 
-        var interaction = await WaitForInteractionAsync(message!.Id);
+        var interaction = await WaitForSuccessfulInteractionWithOutboundMessageAsync(message!.Id);
         interaction.Should().NotBeNull(WorkerSnapshot());
         interaction!.Outcome.Should().Be(AgentInteractionOutcome.Success, WorkerSnapshot());
 
@@ -395,6 +395,42 @@ public sealed class AIAgentReadToolsWorkflowRoundTripTests : IClassFixture<Conve
         {
             var interaction = await ReadInteractionAsync(inboundMessageId);
             if (interaction is not null && interaction.Outcome != AgentInteractionOutcome.InProgress)
+                return interaction;
+            await Task.Delay(TimeSpan.FromMilliseconds(300));
+        }
+        return await ReadInteractionAsync(inboundMessageId);
+    }
+
+    /// <summary>
+    /// Waits for a Success interaction whose response has ALSO been linked
+    /// (<see cref="AgentInteraction.OutboundMessageId"/> populated) — a
+    /// stronger condition than <see cref="WaitForInteractionAsync"/>'s own
+    /// "not InProgress" check, needed only by the one scenario that asserts
+    /// on the link itself. <c>CompleteInteractionAndDeliverResponseAsync</c>
+    /// commits Outcome=Success in its own transaction BEFORE the real
+    /// Communication delivery call runs, with <c>RecordOutboundMessage</c>
+    /// committed in a SEPARATE, later transaction once that delivery
+    /// succeeds — both real, by design (Documento — <c>OutboundMessageId</c>
+    /// is best-effort/never retried, so it legitimately stays null forever
+    /// for a genuinely failed delivery). Reusing <see cref="WaitForInteractionAsync"/>
+    /// here would return as soon as Outcome flips, racing the still-pending
+    /// delivery/link step (confirmed empirically: observed self-resolving
+    /// within ~350ms of Outcome committing). Only this specific
+    /// known-successful-delivery scenario needs the stronger wait — every
+    /// other caller of <see cref="WaitForInteractionAsync"/> in this class
+    /// keeps its original, weaker condition unchanged, so a genuine delivery
+    /// failure elsewhere still correctly reports Outcome with a null
+    /// <c>OutboundMessageId</c> rather than timing out here.
+    /// </summary>
+    private async Task<AgentInteraction?> WaitForSuccessfulInteractionWithOutboundMessageAsync(Guid inboundMessageId)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        while (DateTime.UtcNow < deadline)
+        {
+            var interaction = await ReadInteractionAsync(inboundMessageId);
+            if (interaction is not null
+                && interaction.Outcome == AgentInteractionOutcome.Success
+                && interaction.OutboundMessageId is not null)
                 return interaction;
             await Task.Delay(TimeSpan.FromMilliseconds(300));
         }
