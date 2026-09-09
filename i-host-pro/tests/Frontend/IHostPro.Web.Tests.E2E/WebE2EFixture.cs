@@ -155,7 +155,20 @@ public sealed class WebE2EFixture : IAsyncLifetime
             _workerProcess = StartWorkerProcess();
 
             _webProcess = StartWebProcess();
-            await WaitForHttpReadyAsync(WebBaseUrl, TimeSpan.FromSeconds(90));
+
+            // CI Stabilization Gate: the previous 90s bound was measured only against a
+            // machine with an already-warm Angular build cache — every real CI run starts
+            // from a checkout where node_modules and .angular/cache (both gitignored) are
+            // freshly created by that job's own `npm ci`, and never restored from any cache
+            // step. Direct local measurement of that exact condition (fresh npm ci
+            // immediately followed by this same ng serve invocation, real Postgres/RabbitMQ/
+            // Redis containers plus the API and Worker subprocesses already running
+            // alongside it, exactly as this method does) observed ~57-61s to become
+            // reachable; the full unfiltered 95-test suite run (heavier xUnit discovery/JIT
+            // load ahead of this same wait) was observed to exceed the old 90s bound outright
+            // (workflow run 34354332337). 180s keeps a bounded, simple, documentable ceiling
+            // with real margin above both observations — never an unbounded wait.
+            await WaitForHttpReadyAsync(WebBaseUrl, TimeSpan.FromSeconds(180));
 
             Microsoft.Playwright.Program.Main(["install", "chromium"]);
             _playwright = await Playwright.CreateAsync();
