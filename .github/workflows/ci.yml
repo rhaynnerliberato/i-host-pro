@@ -280,7 +280,7 @@ jobs:
         run: dotnet build src/Host/IHostPro.Worker/IHostPro.Worker.csproj --configuration Debug
 
       - name: Full API Integration Tests
-        run: dotnet test tests/Host/IHostPro.Api.Tests.Integration/IHostPro.Api.Tests.Integration.csproj --no-build --configuration Release --filter "FullyQualifiedName!~AnthropicRealAgentWorkflowRoundTripTests" --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
+        run: dotnet test tests/Host/IHostPro.Api.Tests.Integration/IHostPro.Api.Tests.Integration.csproj --no-build --configuration Release -m:1 --filter "FullyQualifiedName!~AnthropicRealAgentWorkflowRoundTripTests" --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
 
       - name: Upload test results
         if: always()
