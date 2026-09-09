@@ -14,16 +14,25 @@
       <mat-form-field appearance="outline">
         <mat-label>{{ 'propertyManagement.address.zipCode' | transloco }}</mat-label>
         <input matInput formControlName="zipCode" />
+        @if (form.controls.zipCode.invalid && form.controls.zipCode.touched) {
+          <mat-error>{{ 'propertyManagement.address.errors.required' | transloco }}</mat-error>
+        }
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>{{ 'propertyManagement.address.street' | transloco }}</mat-label>
         <input matInput formControlName="street" />
+        @if (form.controls.street.invalid && form.controls.street.touched) {
+          <mat-error>{{ 'propertyManagement.address.errors.required' | transloco }}</mat-error>
+        }
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>{{ 'propertyManagement.address.number' | transloco }}</mat-label>
         <input matInput formControlName="number" />
+        @if (form.controls.number.invalid && form.controls.number.touched) {
+          <mat-error>{{ 'propertyManagement.address.errors.required' | transloco }}</mat-error>
+        }
       </mat-form-field>
 
       <mat-form-field appearance="outline">
@@ -34,21 +43,33 @@
       <mat-form-field appearance="outline">
         <mat-label>{{ 'propertyManagement.address.neighborhood' | transloco }}</mat-label>
         <input matInput formControlName="neighborhood" />
+        @if (form.controls.neighborhood.invalid && form.controls.neighborhood.touched) {
+          <mat-error>{{ 'propertyManagement.address.errors.required' | transloco }}</mat-error>
+        }
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>{{ 'propertyManagement.address.city' | transloco }}</mat-label>
         <input matInput formControlName="city" />
+        @if (form.controls.city.invalid && form.controls.city.touched) {
+          <mat-error>{{ 'propertyManagement.address.errors.required' | transloco }}</mat-error>
+        }
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>{{ 'propertyManagement.address.state' | transloco }}</mat-label>
         <input matInput formControlName="state" />
+        @if (form.controls.state.invalid && form.controls.state.touched) {
+          <mat-error>{{ 'propertyManagement.address.errors.required' | transloco }}</mat-error>
+        }
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>{{ 'propertyManagement.address.country' | transloco }}</mat-label>
         <input matInput formControlName="country" />
+        @if (form.controls.country.invalid && form.controls.country.touched) {
+          <mat-error>{{ 'propertyManagement.address.errors.required' | transloco }}</mat-error>
+        }
       </mat-form-field>
     </div>
 
@@ -59,7 +80,7 @@
 
   <mat-dialog-actions align="end">
     <button mat-button type="button" (click)="cancel()">{{ 'common.cancel' | transloco }}</button>
-    <button mat-flat-button color="primary" type="submit" [disabled]="submitting()">
+    <button mat-flat-button color="primary" type="submit" [disabled]="submitting() || form.invalid">
       @if (submitting()) {
         <mat-progress-spinner diameter="20" mode="indeterminate" />
       } @else {

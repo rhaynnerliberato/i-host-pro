@@ -133,6 +133,44 @@ public sealed class PropertyManagementE2ETests
         await page.Locator("table").GetByText(name).WaitForAsync();
     }
 
+    /// <summary>
+    /// Focused Condominium Save Action Gate (preventive UX fix): the Save button must reflect real
+    /// form validity — never clickable while a required field is empty — and a touched, empty
+    /// required field must show a visible validation message, never silence. Never touches
+    /// production validation rules/API contract, only the dialog's own disabled-state binding and
+    /// mat-error markup.
+    /// </summary>
+    [Fact]
+    public async Task A_condominium_form_with_missing_required_fields_keeps_save_disabled_and_shows_validation()
+    {
+        var (page, _) = await LoginAsAdminOnAsync("Condomínios", "/condominiums");
+
+        await page.GetByRole(AriaRole.Button, new() { Name = "Novo condomínio" }).ClickAsync();
+        var dialog = page.GetByRole(AriaRole.Dialog);
+        var saveButton = dialog.GetByRole(AriaRole.Button, new() { Name = "Salvar" });
+
+        (await saveButton.IsDisabledAsync()).Should().BeTrue(
+            "a freshly opened create dialog has every required field empty — Save must never be clickable until the form is valid");
+
+        var zipCodeField = dialog.GetByLabel("CEP");
+        await zipCodeField.ClickAsync();
+        await dialog.GetByLabel("Rua").ClickAsync(); // blurs zipCode while it is still empty, marking it touched
+
+        await dialog.GetByText("Campo obrigatório.").WaitForAsync();
+        (await saveButton.IsDisabledAsync()).Should().BeTrue("zipCode is still empty and touched — the form remains invalid");
+
+        await dialog.GetByLabel("Nome").FillAsync("E2E Validation Guard Condominium");
+        await zipCodeField.FillAsync("01000-000");
+        await dialog.GetByLabel("Rua").FillAsync("Rua das Flores");
+        await dialog.GetByLabel("Número").FillAsync("100");
+        await dialog.GetByLabel("Bairro").FillAsync("Centro");
+        await dialog.GetByLabel("Cidade").FillAsync("Sao Paulo");
+        await dialog.GetByLabel("Estado").FillAsync("SP");
+
+        (await saveButton.IsDisabledAsync()).Should().BeFalse(
+            "every required field is now filled (country already defaults to BR) — Save must become enabled");
+    }
+
     [Fact]
     public async Task Admin_edits_a_condominium()
     {

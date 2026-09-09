@@ -142,7 +142,10 @@
       "neighborhood": "Bairro",
       "city": "Cidade",
       "state": "Estado",
-      "country": "País"
+      "country": "País",
+      "errors": {
+        "required": "Campo obrigatório."
+      }
     },
     "condominiums": {
       "list": {

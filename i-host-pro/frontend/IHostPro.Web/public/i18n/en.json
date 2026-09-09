@@ -142,7 +142,10 @@
       "neighborhood": "Neighborhood",
       "city": "City",
       "state": "State",
-      "country": "Country"
+      "country": "Country",
+      "errors": {
+        "required": "This field is required."
+      }
     },
     "condominiums": {
       "list": {
