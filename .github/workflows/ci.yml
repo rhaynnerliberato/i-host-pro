@@ -294,6 +294,16 @@ jobs:
       - name: Full API Integration Tests
         run: dotnet test tests/Host/IHostPro.Api.Tests.Integration/IHostPro.Api.Tests.Integration.csproj --no-build --configuration Release -m:1 --filter "FullyQualifiedName!~AnthropicRealAgentWorkflowRoundTripTests" --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
 
+      # CI Matrix Test Failure Observability Gate: reuses the same TRX parser
+      # already validated for integration-tests/frontend-e2e-tests — see
+      # those jobs' own steps for the full rationale. Diagnostics-only: never
+      # changes this job's own conclusion.
+      - name: Report API Integration Tests failures (if any)
+        if: failure()
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        run: ./.github/scripts/report-trx-failures.ps1 -TrxPath "i-host-pro/TestResults/results.trx" -JobLabel "api-integration-tests"
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
