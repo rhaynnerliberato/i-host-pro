@@ -70,6 +70,15 @@ public sealed class GuestAccessDeliveryWorkflowRoundTripTests : IClassFixture<Gu
         public HttpClient ApiClient { get; private set; } = null!;
         public IServiceProvider ApiServices => _apiFactory!.Services;
 
+        /// <summary>
+        /// Guest Access Delivery Eventual Consistency Root Cause Gate: safe, failure-only process/
+        /// container state - never env dumps, never credentials - for a timeout diagnostic to
+        /// distinguish "the Worker subprocess died" from "it's alive but the choreography stalled".
+        /// </summary>
+        public bool IsWorkerProcessRunning => _workerProcess is { HasExited: false };
+        public int? WorkerExitCode => _workerProcess is { HasExited: true } ? _workerProcess.ExitCode : null;
+        public string RabbitMqContainerState => _rabbitMqContainer.State.ToString();
+
         public async Task InitializeAsync()
         {
             _postgresContainer = new PostgreSqlBuilder()
@@ -571,6 +580,27 @@ public sealed class GuestAccessDeliveryWorkflowRoundTripTests : IClassFixture<Gu
     {
         var reached = await WaitUntilAsync(
             () => GetGuestStayOperationStatusAsync(tenantId, reservationId), status => status == expectedStatus, TimeSpan.FromSeconds(30));
+
+        // Guest Access Delivery Eventual Consistency Root Cause Gate: failure-only, so a future
+        // recurrence of this timeout explains itself instead of only re-asserting. Never runs on
+        // the green path — no noise added to a passing run. Sanitized: only existence/status/
+        // timestamps and process/container state, never message payloads or credentials.
+        if (!reached)
+        {
+            var status = await GetGuestStayOperationStatusAsync(tenantId, reservationId);
+            var createdAtUtc = await GetGuestStayOperationCreatedAtAsync(tenantId, reservationId);
+            await Console.Error.WriteLineAsync(
+                "GUEST ACCESS DELIVERY TIMEOUT DIAGNOSTIC (Eventual Consistency Gate) - "
+                + $"reservationId={reservationId} "
+                + $"expectedStatus={expectedStatus} "
+                + $"guestStayOperationExists={status is not null} "
+                + $"guestStayOperationStatus={status ?? "(none)"} "
+                + $"guestStayOperationCreatedAtUtc={(createdAtUtc.HasValue ? createdAtUtc.Value.ToString("O") : "(none)")} "
+                + $"workerProcessRunning={_fixture.IsWorkerProcessRunning} "
+                + $"workerExitCode={(_fixture.WorkerExitCode?.ToString() ?? "(n/a)")} "
+                + $"rabbitMqContainerState={_fixture.RabbitMqContainerState}");
+        }
+
         reached.Should().BeTrue(
             $"the real ReservationCreated -> Guest Operations choreography must reach GuestStayOperation status '{expectedStatus}' within 30s. " +
             "Worker output:\n" + _fixture.GetWorkerOutputSnapshot());
@@ -598,6 +628,18 @@ public sealed class GuestAccessDeliveryWorkflowRoundTripTests : IClassFixture<Gu
             command.Parameters.AddWithValue("tenantId", tenantId);
             command.Parameters.AddWithValue("reservationId", reservationId);
             return (await command.ExecuteScalarAsync()) as string;
+        });
+
+    /// <summary>Failure-only (Guest Access Delivery Eventual Consistency Root Cause Gate) — never called on the green path.</summary>
+    private Task<DateTimeOffset?> GetGuestStayOperationCreatedAtAsync(Guid tenantId, Guid reservationId) =>
+        QueryScopedAsync(tenantId, async connection =>
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT created_at_utc FROM guest_operations.guest_stay_operations WHERE tenant_id = @tenantId AND reservation_id = @reservationId";
+            command.Parameters.AddWithValue("tenantId", tenantId);
+            command.Parameters.AddWithValue("reservationId", reservationId);
+            var value = await command.ExecuteScalarAsync();
+            return value is DateTime dateTime ? new DateTimeOffset(DateTime.SpecifyKind(dateTime, DateTimeKind.Utc)) : (DateTimeOffset?)null;
         });
 
     private Task<(string Status, string? DestinationMasked, string RenderedContent)?> GetMessageAsync(Guid tenantId, Guid reservationId, string templateKey) =>
