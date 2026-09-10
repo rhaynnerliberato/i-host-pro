@@ -227,44 +227,48 @@ jobs:
       - name: Build
         run: dotnet build ${{ matrix.project.path }} --no-restore --configuration Release
 
-      # Reservations Integration Matrix Timeout Root Cause Gate: this matrix entry has
-      # been cancelled twice in real CI at the job's own timeout-minutes:30, never
-      # producing a pass/fail verdict, while a local run of this exact same command
-      # finishes 105/105 in ~40s (leading hypothesis: xUnit's default parallel-collection
-      # behavior starts all 9 of this project's independent Testcontainers Postgres
-      # fixtures concurrently, plausibly starving the standard GitHub-hosted runner in a
-      # way a local dev machine never experiences). Diagnostic-only, Reservations-only:
-      # emits a periodic, sanitized resource snapshot (load/memory/process/container
-      # counts only - never env dumps or docker inspect) so a live job log shows whether
-      # the runner itself was under pressure while the suite ran.
-      - name: Start Reservations resource telemetry (diagnostic only)
-        if: matrix.project.name == 'Reservations'
+      # Integration Matrix Timeout Root Cause Gate: Reservations and Housekeeping have
+      # each independently been cancelled in real CI at the job's own timeout-minutes:30,
+      # never producing a pass/fail verdict, while a local run of the exact same command
+      # finishes in well under a minute (leading hypothesis: xUnit's default
+      # parallel-collection behavior starts each project's several independent
+      # Testcontainers Postgres/RabbitMQ fixtures concurrently, plausibly starving the
+      # standard GitHub-hosted runner in a way a local dev machine never experiences -
+      # Reservations passing cleanly in one run while Housekeeping timed out in that same
+      # run points at intermittent runner/Testcontainers contention, not a defect specific
+      # to either project). Diagnostic-only, limited to these two contexts: emits a
+      # periodic, sanitized resource snapshot (load/memory/process/container counts only -
+      # never env dumps or docker inspect) so a live job log shows whether the runner
+      # itself was under pressure while the suite ran.
+      - name: Start resource telemetry (diagnostic only)
+        if: matrix.project.name == 'Reservations' || matrix.project.name == 'Housekeeping'
         run: |
           (
             while true; do
-              echo "[RESERVATIONS_RESOURCE] $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              echo "[RESERVATIONS_RESOURCE] uptime: $(uptime)"
-              free -h | sed 's/^/[RESERVATIONS_RESOURCE] mem: /'
-              echo "[RESERVATIONS_RESOURCE] processes: $(ps -e --no-headers | wc -l)"
-              echo "[RESERVATIONS_RESOURCE] docker containers running: $(docker ps -q | wc -l)"
-              docker stats --no-stream --format "[RESERVATIONS_RESOURCE] docker: {{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}" 2>/dev/null
+              echo "[MATRIX_TIMEOUT_DIAG:${{ matrix.project.name }}] $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              echo "[MATRIX_TIMEOUT_DIAG:${{ matrix.project.name }}] uptime: $(uptime)"
+              free -h | sed 's/^/[MATRIX_TIMEOUT_DIAG:${{ matrix.project.name }}] mem: /'
+              echo "[MATRIX_TIMEOUT_DIAG:${{ matrix.project.name }}] processes: $(ps -e --no-headers | wc -l)"
+              echo "[MATRIX_TIMEOUT_DIAG:${{ matrix.project.name }}] docker containers running: $(docker ps -q | wc -l)"
+              docker stats --no-stream --format "[MATRIX_TIMEOUT_DIAG:${{ matrix.project.name }}] docker: {{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}" 2>/dev/null
               sleep 45
             done
           ) &
-          echo "RESERVATIONS_TELEMETRY_PID=$!" >> "$GITHUB_ENV"
+          echo "MATRIX_TIMEOUT_TELEMETRY_PID=$!" >> "$GITHUB_ENV"
 
       # Same gate: --blame-hang is a PER-TEST timeout (default 1h) that dumps and kills
       # testhost if any single test exceeds it - 10m is a huge margin over the slowest
-      # test observed locally (~12.55s), so triggering it at all is itself diagnostic.
-      # verbosity=detailed is additive to (never replaces) the TRX logger below, so the
-      # live job log shows per-test progress even if the job is later cancelled before
-      # the TRX file closes (the TRX-based failure parser cannot fire on a cancelled job).
+      # test observed locally in either project (~12.55s), so triggering it at all is
+      # itself diagnostic. verbosity=detailed is additive to (never replaces) the TRX
+      # logger below, so the live job log shows per-test progress even if the job is
+      # later cancelled before the TRX file closes (the TRX-based failure parser cannot
+      # fire on a cancelled job).
       - name: Integration Tests — ${{ matrix.project.name }}
-        run: dotnet test ${{ matrix.project.path }} --no-build --configuration Release -m:1 ${{ matrix.project.filter }} ${{ matrix.project.name == 'Reservations' && '--logger "console;verbosity=detailed" --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type mini' || '' }} --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
+        run: dotnet test ${{ matrix.project.path }} --no-build --configuration Release -m:1 ${{ matrix.project.filter }} ${{ (matrix.project.name == 'Reservations' || matrix.project.name == 'Housekeeping') && '--logger "console;verbosity=detailed" --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type mini' || '' }} --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
 
-      - name: Stop Reservations resource telemetry (diagnostic only)
-        if: always() && matrix.project.name == 'Reservations'
-        run: kill "$RESERVATIONS_TELEMETRY_PID" 2>/dev/null || true
+      - name: Stop resource telemetry (diagnostic only)
+        if: always() && (matrix.project.name == 'Reservations' || matrix.project.name == 'Housekeeping')
+        run: kill "$MATRIX_TIMEOUT_TELEMETRY_PID" 2>/dev/null || true
 
       # CI Matrix Test Failure Observability Gate: reuses the same TRX parser the
       # frontend-e2e-tests job already validated in production — see that job's
