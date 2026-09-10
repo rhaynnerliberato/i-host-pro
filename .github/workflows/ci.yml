@@ -334,6 +334,17 @@ jobs:
       - name: Frontend E2E Tests
         run: dotnet test tests/Frontend/IHostPro.Web.Tests.E2E/IHostPro.Web.Tests.E2E.csproj --no-build --configuration Release -m:1 --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
 
+      # CI Frontend E2E Failure Observability Gate: exposes which test failed, its message and
+      # stack trace as GitHub Actions error annotations plus a Step Summary table — readable via
+      # the public, unauthenticated Checks API, since the artifact/log endpoints below both
+      # require a repo sign-in this project's own guardrails never use. Diagnostics-only: it
+      # never changes this job's own conclusion, which stays governed solely by the test step above.
+      - name: Report Frontend E2E failures (if any)
+        if: failure()
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        run: ./.github/scripts/report-trx-failures.ps1 -TrxPath "i-host-pro/TestResults/results.trx" -JobLabel "frontend-e2e-tests"
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
