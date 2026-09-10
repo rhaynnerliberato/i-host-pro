@@ -844,62 +844,6 @@ public sealed class WebE2EFixture : IAsyncLifetime
         return new IHostPro.Contexts.Reservations.Infrastructure.Persistence.ReservationsDbContext(options, tenantContext);
     }
 
-    /// <summary>
-    /// Counts <c>reservations.reservation_audit_log</c> rows for one reservation/action —
-    /// exposed for tests that must prove a rejected (losing) request produced no audit trail.
-    /// <c>ReservationAuditWriter.Record</c> and the domain event enqueue both happen in the same
-    /// application-layer code path, and both are persisted (or rolled back) atomically together by
-    /// <c>ReservationsOutboxTransactionExecutor</c> (event staged into the same
-    /// <c>SaveChangesAndFlushMessagesAsync</c> call as the audit row) — so an audit-row count of
-    /// exactly one for a two-request race is direct evidence the loser produced neither.
-    ///
-    /// Uses the app connection with an explicit <c>SELECT set_config('app.tenant_id', ..., true)</c>
-    /// inside its own transaction — mirrors <see cref="SeedTenantAndAdminAsync"/>'s own pattern
-    /// exactly. This table is RLS-protected (Fase 3, Incremento 1 plan, item 11); without both the
-    /// tenant-scoped <see cref="TenantContext"/> (satisfies the EF Core Global Query Filter) and the
-    /// session-level <c>app.tenant_id</c> (satisfies the database-level RLS policy, which the
-    /// migrator connection alone does not bypass), the query silently returns zero rows regardless
-    /// of what was actually persisted — confirmed the hard way earlier in this same investigation.
-    /// </summary>
-    public async Task<int> CountReservationAuditEntriesAsync(Guid reservationId, string actionCode)
-    {
-        await using var dbContext = CreateReservationsDbContext(_tenantId);
-        await using var transaction = await dbContext.Database.BeginTransactionAsync();
-        await dbContext.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('app.tenant_id', {_tenantId.ToString()}, true)");
-
-        var count = await dbContext.ReservationAuditLog
-            .Where(e => e.AggregateId == reservationId && e.ActionCode == actionCode)
-            .CountAsync();
-
-        await transaction.CommitAsync();
-        return count;
-    }
-
-    /// <summary>
-    /// FAILURE-ONLY forensic snapshot for <c>ReservationsE2ETests.A_concurrency_conflict_is_presented_without_automatic_retry</c>
-    /// (Reservations Concurrency Forensics Gate): the public API's <c>ReservationResult</c> never
-    /// exposes the server-side <c>xmin</c> concurrency token (by design — Fase 3, Incremento 1 plan,
-    /// item 9, no internal detail beyond what a client needs), so a test that wants to correlate a
-    /// concurrency outcome against the actual row-version has no way to do so through the HTTP
-    /// surface. This reads it directly, the same read-only, RLS-scoped way
-    /// <see cref="CountReservationAuditEntriesAsync"/> already does. Diagnostic-only: never called on
-    /// the test's green path, never asserted against — see that test's own violation-only capture.
-    /// </summary>
-    public async Task<(uint Xmin, string GuestName, DateTimeOffset UpdatedAt)> GetReservationDiagnosticSnapshotAsync(Guid reservationId)
-    {
-        await using var dbContext = CreateReservationsDbContext(_tenantId);
-        await using var transaction = await dbContext.Database.BeginTransactionAsync();
-        await dbContext.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('app.tenant_id', {_tenantId.ToString()}, true)");
-
-        var snapshot = await dbContext.Reservations.AsNoTracking()
-            .Where(r => r.Id == reservationId)
-            .Select(r => new { r.GuestName, r.UpdatedAt, Xmin = EF.Property<uint>(r, "xmin") })
-            .FirstAsync();
-
-        await transaction.CommitAsync();
-        return (snapshot.Xmin, snapshot.GuestName, snapshot.UpdatedAt);
-    }
-
     private static string FindSolutionRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
