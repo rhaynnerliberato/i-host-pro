@@ -7,16 +7,16 @@
 # the exit code the caller observed - this is diagnostics-only, run after the
 # real test step regardless of its own outcome.
 #
-# Reservations Concurrency Forensics Gate: also reads each failed test's
-# <Output><StdOut> - the only place a test's own Console.Error/Console.Out
-# writes land in a .trx (confirmed against a real local .trx: this content is
-# never inside <ErrorInfo>, which holds only the assertion exception's own
-# Message/StackTrace) - since ReservationsE2ETests' own failure-only
-# diagnostic capture writes there and was otherwise invisible via this same
-# public API. Sanitized independently of ErrorInfo (arbitrary test/app log
-# lines are far more likely to accidentally contain a token or connection
-# string than a FluentAssertions message ever is) and bounded so one noisy
-# test can never flood the Checks UI.
+# Reservations Concurrency Forensics Gate: also scans for forensic diagnostic
+# markers (e.g. ReservationsE2ETests' own failure-only Console.Error capture).
+# A real CI run proved a per-test <Output><StdOut> lookup never finds
+# anything: a disposable probe project confirmed VSTest/xUnit's trx logger
+# writes EVERY test's Console.Out/Console.Error into ONE single run-level
+# blob under /TestRun/ResultSummary/Output/StdOut - never per
+# <UnitTestResult> - so nothing can be reliably attributed to one specific
+# test. Instead of dumping that whole (potentially huge, multi-test) blob,
+# this scans it for lines containing a known marker and surfaces only those,
+# sanitized and bounded, as a run-level (not per-test) annotation.
 param(
     [Parameter(Mandatory = $true)]
     [string]$TrxPath,
@@ -24,23 +24,22 @@ param(
     [string]$JobLabel
 )
 
-$StdOutMaxChars = 4000
-$ForensicMarker = "RESERVATIONS CONCURRENCY VIOLATION DIAGNOSTIC"
+$MarkerOutputMaxChars = 4000
+$ForensicMarkers = @("RESERVATIONS CONCURRENCY VIOLATION DIAGNOSTIC")
 
-function Get-SanitizedStdOut {
+function Get-SanitizedText {
     param(
-        [string]$RawStdOut,
-        [int]$MaxChars,
-        [string]$PriorityMarker
+        [string]$RawText,
+        [int]$MaxChars
     )
 
-    if ([string]::IsNullOrWhiteSpace($RawStdOut)) {
+    if ([string]::IsNullOrWhiteSpace($RawText)) {
         return ""
     }
 
     # Private key blocks span multiple lines - strip on the raw text first,
     # before any line-splitting could separate BEGIN from END.
-    $text = $RawStdOut -replace '(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----', '[REDACTED_PRIVATE_KEY]'
+    $text = $RawText -replace '(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----', '[REDACTED_PRIVATE_KEY]'
 
     $lines = $text -split "`r`n|`n" | Where-Object { $_.Trim().Length -gt 0 }
 
@@ -66,15 +65,9 @@ function Get-SanitizedStdOut {
     }
     $sanitized = @($sanitized)
 
-    # Forensic priority: if a diagnostic marker line exists, surface it
-    # first - a long, unrelated stdout must never push it out of the bound.
-    $priorityLines = @($sanitized | Where-Object { $_ -like "*$PriorityMarker*" })
-    $otherLines = @($sanitized | Where-Object { $_ -notlike "*$PriorityMarker*" })
-    $ordered = $priorityLines + $otherLines
-
-    $joined = ($ordered -join ' | ')
+    $joined = ($sanitized -join ' | ')
     if ($joined.Length -gt $MaxChars) {
-        $joined = $joined.Substring(0, $MaxChars) + " [stdout truncated]"
+        $joined = $joined.Substring(0, $MaxChars) + " [truncated]"
     }
     return $joined
 }
@@ -102,8 +95,8 @@ if ($failedCount -eq 0) {
     exit 0
 }
 
-Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| Failed Test | Message | StdOut/Diagnostics |"
-Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "|---|---|---|"
+Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| Failed Test | Message |"
+Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "|---|---|"
 
 foreach ($result in $failed) {
     $testName = $result.testName
@@ -124,22 +117,33 @@ foreach ($result in $failed) {
     if ($flatMessage.Length -gt 500) { $flatMessage = $flatMessage.Substring(0, 500) + "..." }
 
     Write-Host "::error title=$JobLabel failure - $testName::$flatMessage"
+    Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| ``$testName`` | $flatMessage |"
 
     if ($stack) {
         $flatStack = ($stack -replace "[\r\n]+", " | ").Trim()
         if ($flatStack.Length -gt 800) { $flatStack = $flatStack.Substring(0, 800) + "..." }
         Write-Host "::error title=$JobLabel stack - $testName::$flatStack"
     }
+}
 
-    $stdOutNode = $result.SelectSingleNode(".//t:Output/t:StdOut", $ns)
-    $sanitizedStdOut = ""
-    if ($stdOutNode) {
-        $sanitizedStdOut = Get-SanitizedStdOut -RawStdOut $stdOutNode.InnerText -MaxChars $StdOutMaxChars -PriorityMarker $ForensicMarker
-        if ($sanitizedStdOut) {
-            Write-Host "::error title=$JobLabel stdout - $testName::$sanitizedStdOut"
+# Run-level forensic marker scan (see file header): every test's console
+# output is merged into one blob, so this cannot be attributed to a specific
+# failed test above - it is reported once for the whole job instead.
+$runStdOutNode = $trx.SelectSingleNode("/t:TestRun/t:ResultSummary/t:Output/t:StdOut", $ns)
+if ($runStdOutNode) {
+    $runStdOutLines = $runStdOutNode.InnerText -split "`r`n|`n"
+    foreach ($marker in $ForensicMarkers) {
+        $markerLines = @($runStdOutLines | Where-Object { $_ -like "*$marker*" })
+        if ($markerLines.Count -gt 0) {
+            $sanitizedMarkerOutput = Get-SanitizedText -RawText ($markerLines -join "`n") -MaxChars $MarkerOutputMaxChars
+            if ($sanitizedMarkerOutput) {
+                Write-Host "::error title=$JobLabel forensic diagnostics ($marker)::$sanitizedMarkerOutput"
+                Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ""
+                Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### Forensic diagnostics found in test output ($marker)"
+                Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "``````"
+                Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $sanitizedMarkerOutput
+                Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "``````"
+            }
         }
     }
-
-    $summaryStdOut = if ($sanitizedStdOut) { $sanitizedStdOut } else { "(none)" }
-    Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| ``$testName`` | $flatMessage | $summaryStdOut |"
 }
