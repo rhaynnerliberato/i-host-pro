@@ -6,13 +6,78 @@
 # required) plus a short table in the job's own Step Summary. Never changes
 # the exit code the caller observed - this is diagnostics-only, run after the
 # real test step regardless of its own outcome.
+#
+# Reservations Concurrency Forensics Gate: also reads each failed test's
+# <Output><StdOut> - the only place a test's own Console.Error/Console.Out
+# writes land in a .trx (confirmed against a real local .trx: this content is
+# never inside <ErrorInfo>, which holds only the assertion exception's own
+# Message/StackTrace) - since ReservationsE2ETests' own failure-only
+# diagnostic capture writes there and was otherwise invisible via this same
+# public API. Sanitized independently of ErrorInfo (arbitrary test/app log
+# lines are far more likely to accidentally contain a token or connection
+# string than a FluentAssertions message ever is) and bounded so one noisy
+# test can never flood the Checks UI.
 param(
     [Parameter(Mandatory = $true)]
     [string]$TrxPath,
-
     [Parameter(Mandatory = $true)]
     [string]$JobLabel
 )
+
+$StdOutMaxChars = 4000
+$ForensicMarker = "RESERVATIONS CONCURRENCY VIOLATION DIAGNOSTIC"
+
+function Get-SanitizedStdOut {
+    param(
+        [string]$RawStdOut,
+        [int]$MaxChars,
+        [string]$PriorityMarker
+    )
+
+    if ([string]::IsNullOrWhiteSpace($RawStdOut)) {
+        return ""
+    }
+
+    # Private key blocks span multiple lines - strip on the raw text first,
+    # before any line-splitting could separate BEGIN from END.
+    $text = $RawStdOut -replace '(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----', '[REDACTED_PRIVATE_KEY]'
+
+    $lines = $text -split "`r`n|`n" | Where-Object { $_.Trim().Length -gt 0 }
+
+    $sanitized = foreach ($line in $lines) {
+        $l = $line
+        $l = $l -replace '(?i)(authorization\s*[:=]\s*)\S+', '$1[REDACTED]'
+        $l = $l -replace '(?i)(bearer\s+)\S+', '$1[REDACTED]'
+        $l = $l -replace 'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', '[REDACTED_JWT]'
+        $l = $l -replace 'AKIA[0-9A-Z]{16}', '[REDACTED_AWS_KEY]'
+        $l = $l -replace '(?i)(aws[_-]?secret[_-]?access[_-]?key\s*[:=]\s*)\S+', '$1[REDACTED]'
+        $l = $l -replace '(?i)(aws[_-]?session[_-]?token\s*[:=]\s*)\S+', '$1[REDACTED]'
+        $l = $l -replace 'ghp_[A-Za-z0-9]{20,}', '[REDACTED_GH_TOKEN]'
+        $l = $l -replace 'gho_[A-Za-z0-9]{20,}', '[REDACTED_GH_TOKEN]'
+        $l = $l -replace 'ghs_[A-Za-z0-9]{20,}', '[REDACTED_GH_TOKEN]'
+        $l = $l -replace 'github_pat_[A-Za-z0-9_]{20,}', '[REDACTED_GH_TOKEN]'
+        $l = $l -replace '(?i)(x-api-key\s*[:=]\s*)\S+', '$1[REDACTED]'
+        $l = $l -replace '(?i)(api[_-]?key\s*[:=]\s*)\S+', '$1[REDACTED]'
+        $l = $l -replace '(?i)(password\s*[:=]\s*)\S+', '$1[REDACTED]'
+        $l = $l -replace '(?i)(pwd\s*[:=]\s*)\S+', '$1[REDACTED]'
+        $l = $l -replace '(?i)(secret\s*[:=]\s*)\S+', '$1[REDACTED]'
+        $l = $l -replace '(?i)(connectionstring\s*[:=]\s*).+', '$1[REDACTED]'
+        $l
+    }
+    $sanitized = @($sanitized)
+
+    # Forensic priority: if a diagnostic marker line exists, surface it
+    # first - a long, unrelated stdout must never push it out of the bound.
+    $priorityLines = @($sanitized | Where-Object { $_ -like "*$PriorityMarker*" })
+    $otherLines = @($sanitized | Where-Object { $_ -notlike "*$PriorityMarker*" })
+    $ordered = $priorityLines + $otherLines
+
+    $joined = ($ordered -join ' | ')
+    if ($joined.Length -gt $MaxChars) {
+        $joined = $joined.Substring(0, $MaxChars) + " [stdout truncated]"
+    }
+    return $joined
+}
 
 if (-not (Test-Path $TrxPath)) {
     Write-Host "::warning::report-trx-failures.ps1: no .trx found at $TrxPath - nothing to report."
@@ -37,8 +102,8 @@ if ($failedCount -eq 0) {
     exit 0
 }
 
-Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| Failed Test | Message |"
-Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "|---|---|"
+Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| Failed Test | Message | StdOut/Diagnostics |"
+Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "|---|---|---|"
 
 foreach ($result in $failed) {
     $testName = $result.testName
@@ -59,11 +124,22 @@ foreach ($result in $failed) {
     if ($flatMessage.Length -gt 500) { $flatMessage = $flatMessage.Substring(0, 500) + "..." }
 
     Write-Host "::error title=$JobLabel failure - $testName::$flatMessage"
-    Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| ``$testName`` | $flatMessage |"
 
     if ($stack) {
         $flatStack = ($stack -replace "[\r\n]+", " | ").Trim()
         if ($flatStack.Length -gt 800) { $flatStack = $flatStack.Substring(0, 800) + "..." }
         Write-Host "::error title=$JobLabel stack - $testName::$flatStack"
     }
+
+    $stdOutNode = $result.SelectSingleNode(".//t:Output/t:StdOut", $ns)
+    $sanitizedStdOut = ""
+    if ($stdOutNode) {
+        $sanitizedStdOut = Get-SanitizedStdOut -RawStdOut $stdOutNode.InnerText -MaxChars $StdOutMaxChars -PriorityMarker $ForensicMarker
+        if ($sanitizedStdOut) {
+            Write-Host "::error title=$JobLabel stdout - $testName::$sanitizedStdOut"
+        }
+    }
+
+    $summaryStdOut = if ($sanitizedStdOut) { $sanitizedStdOut } else { "(none)" }
+    Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "| ``$testName`` | $flatMessage | $summaryStdOut |"
 }
