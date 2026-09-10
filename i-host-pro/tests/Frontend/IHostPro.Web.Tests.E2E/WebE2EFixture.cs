@@ -875,6 +875,31 @@ public sealed class WebE2EFixture : IAsyncLifetime
         return count;
     }
 
+    /// <summary>
+    /// FAILURE-ONLY forensic snapshot for <c>ReservationsE2ETests.A_concurrency_conflict_is_presented_without_automatic_retry</c>
+    /// (Reservations Concurrency Forensics Gate): the public API's <c>ReservationResult</c> never
+    /// exposes the server-side <c>xmin</c> concurrency token (by design — Fase 3, Incremento 1 plan,
+    /// item 9, no internal detail beyond what a client needs), so a test that wants to correlate a
+    /// concurrency outcome against the actual row-version has no way to do so through the HTTP
+    /// surface. This reads it directly, the same read-only, RLS-scoped way
+    /// <see cref="CountReservationAuditEntriesAsync"/> already does. Diagnostic-only: never called on
+    /// the test's green path, never asserted against — see that test's own violation-only capture.
+    /// </summary>
+    public async Task<(uint Xmin, string GuestName, DateTimeOffset UpdatedAt)> GetReservationDiagnosticSnapshotAsync(Guid reservationId)
+    {
+        await using var dbContext = CreateReservationsDbContext(_tenantId);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('app.tenant_id', {_tenantId.ToString()}, true)");
+
+        var snapshot = await dbContext.Reservations.AsNoTracking()
+            .Where(r => r.Id == reservationId)
+            .Select(r => new { r.GuestName, r.UpdatedAt, Xmin = EF.Property<uint>(r, "xmin") })
+            .FirstAsync();
+
+        await transaction.CommitAsync();
+        return (snapshot.Xmin, snapshot.GuestName, snapshot.UpdatedAt);
+    }
+
     private static string FindSolutionRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

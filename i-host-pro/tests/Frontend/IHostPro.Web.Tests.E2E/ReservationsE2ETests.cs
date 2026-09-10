@@ -295,12 +295,46 @@ public sealed class ReservationsE2ETests
             var readByB = await GetReservationViaApiAsync(page, tokenB, reservationId);
             readByA.GetProperty("guestName").GetString().Should().Be(readByB.GetProperty("guestName").GetString());
 
+            // Reservations Concurrency Forensics Gate: the two requests below carry no
+            // client-visible concurrency token at all (PatchGuestNameAsync's body is only
+            // { guestName } — confirmed by the Reservations Concurrency Production Integrity
+            // Gate's static audit) — the server-side xmin guard is entirely opaque to callers.
+            // This snapshot is the only way a test can observe it; it is read before either
+            // PATCH is dispatched purely so a violation (below) has a "before" value to compare
+            // against a "after" one — it does not participate in, gate, or delay the race itself.
+            var initialSnapshot = await _fixture.GetReservationDiagnosticSnapshotAsync(Guid.Parse(reservationId));
+
+            var requestAStartUtc = DateTimeOffset.UtcNow;
             var patchTaskA = PatchGuestNameAsync(page, tokenA, reservationId, $"Concurrent Edit A {iteration}");
+            var requestBStartUtc = DateTimeOffset.UtcNow;
             var patchTaskB = PatchGuestNameAsync(page, tokenB, reservationId, $"Concurrent Edit B {iteration}");
-            var (responseA, responseB) = (await patchTaskA, await patchTaskB);
+            var responseA = await patchTaskA;
+            var responseAEndUtc = DateTimeOffset.UtcNow;
+            var responseB = await patchTaskB;
+            var responseBEndUtc = DateTimeOffset.UtcNow;
 
             var succeededA = responseA.Status == 200;
             var succeededB = responseB.Status == 200;
+
+            // Only when the pair violates the test's own contract (never on the green path, so
+            // this adds no noise to a passing run): capture enough forensic detail — sanitized,
+            // no Authorization header/token, xmin values only — to explain a future recurrence
+            // of the real CI's 200/200 without needing to reproduce it again from scratch.
+            var isExpectedOutcome = (succeededA ^ succeededB)
+                && (succeededA ? responseB.Status == 409 : responseA.Status == 409);
+            if (!isExpectedOutcome)
+            {
+                var finalSnapshot = await _fixture.GetReservationDiagnosticSnapshotAsync(Guid.Parse(reservationId));
+                await Console.Error.WriteLineAsync(
+                    "RESERVATIONS CONCURRENCY VIOLATION DIAGNOSTIC (Forensics Gate) - "
+                    + $"iteration={iteration} "
+                    + $"initialXmin={initialSnapshot.Xmin} "
+                    + $"requestAStartUtc={requestAStartUtc:O} requestBStartUtc={requestBStartUtc:O} "
+                    + $"responseAStatus={responseA.Status} responseAEndUtc={responseAEndUtc:O} "
+                    + $"responseBStatus={responseB.Status} responseBEndUtc={responseBEndUtc:O} "
+                    + $"finalXmin={finalSnapshot.Xmin} finalGuestName='{finalSnapshot.GuestName}' finalUpdatedAtUtc={finalSnapshot.UpdatedAt:O}");
+            }
+
             (succeededA ^ succeededB).Should().BeTrue(
                 $"iteration {iteration}: exactly one of two genuinely concurrent PATCHes on the same reservation must succeed (200) and the other must be rejected with a conflict (409) — got statusA={responseA.Status}, statusB={responseB.Status}. Never both succeeding (silently overwriting each other) and never both failing.");
 
