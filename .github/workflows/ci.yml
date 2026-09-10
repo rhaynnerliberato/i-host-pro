@@ -477,6 +477,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # GitHub Environment + Safe Real OIDC Claim Inspection Gate: the AWS-side trust
+      # policy, OIDC provider and deploy role all statically match what this workflow
+      # sends (confirmed read-only against real AWS state), yet configure-aws-credentials
+      # below still fails with "Not authorized to perform sts:AssumeRoleWithWebIdentity".
+      # TEMPORARY, single-matrix-entry diagnostic: requests the exact same OIDC token
+      # audience (sts.amazonaws.com) via the official actions/toolkit API, decodes ONLY
+      # its payload locally, and publishes ONLY a fixed allowlist of non-sensitive claims
+      # (sub/aud/repository/ref/environment/job_workflow_ref/workflow/event_name) plus a
+      # boolean comparison against the expected trust condition - via core.notice, so it
+      # lands in this check run's own public annotations (the same, already-proven
+      # unauthenticated-readable mechanism the TRX failure parser uses), never in a job
+      # console log this project's own guardrails can't read without authentication. The
+      # raw token, its header, its signature, and any other claim are never printed,
+      # logged, or persisted to $GITHUB_OUTPUT/$GITHUB_ENV/an artifact.
+      - name: Diagnose OIDC token claims (temporary, safe, Api entry only)
+        if: matrix.image.name == 'Api'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken('sts.amazonaws.com');
+            const payloadB64Url = token.split('.')[1];
+            const payloadB64 = payloadB64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const padded = payloadB64 + '=='.slice(0, (4 - (payloadB64.length % 4)) % 4);
+            const claims = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+
+            const expectedSub = 'repo:rhaynnerliberato/i-host-pro:environment:homolog';
+            const expectedAud = 'sts.amazonaws.com';
+
+            const safe = {
+              ActualSub: claims.sub,
+              ActualAud: claims.aud,
+              ActualRepository: claims.repository,
+              ActualRef: claims.ref,
+              ActualRefType: claims.ref_type,
+              ActualEnvironment: claims.environment,
+              ActualJobWorkflowRef: claims.job_workflow_ref,
+              ActualWorkflow: claims.workflow,
+              ActualEventName: claims.event_name,
+              ActualSubjectMatchesTrust: claims.sub === expectedSub,
+              ActualAudienceMatchesTrust: claims.aud === expectedAud,
+            };
+
+            core.notice('OIDC_CLAIM_DIAGNOSTIC ' + JSON.stringify(safe));
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::816435462760:role/ihostpro-homolog-deploy
