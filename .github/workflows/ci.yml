@@ -263,8 +263,23 @@ jobs:
       # logger below, so the live job log shows per-test progress even if the job is
       # later cancelled before the TRX file closes (the TRX-based failure parser cannot
       # fire on a cancelled job).
+      # Matrix Process-Level Failure Observability Gate: for Reservations/Housekeeping
+      # only, also captures the test run's own stdout/stderr to a file via `tee`, so a
+      # --blame-hang testhost kill (or the job's own timeout-minutes cancelling it) can
+      # be diagnosed even when it leaves zero <UnitTestResult outcome="Failed"> in the
+      # TRX - see report-test-process-failure.ps1 below. `set -o pipefail` preserves
+      # dotnet test's real exit code through the pipe (tee's own exit code would
+      # otherwise mask it and turn a real failure into a false job success).
       - name: Integration Tests — ${{ matrix.project.name }}
-        run: dotnet test ${{ matrix.project.path }} --no-build --configuration Release -m:1 ${{ matrix.project.filter }} ${{ (matrix.project.name == 'Reservations' || matrix.project.name == 'Housekeeping') && '--logger "console;verbosity=detailed" --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type mini' || '' }} --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ./TestResults
+          if [ "${{ matrix.project.name }}" == "Reservations" ] || [ "${{ matrix.project.name }}" == "Housekeeping" ]; then
+            dotnet test ${{ matrix.project.path }} --no-build --configuration Release -m:1 ${{ matrix.project.filter }} --logger "console;verbosity=detailed" --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type mini --logger "trx;LogFileName=results.trx" --results-directory ./TestResults 2>&1 | tee ./TestResults/console.log
+          else
+            dotnet test ${{ matrix.project.path }} --no-build --configuration Release -m:1 ${{ matrix.project.filter }} --logger "trx;LogFileName=results.trx" --results-directory ./TestResults
+          fi
 
       - name: Stop resource telemetry (diagnostic only)
         if: always() && (matrix.project.name == 'Reservations' || matrix.project.name == 'Housekeeping')
@@ -281,6 +296,18 @@ jobs:
         shell: pwsh
         working-directory: ${{ github.workspace }}
         run: ./.github/scripts/report-trx-failures.ps1 -TrxPath "i-host-pro/TestResults/results.trx" -JobLabel "integration-tests (${{ matrix.project.name }})"
+
+      # Companion to the gate above: covers failures the TRX parser structurally
+      # cannot explain (no failed UnitTestResult at all - a killed testhost or a
+      # cancelled job). Reservations/Housekeeping only, matching the console capture
+      # added above. Also runs on cancelled() - the job's own timeout-minutes:30
+      # cancellation is exactly the historical failure shape this is meant to explain,
+      # and whatever tee already flushed to disk before the kill is still readable.
+      - name: Report process-level test failures (if any)
+        if: (failure() || cancelled()) && (matrix.project.name == 'Reservations' || matrix.project.name == 'Housekeeping')
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
+        run: ./.github/scripts/report-test-process-failure.ps1 -ConsoleLogPath "i-host-pro/TestResults/console.log" -JobLabel "integration-tests (${{ matrix.project.name }})"
 
       - name: Upload test results
         if: always()
