@@ -146,6 +146,12 @@ resource "aws_ecs_task_definition" "api" {
         # point of view. Flagged for confirmation, not silently assumed as
         # final.
         { name = "ASPNETCORE_ENVIRONMENT", value = "Production" },
+        # CP6 Plan A (Frontend Hosting) corrective finding: appsettings.json's
+        # base Cors:AllowedOrigins is ["http://localhost:4200"] and nothing
+        # overrode it here before - the real deployed Homolog Api's effective
+        # CORS allowlist was literally localhost only. Additive override,
+        # Api-only (Worker is never called from a browser).
+        { name = "Cors__AllowedOrigins__0", value = var.frontend_cors_origin },
         { name = "AIAgent__Anthropic__Secrets__SecretsManagerSecretId", value = var.anthropic_secret_arn },
         { name = "ExternalIntegrations__WhatsApp__Webhook__Secrets__AppSecretSecretsManagerSecretId", value = var.meta_webhook_app_secret_arn },
         { name = "ExternalIntegrations__WhatsApp__Webhook__Secrets__VerifyTokenSecretsManagerSecretId", value = var.meta_webhook_verify_token_secret_arn },

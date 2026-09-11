@@ -163,7 +163,48 @@ data "aws_iam_policy_document" "deploy_permissions" {
     actions   = ["ecs:DescribeTasks"]
     resources = ["arn:aws:ecs:*:*:task/ihostpro-${each.key}-cluster/*"]
   }
+
+  # CP6 Plan A (Frontend Hosting): bucket name is exact and deterministic
+  # (matches modules/frontend-hosting's own "ihostpro-<env>-frontend-<account
+  # id>" naming), same predictable-naming-convention approach already used
+  # for every ECR/ECS resource above - never a cross-Terraform-root state
+  # reference (github-oidc lives in environments/global, frontend-hosting in
+  # environments/homolog - two separate state files with no existing
+  # linkage in this codebase).
+  statement {
+    sid    = "FrontendDeployS3"
+    effect = "Allow"
+    actions = [
+      "s3:PutObject",
+      "s3:DeleteObject",
+      "s3:ListBucket",
+    ]
+    resources = [
+      "arn:aws:s3:::ihostpro-${each.key}-frontend-${data.aws_caller_identity.current.account_id}",
+      "arn:aws:s3:::ihostpro-${each.key}-frontend-${data.aws_caller_identity.current.account_id}/*",
+    ]
+  }
+
+  # CP6 Plan A: unlike the S3 bucket name above, a CloudFront distribution ID
+  # is AWS-assigned and opaque - it cannot be predicted by naming convention,
+  # and (per the same cross-root limitation noted above) this policy has no
+  # way to reference environments/homolog's real distribution ARN output
+  # without introducing a new terraform_remote_state linkage that does not
+  # exist anywhere in this codebase today. Scoped to this AWS account only
+  # (never Resource="*") and to exactly one action - distribution IDs are not
+  # secret/sensitive, so an account-scoped wildcard on the ID segment carries
+  # no real exposure beyond "this role may invalidate any CloudFront
+  # distribution in this account," which today is exactly one (the frontend's).
+  # Flagged explicitly for review rather than silently treated as final.
+  statement {
+    sid       = "FrontendDeployCloudFrontInvalidation"
+    effect    = "Allow"
+    actions   = ["cloudfront:CreateInvalidation"]
+    resources = ["arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/*"]
+  }
 }
+
+data "aws_caller_identity" "current" {}
 
 resource "aws_iam_role_policy" "deploy" {
   for_each = var.environments

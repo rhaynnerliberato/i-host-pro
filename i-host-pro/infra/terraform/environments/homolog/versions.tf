@@ -31,3 +31,13 @@ terraform {
 provider "aws" {
   region = var.region
 }
+
+# CP6 Plan A (Frontend Hosting): CloudFront's viewer certificate must be an
+# ACM certificate issued in us-east-1, regardless of where every other
+# resource in this environment lives (sa-east-1) - a hard, non-negotiable
+# AWS requirement, not a preference. This is the only resource in this
+# environment that uses this aliased provider.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}

@@ -68,6 +68,17 @@ variable "alb_target_group_arn" {
   type        = string
 }
 
+# CP6 Plan A (Frontend Hosting) corrective finding: the Api's own CORS
+# allowlist was never overridden here before, so the real deployed Homolog
+# Api's effective allowlist was appsettings.json's base
+# ["http://localhost:4200"] default. No default here either - an empty/
+# placeholder origin would silently misconfigure a real production CORS
+# policy, worse than an explicit plan-time requirement.
+variable "frontend_cors_origin" {
+  description = "The Angular SPA's real HTTPS origin, injected as Cors__AllowedOrigins__0 on the Api container only (Worker is never called from a browser)."
+  type        = string
+}
+
 # --- Secret ARNs (NON_SECRET_CONFIG - resource identifiers, never values) ---
 variable "database_app_secret_arn" {
   type = string

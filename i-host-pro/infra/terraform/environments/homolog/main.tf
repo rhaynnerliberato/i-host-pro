@@ -326,6 +326,11 @@ module "ecs_services" {
   vpc_id                      = module.network.vpc_id
   alb_target_group_arn        = module.alb[0].target_group_arn
 
+  # CP6 Plan A (Frontend Hosting) - the real Angular SPA origin, additive
+  # Cors:AllowedOrigins entry (see modules/ecs-services/variables.tf's own
+  # doc comment for the corrective-finding context).
+  frontend_cors_origin = "https://app.homolog.${var.base_domain}"
+
   database_app_secret_arn              = module.credentials.secret_arns["database/app"]
   rabbitmq_secret_arn                  = module.credentials.secret_arns["rabbitmq"]
   redis_secret_arn                     = module.credentials.secret_arns["redis"]
@@ -479,5 +484,54 @@ resource "aws_route53_record" "api_homolog" {
     name                   = module.alb[0].alb_dns_name
     zone_id                = module.alb[0].alb_zone_id
     evaluate_target_health = true
+  }
+}
+
+# CP6 Plan A (Frontend Hosting) - approved via the F12 CP6 planning gate's
+# follow-up decision gate. Same runtime_edge_enabled (= B2) gate as the rest
+# of this public-facing-edge section: while false, this contributes ZERO
+# resources (no CloudFront, no S3 bucket, no second ACM certificate). Design
+# and Terraform authored only - TerraformApplyAuthorized=false for this
+# checkpoint (planning/implementation gate, not an execution gate).
+#
+# CloudFront's certificate must live in us-east-1 (see versions.tf's aliased
+# provider) - this is the same modules/acm-certificate already proven for
+# api.homolog's ALB certificate, reused unmodified via the providers map.
+module "acm_certificate_cloudfront" {
+  count = local.runtime_edge_enabled ? 1 : 0
+
+  source = "../../modules/acm-certificate"
+  providers = {
+    aws = aws.us_east_1
+  }
+
+  domain_name = "app.homolog.${var.base_domain}"
+  zone_id     = module.route53[0].zone_id
+}
+
+module "frontend_hosting" {
+  count = local.runtime_edge_enabled ? 1 : 0
+
+  source = "../../modules/frontend-hosting"
+
+  environment     = "homolog"
+  domain_name     = "app.homolog.${var.base_domain}"
+  certificate_arn = module.acm_certificate_cloudfront[0].certificate_arn
+}
+
+resource "aws_route53_record" "app_homolog" {
+  count = local.runtime_edge_enabled ? 1 : 0
+
+  zone_id = module.route53[0].zone_id
+  name    = "app.homolog.${var.base_domain}"
+  type    = "A"
+
+  alias {
+    name = module.frontend_hosting[0].cloudfront_domain_name
+    # CloudFront's hosted-zone ID for alias records is a fixed, AWS-documented
+    # constant, identical for every CloudFront distribution globally - never
+    # looked up, unlike an ALB's zone_id which is region/LB-specific.
+    zone_id                = "Z2FDTNDATAQYW2"
+    evaluate_target_health = false
   }
 }

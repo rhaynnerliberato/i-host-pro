@@ -513,6 +513,37 @@ jobs:
         working-directory: i-host-pro
         run: docker build -f ${{ matrix.image.dockerfile }} -t ihostpro-${{ matrix.image.tag_name }}-ci .
 
+  # ---- CP6 Plan A (Frontend Hosting) packaging validation. The Angular SPA
+  # has no Dockerfile (static S3+CloudFront hosting needs none) - this job's
+  # equivalent of "packaging" is proving the real production bundle compiles.
+  # `ng build --configuration production` has never run in this CI before
+  # (frontend-e2e-tests only ever runs `ng serve`, the dev server) - this is
+  # the first real exercise of that path. Never pushes/publishes anything.
+  frontend-packaging:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: i-host-pro/frontend/IHostPro.Web/package-lock.json
+
+      - name: npm ci (frontend)
+        working-directory: i-host-pro/frontend/IHostPro.Web
+        run: npm ci
+
+      - name: Angular production build
+        working-directory: i-host-pro/frontend/IHostPro.Web
+        run: npm run build -- --configuration production
+
+      - name: Verify expected build output
+        working-directory: i-host-pro/frontend/IHostPro.Web
+        run: |
+          test -f dist/IHostPro.Web/browser/index.html
+          test -f dist/IHostPro.Web/browser/config.json
+
   # ---- Publish (CP5.3C corrective Decision Gate items 2-7). Builds and
   # pushes the 4 images to Homolog's ECR under an immutable git-SHA tag,
   # authenticating via the pre-existing (CP5.2) ihostpro-homolog-deploy IAM
@@ -587,3 +618,85 @@ jobs:
       - name: Already published — ${{ matrix.image.name }}
         if: steps.check.outputs.already_published == 'true'
         run: echo "::notice::${{ matrix.image.repository }}:${{ github.sha }} already exists in ECR (repository is IMMUTABLE) - skipping push. Expected on a re-run of the same commit."
+
+  # ---- CP6 Plan A (Frontend Hosting) publish. Deliberately a separate job
+  # from `publish` above (never refactored - Api/Worker/MigrationRunner/
+  # DatabaseBootstrap's existing publish flow is untouched) since the
+  # artifact shape is different: a static S3+CloudFront site, not a Docker
+  # image pushed to ECR. Same OIDC role/environment/master-only gate as
+  # `publish` - no long-lived AWS credentials here either.
+  publish-frontend:
+    needs:
+      [
+        build,
+        architecture-tests,
+        unit-tests,
+        integration-tests,
+        api-integration-tests,
+        frontend-e2e-tests,
+        packaging,
+        frontend-packaging,
+      ]
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment: homolog
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: i-host-pro/frontend/IHostPro.Web/package-lock.json
+
+      - name: npm ci (frontend)
+        working-directory: i-host-pro/frontend/IHostPro.Web
+        run: npm ci
+
+      - name: Angular production build
+        working-directory: i-host-pro/frontend/IHostPro.Web
+        run: npm run build -- --configuration production
+
+      # The git-committed public/config.json (copied verbatim into this
+      # build) carries the local-dev value (http://localhost:5140) - this is
+      # the ONE file the deploy step must override before publishing, per
+      # RuntimeConfigService's own runtime-config design (see
+      # src/app/core/config/runtime-config.service.ts). Not a secret: the
+      # API's base URL is a public DNS name, not a credential.
+      - name: Write Homolog runtime config
+        working-directory: i-host-pro/frontend/IHostPro.Web
+        run: |
+          cat > dist/IHostPro.Web/browser/config.json <<'EOF'
+          {"apiBaseUrl":"https://api.homolog.ihostpro.com.br"}
+          EOF
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::816435462760:role/ihostpro-homolog-deploy
+          aws-region: sa-east-1
+
+      # CP6 Plan A RollbackModel: every publish lands twice - once under the
+      # immutable releases/<git-sha>/ prefix (kept for a future manual
+      # rollback, retained 90 days by the bucket's own lifecycle rule), once
+      # synced to the bucket root with --delete, which is what CloudFront
+      # actually serves.
+      - name: Upload release artifact — ${{ github.sha }}
+        working-directory: i-host-pro/frontend/IHostPro.Web
+        run: aws s3 sync dist/IHostPro.Web/browser/ s3://ihostpro-homolog-frontend-816435462760/releases/${{ github.sha }}/
+
+      - name: Sync active root
+        working-directory: i-host-pro/frontend/IHostPro.Web
+        run: aws s3 sync dist/IHostPro.Web/browser/ s3://ihostpro-homolog-frontend-816435462760/ --delete --exclude "releases/*"
+
+      # Distribution ID is looked up dynamically by its known alias rather
+      # than hardcoded/stored as a separate secret or variable - the alias is
+      # already a fixed, public DNS name, and this avoids a second place
+      # this ID would need to stay in sync with Terraform's own state.
+      - name: Invalidate CloudFront cache
+        run: |
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?contains(Aliases.Items, 'app.homolog.ihostpro.com.br')].Id" \
+            --output text)
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths "/*"
