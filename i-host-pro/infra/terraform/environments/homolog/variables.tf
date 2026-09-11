@@ -128,3 +128,13 @@ variable "homolog_scenario_provisioning_tenant_id" {
   description = "TenantId (GUID) of the real ihostpro-homolog tenant the synthetic homolog fixture data belongs to."
   type        = string
 }
+
+# CP6 Plan B (Active Alert Delivery) Decision Gate: AlertRecipientDecisionRequired=true
+# - never defaults to or silently reuses environments/global's
+# var.budget_alert_email. A real, deliberate operational-recipient decision,
+# same "no invented/placeholder value" discipline as every other real-decision
+# variable in this file.
+variable "operational_alert_email" {
+  description = "Email address that receives Homolog operational CloudWatch alarm notifications (api/worker unavailable, high error rate). Not defaulted to the budget-alert address - a distinct, deliberate decision."
+  type        = string
+}

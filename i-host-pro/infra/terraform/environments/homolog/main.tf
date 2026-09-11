@@ -341,6 +341,60 @@ module "ecs_services" {
   otlp_secret_arn                      = module.credentials.secret_arns["observability/otlp"]
 }
 
+# CP6 Plan B (Active Alert Delivery) - approved via the F12 CP6 planning
+# gate's follow-up decision gate. Structural copy of the exact SNS+policy+
+# email-subscription pattern already proven and applied in
+# environments/global/../../modules/budget (budget alerts) - only the
+# publishing principal changes (cloudwatch.amazonaws.com instead of
+# budgets.amazonaws.com). Same runtime_edge_enabled gate as the 3 alarms
+# themselves, since this delivers notifications for exactly those 3.
+resource "aws_sns_topic" "operational_alerts" {
+  count = local.runtime_edge_enabled ? 1 : 0
+  name  = "ihostpro-homolog-operational-alerts"
+
+  tags = {
+    Project     = "iHostPro"
+    Environment = "homolog"
+    ManagedBy   = "Terraform"
+  }
+}
+
+data "aws_iam_policy_document" "operational_alerts_publish" {
+  count = local.runtime_edge_enabled ? 1 : 0
+
+  statement {
+    effect    = "Allow"
+    actions   = ["SNS:Publish"]
+    resources = [aws_sns_topic.operational_alerts[0].arn]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_sns_topic_policy" "operational_alerts" {
+  count  = local.runtime_edge_enabled ? 1 : 0
+  arn    = aws_sns_topic.operational_alerts[0].arn
+  policy = data.aws_iam_policy_document.operational_alerts_publish[0].json
+}
+
+# AlertRecipientDecisionRequired=true (CP6 Plan B gate, explicit): never
+# defaults to or silently reuses the existing budget-alert email
+# (environments/global's var.budget_alert_email) - a real, deliberate
+# operational-recipient decision, no default on this variable (see
+# variables.tf). AWS creates this subscription in PendingConfirmation state;
+# it delivers nothing until the recipient clicks the confirmation email AWS
+# sends - a real, unavoidable execution-time step, not something Terraform
+# can complete on its own.
+resource "aws_sns_topic_subscription" "operational_alerts_email" {
+  count     = local.runtime_edge_enabled ? 1 : 0
+  topic_arn = aws_sns_topic.operational_alerts[0].arn
+  protocol  = "email"
+  endpoint  = var.operational_alert_email
+}
+
 # CP5.3E (Observability Architecture) mandate item 20/25/30/31/34: the 3
 # alerts from the already-approved 10-item catalogue (Fase 12 §4.6) that
 # have a reliable, native AWS CloudWatch signal - confirmed empirically
@@ -385,6 +439,11 @@ resource "aws_cloudwatch_metric_alarm" "api_unavailable" {
   threshold           = 1
   treat_missing_data  = "breaching"
 
+  # CP6 Plan B (Active Alert Delivery): previously no alarm_actions/ok_actions
+  # at all - this alarm could fire and recover with nobody ever notified.
+  alarm_actions = [aws_sns_topic.operational_alerts[0].arn]
+  ok_actions    = [aws_sns_topic.operational_alerts[0].arn]
+
   tags = {
     Project     = "iHostPro"
     Environment = "homolog"
@@ -410,6 +469,11 @@ resource "aws_cloudwatch_metric_alarm" "worker_unavailable" {
   comparison_operator = "LessThanThreshold"
   threshold           = 1
   treat_missing_data  = "breaching"
+
+  # CP6 Plan B (Active Alert Delivery): see the identical comment on
+  # api_unavailable above.
+  alarm_actions = [aws_sns_topic.operational_alerts[0].arn]
+  ok_actions    = [aws_sns_topic.operational_alerts[0].arn]
 
   tags = {
     Project     = "iHostPro"
@@ -461,6 +525,11 @@ resource "aws_cloudwatch_metric_alarm" "high_error_rate" {
       stat   = "Sum"
     }
   }
+
+  # CP6 Plan B (Active Alert Delivery): see the identical comment on
+  # api_unavailable above.
+  alarm_actions = [aws_sns_topic.operational_alerts[0].arn]
+  ok_actions    = [aws_sns_topic.operational_alerts[0].arn]
 
   tags = {
     Project     = "iHostPro"
