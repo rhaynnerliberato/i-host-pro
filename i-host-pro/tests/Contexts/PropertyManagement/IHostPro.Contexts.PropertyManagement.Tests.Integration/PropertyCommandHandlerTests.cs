@@ -491,6 +491,7 @@ public class PropertyCommandHandlerTests : IClassFixture<PropertyCommandHandlerT
             var timingB = barrierTimings.SingleOrDefault(t => t.Label == "B");
             await Console.Error.WriteLineAsync(
                 "PROPERTY CONCURRENCY VIOLATION DIAGNOSTIC (Barrier Integrity Gate) - "
+                + "scenario=UPDATE_VS_UPDATE "
                 + $"initialXmin={initialSnapshot.Xmin} "
                 + $"barrierArrivalA={timingA.ArrivalUtc:O} barrierReleaseA={timingA.ReleaseUtc:O} "
                 + $"barrierArrivalB={timingB.ArrivalUtc:O} barrierReleaseB={timingB.ReleaseUtc:O} "

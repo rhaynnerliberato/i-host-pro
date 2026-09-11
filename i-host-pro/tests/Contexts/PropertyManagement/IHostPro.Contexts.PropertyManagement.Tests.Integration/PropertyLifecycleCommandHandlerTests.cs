@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using FluentAssertions;
 using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
@@ -454,10 +455,57 @@ public class PropertyLifecycleCommandHandlerTests : IClassFixture<PropertyLifecy
     private sealed class BarrierPropertyAuditWriter : IPropertyAuditWriter
     {
         private readonly Barrier _barrier;
+        private readonly string _label;
+        private readonly ConcurrentBag<(string Label, DateTimeOffset ArrivalUtc, DateTimeOffset ReleaseUtc)> _timings;
 
-        public BarrierPropertyAuditWriter(Barrier barrier) => _barrier = barrier;
+        public BarrierPropertyAuditWriter(
+            Barrier barrier, string label = "",
+            ConcurrentBag<(string Label, DateTimeOffset ArrivalUtc, DateTimeOffset ReleaseUtc)>? timings = null)
+        {
+            _barrier = barrier;
+            _label = label;
+            _timings = timings ?? [];
+        }
 
-        public void Record(PropertyAuditEntry entry) => _barrier.SignalAndWait(TimeSpan.FromSeconds(10));
+        public void Record(PropertyAuditEntry entry)
+        {
+            var arrivalUtc = DateTimeOffset.UtcNow;
+            _barrier.SignalAndWait(TimeSpan.FromSeconds(10));
+            _timings.Add((_label, arrivalUtc, DateTimeOffset.UtcNow));
+        }
+    }
+
+    /// <summary>
+    /// Property Management Multi-Scenario Concurrency Integrity Gate: read-only,
+    /// failure-only forensic snapshot of the row's own xmin - mirrors
+    /// <c>PropertyCommandHandlerTests.GetPropertyDiagnosticSnapshotAsync</c> exactly
+    /// (duplicated rather than shared, per the same class-isolation reasoning as
+    /// <c>BarrierPropertyAuditWriter</c> itself), so a future recurrence of this
+    /// test's own "found 2" failure explains itself instead of only re-asserting.
+    /// </summary>
+    private async Task<(uint Xmin, string Name, DateTimeOffset UpdatedAt)> GetPropertyDiagnosticSnapshotAsync(Guid tenantId, Guid propertyId)
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using (var setCommand = connection.CreateCommand())
+        {
+            setCommand.CommandText = $"SET LOCAL app.tenant_id = '{tenantId:D}'";
+            await setCommand.ExecuteNonQueryAsync();
+        }
+
+        (uint Xmin, string Name, DateTimeOffset UpdatedAt) snapshot;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT xmin::text, name, updated_at FROM property_management.properties WHERE id = @id";
+            command.Parameters.AddWithValue("id", propertyId);
+            await using var reader = await command.ExecuteReaderAsync();
+            await reader.ReadAsync();
+            snapshot = (uint.Parse(reader.GetString(0)), reader.GetString(1), reader.GetFieldValue<DateTimeOffset>(2));
+        }
+
+        await transaction.CommitAsync();
+        return snapshot;
     }
 
     [Fact]
@@ -540,11 +588,17 @@ public class PropertyLifecycleCommandHandlerTests : IClassFixture<PropertyLifecy
         using var seedHost = await BuildHostAsync();
         var propertyId = await SeedInactivePropertyAsync(seedHost, tenantId, "LC-16");
 
+        // Property Management Multi-Scenario Concurrency Integrity Gate: captured before
+        // either command dispatches, purely as a "before" value for the failure-only
+        // diagnostic below - does not participate in, gate, or delay the race itself.
+        var initialSnapshot = await GetPropertyDiagnosticSnapshotAsync(tenantId, propertyId);
+
+        var barrierTimings = new ConcurrentBag<(string Label, DateTimeOffset ArrivalUtc, DateTimeOffset ReleaseUtc)>();
         using var barrier = new Barrier(2);
         using var hostA = await BuildHostAsync(overrides: sc =>
-            sc.AddScoped<IPropertyAuditWriter>(_ => new BarrierPropertyAuditWriter(barrier)));
+            sc.AddScoped<IPropertyAuditWriter>(_ => new BarrierPropertyAuditWriter(barrier, "ACTIVATE", barrierTimings)));
         using var hostB = await BuildHostAsync(overrides: sc =>
-            sc.AddScoped<IPropertyAuditWriter>(_ => new BarrierPropertyAuditWriter(barrier)));
+            sc.AddScoped<IPropertyAuditWriter>(_ => new BarrierPropertyAuditWriter(barrier, "UPDATE", barrierTimings)));
 
         var activateTask = ExecuteAsync<ActivatePropertyCommand, PropertyResult>(
             hostA, new ActivatePropertyCommand(tenantId, Guid.NewGuid(), propertyId), tenantId);
@@ -555,6 +609,27 @@ public class PropertyLifecycleCommandHandlerTests : IClassFixture<PropertyLifecy
         var updateTask = ExecuteAsync<UpdatePropertyCommand, PropertyResult>(hostB, update, tenantId);
 
         var results = await Task.WhenAll(activateTask, updateTask);
+
+        // Only when the pair violates the test's own contract (never on the green path, so
+        // this adds no noise to a passing run): capture enough forensic detail to explain a
+        // future recurrence of the real CI's "found 2" without needing to reproduce it again
+        // from scratch. No secrets/PII in scope - only xmin values, a property name/status,
+        // and status codes.
+        if (results.Count(r => r.IsSuccess) != 1)
+        {
+            var finalSnapshot = await GetPropertyDiagnosticSnapshotAsync(tenantId, propertyId);
+            var timingActivate = barrierTimings.SingleOrDefault(t => t.Label == "ACTIVATE");
+            var timingUpdate = barrierTimings.SingleOrDefault(t => t.Label == "UPDATE");
+            await Console.Error.WriteLineAsync(
+                "PROPERTY CONCURRENCY VIOLATION DIAGNOSTIC (Multi-Scenario Integrity Gate) - "
+                + "scenario=ACTIVATE_VS_UPDATE "
+                + $"initialXmin={initialSnapshot.Xmin} "
+                + $"barrierArrivalActivate={timingActivate.ArrivalUtc:O} barrierReleaseActivate={timingActivate.ReleaseUtc:O} "
+                + $"barrierArrivalUpdate={timingUpdate.ArrivalUtc:O} barrierReleaseUpdate={timingUpdate.ReleaseUtc:O} "
+                + $"resultActivateIsSuccess={results[0].IsSuccess} resultActivateErrorCode={(results[0].IsFailure ? results[0].Error.Code : "(none)")} "
+                + $"resultUpdateIsSuccess={results[1].IsSuccess} resultUpdateErrorCode={(results[1].IsFailure ? results[1].Error.Code : "(none)")} "
+                + $"finalXmin={finalSnapshot.Xmin} finalName='{finalSnapshot.Name}' finalUpdatedAtUtc={finalSnapshot.UpdatedAt:O}");
+        }
 
         results.Count(r => r.IsSuccess).Should().Be(1);
         var failure = results.Single(r => r.IsFailure);
