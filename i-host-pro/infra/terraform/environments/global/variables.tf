@@ -13,6 +13,16 @@ variable "github_repo" {
   type        = string
 }
 
+variable "github_owner_id" {
+  description = "GitHub numeric owner (user/org) ID - see modules/github-oidc/variables.tf for why this repository's real OIDC sub claim requires it."
+  type        = string
+}
+
+variable "github_repo_id" {
+  description = "GitHub numeric repository ID - see modules/github-oidc/variables.tf for why this repository's real OIDC sub claim requires it."
+  type        = string
+}
+
 variable "budget_alert_email" {
   description = "Email to receive AWS Budget alert notifications. No default — DecisionRequired: must be supplied explicitly (see CP5.2 report, item 35)."
   type        = string

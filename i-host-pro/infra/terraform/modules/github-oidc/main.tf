@@ -14,8 +14,11 @@ resource "aws_iam_openid_connect_provider" "github" {
 }
 
 # Trust policy per environment: only workflow runs targeting that exact
-# GitHub Environment (repo:<org>/<repo>:environment:<name>) may assume the
-# role — never a bare branch/tag condition, and never a wildcard subject.
+# GitHub Environment may assume the role — never a bare branch/tag condition,
+# and never a wildcard subject. The subject uses GitHub's immutable-ID format
+# (repo:<org>@<owner-id>/<repo>@<repo-id>:environment:<name>) — see
+# github_owner_id/github_repo_id's own description for why the plain-name
+# format doesn't match this repository's real token.
 # Production's GitHub Environment should additionally have required-reviewer
 # protection configured in GitHub itself (Terraform cannot express that).
 data "aws_iam_policy_document" "trust" {
@@ -39,7 +42,7 @@ data "aws_iam_policy_document" "trust" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_org}/${var.github_repo}:environment:${each.value}"]
+      values   = ["repo:${var.github_org}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}:environment:${each.value}"]
     }
   }
 }

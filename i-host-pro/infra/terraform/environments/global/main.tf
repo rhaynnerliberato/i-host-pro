@@ -15,9 +15,11 @@ locals {
 module "github_oidc" {
   source = "../../modules/github-oidc"
 
-  github_org   = var.github_org
-  github_repo  = var.github_repo
-  environments = local.oidc_environments
+  github_org      = var.github_org
+  github_repo     = var.github_repo
+  github_owner_id = var.github_owner_id
+  github_repo_id  = var.github_repo_id
+  environments    = local.oidc_environments
 }
 
 module "budget" {
