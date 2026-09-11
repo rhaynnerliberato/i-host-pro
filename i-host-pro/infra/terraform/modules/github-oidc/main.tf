@@ -191,16 +191,30 @@ data "aws_iam_policy_document" "deploy_permissions" {
   # way to reference environments/homolog's real distribution ARN output
   # without introducing a new terraform_remote_state linkage that does not
   # exist anywhere in this codebase today. Scoped to this AWS account only
-  # (never Resource="*") and to exactly one action - distribution IDs are not
-  # secret/sensitive, so an account-scoped wildcard on the ID segment carries
-  # no real exposure beyond "this role may invalidate any CloudFront
-  # distribution in this account," which today is exactly one (the frontend's).
-  # Flagged explicitly for review rather than silently treated as final.
+  # and to exactly one action - distribution IDs are not secret/sensitive, so
+  # an account-scoped resource carries no real exposure beyond "this role may
+  # invalidate any CloudFront distribution in this account," which today is
+  # exactly one (the frontend's). Accepted as ACCEPTED_PILOT_IAM_SCOPE.
   statement {
     sid       = "FrontendDeployCloudFrontInvalidation"
     effect    = "Allow"
     actions   = ["cloudfront:CreateInvalidation"]
     resources = ["arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/*"]
+  }
+
+  # Real CI failure, corrective fix: the publish-frontend workflow step looks
+  # up its own distribution ID at deploy time via `aws cloudfront
+  # list-distributions` (filtering by the known alias) rather than a hardcoded
+  # ID - CreateInvalidation alone isn't enough to make that call succeed.
+  # cloudfront:ListDistributions is an account-wide, non-resource-scopable
+  # action in AWS IAM (same class of unavoidable Resource="*" exception this
+  # policy already documents for ecr:GetAuthorizationToken above) - never
+  # broadened beyond this one read-only listing action.
+  statement {
+    sid       = "FrontendDeployCloudFrontListDistributions"
+    effect    = "Allow"
+    actions   = ["cloudfront:ListDistributions"]
+    resources = ["*"]
   }
 }
 
