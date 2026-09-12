@@ -659,6 +659,47 @@ public class ReservationsEndpointsTests : IClassFixture<ReservationsEndpointsTes
         body!.Items.Should().ContainSingle(i => i.Id == bBody!.Id);
     }
 
+    // Real production defect found during the CP6 Stage 1 cutover: a
+    // from/to query using a non-UTC offset (e.g. -03:00, what any Brazilian
+    // caller naturally sends) threw a real 500 - ReservationReader.ListAsync
+    // used the caller-supplied DateTimeOffset directly in the EF filter,
+    // and Npgsql refuses to write a non-UTC offset to a timestamptz
+    // parameter. Fixed by normalizing to UTC at the query boundary (mirrors
+    // Reservation.Create/Reschedule's own normalization). Asserts both that
+    // the -03:00 query no longer throws AND that it returns the exact same
+    // result as the semantically equivalent UTC query.
+    [Fact]
+    public async Task List_with_from_and_to_using_a_non_UTC_offset_returns_200_and_matches_the_UTC_equivalent_query()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var tenantId = Guid.NewGuid();
+        var token = await GenerateTokenAsync(host, Guid.NewGuid(), tenantId, ["ADMIN"]);
+        var propertyId = await SeedActivePropertyAsync(tenantId);
+
+        var created = await PostAsync(
+            client, "/api/v1/reservations",
+            new CreateReservationRequest(propertyId, "Non-UTC query subject", null, new DateTimeOffset(2026, 9, 7, 14, 0, 0, TimeSpan.FromHours(-3)), new DateTimeOffset(2026, 9, 14, 11, 0, 0, TimeSpan.FromHours(-3)), 2),
+            token);
+        var createdBody = await created.Content.ReadFromJsonAsync<ReservationDetailResponse>(JsonWebDefaults);
+
+        var fromLocal = Uri.EscapeDataString(new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.FromHours(-3)).ToString("O"));
+        var toLocal = Uri.EscapeDataString(new DateTimeOffset(2026, 9, 30, 0, 0, 0, TimeSpan.FromHours(-3)).ToString("O"));
+        var localOffsetResponse = await GetAsync(client, $"/api/v1/reservations?propertyId={propertyId}&from={fromLocal}&to={toLocal}", token);
+
+        localOffsetResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var localOffsetBody = await localOffsetResponse.Content.ReadFromJsonAsync<PagedReservationResponse>(JsonWebDefaults);
+        localOffsetBody!.Items.Should().ContainSingle(i => i.Id == createdBody!.Id);
+
+        var fromUtc = Uri.EscapeDataString(new DateTimeOffset(2026, 9, 1, 3, 0, 0, TimeSpan.Zero).ToString("O"));
+        var toUtc = Uri.EscapeDataString(new DateTimeOffset(2026, 9, 30, 3, 0, 0, TimeSpan.Zero).ToString("O"));
+        var utcResponse = await GetAsync(client, $"/api/v1/reservations?propertyId={propertyId}&from={fromUtc}&to={toUtc}", token);
+
+        utcResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var utcBody = await utcResponse.Content.ReadFromJsonAsync<PagedReservationResponse>(JsonWebDefaults);
+        utcBody!.Items.Select(i => i.Id).Should().BeEquivalentTo(localOffsetBody.Items.Select(i => i.Id));
+    }
+
     [Fact]
     public async Task List_orders_deterministically_by_check_in_then_id()
     {

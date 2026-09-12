@@ -64,11 +64,25 @@ public sealed class ReservationReader : IReservationReader
             query = query.Where(r => r.Status == statusEnum);
         }
 
+        // Postgres timestamptz parameters must be written as UTC (Offset=0) -
+        // Npgsql throws ArgumentException for any other offset. Callers are
+        // expected to (and do, e.g. the manual Airbnb reconciliation runbook's
+        // duplicate-check step) supply their own local offset such as -03:00,
+        // so it must be normalized here, at the query boundary, rather than
+        // pushing that requirement onto every caller. Mirrors the same
+        // .ToUniversalTime() normalization Reservation.Create/Reschedule
+        // already apply before persisting CheckInAt/CheckOutAt.
         if (from is DateTimeOffset effectiveFrom)
-            query = query.Where(r => r.CheckOutAt > effectiveFrom);
+        {
+            var normalizedFrom = effectiveFrom.ToUniversalTime();
+            query = query.Where(r => r.CheckOutAt > normalizedFrom);
+        }
 
         if (to is DateTimeOffset effectiveTo)
-            query = query.Where(r => r.CheckInAt < effectiveTo);
+        {
+            var normalizedTo = effectiveTo.ToUniversalTime();
+            query = query.Where(r => r.CheckInAt < normalizedTo);
+        }
 
         var totalCount = await query.CountAsync(cancellationToken);
 
