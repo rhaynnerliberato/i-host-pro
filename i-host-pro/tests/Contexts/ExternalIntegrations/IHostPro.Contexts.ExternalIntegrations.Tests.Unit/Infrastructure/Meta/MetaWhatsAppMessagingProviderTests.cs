@@ -27,7 +27,12 @@ public class MetaWhatsAppMessagingProviderTests
     private static WhatsAppIntegration BuildIntegration()
     {
         var integration = WhatsAppIntegration.Create(Guid.NewGuid(), TenantId, DateTimeOffset.UtcNow);
-        integration.UpdateConfiguration("waba-1", "1234567890", "access-token-ref", null, null, DateTimeOffset.UtcNow);
+        // Real Tenant WhatsApp Activation Readiness gate: every test in this
+        // file exercises the HTTP/mapping behavior below the IsEnabled gate,
+        // so this shared fixture is enabled — the gate itself has its own
+        // dedicated test below.
+        integration.UpdateConfiguration("waba-1", "1234567890", "access-token-ref", "app-secret-ref", "verify-ref", DateTimeOffset.UtcNow);
+        integration.Enable(DateTimeOffset.UtcNow);
         return integration;
     }
 
@@ -275,6 +280,27 @@ public class MetaWhatsAppMessagingProviderTests
 
         result.Accepted.Should().BeFalse();
         handler.Requests.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Real Tenant WhatsApp Activation Readiness gate (SMALL_IMPLEMENTATION_GAP
+    /// plan) — the most important regression this checkpoint introduces:
+    /// a fully-configured but not-yet-enabled tenant (IsEnabled=false, the
+    /// default until an explicit Enable command) must never reach Meta.
+    /// </summary>
+    [Fact]
+    public async Task SendAsync_rejects_without_any_HTTP_call_when_the_integration_is_configured_but_not_enabled()
+    {
+        var integration = WhatsAppIntegration.Create(Guid.NewGuid(), TenantId, DateTimeOffset.UtcNow);
+        integration.UpdateConfiguration("waba-1", "1234567890", "access-token-ref", "app-secret-ref", "verify-ref", DateTimeOffset.UtcNow);
+        var handler = RecordingHttpMessageHandler.Returning(JsonResponse(HttpStatusCode.OK, new { messages = new[] { new { id = "wamid.ABC" } } }));
+        var provider = BuildProvider(handler, integration, BuildMapping());
+
+        var result = await provider.SendAsync(BuildRequest(), CancellationToken.None);
+
+        result.Accepted.Should().BeFalse();
+        result.FailureCode.Should().Be("integration_disabled");
+        handler.Requests.Should().BeEmpty("a disabled tenant, however completely configured, must never reach Meta");
     }
 
     [Fact]

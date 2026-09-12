@@ -13,14 +13,18 @@ namespace IHostPro.Contexts.ExternalIntegrations.Api.Controllers;
 /// Administrative WhatsApp integration configuration endpoints (Fase 9,
 /// Checkpoint 2.1 — "External Integrations + Credential/Configuration
 /// Foundation") — mirrors <c>TemplatesController</c>'s structure exactly.
-/// Both actions require <see cref="IdentityPermissionCodes.IntegrationsManage"/>
+/// Every action requires <see cref="IdentityPermissionCodes.IntegrationsManage"/>
 /// — no <c>INTEGRATIONS:READ</c> counterpart exists (CP2.1 mandate §24).
 ///
 /// Never accepts or returns a secret value (CP2.1 mandate §25/§26): the
 /// request/response only carry secret REFERENCES (opaque names) and
-/// <c>*Configured</c> booleans — never the secret itself. No endpoint here
-/// can activate real WhatsApp sending — <c>IsEnabled</c> is never settable
-/// through this controller (CP2.1 mandate §18).
+/// <c>*Configured</c> booleans — never the secret itself.
+///
+/// Real Tenant WhatsApp Activation Readiness gate (SMALL_IMPLEMENTATION_GAP
+/// plan): <see cref="Enable"/>/<see cref="Disable"/> are the only endpoints
+/// that can change <c>IsEnabled</c> — <see cref="Configure"/> never does
+/// (CP2.1 mandate §18's own original intent, now satisfied by two distinct,
+/// explicit, audited actions instead of no action at all).
 /// </summary>
 [ApiController]
 [Route("api/v1/integrations/whatsapp")]
@@ -72,6 +76,48 @@ public sealed class WhatsAppIntegrationController : ControllerBase
             cancellationToken);
 
         return Ok(ToResponse(result.Value));
+    }
+
+    [HttpPost("enable")]
+    [Authorize(Policy = IdentityPermissionCodes.IntegrationsManage)]
+    [ProducesResponseType(typeof(WhatsAppIntegrationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Enable(CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        if (!ExternalIntegrationsIdentityReader.TryRead(User, out var identity))
+            return Unauthorized();
+
+        var result = await _sender.Send(new EnableWhatsAppIntegrationCommand(identity.TenantId, identity.UserId), cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(ToResponse(result.Value))
+            : ExternalIntegrationsResultHttpMapper.ToActionResult(result.Error);
+    }
+
+    [HttpPost("disable")]
+    [Authorize(Policy = IdentityPermissionCodes.IntegrationsManage)]
+    [ProducesResponseType(typeof(WhatsAppIntegrationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Disable(CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        if (!ExternalIntegrationsIdentityReader.TryRead(User, out var identity))
+            return Unauthorized();
+
+        var result = await _sender.Send(new DisableWhatsAppIntegrationCommand(identity.TenantId, identity.UserId), cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(ToResponse(result.Value))
+            : ExternalIntegrationsResultHttpMapper.ToActionResult(result.Error);
     }
 
     private void SetNoStoreHeaders() => Response.Headers.CacheControl = "no-store";

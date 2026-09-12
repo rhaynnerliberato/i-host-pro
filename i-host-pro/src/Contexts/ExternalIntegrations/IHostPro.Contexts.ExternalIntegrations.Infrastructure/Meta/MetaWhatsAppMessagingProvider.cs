@@ -29,6 +29,16 @@ namespace IHostPro.Contexts.ExternalIntegrations.Infrastructure.Meta;
 ///
 /// Never logs <c>Destination</c>/template parameter values/the access token/
 /// the raw provider response body (mandate §24/§34/§35).
+///
+/// Real Tenant WhatsApp Activation Readiness gate (SMALL_IMPLEMENTATION_GAP
+/// plan): <see cref="SendAsync"/> also owns the per-tenant fail-closed
+/// enablement gate — <c>WhatsAppIntegration.IsEnabled=false</c> rejects
+/// before any HTTP call, exactly like the pre-existing
+/// PhoneNumberId/AccessToken/template checks below. This keeps the gate in
+/// the one place that already loads <c>WhatsAppIntegration</c> for the
+/// current tenant, so <c>Communication</c>'s <c>IOutboundMessageConnector</c>
+/// registration can select this real connector per environment without
+/// itself becoming tenant-aware.
 /// </summary>
 public sealed class MetaWhatsAppMessagingProvider : IMessagingProvider
 {
@@ -63,7 +73,16 @@ public sealed class MetaWhatsAppMessagingProvider : IMessagingProvider
         var stopwatch = Stopwatch.StartNew();
 
         var integration = await _integrationRepository.GetForCurrentTenantAsync(cancellationToken);
-        if (string.IsNullOrEmpty(integration?.PhoneNumberId))
+
+        // Real Tenant WhatsApp Activation Readiness gate (SMALL_IMPLEMENTATION_GAP
+        // plan) — the tenant-level fail-closed gate: IsEnabled=false (the
+        // default, and the only value before an explicit Enable command)
+        // must never let a real Meta HTTP call happen, no matter how
+        // complete the rest of the configuration below is.
+        if (integration is null || !integration.IsEnabled)
+            return Reject(request, stopwatch, "integration_disabled", ProviderFailureCategory.PermanentFailure);
+
+        if (string.IsNullOrEmpty(integration.PhoneNumberId))
             return Reject(request, stopwatch, "integration_not_configured", ProviderFailureCategory.PermanentFailure);
 
         if (string.IsNullOrEmpty(integration.AccessTokenSecretReference))

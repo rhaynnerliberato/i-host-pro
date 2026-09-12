@@ -18,12 +18,17 @@ namespace IHostPro.Contexts.ExternalIntegrations.Domain;
 /// <c>IWhatsAppCredentialProvider</c> from the reference).
 ///
 /// <see cref="IsEnabled"/> is set once at <see cref="Create"/> to
-/// <c>false</c> and never changes for the entire lifetime of this
-/// checkpoint — deliberately no <c>Enable()</c>/<c>Disable()</c> operation
-/// is exposed here (CP2.1 mandate §18): enabling must eventually respect
-/// provider credentials being valid, a Production secret provider existing,
-/// and a resolved consent decision, none of which exist yet. Exposing an
-/// early bypass would be worse than not having the capability at all.
+/// <c>false</c> and stays <c>false</c> until an explicit, separately
+/// authorized <see cref="Enable"/> call (Real Tenant WhatsApp Activation
+/// Readiness gate — SMALL_IMPLEMENTATION_GAP plan approved after the CP2.1
+/// mandate §18 freeze). <see cref="UpdateConfiguration"/> never enables or
+/// disables this aggregate implicitly — Configure and Enable/Disable are
+/// always distinct actions, never one hidden inside the other.
+/// <see cref="Enable"/> asserts only the LOCAL invariants this aggregate can
+/// see for itself (the identifiers/references below are present); whether
+/// the referenced secret VALUES actually resolve is an external/
+/// Infrastructure concern checked separately by the Application layer —
+/// this aggregate must never depend on AWS/Secrets Manager.
 /// </summary>
 public sealed class WhatsAppIntegration : AggregateRoot<Guid>, ITenantOwned
 {
@@ -70,6 +75,48 @@ public sealed class WhatsAppIntegration : AggregateRoot<Guid>, ITenantOwned
         AccessTokenSecretReference = accessTokenSecretReference;
         AppSecretSecretReference = appSecretSecretReference;
         VerifyTokenSecretReference = verifyTokenSecretReference;
+        UpdatedAtUtc = updatedAtUtc;
+    }
+
+    /// <summary>
+    /// <see langword="false"/> → <see langword="true"/>. Requires
+    /// <see cref="WabaId"/>, <see cref="PhoneNumberId"/> and all three
+    /// secret references to already be present (via
+    /// <see cref="UpdateConfiguration"/>) — an integration can never be
+    /// enabled with an incomplete configuration. Deliberately never
+    /// validates the referenced secret VALUES themselves (see this class's
+    /// own remarks) — that preflight belongs to the Application layer.
+    /// </summary>
+    public void Enable(DateTimeOffset updatedAtUtc)
+    {
+        if (IsEnabled)
+            throw new InvalidOperationException("WhatsApp integration is already enabled.");
+
+        if (string.IsNullOrWhiteSpace(WabaId) ||
+            string.IsNullOrWhiteSpace(PhoneNumberId) ||
+            string.IsNullOrWhiteSpace(AccessTokenSecretReference) ||
+            string.IsNullOrWhiteSpace(AppSecretSecretReference) ||
+            string.IsNullOrWhiteSpace(VerifyTokenSecretReference))
+        {
+            throw new InvalidOperationException("Cannot enable a WhatsApp integration with incomplete configuration.");
+        }
+
+        IsEnabled = true;
+        UpdatedAtUtc = updatedAtUtc;
+    }
+
+    /// <summary>
+    /// <see langword="true"/> → <see langword="false"/>. Always allowed
+    /// regardless of the current configuration's completeness — disabling
+    /// must never be blocked by the same precondition that guards
+    /// <see cref="Enable"/>.
+    /// </summary>
+    public void Disable(DateTimeOffset updatedAtUtc)
+    {
+        if (!IsEnabled)
+            throw new InvalidOperationException("WhatsApp integration is already disabled.");
+
+        IsEnabled = false;
         UpdatedAtUtc = updatedAtUtc;
     }
 }

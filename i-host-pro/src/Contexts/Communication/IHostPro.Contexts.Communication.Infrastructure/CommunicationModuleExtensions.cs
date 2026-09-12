@@ -24,24 +24,36 @@ namespace IHostPro.Contexts.Communication.Infrastructure;
 public static class CommunicationModuleExtensions
 {
     /// <param name="isDevelopmentEnvironment">
-    /// CP5.3E corrective fix: selects the <see cref="IOutboundMessageConnector"/>
-    /// registered for every Communication outbound-send flow — <see cref="FakeWhatsAppConnector"/>
-    /// (Development, unchanged behavior) or <see cref="NotConfiguredOutboundMessageConnector"/>
-    /// (every other environment: resolves cleanly via DI but always reports
-    /// an explicit, deterministic failure — never a silent fake success,
-    /// never a DI resolution exception). Defaults to <see langword="false"/>
-    /// so existing test call sites need no change; both real hosts
-    /// (<c>IHostPro.Api</c>/<c>IHostPro.Worker</c>) pass their own
-    /// <c>IHostEnvironment.IsDevelopment()</c> explicitly, mirroring
-    /// <c>AddAIAgentModule</c>/<c>AddPropertyManagementModule</c>'s own
-    /// established parameter.
+    /// Selects the <see cref="IOutboundMessageConnector"/> registered for every
+    /// Communication outbound-send flow — <see cref="FakeWhatsAppConnector"/>
+    /// (Development, unchanged behavior) or, outside Development, the real
+    /// <see cref="ExternalIntegrationsWhatsAppConnector"/> (Real Tenant
+    /// WhatsApp Activation Readiness gate — SMALL_IMPLEMENTATION_GAP plan;
+    /// previously <see cref="NotConfiguredOutboundMessageConnector"/>, the
+    /// CP5.3E corrective fix). The real connector stays fail-closed per
+    /// tenant with never a silent fake success — the gate now lives in
+    /// <c>MetaWhatsAppMessagingProvider.SendAsync</c>, which rejects before
+    /// any HTTP call whenever the current tenant's <c>WhatsAppIntegration.IsEnabled</c>
+    /// is <see langword="false"/> (the default, until an explicit Enable
+    /// command) or its configuration/credentials are incomplete — so simply
+    /// registering this connector does NOT let every tenant send; only a
+    /// tenant that has both configured AND explicitly enabled its
+    /// integration can. Requires <c>IMessagingProvider</c> to already be
+    /// registered in the SAME container — <c>IHostPro.Api</c> gets it from
+    /// <c>AddExternalIntegrationsModule</c>, <c>IHostPro.Worker</c> from the
+    /// narrower <c>AddExternalIntegrationsWhatsAppOutboundProvider</c>.
+    /// Defaults to <see langword="false"/> so existing test call sites need
+    /// no change; both real hosts (<c>IHostPro.Api</c>/<c>IHostPro.Worker</c>)
+    /// pass their own <c>IHostEnvironment.IsDevelopment()</c> explicitly,
+    /// mirroring <c>AddAIAgentModule</c>/<c>AddPropertyManagementModule</c>'s
+    /// own established parameter.
     /// </param>
     public static IServiceCollection AddCommunicationModule(this IServiceCollection services, IConfiguration configuration, bool isDevelopmentEnvironment = false)
     {
         if (isDevelopmentEnvironment)
             services.AddScoped<IOutboundMessageConnector, FakeWhatsAppConnector>();
         else
-            services.AddScoped<IOutboundMessageConnector, NotConfiguredOutboundMessageConnector>();
+            services.AddScoped<IOutboundMessageConnector, ExternalIntegrationsWhatsAppConnector>();
 
         services.AddDbContext<CommunicationDbContext>(options =>
             options.UseNpgsql(

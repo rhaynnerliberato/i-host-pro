@@ -14,7 +14,7 @@ public class WhatsAppIntegrationTests
         var integration = WhatsAppIntegration.Create(Guid.NewGuid(), TenantId, Now);
 
         integration.TenantId.Should().Be(TenantId);
-        integration.IsEnabled.Should().BeFalse("no path in this checkpoint can enable a real integration (CP2.1 mandate §18)");
+        integration.IsEnabled.Should().BeFalse("Create must never start an integration already enabled");
         integration.WabaId.Should().BeNull();
         integration.PhoneNumberId.Should().BeNull();
         integration.AccessTokenSecretReference.Should().BeNull();
@@ -61,5 +61,78 @@ public class WhatsAppIntegrationTests
         integration.AppSecretSecretReference.Should().BeNull();
         integration.VerifyTokenSecretReference.Should().BeNull();
         integration.AccessTokenSecretReference.Should().Be("access-ref");
+    }
+
+    // ---- Real Tenant WhatsApp Activation Readiness gate: Enable/Disable ----
+
+    private static WhatsAppIntegration BuildFullyConfiguredIntegration()
+    {
+        var integration = WhatsAppIntegration.Create(Guid.NewGuid(), TenantId, Now);
+        integration.UpdateConfiguration("waba-1", "phone-1", "access-ref", "app-secret-ref", "verify-ref", Now);
+        return integration;
+    }
+
+    [Fact]
+    public void Enable_from_a_fully_configured_state_becomes_enabled()
+    {
+        var integration = BuildFullyConfiguredIntegration();
+        var enabledAt = Now.AddMinutes(1);
+
+        integration.Enable(enabledAt);
+
+        integration.IsEnabled.Should().BeTrue();
+        integration.UpdatedAtUtc.Should().Be(enabledAt);
+    }
+
+    [Theory]
+    [InlineData(null, "phone-1", "access-ref", "app-secret-ref", "verify-ref")]
+    [InlineData("waba-1", null, "access-ref", "app-secret-ref", "verify-ref")]
+    [InlineData("waba-1", "phone-1", null, "app-secret-ref", "verify-ref")]
+    [InlineData("waba-1", "phone-1", "access-ref", null, "verify-ref")]
+    [InlineData("waba-1", "phone-1", "access-ref", "app-secret-ref", null)]
+    public void Enable_without_every_required_field_throws(
+        string? wabaId, string? phoneNumberId, string? accessTokenRef, string? appSecretRef, string? verifyTokenRef)
+    {
+        var integration = WhatsAppIntegration.Create(Guid.NewGuid(), TenantId, Now);
+        integration.UpdateConfiguration(wabaId, phoneNumberId, accessTokenRef, appSecretRef, verifyTokenRef, Now);
+
+        var act = () => integration.Enable(Now.AddMinutes(1));
+
+        act.Should().Throw<InvalidOperationException>();
+        integration.IsEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Enable_when_already_enabled_throws()
+    {
+        var integration = BuildFullyConfiguredIntegration();
+        integration.Enable(Now.AddMinutes(1));
+
+        var act = () => integration.Enable(Now.AddMinutes(2));
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Disable_from_an_enabled_state_becomes_disabled()
+    {
+        var integration = BuildFullyConfiguredIntegration();
+        integration.Enable(Now.AddMinutes(1));
+        var disabledAt = Now.AddMinutes(2);
+
+        integration.Disable(disabledAt);
+
+        integration.IsEnabled.Should().BeFalse();
+        integration.UpdatedAtUtc.Should().Be(disabledAt);
+    }
+
+    [Fact]
+    public void Disable_when_already_disabled_throws()
+    {
+        var integration = BuildFullyConfiguredIntegration();
+
+        var act = () => integration.Disable(Now.AddMinutes(1));
+
+        act.Should().Throw<InvalidOperationException>();
     }
 }

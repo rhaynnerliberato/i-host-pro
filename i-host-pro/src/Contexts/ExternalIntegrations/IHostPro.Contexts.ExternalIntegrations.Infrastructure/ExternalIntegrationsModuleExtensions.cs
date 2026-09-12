@@ -234,4 +234,100 @@ public static class ExternalIntegrationsModuleExtensions
         services.AddScoped<IPixProvider, FakePixProvider>();
         return services;
     }
+
+    /// <summary>
+    /// Real Tenant WhatsApp Activation Readiness gate (SMALL_IMPLEMENTATION_GAP
+    /// plan): registers exactly what <see cref="MetaWhatsAppMessagingProvider"/>
+    /// needs to run in <c>IHostPro.Worker</c> — the ONLY process that resolves
+    /// <c>Communication</c>'s <c>IOutboundMessageConnector</c> for a real send
+    /// (<c>SendAgentResponseCommand</c>'s handler, reached from the AI Agent's
+    /// Wolverine-hosted consumer). Deliberately a SEPARATE method from
+    /// <see cref="AddExternalIntegrationsModule"/> rather than that method being
+    /// called wholesale from Worker too: <see cref="AddExternalIntegrationsModule"/>
+    /// also registers the webhook-only surface (<c>IWebhookRateLimiter</c> needs
+    /// <c>IDistributedRateLimiter</c>, registered only by <c>IHostPro.Api</c>'s own
+    /// <c>AddIHostProRateLimiting</c>; the Airbnb/tenant-route repositories are
+    /// webhook-only concerns) — Worker never hosts any controller, so none of
+    /// that is reachable there, and <c>Host.CreateApplicationBuilder</c>'s
+    /// default <c>ValidateOnBuild=true</c> would fail Worker's startup on the
+    /// unresolvable <c>IDistributedRateLimiter</c> dependency if the whole
+    /// module were registered instead. This intentionally duplicates a few
+    /// registrations already in <see cref="AddExternalIntegrationsModule"/>
+    /// (same accepted trade-off as <c>AwsSecretsManagerValueReader</c> existing
+    /// separately in AIAgent.Infrastructure too) rather than refactoring the
+    /// existing, already-Api-proven method.
+    /// </summary>
+    public static IServiceCollection AddExternalIntegrationsWhatsAppOutboundProvider(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        bool isDevelopmentEnvironment)
+    {
+        services.AddDbContext<ExternalIntegrationsDbContext>(options =>
+            options.UseNpgsql(
+                configuration.GetConnectionString("ExternalIntegrations"),
+                npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "external_integrations")));
+
+        services.AddScoped<IWhatsAppIntegrationRepository, WhatsAppIntegrationRepository>();
+        services.AddScoped<IWhatsAppTemplateMappingRepository, WhatsAppTemplateMappingRepository>();
+
+        if (isDevelopmentEnvironment)
+            services.AddScoped<IWhatsAppCredentialProvider, DevelopmentWhatsAppCredentialProvider>();
+        else
+            services.AddScoped<IWhatsAppCredentialProvider, SecretsManagerWhatsAppCredentialProvider>();
+
+        if (!isDevelopmentEnvironment)
+        {
+            services.AddSingleton<Amazon.SecretsManager.IAmazonSecretsManager>(
+                new Amazon.SecretsManager.AmazonSecretsManagerClient());
+            services.AddSingleton<ISecretValueReader, AwsSecretsManagerValueReader>();
+        }
+
+        services.Configure<MetaWhatsAppOptions>(configuration.GetSection("ExternalIntegrations:WhatsApp:Meta"));
+
+        var metaHttpClientBuilder = services.AddHttpClient(MetaWhatsAppMessagingProvider.HttpClientName, (serviceProvider, client) =>
+        {
+            var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<MetaWhatsAppOptions>>().Value;
+            client.BaseAddress = new Uri("https://graph.facebook.com/");
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        });
+
+        var metaCircuitBreakerOptions = configuration.GetSection("ExternalIntegrations:WhatsApp:Meta:CircuitBreaker").Get<MetaHttpCircuitBreakerOptions>()
+            ?? new MetaHttpCircuitBreakerOptions();
+        if (metaCircuitBreakerOptions.Enabled)
+        {
+            metaHttpClientBuilder.AddResilienceHandler("meta-circuit-breaker", builder =>
+            {
+                builder.AddCircuitBreaker(new CircuitBreakerStrategyOptions<HttpResponseMessage>
+                {
+                    FailureRatio = metaCircuitBreakerOptions.FailureRatio,
+                    MinimumThroughput = metaCircuitBreakerOptions.MinimumThroughput,
+                    SamplingDuration = metaCircuitBreakerOptions.SamplingDuration,
+                    BreakDuration = metaCircuitBreakerOptions.BreakDuration,
+                    ShouldHandle = args => ValueTask.FromResult(
+                        args.Outcome.Exception is HttpRequestException or TaskCanceledException ||
+                        (args.Outcome.Result is { } response &&
+                            (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500))),
+                    OnOpened = _ =>
+                    {
+                        IHostPro.BuildingBlocks.Infrastructure.Resilience.CircuitBreakerTelemetry.RecordStateChange("Meta", "Opened");
+                        return ValueTask.CompletedTask;
+                    },
+                    OnClosed = _ =>
+                    {
+                        IHostPro.BuildingBlocks.Infrastructure.Resilience.CircuitBreakerTelemetry.RecordStateChange("Meta", "Closed");
+                        return ValueTask.CompletedTask;
+                    },
+                    OnHalfOpened = _ =>
+                    {
+                        IHostPro.BuildingBlocks.Infrastructure.Resilience.CircuitBreakerTelemetry.RecordStateChange("Meta", "HalfOpened");
+                        return ValueTask.CompletedTask;
+                    },
+                });
+            });
+        }
+
+        services.AddScoped<IMessagingProvider, MetaWhatsAppMessagingProvider>();
+
+        return services;
+    }
 }

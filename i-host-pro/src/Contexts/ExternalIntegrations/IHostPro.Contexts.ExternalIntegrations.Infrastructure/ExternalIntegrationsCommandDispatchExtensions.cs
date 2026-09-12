@@ -55,6 +55,23 @@ public static class ExternalIntegrationsCommandDispatchExtensions
             IPipelineBehavior<GetWhatsAppIntegrationQuery, Result<WhatsAppIntegrationResult>>,
             TenantTransactionBehavior<GetWhatsAppIntegrationQuery, Result<WhatsAppIntegrationResult>, ExternalIntegrationsDbContext>>();
 
+        // Real Tenant WhatsApp Activation Readiness gate (SMALL_IMPLEMENTATION_GAP
+        // plan) — Enable/Disable commands, same audit-outermost/TenantTransactionBehavior
+        // wiring as ConfigureWhatsAppIntegrationCommand above.
+        services.AddScoped<
+            IPipelineBehavior<EnableWhatsAppIntegrationCommand, Result<WhatsAppIntegrationResult>>,
+            AuditEnableWhatsAppIntegrationBehavior>();
+        services.AddScoped<
+            IPipelineBehavior<EnableWhatsAppIntegrationCommand, Result<WhatsAppIntegrationResult>>,
+            TenantTransactionBehavior<EnableWhatsAppIntegrationCommand, Result<WhatsAppIntegrationResult>, ExternalIntegrationsDbContext>>();
+
+        services.AddScoped<
+            IPipelineBehavior<DisableWhatsAppIntegrationCommand, Result<WhatsAppIntegrationResult>>,
+            AuditDisableWhatsAppIntegrationBehavior>();
+        services.AddScoped<
+            IPipelineBehavior<DisableWhatsAppIntegrationCommand, Result<WhatsAppIntegrationResult>>,
+            TenantTransactionBehavior<DisableWhatsAppIntegrationCommand, Result<WhatsAppIntegrationResult>, ExternalIntegrationsDbContext>>();
+
         // Fase 9, Checkpoint 2.2 — WhatsAppTemplateMapping admin commands/
         // queries, same TenantTransactionBehavior wiring as WhatsAppIntegration
         // above.

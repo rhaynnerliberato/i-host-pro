@@ -15,16 +15,23 @@ namespace IHostPro.Contexts.Communication.Infrastructure.Messaging;
 /// <c>ExternalIntegrations.Infrastructure.Meta</c>, reached only through the
 /// provider-neutral <see cref="IMessagingProvider"/> port.
 ///
-/// NOT registered in <c>AddCommunicationReservationConsumer</c> — Communication's
-/// automatic, Wolverine-triggered <c>ReservationCreated</c> flow keeps using
-/// <see cref="FakeWhatsAppConnector"/> unchanged this checkpoint
-/// (CP2.2 mandate §46-49, Option A: <c>WhatsAppIntegration.IsEnabled</c>
-/// stays <see langword="false"/>/unchanged, so wiring this into the automatic
-/// flow would silently bypass that gate — not authorized this checkpoint).
-/// This class exists and is fully tested so a direct Application-level call
-/// (a dedicated test, never the automatic Worker subscription) can prove the
-/// real send path end-to-end, including the Message state-transition mapping
-/// below.
+/// Real Tenant WhatsApp Activation Readiness gate (SMALL_IMPLEMENTATION_GAP
+/// plan): registered by <see cref="CommunicationModuleExtensions.AddCommunicationModule"/>
+/// as the real <see cref="IOutboundMessageConnector"/> for every
+/// non-Development environment — reached only by
+/// <c>SendAgentResponseCommand</c>/<c>SendHumanHandoffNotificationCommand</c>
+/// (the AI Agent's own response-delivery path). Still NOT registered in
+/// <c>AddCommunicationReservationConsumer</c> — Communication's automatic,
+/// Wolverine-triggered <c>ReservationCreated</c>/Front Desk/PIX/Guest Access
+/// flows stay on <see cref="FakeWhatsAppConnector"/>, Development-only,
+/// unchanged (that consumer group is registered only under
+/// <c>IHostEnvironment.IsDevelopment()</c> at every real host's own
+/// composition root — this class's wiring into <c>AddCommunicationModule</c>
+/// does not affect it). The per-tenant fail-closed gate
+/// (<c>WhatsAppIntegration.IsEnabled</c>, configuration completeness,
+/// credential resolvability) lives in <c>MetaWhatsAppMessagingProvider.SendAsync</c>,
+/// reached through <see cref="IMessagingProvider"/> below — this adapter
+/// itself carries no tenant-awareness of its own.
 /// </remarks>
 public sealed class ExternalIntegrationsWhatsAppConnector : IOutboundMessageConnector
 {

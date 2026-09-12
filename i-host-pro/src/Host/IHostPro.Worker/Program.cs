@@ -269,6 +269,19 @@ try
     // GetAccessInstructions need.
     builder.Services.KeepOnlyMediatorHandlers(typeof(GetPropertyDetailQueryHandler), typeof(GetPropertyAccessConfigurationQueryHandler));
 
+    // Real Tenant WhatsApp Activation Readiness gate (SMALL_IMPLEMENTATION_GAP
+    // plan): registers exactly what MetaWhatsAppMessagingProvider needs
+    // (ExternalIntegrationsDbContext + its WhatsApp repositories/credential
+    // provider/HTTP client) so AddCommunicationModule right below can select
+    // the real ExternalIntegrationsWhatsAppConnector for this process in
+    // every non-Development environment — must run BEFORE AddCommunicationModule,
+    // never the full AddExternalIntegrationsModule (see this method's own
+    // doc comment for why: Worker hosts no controller, so the webhook-only
+    // surface that method also registers — IWebhookRateLimiter needs
+    // IDistributedRateLimiter, registered only by IHostPro.Api — would fail
+    // Host.CreateApplicationBuilder's default ValidateOnBuild=true here.
+    builder.Services.AddExternalIntegrationsWhatsAppOutboundProvider(builder.Configuration, builder.Environment.IsDevelopment());
+
     // Communication module (Fase 9, Checkpoint 1): CommunicationDbContext +
     // its shared execution-scope/repository/transaction-executor DI graph
     // (ADR-016) — mirrors AddDashboardModule's own precedent. Fase 9,
@@ -285,9 +298,10 @@ try
     // (CP4) and SendHumanHandoffNotificationCommand (CP6) are the only two
     // handlers the Worker-hosted AI Agent orchestrator actually calls; both
     // need IOutboundMessageConnector, which AddCommunicationModule now
-    // registers in every environment (CP5.3E corrective fix: FakeWhatsAppConnector
-    // in Development, NotConfiguredOutboundMessageConnector otherwise — never
-    // a DI resolution crash). UpsertAdministratorNotificationContactCommandHandler/
+    // registers in every environment (FakeWhatsAppConnector in Development;
+    // the real, tenant-gated ExternalIntegrationsWhatsAppConnector otherwise —
+    // Real Tenant WhatsApp Activation Readiness gate, SMALL_IMPLEMENTATION_GAP
+    // plan — never a DI resolution crash). UpsertAdministratorNotificationContactCommandHandler/
     // GetAdministratorNotificationContactQueryHandler (CP6, Api-only —
     // administrator contact management) are deliberately excluded from the
     // Worker's own composition, mirroring every other promoted context's

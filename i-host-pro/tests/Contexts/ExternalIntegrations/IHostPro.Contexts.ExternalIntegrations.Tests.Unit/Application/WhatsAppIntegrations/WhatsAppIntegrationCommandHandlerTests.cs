@@ -26,7 +26,7 @@ public class WhatsAppIntegrationCommandHandlerTests
         result.Value.TenantId.Should().Be(TenantId);
         result.Value.WabaId.Should().Be("waba-1");
         result.Value.PhoneNumberId.Should().Be("phone-1");
-        result.Value.IsEnabled.Should().BeFalse("no path in this checkpoint can enable a real integration");
+        result.Value.IsEnabled.Should().BeFalse("Configure alone must never enable a real integration — enabling requires the explicit Enable command");
         result.Value.AccessTokenConfigured.Should().BeTrue();
         result.Value.AppSecretConfigured.Should().BeTrue();
         result.Value.VerifyTokenConfigured.Should().BeTrue();
