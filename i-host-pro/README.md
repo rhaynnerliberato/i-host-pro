@@ -40,13 +40,57 @@ Configuração dos arquivos do Collector/Prometheus/Grafana em `observability/`.
 
 ## Executando localmente
 
+O ambiente local não depende de nenhum recurso AWS — a API e o Worker nunca
+chamam o AWS Secrets Manager quando `ASPNETCORE_ENVIRONMENT=Development`
+(padrão do `launchSettings.json`), e `appsettings.Development.json` já aponta
+para os serviços do `docker-compose.yml`.
+
 ```bash
+# 1. Sobe a infraestrutura (PostgreSQL, Redis, RabbitMQ, MinIO, observabilidade)
 docker compose up -d
+
+# 2. Compila e valida as regras de arquitetura
 dotnet build IHostPro.sln
 dotnet test tests/IHostPro.ArchitectureTests/IHostPro.ArchitectureTests.csproj
+
+# 3. Aplica as migrations de todos os módulos no Postgres local
+dotnet run --project tools/IHostPro.MigrationRunner
+
+# 4. Sobe a API e o Worker (em terminais separados)
+dotnet run --project src/Host/IHostPro.Api
+dotnet run --project src/Host/IHostPro.Worker
+
+# 5. Sobe o frontend Angular
+cd frontend/IHostPro.Web && npm install && npm start
 ```
 
+Para ter um usuário para login local, habilite o seed de desenvolvimento
+(`Identity:DevelopmentSeed:Enabled=true` em `appsettings.Development.json` ou
+via `dotnet user-secrets`, definindo também `Identity:DevelopmentSeed:AdminPassword`)
+antes do passo 4 — ele cria um Tenant + usuário Admin idempotentemente ao
+iniciar a Api/Worker (`DevelopmentIdentitySeeder`).
+
+**Limitação conhecida:** esse seed de desenvolvimento não atribui nenhuma
+Role ao usuário criado (por desenho — ver `DevelopmentIdentitySeeder.cs`), então
+ele nasce sem permissões. `tools/IHostPro.TenantProvisioning` resolve isso
+(atribui a Role ADMIN), mas exige AWS Secrets Manager e por isso **não funciona
+localmente** — é a ferramenta usada para provisionar tenants no Homolog/produção,
+não para desenvolvimento local. Atribuir a Role ADMIN a um usuário local hoje
+exige um passo manual (fora do escopo desta atualização de documentação).
+
+**Nota (2026-09):** a conta AWS de Homolog foi desativada por decisão do time
+(ver `documentacao do projeto/ADRs`); o desenvolvimento local acima não depende
+dela em nada. O job de deploy do CI (`.github/workflows/ci.yml`, branch
+`master`) para Homolog é esperado falhar até que a estratégia de nuvem seja
+retomada — os demais jobs (build, testes de arquitetura, unitários, integração,
+E2E de frontend) não têm nenhuma dependência de AWS.
+
 ## Estado atual (Fase 0)
+
+> Esta seção descreve apenas o estado inicial do projeto (Fase 0). O código
+> evoluiu muito além disso — consulte `documentacao do projeto/ADRs/` e os
+> documentos de Fase em `documentacao do projeto/` para o estado atual de cada
+> Bounded Context.
 
 Concluído nesta etapa:
 - Estrutura da Solution e BuildingBlocks (Domain, Application, Infrastructure, Messaging.Abstractions).
