@@ -41,6 +41,11 @@ public sealed class ExternalIntegrationsDbContext : BaseDbContext
     public DbSet<AirbnbIntegration> AirbnbIntegrations => Set<AirbnbIntegration>();
     public DbSet<AirbnbListingMapping> AirbnbListingMappings => Set<AirbnbListingMapping>();
 
+    /// <summary>Airbnb Email Bridge — temporary discovery channel feeding the Airbnb Deterministic Foundation above.</summary>
+    public DbSet<AirbnbEmailMailboxConnection> AirbnbEmailMailboxConnections => Set<AirbnbEmailMailboxConnection>();
+    public DbSet<AirbnbEmailSyncState> AirbnbEmailSyncStates => Set<AirbnbEmailSyncState>();
+    public DbSet<AirbnbEmailMessageReceipt> AirbnbEmailMessageReceipts => Set<AirbnbEmailMessageReceipt>();
+
     public ExternalIntegrationsDbContext(DbContextOptions<ExternalIntegrationsDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)
     {

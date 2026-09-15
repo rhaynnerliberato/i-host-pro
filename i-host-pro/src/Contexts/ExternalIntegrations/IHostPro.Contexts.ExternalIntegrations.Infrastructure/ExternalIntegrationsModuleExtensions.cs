@@ -70,6 +70,19 @@ public static class ExternalIntegrationsModuleExtensions
         services.AddScoped<IAirbnbListingMappingRepository, AirbnbListingMappingRepository>();
         services.AddScoped<IAirbnbReservationSyncPublisher, AirbnbReservationSyncPublisher>();
 
+        // Airbnb Email Bridge — persistence gate only (real OAuth flow and
+        // Graph polling are later, separately authorized gates; this store
+        // has no caller yet). Unconditional in every environment, same
+        // rationale as the Airbnb repositories above: PostgreSQL + local
+        // configuration only, no AWS dependency. The encryption key is
+        // resolved lazily on first use (see AesGcmTokenCacheProtector), so a
+        // missing key never blocks host startup for tenants not using this
+        // feature.
+        services.AddSingleton<IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.ITokenCacheProtector,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.AesGcmTokenCacheProtector>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailTokenCacheStore,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.PostgresAirbnbEmailTokenCacheStore>();
+
         // Fase 12, CP5.3A: outside Development, IWhatsAppCredentialProvider is
         // now backed by AWS Secrets Manager per-tenant secrets
         // (WhatsAppTenantSecretBackend=AWS_SECRETS_MANAGER_PER_TENANT)

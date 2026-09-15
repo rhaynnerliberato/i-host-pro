@@ -1,8 +1,11 @@
+using System.Security.Cryptography;
 using FluentAssertions;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.Contexts.ExternalIntegrations.Domain;
+using IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -641,6 +644,276 @@ public class ExternalIntegrationsFoundationTests : IClassFixture<ExternalIntegra
         dbContext.WhatsAppTenantRoutes.Add(route);
         await dbContext.SaveChangesAsync();
         return route.Id;
+    }
+
+    // ---- Airbnb Email Bridge (persistence gate) ----
+
+    [Fact]
+    public async Task Migration_creates_the_airbnb_email_bridge_tables()
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+
+        var tableNames = new HashSet<string>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'external_integrations'";
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                tableNames.Add(reader.GetString(0));
+        }
+
+        tableNames.Should().Contain([
+            "airbnb_email_mailbox_connections", "airbnb_email_sync_states", "airbnb_email_message_receipts",
+        ]);
+    }
+
+    [Theory]
+    [InlineData("airbnb_email_mailbox_connections")]
+    [InlineData("airbnb_email_sync_states")]
+    [InlineData("airbnb_email_message_receipts")]
+    public async Task ENABLE_and_FORCE_row_level_security_are_active_on_airbnb_email_bridge_tables(string tableName)
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = @tableName AND relnamespace = 'external_integrations'::regnamespace";
+        command.Parameters.AddWithValue("tableName", tableName);
+        await using var reader = await command.ExecuteReaderAsync();
+        (await reader.ReadAsync()).Should().BeTrue();
+
+        reader.GetBoolean(0).Should().BeTrue("ENABLE ROW LEVEL SECURITY must be active");
+        reader.GetBoolean(1).Should().BeTrue("FORCE ROW LEVEL SECURITY must be active — applies even to the table owner");
+    }
+
+    [Fact]
+    public async Task Correct_tenant_sees_its_own_mailbox_connection()
+    {
+        var (tenantId, connectionId) = await SeedMailboxConnectionAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var connections = await dbContext.AirbnbEmailMailboxConnections.ToListAsync();
+
+        connections.Should().ContainSingle(c => c.Id == connectionId);
+    }
+
+    [Fact]
+    public async Task Different_tenant_sees_zero_rows_for_another_tenants_mailbox_connection()
+    {
+        var (_, connectionId) = await SeedMailboxConnectionAsync();
+        var (unrelatedTenantId, _) = await SeedMailboxConnectionAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(unrelatedTenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, unrelatedTenantId);
+
+        var visible = await dbContext.AirbnbEmailMailboxConnections.Where(c => c.Id == connectionId).ToListAsync();
+
+        visible.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_second_mailbox_connection_for_the_same_tenant_is_rejected_by_the_unique_index()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        dbContext.AirbnbEmailMailboxConnections.Add(AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), tenantId, DateTimeOffset.UtcNow));
+        await dbContext.SaveChangesAsync();
+
+        dbContext.AirbnbEmailMailboxConnections.Add(AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), tenantId, DateTimeOffset.UtcNow));
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>("exactly one Airbnb email mailbox is allowed per tenant in the MVP");
+    }
+
+    [Fact]
+    public async Task A_second_message_receipt_with_the_same_graph_message_id_for_the_same_tenant_is_rejected_by_the_unique_index()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var now = DateTimeOffset.UtcNow;
+        dbContext.AirbnbEmailMessageReceipts.Add(
+            AirbnbEmailMessageReceipt.Create(Guid.NewGuid(), tenantId, "graph-message-1", null, now, now));
+        await dbContext.SaveChangesAsync();
+
+        dbContext.AirbnbEmailMessageReceipts.Add(
+            AirbnbEmailMessageReceipt.Create(Guid.NewGuid(), tenantId, "graph-message-1", null, now, now));
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>("a Graph delta replay must never be recorded twice for the same tenant");
+    }
+
+    [Fact]
+    public async Task A_second_sync_state_for_the_same_connection_and_folder_is_rejected_by_the_unique_index()
+    {
+        var (tenantId, connectionId) = await SeedMailboxConnectionAsync();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        dbContext.AirbnbEmailSyncStates.Add(
+            AirbnbEmailSyncState.Create(Guid.NewGuid(), tenantId, connectionId, "inbox", DateTimeOffset.UtcNow));
+        await dbContext.SaveChangesAsync();
+
+        dbContext.AirbnbEmailSyncStates.Add(
+            AirbnbEmailSyncState.Create(Guid.NewGuid(), tenantId, connectionId, "inbox", DateTimeOffset.UtcNow));
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>("exactly one cursor is allowed per (tenant, connection, folder)");
+    }
+
+    [Fact]
+    public async Task Deleting_a_mailbox_connection_referenced_by_a_sync_state_is_rejected()
+    {
+        var (tenantId, connectionId) = await SeedMailboxConnectionAsync();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using (var seedDbContext = CreateDbContext(_migratorConnectionString, tenantContext))
+        await using (var seedTransaction = await seedDbContext.Database.BeginTransactionAsync())
+        {
+            await SetTenantAsync(seedDbContext, tenantId);
+            seedDbContext.AirbnbEmailSyncStates.Add(
+                AirbnbEmailSyncState.Create(Guid.NewGuid(), tenantId, connectionId, "inbox", DateTimeOffset.UtcNow));
+            await seedDbContext.SaveChangesAsync();
+            await seedTransaction.CommitAsync();
+        }
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var connection = await dbContext.AirbnbEmailMailboxConnections.SingleAsync(c => c.Id == connectionId);
+        dbContext.AirbnbEmailMailboxConnections.Remove(connection);
+
+        var act = async () => await dbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateException>("disconnecting must never silently orphan or cascade-delete sync history");
+    }
+
+    /// <summary>
+    /// Proves the optimistic-concurrency protection the token cache needs
+    /// (Fase 9 review item 7): two writers that both loaded the same
+    /// connection before either saved must not silently overwrite each
+    /// other — the second SaveChangesAsync must fail, never last-write-wins.
+    /// </summary>
+    [Fact]
+    public async Task Concurrent_token_cache_updates_the_second_writer_fails_instead_of_overwriting()
+    {
+        var (tenantId, connectionId) = await SeedMailboxConnectionAsync();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var firstDbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var firstTransaction = await firstDbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(firstDbContext, tenantId);
+        var firstView = await firstDbContext.AirbnbEmailMailboxConnections.SingleAsync(c => c.Id == connectionId);
+
+        await using var secondDbContext = CreateDbContext(_appConnectionString, tenantContext);
+        await using var secondTransaction = await secondDbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(secondDbContext, tenantId);
+        var secondView = await secondDbContext.AirbnbEmailMailboxConnections.SingleAsync(c => c.Id == connectionId);
+
+        firstView.Connect("home-account-1", null, null, "Mail.Read", [1], DateTimeOffset.UtcNow);
+        await firstDbContext.SaveChangesAsync();
+        await firstTransaction.CommitAsync();
+
+        secondView.Connect("home-account-1", null, null, "Mail.Read", [2], DateTimeOffset.UtcNow);
+        var act = async () => await secondDbContext.SaveChangesAsync();
+
+        await act.Should().ThrowAsync<DbUpdateConcurrencyException>(
+            "the xmin-based concurrency token must reject a write based on stale data instead of overwriting the first writer's update");
+    }
+
+    [Fact]
+    public async Task PostgresAirbnbEmailTokenCacheStore_encrypts_at_rest_and_round_trips_the_plaintext_cache()
+    {
+        var (tenantId, connectionId) = await SeedMailboxConnectionAsync();
+        var plaintext = "msal-token-cache-payload"u8.ToArray();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ExternalIntegrations:AirbnbEmailBridge:TokenCacheEncryptionKeyBase64"] =
+                    Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
+            })
+            .Build();
+        var protector = new AesGcmTokenCacheProtector(configuration);
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using (var writeDbContext = CreateDbContext(_appConnectionString, tenantContext))
+        {
+            var store = new PostgresAirbnbEmailTokenCacheStore(writeDbContext, protector, TimeProvider.System);
+            await using var transaction = await writeDbContext.Database.BeginTransactionAsync();
+            await SetTenantAsync(writeDbContext, tenantId);
+            await store.SaveAsync(tenantId, plaintext, CancellationToken.None);
+            await transaction.CommitAsync();
+        }
+
+        await using (var connection = new NpgsqlConnection(_migratorConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var readTransaction = await connection.BeginTransactionAsync();
+            await ExecuteAsync(connection, $"SET LOCAL app.tenant_id = '{tenantId:D}'");
+            var storedBytes = (byte[])(await ExecuteScalarAsync(
+                connection, $"SELECT token_cache_blob FROM external_integrations.airbnb_email_mailbox_connections WHERE id = '{connectionId:D}'"))!;
+
+            storedBytes.Should().NotEqual(plaintext, "the stored bytes must be ciphertext, never the plaintext cache");
+        }
+
+        await using var readDbContext = CreateDbContext(_appConnectionString, tenantContext);
+        var readStore = new PostgresAirbnbEmailTokenCacheStore(readDbContext, protector, TimeProvider.System);
+        await using var readOnlyTransaction = await readDbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(readDbContext, tenantId);
+        var loaded = await readStore.LoadAsync(tenantId, CancellationToken.None);
+
+        loaded.Should().Equal(plaintext);
+    }
+
+    private async Task<(Guid TenantId, Guid ConnectionId)> SeedMailboxConnectionAsync()
+    {
+        var tenantId = Guid.NewGuid();
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+
+        await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(dbContext, tenantId);
+
+        var connection = AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), tenantId, DateTimeOffset.UtcNow);
+        dbContext.AirbnbEmailMailboxConnections.Add(connection);
+
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        return (tenantId, connection.Id);
     }
 
     // ---- Helpers ----
