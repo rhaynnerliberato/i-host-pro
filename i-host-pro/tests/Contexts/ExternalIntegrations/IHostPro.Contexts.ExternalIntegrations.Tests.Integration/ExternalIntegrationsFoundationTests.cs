@@ -841,11 +841,11 @@ public class ExternalIntegrationsFoundationTests : IClassFixture<ExternalIntegra
         await SetTenantAsync(secondDbContext, tenantId);
         var secondView = await secondDbContext.AirbnbEmailMailboxConnections.SingleAsync(c => c.Id == connectionId);
 
-        firstView.Connect("home-account-1", null, null, "Mail.Read", [1], DateTimeOffset.UtcNow);
+        firstView.UpdateTokenCache([1], DateTimeOffset.UtcNow);
         await firstDbContext.SaveChangesAsync();
         await firstTransaction.CommitAsync();
 
-        secondView.Connect("home-account-1", null, null, "Mail.Read", [2], DateTimeOffset.UtcNow);
+        secondView.UpdateTokenCache([2], DateTimeOffset.UtcNow);
         var act = async () => await secondDbContext.SaveChangesAsync();
 
         await act.Should().ThrowAsync<DbUpdateConcurrencyException>(

@@ -70,18 +70,24 @@ public static class ExternalIntegrationsModuleExtensions
         services.AddScoped<IAirbnbListingMappingRepository, AirbnbListingMappingRepository>();
         services.AddScoped<IAirbnbReservationSyncPublisher, AirbnbReservationSyncPublisher>();
 
-        // Airbnb Email Bridge — persistence gate only (real OAuth flow and
-        // Graph polling are later, separately authorized gates; this store
-        // has no caller yet). Unconditional in every environment, same
-        // rationale as the Airbnb repositories above: PostgreSQL + local
-        // configuration only, no AWS dependency. The encryption key is
-        // resolved lazily on first use (see AesGcmTokenCacheProtector), so a
-        // missing key never blocks host startup for tenants not using this
-        // feature.
+        // Airbnb Email Bridge — persistence gate + real Microsoft OAuth gate.
+        // Unconditional in every environment, same rationale as the Airbnb
+        // repositories above: PostgreSQL + local configuration only, no AWS
+        // dependency. The encryption key and ClientId are both resolved
+        // lazily on first use (see AesGcmTokenCacheProtector/
+        // MsalAirbnbEmailAuthenticator), so a missing value never blocks
+        // host startup for tenants not using this feature. Graph polling and
+        // the Airbnb email parser remain later, separately authorized gates.
         services.AddSingleton<IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.ITokenCacheProtector,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.AesGcmTokenCacheProtector>();
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailTokenCacheStore,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.PostgresAirbnbEmailTokenCacheStore>();
+        services.Configure<IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.AirbnbEmailBridgeOptions>(
+            configuration.GetSection("ExternalIntegrations:AirbnbEmailBridge"));
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailMailboxConnectionRepository,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.AirbnbEmailMailboxConnectionRepository>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailAuthenticator,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MsalAirbnbEmailAuthenticator>();
 
         // Fase 12, CP5.3A: outside Development, IWhatsAppCredentialProvider is
         // now backed by AWS Secrets Manager per-tenant secrets

@@ -50,22 +50,24 @@ public sealed class AirbnbEmailMailboxConnection : AggregateRoot<Guid>, ITenantO
     /// <summary>
     /// Records a successful interactive consent — used both for the first
     /// connection and for a later re-authorization (Fase 9 review item 22:
-    /// the resulting state transition is identical either way).
+    /// the resulting state transition is identical either way). Deliberately
+    /// does NOT touch <see cref="TokenCacheBlob"/> — call <see cref="UpdateTokenCache"/>
+    /// separately. Keeping the two apart means this method never needs to
+    /// know about encryption, and the token cache's own MSAL-driven
+    /// read/write lifecycle (via a store in the Infrastructure layer) never
+    /// needs to know about account identity.
     /// </summary>
     public void Connect(
         string homeAccountId, string? accountTenantId, string? mailboxAddress, string? grantedScopes,
-        byte[] tokenCacheBlob, DateTimeOffset connectedAtUtc)
+        DateTimeOffset connectedAtUtc)
     {
         if (string.IsNullOrWhiteSpace(homeAccountId))
             throw new ArgumentException("Home account id cannot be empty.", nameof(homeAccountId));
-        if (tokenCacheBlob is null || tokenCacheBlob.Length == 0)
-            throw new ArgumentException("Token cache blob cannot be empty.", nameof(tokenCacheBlob));
 
         HomeAccountId = homeAccountId;
         AccountTenantId = accountTenantId;
         MailboxAddress = mailboxAddress;
         GrantedScopes = grantedScopes;
-        TokenCacheBlob = tokenCacheBlob;
         AuthorizationStatus = AirbnbEmailAuthorizationStatus.Connected;
         IsEnabled = true;
         LastAuthenticatedAtUtc = connectedAtUtc;

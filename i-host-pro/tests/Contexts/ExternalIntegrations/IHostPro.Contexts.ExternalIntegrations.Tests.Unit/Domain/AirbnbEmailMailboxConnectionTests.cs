@@ -24,18 +24,26 @@ public class AirbnbEmailMailboxConnectionTests
     public void Connect_stores_the_stable_account_identity_and_marks_connected()
     {
         var connection = AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), TenantId, Now);
-        var cacheBlob = new byte[] { 1, 2, 3 };
 
-        connection.Connect("home-account-1", "entra-tenant-1", "guest@hotmail.com", "Mail.Read", cacheBlob, Now);
+        connection.Connect("home-account-1", "entra-tenant-1", "guest@hotmail.com", "Mail.Read", Now);
 
         connection.HomeAccountId.Should().Be("home-account-1");
         connection.AccountTenantId.Should().Be("entra-tenant-1");
         connection.MailboxAddress.Should().Be("guest@hotmail.com");
         connection.GrantedScopes.Should().Be("Mail.Read");
-        connection.TokenCacheBlob.Should().Equal(cacheBlob);
         connection.AuthorizationStatus.Should().Be(AirbnbEmailAuthorizationStatus.Connected);
         connection.IsEnabled.Should().BeTrue();
         connection.LastAuthenticatedAtUtc.Should().Be(Now);
+    }
+
+    [Fact]
+    public void Connect_never_touches_the_token_cache_blob()
+    {
+        var connection = AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), TenantId, Now);
+
+        connection.Connect("home-account-1", null, null, "Mail.Read", Now);
+
+        connection.TokenCacheBlob.Should().BeNull("persisting the cache is a separate concern handled by UpdateTokenCache");
     }
 
     [Fact]
@@ -43,7 +51,7 @@ public class AirbnbEmailMailboxConnectionTests
     {
         var connection = AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), TenantId, Now);
 
-        var act = () => connection.Connect("", null, null, null, [1], Now);
+        var act = () => connection.Connect("", null, null, null, Now);
 
         act.Should().Throw<ArgumentException>();
     }
@@ -52,7 +60,8 @@ public class AirbnbEmailMailboxConnectionTests
     public void UpdateTokenCache_replaces_the_blob_without_touching_the_account_identity()
     {
         var connection = AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), TenantId, Now);
-        connection.Connect("home-account-1", null, null, "Mail.Read", [1], Now);
+        connection.Connect("home-account-1", null, null, "Mail.Read", Now);
+        connection.UpdateTokenCache([1], Now);
         var refreshedAt = Now.AddMinutes(30);
 
         connection.UpdateTokenCache([9, 9, 9], refreshedAt);
@@ -66,7 +75,8 @@ public class AirbnbEmailMailboxConnectionTests
     public void MarkError_flags_the_connection_without_clearing_the_cache()
     {
         var connection = AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), TenantId, Now);
-        connection.Connect("home-account-1", null, null, "Mail.Read", [1], Now);
+        connection.Connect("home-account-1", null, null, "Mail.Read", Now);
+        connection.UpdateTokenCache([1], Now);
 
         connection.MarkError(Now.AddHours(1));
 
@@ -78,7 +88,8 @@ public class AirbnbEmailMailboxConnectionTests
     public void Disconnect_clears_the_cache_and_disables_the_connection_but_keeps_the_account_identity()
     {
         var connection = AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), TenantId, Now);
-        connection.Connect("home-account-1", "entra-tenant-1", "guest@hotmail.com", "Mail.Read", [1, 2, 3], Now);
+        connection.Connect("home-account-1", "entra-tenant-1", "guest@hotmail.com", "Mail.Read", Now);
+        connection.UpdateTokenCache([1, 2, 3], Now);
 
         connection.Disconnect(Now.AddDays(1));
 

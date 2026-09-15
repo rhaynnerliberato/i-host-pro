@@ -16,6 +16,7 @@
     Infrastructure.csproj exactly (e.g. Reservations, version pinned identically).
   -->
   <ItemGroup>
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.89.0" />
     <PackageReference Include="WolverineFx.EntityFrameworkCore" Version="6.22.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
