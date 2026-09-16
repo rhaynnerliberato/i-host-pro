@@ -23,6 +23,9 @@ internal sealed class FakeAirbnbListingTitleMappingRepository : IAirbnbListingTi
         return Task.FromResult(_mappings.FirstOrDefault(m => m.ListingTitle == normalized));
     }
 
+    public Task<IReadOnlyList<AirbnbListingTitleMapping>> ListForCurrentTenantAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AirbnbListingTitleMapping>>(_mappings.OrderBy(m => m.ListingTitle).ToList());
+
     public void Add(AirbnbListingTitleMapping aggregate) => _mappings.Add(aggregate);
 
     public void Update(AirbnbListingTitleMapping aggregate)

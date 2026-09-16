@@ -109,6 +109,41 @@ public sealed class MicrosoftGraphEmailMessageSource : IAirbnbEmailMessageSource
         }
     }
 
+    public async Task<string?> GetMessageBodyAsync(string accessToken, string messageId, CancellationToken cancellationToken)
+    {
+        var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+        var requestUri = $"{GraphBaseUrl}me/messages/{Uri.EscapeDataString(messageId)}?$select=body";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await httpClient.SendAsync(request, cancellationToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _logger.LogWarning(ex, "Airbnb Email Bridge message body fetch failed.");
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        try
+        {
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            var parsed = JsonSerializer.Deserialize<GraphMessageBodyResponse>(responseBody);
+            return parsed?.Body?.Content;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Airbnb Email Bridge message body fetch returned malformed JSON.");
+            return null;
+        }
+    }
+
     private AirbnbEmailDeltaFetchOutcome ParseSuccessResponse(string responseBody)
     {
         GraphDeltaResponse? parsed;
@@ -194,5 +229,17 @@ public sealed class MicrosoftGraphEmailMessageSource : IAirbnbEmailMessageSource
     {
         [JsonPropertyName("address")]
         public string? Address { get; set; }
+    }
+
+    private sealed class GraphMessageBodyResponse
+    {
+        [JsonPropertyName("body")]
+        public GraphItemBody? Body { get; set; }
+    }
+
+    private sealed class GraphItemBody
+    {
+        [JsonPropertyName("content")]
+        public string? Content { get; set; }
     }
 }

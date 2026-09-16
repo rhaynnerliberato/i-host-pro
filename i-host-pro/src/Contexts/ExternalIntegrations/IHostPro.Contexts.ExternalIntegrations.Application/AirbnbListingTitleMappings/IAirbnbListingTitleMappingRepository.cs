@@ -18,4 +18,7 @@ public interface IAirbnbListingTitleMappingRepository : IRepository<AirbnbListin
     /// PropertyId, do not import".
     /// </summary>
     Task<AirbnbListingTitleMapping?> GetByListingTitleAsync(string listingTitle, CancellationToken cancellationToken);
+
+    /// <summary>All of the current tenant's mappings — tenant scoping via RLS/query filter, same as every other read here.</summary>
+    Task<IReadOnlyList<AirbnbListingTitleMapping>> ListForCurrentTenantAsync(CancellationToken cancellationToken);
 }

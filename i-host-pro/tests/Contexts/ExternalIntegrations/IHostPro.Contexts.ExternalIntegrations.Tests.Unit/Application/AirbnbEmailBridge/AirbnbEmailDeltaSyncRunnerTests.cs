@@ -1,5 +1,6 @@
 using FluentAssertions;
 using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge;
+using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser;
 using IHostPro.Contexts.ExternalIntegrations.Domain;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -28,7 +29,8 @@ public class AirbnbEmailDeltaSyncRunnerTests
 
         var runner = new AirbnbEmailDeltaSyncRunner(
             connectionRepository, syncStateRepository, receiptRepository, authenticator, messageSource,
-            new FakeAirbnbEmailUnitOfWork(), TimeProvider.System, NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
+            new FakeAirbnbReservationDryRunEvaluator(), new FakeAirbnbEmailUnitOfWork(), TimeProvider.System,
+            NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
 
         return new Harness(connectionRepository, syncStateRepository, receiptRepository, authenticator, messageSource, runner);
     }
@@ -119,7 +121,8 @@ public class AirbnbEmailDeltaSyncRunnerTests
             AirbnbEmailDeltaFetchOutcome.Success(new AirbnbEmailDeltaPage([], null, "https://graph.microsoft.com/v1.0/new-cursor")));
         var runner = new AirbnbEmailDeltaSyncRunner(
             connectionRepository, syncStateRepository, receiptRepository, authenticator, messageSource,
-            new FakeAirbnbEmailUnitOfWork(), TimeProvider.System, NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
+            new FakeAirbnbReservationDryRunEvaluator(), new FakeAirbnbEmailUnitOfWork(), TimeProvider.System,
+            NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
 
         await runner.RunAsync(TenantId, MailFolderId, CancellationToken.None);
 
@@ -161,7 +164,8 @@ public class AirbnbEmailDeltaSyncRunnerTests
             AirbnbEmailDeltaFetchOutcome.Success(new AirbnbEmailDeltaPage([message], null, "https://graph.microsoft.com/v1.0/delta-1")));
         var runner = new AirbnbEmailDeltaSyncRunner(
             connectionRepository, syncStateRepository, receiptRepository, authenticator, messageSource,
-            new FakeAirbnbEmailUnitOfWork(), TimeProvider.System, NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
+            new FakeAirbnbReservationDryRunEvaluator(), new FakeAirbnbEmailUnitOfWork(), TimeProvider.System,
+            NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
 
         await runner.RunAsync(TenantId, MailFolderId, CancellationToken.None);
 
@@ -215,11 +219,141 @@ public class AirbnbEmailDeltaSyncRunnerTests
             AirbnbEmailDeltaFetchOutcome.Failure(AirbnbEmailDeltaFetchFailureReason.InvalidDeltaLink, "delta_resync_required"));
         var runner = new AirbnbEmailDeltaSyncRunner(
             connectionRepository, syncStateRepository, receiptRepository, authenticator, messageSource,
-            new FakeAirbnbEmailUnitOfWork(), TimeProvider.System, NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
+            new FakeAirbnbReservationDryRunEvaluator(), new FakeAirbnbEmailUnitOfWork(), TimeProvider.System,
+            NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
 
         await runner.RunAsync(TenantId, MailFolderId, CancellationToken.None);
 
         syncStateRepository.Current!.DeltaLink.Should().BeNull("an invalid/expired deltaLink must be discarded, never silently reused");
         syncStateRepository.Current.LastErrorCode.Should().BeNull("Reset clears the error code too - this is a controlled resync, not a failure to surface");
+    }
+
+    [Fact]
+    public async Task A_supported_airbnb_message_with_resolved_mapping_is_marked_processed_with_the_parsed_code()
+    {
+        var connection = ConnectedConnection();
+        var connectionRepository = FakeAirbnbEmailMailboxConnectionRepository.WithExisting(connection);
+        var syncStateRepository = new FakeAirbnbEmailSyncStateRepository();
+        var receiptRepository = new FakeAirbnbEmailMessageReceiptRepository();
+        var authenticator = FakeAirbnbEmailAuthenticator.Succeeding(connectionRepository);
+        var message = new AirbnbEmailMessageSummary("msg-1", null, DateTimeOffset.UtcNow, "Lembrete de reserva", "automated@airbnb.com", "automated@airbnb.com", "preview");
+        var messageSource = new FakeAirbnbEmailMessageSource(
+            AirbnbEmailDeltaFetchOutcome.Success(new AirbnbEmailDeltaPage([message], null, "https://graph.microsoft.com/v1.0/delta-1")));
+        messageSource.BodiesByMessageId["msg-1"] = "<html>fake body</html>";
+        var propertyId = Guid.NewGuid();
+        var evaluator = new FakeAirbnbReservationDryRunEvaluator(AirbnbReservationDryRunOutcome.Ready(propertyId, "TESTCODE12"));
+        var runner = new AirbnbEmailDeltaSyncRunner(
+            connectionRepository, syncStateRepository, receiptRepository, authenticator, messageSource,
+            evaluator, new FakeAirbnbEmailUnitOfWork(), TimeProvider.System, NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
+
+        await runner.RunAsync(TenantId, MailFolderId, CancellationToken.None);
+
+        messageSource.BodyFetchCalls.Should().ContainSingle().Which.Should().Be("msg-1");
+        evaluator.Calls.Should().ContainSingle();
+        var receipt = receiptRepository.Added.Should().ContainSingle().Subject;
+        receipt.ProcessingStatus.Should().Be(AirbnbEmailMessageProcessingStatus.Processed);
+        receipt.ExternalReservationId.Should().Be("TESTCODE12");
+    }
+
+    [Fact]
+    public async Task A_parsed_message_with_no_listing_mapping_is_marked_needs_review_not_failed()
+    {
+        var connection = ConnectedConnection();
+        var connectionRepository = FakeAirbnbEmailMailboxConnectionRepository.WithExisting(connection);
+        var syncStateRepository = new FakeAirbnbEmailSyncStateRepository();
+        var receiptRepository = new FakeAirbnbEmailMessageReceiptRepository();
+        var authenticator = FakeAirbnbEmailAuthenticator.Succeeding(connectionRepository);
+        var message = new AirbnbEmailMessageSummary("msg-1", null, DateTimeOffset.UtcNow, "Lembrete de reserva", "automated@airbnb.com", "automated@airbnb.com", "preview");
+        var messageSource = new FakeAirbnbEmailMessageSource(
+            AirbnbEmailDeltaFetchOutcome.Success(new AirbnbEmailDeltaPage([message], null, "https://graph.microsoft.com/v1.0/delta-1")));
+        messageSource.BodiesByMessageId["msg-1"] = "<html>fake body</html>";
+        var evaluator = new FakeAirbnbReservationDryRunEvaluator(AirbnbReservationDryRunOutcome.PropertyNotResolved("TESTCODE12"));
+        var runner = new AirbnbEmailDeltaSyncRunner(
+            connectionRepository, syncStateRepository, receiptRepository, authenticator, messageSource,
+            evaluator, new FakeAirbnbEmailUnitOfWork(), TimeProvider.System, NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
+
+        await runner.RunAsync(TenantId, MailFolderId, CancellationToken.None);
+
+        var receipt = receiptRepository.Added.Should().ContainSingle().Subject;
+        receipt.ProcessingStatus.Should().Be(AirbnbEmailMessageProcessingStatus.NeedsReview,
+            "the email itself parsed fine - a human just needs to add the listing-title mapping, this is not an error in the email");
+    }
+
+    [Fact]
+    public async Task An_unsupported_template_message_is_marked_failed_with_the_safe_reason()
+    {
+        var connection = ConnectedConnection();
+        var connectionRepository = FakeAirbnbEmailMailboxConnectionRepository.WithExisting(connection);
+        var syncStateRepository = new FakeAirbnbEmailSyncStateRepository();
+        var receiptRepository = new FakeAirbnbEmailMessageReceiptRepository();
+        var authenticator = FakeAirbnbEmailAuthenticator.Succeeding(connectionRepository);
+        var message = new AirbnbEmailMessageSummary("msg-1", null, DateTimeOffset.UtcNow, "Some other Airbnb email", "automated@airbnb.com", "automated@airbnb.com", "preview");
+        var messageSource = new FakeAirbnbEmailMessageSource(
+            AirbnbEmailDeltaFetchOutcome.Success(new AirbnbEmailDeltaPage([message], null, "https://graph.microsoft.com/v1.0/delta-1")));
+        messageSource.BodiesByMessageId["msg-1"] = "<html>fake body</html>";
+        var evaluator = new FakeAirbnbReservationDryRunEvaluator(
+            AirbnbReservationDryRunOutcome.ParseFailed(AirbnbReservationReminderParseFailureReason.UnsupportedTemplate));
+        var runner = new AirbnbEmailDeltaSyncRunner(
+            connectionRepository, syncStateRepository, receiptRepository, authenticator, messageSource,
+            evaluator, new FakeAirbnbEmailUnitOfWork(), TimeProvider.System, NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
+
+        await runner.RunAsync(TenantId, MailFolderId, CancellationToken.None);
+
+        var receipt = receiptRepository.Added.Should().ContainSingle().Subject;
+        receipt.ProcessingStatus.Should().Be(AirbnbEmailMessageProcessingStatus.Failed);
+        receipt.FailureReason.Should().Be("UnsupportedTemplate");
+    }
+
+    [Fact]
+    public async Task A_non_airbnb_sender_never_triggers_a_body_fetch_and_the_receipt_stays_pending()
+    {
+        var connection = ConnectedConnection();
+        var connectionRepository = FakeAirbnbEmailMailboxConnectionRepository.WithExisting(connection);
+        var syncStateRepository = new FakeAirbnbEmailSyncStateRepository();
+        var receiptRepository = new FakeAirbnbEmailMessageReceiptRepository();
+        var authenticator = FakeAirbnbEmailAuthenticator.Succeeding(connectionRepository);
+        var message = new AirbnbEmailMessageSummary("msg-1", null, DateTimeOffset.UtcNow, "Just a personal email", "someone@example.com", "someone@example.com", "preview");
+        var messageSource = new FakeAirbnbEmailMessageSource(
+            AirbnbEmailDeltaFetchOutcome.Success(new AirbnbEmailDeltaPage([message], null, "https://graph.microsoft.com/v1.0/delta-1")));
+        var evaluator = new FakeAirbnbReservationDryRunEvaluator();
+        var runner = new AirbnbEmailDeltaSyncRunner(
+            connectionRepository, syncStateRepository, receiptRepository, authenticator, messageSource,
+            evaluator, new FakeAirbnbEmailUnitOfWork(), TimeProvider.System, NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
+
+        await runner.RunAsync(TenantId, MailFolderId, CancellationToken.None);
+
+        messageSource.BodyFetchCalls.Should().BeEmpty("only Airbnb-domain senders are ever candidates for a full-body fetch");
+        evaluator.Calls.Should().BeEmpty();
+        var receipt = receiptRepository.Added.Should().ContainSingle().Subject;
+        receipt.ProcessingStatus.Should().Be(AirbnbEmailMessageProcessingStatus.Pending);
+    }
+
+    [Fact]
+    public async Task Polling_receipts_every_message_and_advances_the_cursor_even_when_one_message_fails_to_parse()
+    {
+        var connection = ConnectedConnection();
+        var connectionRepository = FakeAirbnbEmailMailboxConnectionRepository.WithExisting(connection);
+        var syncStateRepository = new FakeAirbnbEmailSyncStateRepository();
+        var receiptRepository = new FakeAirbnbEmailMessageReceiptRepository();
+        var authenticator = FakeAirbnbEmailAuthenticator.Succeeding(connectionRepository);
+        var messages = new[]
+        {
+            new AirbnbEmailMessageSummary("msg-1", null, DateTimeOffset.UtcNow, "Unsupported Airbnb email", "automated@airbnb.com", "automated@airbnb.com", "preview"),
+            new AirbnbEmailMessageSummary("msg-2", null, DateTimeOffset.UtcNow, "Personal email", "someone@example.com", "someone@example.com", "preview"),
+        };
+        var messageSource = new FakeAirbnbEmailMessageSource(
+            AirbnbEmailDeltaFetchOutcome.Success(new AirbnbEmailDeltaPage(messages, null, "https://graph.microsoft.com/v1.0/delta-1")));
+        messageSource.BodiesByMessageId["msg-1"] = "<html>fake body</html>";
+        var evaluator = new FakeAirbnbReservationDryRunEvaluator(
+            AirbnbReservationDryRunOutcome.ParseFailed(AirbnbReservationReminderParseFailureReason.UnsupportedTemplate));
+        var runner = new AirbnbEmailDeltaSyncRunner(
+            connectionRepository, syncStateRepository, receiptRepository, authenticator, messageSource,
+            evaluator, new FakeAirbnbEmailUnitOfWork(), TimeProvider.System, NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
+
+        await runner.RunAsync(TenantId, MailFolderId, CancellationToken.None);
+
+        receiptRepository.Added.Should().HaveCount(2, "one message's parse outcome never blocks the others from being receipted");
+        syncStateRepository.Current!.DeltaLink.Should().Be("https://graph.microsoft.com/v1.0/delta-1",
+            "an UnsupportedTemplate/ParseFailed outcome is a normal, expected receipt state - not a delta-fetch failure, so the cursor still advances");
     }
 }

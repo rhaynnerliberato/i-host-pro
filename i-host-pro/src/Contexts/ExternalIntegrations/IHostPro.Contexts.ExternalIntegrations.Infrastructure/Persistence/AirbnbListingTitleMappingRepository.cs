@@ -19,6 +19,9 @@ public sealed class AirbnbListingTitleMappingRepository : IAirbnbListingTitleMap
         return _dbContext.AirbnbListingTitleMappings.FirstOrDefaultAsync(m => m.ListingTitle == normalized, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<AirbnbListingTitleMapping>> ListForCurrentTenantAsync(CancellationToken cancellationToken) =>
+        await _dbContext.AirbnbListingTitleMappings.OrderBy(m => m.ListingTitle).ToListAsync(cancellationToken);
+
     public void Add(AirbnbListingTitleMapping aggregate) => _dbContext.AirbnbListingTitleMappings.Add(aggregate);
 
     public void Update(AirbnbListingTitleMapping aggregate) => _dbContext.AirbnbListingTitleMappings.Update(aggregate);

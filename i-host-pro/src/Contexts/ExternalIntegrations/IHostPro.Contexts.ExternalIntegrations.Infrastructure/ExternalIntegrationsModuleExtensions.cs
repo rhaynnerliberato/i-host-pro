@@ -422,6 +422,16 @@ public static class ExternalIntegrationsModuleExtensions
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailMessageSource,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MicrosoftGraphEmailMessageSource>();
 
+        // Airbnb Reservation Email Parser gate (DRY_RUN only) - the delta sync
+        // runner resolves this to turn a supported real message into DRY_RUN
+        // evidence on its own receipt row; never wired to IAirbnbReservationSyncPublisher.
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbListingTitleMappings.IAirbnbListingTitleMappingRepository,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.AirbnbListingTitleMappingRepository>();
+        services.AddSingleton<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser.IAirbnbReservationReminderParser,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbReservationParser.AirbnbReservationReminderParser>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser.IAirbnbReservationDryRunEvaluator,
+            IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser.AirbnbReservationDryRunEvaluator>();
+
         return services;
     }
 }

@@ -19,4 +19,13 @@ internal sealed class FakeAirbnbEmailMessageSource : IAirbnbEmailMessageSource
             ? _outcomes.Dequeue()
             : AirbnbEmailDeltaFetchOutcome.Success(new AirbnbEmailDeltaPage([], null, "https://graph.microsoft.com/v1.0/unused-delta")));
     }
+
+    public Dictionary<string, string?> BodiesByMessageId { get; } = [];
+    public List<string> BodyFetchCalls { get; } = [];
+
+    public Task<string?> GetMessageBodyAsync(string accessToken, string messageId, CancellationToken cancellationToken)
+    {
+        BodyFetchCalls.Add(messageId);
+        return Task.FromResult(BodiesByMessageId.GetValueOrDefault(messageId));
+    }
 }

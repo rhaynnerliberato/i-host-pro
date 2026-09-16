@@ -23,8 +23,8 @@ public sealed class AirbnbReservationDryRunEvaluator : IAirbnbReservationDryRunE
 
         var mapping = await _listingTitleMappingRepository.GetByListingTitleAsync(parseResult.ListingName!, cancellationToken);
         if (mapping is null)
-            return AirbnbReservationDryRunOutcome.PropertyNotResolved();
+            return AirbnbReservationDryRunOutcome.PropertyNotResolved(parseResult.ExternalReservationId!);
 
-        return AirbnbReservationDryRunOutcome.Ready(mapping.PropertyId);
+        return AirbnbReservationDryRunOutcome.Ready(mapping.PropertyId, parseResult.ExternalReservationId!);
     }
 }

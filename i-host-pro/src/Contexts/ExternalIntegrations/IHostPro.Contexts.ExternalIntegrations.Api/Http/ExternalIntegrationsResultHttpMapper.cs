@@ -1,5 +1,6 @@
 using IHostPro.BuildingBlocks.Domain;
 using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge;
+using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbListingTitleMappings;
 using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppIntegrations;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -31,6 +32,7 @@ public static class ExternalIntegrationsResultHttpMapper
             AirbnbEmailBridgeErrorCodes.ConsentDenied => (StatusCodes.Status409Conflict, AirbnbEmailBridgeErrorCodes.ConsentDenied),
             AirbnbEmailBridgeErrorCodes.AcquisitionFailed => (StatusCodes.Status502BadGateway, AirbnbEmailBridgeErrorCodes.AcquisitionFailed),
             AirbnbEmailBridgeErrorCodes.AccountIdentityUnavailable => (StatusCodes.Status502BadGateway, AirbnbEmailBridgeErrorCodes.AccountIdentityUnavailable),
+            AirbnbListingTitleMappingErrorCodes.DuplicateListingTitle => (StatusCodes.Status409Conflict, AirbnbListingTitleMappingErrorCodes.DuplicateListingTitle),
             _ => (StatusCodes.Status400BadRequest, "validation_error"),
         };
 

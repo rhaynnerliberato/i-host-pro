@@ -3,6 +3,7 @@ using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.ExternalIntegrations.Application;
+using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbListingTitleMappings;
 using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppIntegrations;
 using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppTemplateMappings;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
@@ -94,6 +95,20 @@ public static class ExternalIntegrationsCommandDispatchExtensions
         services.AddScoped<
             IPipelineBehavior<GetWhatsAppTemplateMappingQuery, Result<WhatsAppTemplateMappingResult>>,
             TenantTransactionBehavior<GetWhatsAppTemplateMappingQuery, Result<WhatsAppTemplateMappingResult>, ExternalIntegrationsDbContext>>();
+
+        // Airbnb Reservation Email Parser gate - Mapping + DRY_RUN
+        // Orchestration - same TenantTransactionBehavior wiring as every
+        // other command/query above (required for the RLS-protected
+        // AirbnbListingTitleMappingRepository to have app.tenant_id set).
+        // No audit behavior yet - not requested for this gate, unlike the
+        // Airbnb Email Bridge Connect/Disconnect commands' own (Fase 12 CP4
+        // LGPD-driven) audit trail.
+        services.AddScoped<
+            IPipelineBehavior<CreateAirbnbListingTitleMappingCommand, Result<AirbnbListingTitleMappingResult>>,
+            TenantTransactionBehavior<CreateAirbnbListingTitleMappingCommand, Result<AirbnbListingTitleMappingResult>, ExternalIntegrationsDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<ListAirbnbListingTitleMappingsQuery, Result<IReadOnlyList<AirbnbListingTitleMappingResult>>>,
+            TenantTransactionBehavior<ListAirbnbListingTitleMappingsQuery, Result<IReadOnlyList<AirbnbListingTitleMappingResult>>, ExternalIntegrationsDbContext>>();
 
         return services;
     }

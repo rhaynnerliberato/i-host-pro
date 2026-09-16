@@ -52,5 +52,6 @@ public class AirbnbReservationDryRunEvaluatorTests
 
         outcome.WouldImport.Should().BeTrue();
         outcome.ResolvedPropertyId.Should().Be(propertyId);
+        outcome.ExternalReservationId.Should().Be("TESTCODE12");
     }
 }

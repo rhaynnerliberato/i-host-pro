@@ -1,3 +1,4 @@
+using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser;
 using IHostPro.Contexts.ExternalIntegrations.Domain;
 using Microsoft.Extensions.Logging;
 
@@ -25,11 +26,16 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
     /// <summary>Hard safety cap — a mailbox with more pages than this in one run stops early and resumes on the next scheduled tick, rather than looping indefinitely.</summary>
     private const int MaxPagesPerRun = 25;
 
+    /// <summary>Parser version recorded on every receipt this runner marks Processed/NeedsReview/Failed via the DRY_RUN pipeline — kept here (not read from the parser type) since only the Infrastructure-layer parser implementation may reference it directly, and this runner only depends on the Application-layer evaluator abstraction.</summary>
+    private const string ReservationParserVersion = "airbnb-reservation-reminder-v1";
+    private const string ReservationDetectedEventType = "RESERVATION_REMINDER";
+
     private readonly IAirbnbEmailMailboxConnectionRepository _connectionRepository;
     private readonly IAirbnbEmailSyncStateRepository _syncStateRepository;
     private readonly IAirbnbEmailMessageReceiptRepository _receiptRepository;
     private readonly IAirbnbEmailAuthenticator _authenticator;
     private readonly IAirbnbEmailMessageSource _messageSource;
+    private readonly IAirbnbReservationDryRunEvaluator _dryRunEvaluator;
     private readonly IAirbnbEmailUnitOfWork _unitOfWork;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<AirbnbEmailDeltaSyncRunner> _logger;
@@ -40,6 +46,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
         IAirbnbEmailMessageReceiptRepository receiptRepository,
         IAirbnbEmailAuthenticator authenticator,
         IAirbnbEmailMessageSource messageSource,
+        IAirbnbReservationDryRunEvaluator dryRunEvaluator,
         IAirbnbEmailUnitOfWork unitOfWork,
         TimeProvider timeProvider,
         ILogger<AirbnbEmailDeltaSyncRunner> logger)
@@ -49,6 +56,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
         _receiptRepository = receiptRepository;
         _authenticator = authenticator;
         _messageSource = messageSource;
+        _dryRunEvaluator = dryRunEvaluator;
         _unitOfWork = unitOfWork;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -139,6 +147,19 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
 
             var deltaPage = fetchOutcome.Page!;
 
+            // Full body is fetched OUTSIDE the transaction below (an external
+            // HTTP call has no place holding a DB transaction open), and only
+            // for messages whose sender domain already looks like Airbnb's -
+            // never for the rest of the tenant's mail, and never widening the
+            // delta page's own $select (Fase 9 review - avoid overfetching).
+            var candidateBodies = new Dictionary<string, string?>();
+            foreach (var message in deltaPage.Messages)
+            {
+                var domain = ExtractDomain(message.FromAddress) ?? ExtractDomain(message.SenderAddress);
+                if (domain is not null && domain.Contains("airbnb", StringComparison.OrdinalIgnoreCase))
+                    candidateBodies[message.MessageId] = await _messageSource.GetMessageBodyAsync(authOutcome.AccessToken!, message.MessageId, cancellationToken);
+            }
+
             await _unitOfWork.ExecuteAsync(async () =>
             {
                 foreach (var message in deltaPage.Messages)
@@ -146,9 +167,17 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
                     if (await _receiptRepository.ExistsForCurrentTenantAsync(message.MessageId, cancellationToken))
                         continue;
 
-                    _receiptRepository.Add(AirbnbEmailMessageReceipt.Create(
+                    var receipt = AirbnbEmailMessageReceipt.Create(
                         Guid.NewGuid(), tenantId, message.MessageId, message.InternetMessageId,
-                        message.ReceivedAtUtc, _timeProvider.GetUtcNow()));
+                        message.ReceivedAtUtc, _timeProvider.GetUtcNow());
+                    _receiptRepository.Add(receipt);
+
+                    if (candidateBodies.TryGetValue(message.MessageId, out var body) && body is not null)
+                    {
+                        var dryRunOutcome = await _dryRunEvaluator.EvaluateAsync(
+                            message.Subject ?? string.Empty, body, message.ReceivedAtUtc, cancellationToken);
+                        ApplyDryRunOutcome(receipt, dryRunOutcome, _timeProvider.GetUtcNow());
+                    }
                 }
 
                 if (deltaPage.DeltaLink is not null)
@@ -173,5 +202,47 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
         _logger.LogWarning(
             "Airbnb Email Bridge delta sync for tenant {TenantId} exceeded {MaxPages} pages in one run - stopping early, will resume next cycle.",
             tenantId, MaxPagesPerRun);
+    }
+
+    /// <summary>
+    /// Maps one DRY_RUN evaluation onto the receipt's existing, already-tested
+    /// processing lifecycle (Fase 9 review — Reservation Email Parser
+    /// gate) — deliberately reuses the receipt's current 4-state
+    /// <see cref="AirbnbEmailMessageProcessingStatus"/> rather than inventing
+    /// new domain states for concepts (UNSUPPORTED_TEMPLATE, MAPPING_NOT_FOUND)
+    /// that the existing Failed/NeedsReview states, combined with the
+    /// receipt's own free-text diagnostic fields, already capture safely:
+    /// <list type="bullet">
+    /// <item>parse failure (any reason, including an unrecognized template) → Failed, with the safe failure-reason code as the diagnostic message</item>
+    /// <item>parsed successfully but the listing title has no mapping yet → NeedsReview (a human needs to add the mapping - not an error in the email itself)</item>
+    /// <item>parsed successfully and the listing resolved to a Property → Processed, carrying the parsed confirmation code — this is DRY_RUN evidence only, no publisher/mutation follows</item>
+    /// </list>
+    /// </summary>
+    private static void ApplyDryRunOutcome(AirbnbEmailMessageReceipt receipt, AirbnbReservationDryRunOutcome outcome, DateTimeOffset processedAtUtc)
+    {
+        if (outcome.WouldImport)
+        {
+            receipt.MarkProcessed(ReservationDetectedEventType, outcome.ExternalReservationId, ReservationParserVersion, processedAtUtc);
+        }
+        else if (outcome.ParseFailureReason is { } failureReason)
+        {
+            receipt.MarkFailed(failureReason.ToString(), ReservationParserVersion, processedAtUtc);
+        }
+        else
+        {
+            // Parsed successfully (ExternalReservationId/dates/guest count all
+            // present) but PropertyResolved=false - the email itself is fine,
+            // a tenant just has not mapped this listing title to a Property
+            // yet. Never invented/guessed - see AirbnbListingTitleMapping.
+            receipt.MarkNeedsReview(ReservationDetectedEventType, ReservationParserVersion, processedAtUtc);
+        }
+    }
+
+    private static string? ExtractDomain(string? emailAddress)
+    {
+        if (string.IsNullOrWhiteSpace(emailAddress))
+            return null;
+        var atIndex = emailAddress.LastIndexOf('@');
+        return atIndex >= 0 && atIndex < emailAddress.Length - 1 ? emailAddress[(atIndex + 1)..] : null;
     }
 }

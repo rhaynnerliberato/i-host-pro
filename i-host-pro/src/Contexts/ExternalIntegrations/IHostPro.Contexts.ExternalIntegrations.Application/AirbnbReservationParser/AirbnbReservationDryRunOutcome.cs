@@ -17,9 +17,20 @@ public sealed record AirbnbReservationDryRunOutcome
     public Guid? ResolvedPropertyId { get; }
     public AirbnbReservationReminderParseFailureReason? ParseFailureReason { get; }
 
+    /// <summary>
+    /// The parsed confirmation code, present only when parsing succeeded
+    /// (regardless of whether the listing resolved to a Property). This is an
+    /// operational identifier meant for storage on the message receipt row -
+    /// the same value <c>AirbnbEmailMessageReceipt.ExternalReservationId</c>
+    /// already exists to hold - not the guest/body PII this gate's DRY_RUN
+    /// evidence must otherwise never expose in logs/reports.
+    /// </summary>
+    public string? ExternalReservationId { get; }
+
     private AirbnbReservationDryRunOutcome(
         bool wouldImport, bool externalReservationIdPresent, bool datesParsed, bool guestCountParsed,
-        bool propertyResolved, Guid? resolvedPropertyId, AirbnbReservationReminderParseFailureReason? parseFailureReason)
+        bool propertyResolved, Guid? resolvedPropertyId, AirbnbReservationReminderParseFailureReason? parseFailureReason,
+        string? externalReservationId)
     {
         WouldImport = wouldImport;
         ExternalReservationIdPresent = externalReservationIdPresent;
@@ -28,14 +39,15 @@ public sealed record AirbnbReservationDryRunOutcome
         PropertyResolved = propertyResolved;
         ResolvedPropertyId = resolvedPropertyId;
         ParseFailureReason = parseFailureReason;
+        ExternalReservationId = externalReservationId;
     }
 
     public static AirbnbReservationDryRunOutcome ParseFailed(AirbnbReservationReminderParseFailureReason reason) =>
-        new(false, false, false, false, false, null, reason);
+        new(false, false, false, false, false, null, reason, null);
 
-    public static AirbnbReservationDryRunOutcome PropertyNotResolved() =>
-        new(false, true, true, true, false, null, null);
+    public static AirbnbReservationDryRunOutcome PropertyNotResolved(string externalReservationId) =>
+        new(false, true, true, true, false, null, null, externalReservationId);
 
-    public static AirbnbReservationDryRunOutcome Ready(Guid resolvedPropertyId) =>
-        new(true, true, true, true, true, resolvedPropertyId, null);
+    public static AirbnbReservationDryRunOutcome Ready(Guid resolvedPropertyId, string externalReservationId) =>
+        new(true, true, true, true, true, resolvedPropertyId, null, externalReservationId);
 }
