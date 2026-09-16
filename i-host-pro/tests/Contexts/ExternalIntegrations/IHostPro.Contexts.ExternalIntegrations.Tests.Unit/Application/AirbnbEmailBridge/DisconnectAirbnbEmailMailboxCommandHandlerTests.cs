@@ -13,7 +13,8 @@ public class DisconnectAirbnbEmailMailboxCommandHandlerTests
     public async Task Returns_not_found_when_the_tenant_has_no_connection()
     {
         var repository = FakeAirbnbEmailMailboxConnectionRepository.WithExisting(null);
-        var handler = new DisconnectAirbnbEmailMailboxCommandHandler(repository, new FakeAirbnbEmailTokenCacheStore(repository));
+        var handler = new DisconnectAirbnbEmailMailboxCommandHandler(
+            repository, new FakeAirbnbEmailTokenCacheStore(repository), new FakeAirbnbEmailUnitOfWork());
 
         var result = await handler.Handle(new DisconnectAirbnbEmailMailboxCommand(TenantId, ActorUserId), CancellationToken.None);
 
@@ -28,7 +29,7 @@ public class DisconnectAirbnbEmailMailboxCommandHandlerTests
         connection.Connect("home-account-1", null, "guest@hotmail.com", "Mail.Read", DateTimeOffset.UtcNow);
         var repository = FakeAirbnbEmailMailboxConnectionRepository.WithExisting(connection);
         var tokenCacheStore = new FakeAirbnbEmailTokenCacheStore(repository);
-        var handler = new DisconnectAirbnbEmailMailboxCommandHandler(repository, tokenCacheStore);
+        var handler = new DisconnectAirbnbEmailMailboxCommandHandler(repository, tokenCacheStore, new FakeAirbnbEmailUnitOfWork());
 
         var result = await handler.Handle(new DisconnectAirbnbEmailMailboxCommand(TenantId, ActorUserId), CancellationToken.None);
 

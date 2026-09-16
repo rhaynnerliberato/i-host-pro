@@ -17,12 +17,14 @@ public sealed class ConnectAirbnbEmailMailboxCommandHandler
 {
     private readonly IAirbnbEmailAuthenticator _authenticator;
     private readonly IAirbnbEmailMailboxConnectionRepository _repository;
+    private readonly IAirbnbEmailUnitOfWork _unitOfWork;
 
     public ConnectAirbnbEmailMailboxCommandHandler(
-        IAirbnbEmailAuthenticator authenticator, IAirbnbEmailMailboxConnectionRepository repository)
+        IAirbnbEmailAuthenticator authenticator, IAirbnbEmailMailboxConnectionRepository repository, IAirbnbEmailUnitOfWork unitOfWork)
     {
         _authenticator = authenticator;
         _repository = repository;
+        _unitOfWork = unitOfWork;
     }
 
     public async ValueTask<Result<AirbnbEmailMailboxConnectionResult>> Handle(
@@ -33,7 +35,11 @@ public sealed class ConnectAirbnbEmailMailboxCommandHandler
         if (!outcome.IsSuccess)
             return Result.Failure<AirbnbEmailMailboxConnectionResult>(ToError(outcome.FailureReason!.Value));
 
-        var connection = await _repository.GetForCurrentTenantAsync(cancellationToken)
+        // Its own tenant-scoped transaction (no ambient one wraps this
+        // command - see the DI registration's own remarks): without it, RLS
+        // would hide the row this authenticator call just wrote.
+        var connection = await _unitOfWork.ExecuteAsync(
+            () => _repository.GetForCurrentTenantAsync(cancellationToken), cancellationToken)
             ?? throw new InvalidOperationException(
                 $"Airbnb Email Bridge connection row for tenant {command.TenantId:D} disappeared after a successful authentication.");
 

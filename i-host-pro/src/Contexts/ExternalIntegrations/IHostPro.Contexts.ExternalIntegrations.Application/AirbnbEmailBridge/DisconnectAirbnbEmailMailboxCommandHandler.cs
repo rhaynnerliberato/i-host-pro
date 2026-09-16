@@ -16,18 +16,24 @@ public sealed class DisconnectAirbnbEmailMailboxCommandHandler
 
     private readonly IAirbnbEmailMailboxConnectionRepository _repository;
     private readonly IAirbnbEmailTokenCacheStore _tokenCacheStore;
+    private readonly IAirbnbEmailUnitOfWork _unitOfWork;
 
     public DisconnectAirbnbEmailMailboxCommandHandler(
-        IAirbnbEmailMailboxConnectionRepository repository, IAirbnbEmailTokenCacheStore tokenCacheStore)
+        IAirbnbEmailMailboxConnectionRepository repository, IAirbnbEmailTokenCacheStore tokenCacheStore, IAirbnbEmailUnitOfWork unitOfWork)
     {
         _repository = repository;
         _tokenCacheStore = tokenCacheStore;
+        _unitOfWork = unitOfWork;
     }
 
     public async ValueTask<Result<AirbnbEmailMailboxConnectionResult>> Handle(
         DisconnectAirbnbEmailMailboxCommand command, CancellationToken cancellationToken)
     {
-        var connection = await _repository.GetForCurrentTenantAsync(cancellationToken);
+        // Its own tenant-scoped transaction (no ambient one wraps this
+        // command - see the DI registration's own remarks): without it, RLS
+        // would hide a genuinely existing connection row.
+        var connection = await _unitOfWork.ExecuteAsync(
+            () => _repository.GetForCurrentTenantAsync(cancellationToken), cancellationToken);
         if (connection is null)
             return Result.Failure<AirbnbEmailMailboxConnectionResult>(NotFoundError);
 

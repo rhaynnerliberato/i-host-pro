@@ -13,7 +13,8 @@ public class ConnectAirbnbEmailMailboxCommandHandlerTests
     public async Task Successful_authentication_returns_the_connected_state()
     {
         var repository = FakeAirbnbEmailMailboxConnectionRepository.WithExisting(null);
-        var handler = new ConnectAirbnbEmailMailboxCommandHandler(FakeAirbnbEmailAuthenticator.Succeeding(repository), repository);
+        var handler = new ConnectAirbnbEmailMailboxCommandHandler(
+            FakeAirbnbEmailAuthenticator.Succeeding(repository), repository, new FakeAirbnbEmailUnitOfWork());
 
         var result = await handler.Handle(new ConnectAirbnbEmailMailboxCommand(TenantId, ActorUserId), CancellationToken.None);
 
@@ -33,7 +34,8 @@ public class ConnectAirbnbEmailMailboxCommandHandlerTests
         AirbnbEmailAuthenticationFailureReason reason, string expectedErrorCode)
     {
         var repository = FakeAirbnbEmailMailboxConnectionRepository.WithExisting(null);
-        var handler = new ConnectAirbnbEmailMailboxCommandHandler(FakeAirbnbEmailAuthenticator.Failing(repository, reason), repository);
+        var handler = new ConnectAirbnbEmailMailboxCommandHandler(
+            FakeAirbnbEmailAuthenticator.Failing(repository, reason), repository, new FakeAirbnbEmailUnitOfWork());
 
         var result = await handler.Handle(new ConnectAirbnbEmailMailboxCommand(TenantId, ActorUserId), CancellationToken.None);
 
@@ -47,7 +49,8 @@ public class ConnectAirbnbEmailMailboxCommandHandlerTests
         var repository = FakeAirbnbEmailMailboxConnectionRepository.WithExisting(
             AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), TenantId, DateTimeOffset.UtcNow));
         var handler = new ConnectAirbnbEmailMailboxCommandHandler(
-            FakeAirbnbEmailAuthenticator.Failing(repository, AirbnbEmailAuthenticationFailureReason.UserCancelled), repository);
+            FakeAirbnbEmailAuthenticator.Failing(repository, AirbnbEmailAuthenticationFailureReason.UserCancelled), repository,
+            new FakeAirbnbEmailUnitOfWork());
 
         var result = await handler.Handle(new ConnectAirbnbEmailMailboxCommand(TenantId, ActorUserId), CancellationToken.None);
 

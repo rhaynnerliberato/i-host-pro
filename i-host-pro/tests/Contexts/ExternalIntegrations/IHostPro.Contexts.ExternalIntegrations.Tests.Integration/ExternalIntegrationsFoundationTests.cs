@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using FluentAssertions;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
+using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge;
 using IHostPro.Contexts.ExternalIntegrations.Domain;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
@@ -982,6 +983,108 @@ public class ExternalIntegrationsFoundationTests : IClassFixture<ExternalIntegra
 
         await act.Should().ThrowAsync<TenantContextNotResolvedException>(
             "an unresolved tenant context must fail loudly as an infrastructure error, never silently look like a disconnected mailbox");
+    }
+
+    /// <summary>
+    /// A minimal <see cref="IAirbnbEmailAuthenticator"/> stand-in for the
+    /// Connect/Disconnect handler regression tests below: on success it
+    /// mirrors what the real MsalAirbnbEmailAuthenticator does (opens its own
+    /// tenant-scoped transaction and calls <see cref="AirbnbEmailMailboxConnection.Connect"/>)
+    /// against a REAL, already-seeded connection row - proving the handler's
+    /// own subsequent read (in a separate transaction) does not nest inside
+    /// this one.
+    /// </summary>
+    private sealed class SucceedingAirbnbEmailAuthenticatorStub(
+        IAirbnbEmailMailboxConnectionRepository repository, IAirbnbEmailUnitOfWork unitOfWork) : IAirbnbEmailAuthenticator
+    {
+        public async Task<AirbnbEmailAuthenticationOutcome> ConnectInteractiveAsync(Guid tenantId, CancellationToken cancellationToken)
+        {
+            await unitOfWork.ExecuteAsync(async () =>
+            {
+                var connection = await repository.GetForCurrentTenantAsync(cancellationToken)
+                    ?? throw new InvalidOperationException("Connection row must be seeded before calling this stub.");
+                connection.Connect("home-account-1", "entra-tenant-1", "guest@hotmail.com", "Mail.Read", DateTimeOffset.UtcNow);
+                return true;
+            }, cancellationToken);
+
+            return AirbnbEmailAuthenticationOutcome.Success("home-account-1", "entra-tenant-1", "guest@hotmail.com", "Mail.Read");
+        }
+
+        public Task<AirbnbEmailSilentAcquisitionOutcome> AcquireTokenSilentAsync(Guid tenantId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException("Not exercised by these tests.");
+    }
+
+    /// <summary>
+    /// Airbnb Email Bridge Audit Behavior DI Hardening gate: proves the fix
+    /// for the latent RLS bug found while auditing that gate -
+    /// ConnectAirbnbEmailMailboxCommandHandler's post-authentication read now
+    /// runs inside its own IAirbnbEmailUnitOfWork transaction, so it finds
+    /// the real, RLS-protected row the stub authenticator's OWN (separate,
+    /// already-committed) transaction just wrote - and does not throw
+    /// NestedUnitOfWorkException doing so.
+    /// </summary>
+    [Fact]
+    public async Task ConnectAirbnbEmailMailboxCommandHandler_reads_the_connection_after_authentication_under_real_RLS_without_nesting()
+    {
+        var (tenantId, _) = await SeedMailboxConnectionAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        var repository = new AirbnbEmailMailboxConnectionRepository(dbContext);
+        var unitOfWork = new AirbnbEmailUnitOfWork(dbContext, tenantContext);
+        var authenticator = new SucceedingAirbnbEmailAuthenticatorStub(repository, unitOfWork);
+        var handler = new ConnectAirbnbEmailMailboxCommandHandler(authenticator, repository, unitOfWork);
+
+        var act = async () => await handler.Handle(new ConnectAirbnbEmailMailboxCommand(tenantId, Guid.NewGuid()), CancellationToken.None);
+
+        var outcome = await act.Should().NotThrowAsync(
+            "the handler's own post-auth read must open its own transaction, never nest inside the authenticator's already-closed one");
+        outcome.Subject.IsSuccess.Should().BeTrue();
+        outcome.Subject.Value.TenantId.Should().Be(tenantId);
+        outcome.Subject.Value.AuthorizationStatus.Should().Be(AirbnbEmailAuthorizationStatus.Connected);
+    }
+
+    /// <summary>Companion regression test for Disconnect - same nesting/RLS concern, opposite direction (clearing an existing connection).</summary>
+    [Fact]
+    public async Task DisconnectAirbnbEmailMailboxCommandHandler_reads_and_clears_the_connection_under_real_RLS_without_nesting()
+    {
+        var (tenantId, connectionId) = await SeedMailboxConnectionAsync();
+
+        var seedTenantContext = new TenantContext();
+        seedTenantContext.SetTenant(tenantId);
+        await using (var seedDbContext = CreateDbContext(_migratorConnectionString, seedTenantContext))
+        await using (var seedTransaction = await seedDbContext.Database.BeginTransactionAsync())
+        {
+            await SetTenantAsync(seedDbContext, tenantId);
+            var connection = await seedDbContext.AirbnbEmailMailboxConnections.SingleAsync(c => c.Id == connectionId);
+            connection.Connect("home-account-1", "entra-tenant-1", "guest@hotmail.com", "Mail.Read", DateTimeOffset.UtcNow);
+            await seedDbContext.SaveChangesAsync();
+            await seedTransaction.CommitAsync();
+        }
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        var repository = new AirbnbEmailMailboxConnectionRepository(dbContext);
+        var unitOfWork = new AirbnbEmailUnitOfWork(dbContext, tenantContext);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ExternalIntegrations:AirbnbEmailBridge:TokenCacheEncryptionKeyBase64"] =
+                    Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
+            })
+            .Build();
+        var protector = new AesGcmTokenCacheProtector(configuration);
+        var tokenCacheStore = new PostgresAirbnbEmailTokenCacheStore(dbContext, unitOfWork, protector, TimeProvider.System);
+        var handler = new DisconnectAirbnbEmailMailboxCommandHandler(repository, tokenCacheStore, unitOfWork);
+
+        var act = async () => await handler.Handle(new DisconnectAirbnbEmailMailboxCommand(tenantId, Guid.NewGuid()), CancellationToken.None);
+
+        var outcome = await act.Should().NotThrowAsync(
+            "the handler's own pre-clear read must open its own transaction, never nest inside another one");
+        outcome.Subject.IsSuccess.Should().BeTrue();
+        outcome.Subject.Value.AuthorizationStatus.Should().Be(AirbnbEmailAuthorizationStatus.Disconnected);
     }
 
     private async Task<(Guid TenantId, Guid ConnectionId)> SeedMailboxConnectionAsync()

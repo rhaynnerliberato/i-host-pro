@@ -111,13 +111,30 @@ public static class ExternalIntegrationsCommandDispatchExtensions
             IPipelineBehavior<ListAirbnbListingTitleMappingsQuery, Result<IReadOnlyList<AirbnbListingTitleMappingResult>>>,
             TenantTransactionBehavior<ListAirbnbListingTitleMappingsQuery, Result<IReadOnlyList<AirbnbListingTitleMappingResult>>, ExternalIntegrationsDbContext>>();
 
+        // Airbnb Email Bridge Audit Behavior DI Hardening gate - registers
+        // the pre-existing AuditConnectAirbnbEmailMailboxBehavior/
+        // AuditDisconnectAirbnbEmailMailboxBehavior classes, which existed
+        // fully written but were never wired here. AUDIT ONLY - deliberately
+        // NOT the audit-outermost/TenantTransactionBehavior pair used
+        // everywhere else in this file: MsalAirbnbEmailAuthenticator (the
+        // RLS/tenant-context gate) now owns its own tenant-scoped transaction
+        // for Connect, and ConnectAirbnbEmailMailboxCommandHandler/
+        // DisconnectAirbnbEmailMailboxCommandHandler fix their own remaining
+        // reads the same way (see IAirbnbEmailUnitOfWork.ExecuteAsync calls
+        // in those handlers) - wrapping either command in an ADDITIONAL
+        // ambient TenantTransactionBehavior would nest a second transaction
+        // on the same DbContext and throw NestedUnitOfWorkException.
+        services.AddScoped<
+            IPipelineBehavior<ConnectAirbnbEmailMailboxCommand, Result<AirbnbEmailMailboxConnectionResult>>,
+            AuditConnectAirbnbEmailMailboxBehavior>();
+        services.AddScoped<
+            IPipelineBehavior<DisconnectAirbnbEmailMailboxCommand, Result<AirbnbEmailMailboxConnectionResult>>,
+            AuditDisconnectAirbnbEmailMailboxBehavior>();
+
         // Automatic Publication Design + Safety gate - Enable/Disable/Get
         // commands for the tenant opt-in flag, same audit-outermost/
         // TenantTransactionBehavior wiring as WhatsAppIntegration's own
-        // Enable/Disable above (unlike the pre-existing, still-unregistered
-        // AuditConnectAirbnbEmailMailboxBehavior/AuditDisconnectAirbnbEmailMailboxBehavior
-        // gap - flagged separately, not fixed here, since it is unrelated to
-        // this gate's own scope).
+        // Enable/Disable above.
         services.AddScoped<
             IPipelineBehavior<EnableAirbnbAutoPublicationCommand, Result<AirbnbAutoPublicationStatusResult>>,
             AuditEnableAirbnbAutoPublicationBehavior>();
