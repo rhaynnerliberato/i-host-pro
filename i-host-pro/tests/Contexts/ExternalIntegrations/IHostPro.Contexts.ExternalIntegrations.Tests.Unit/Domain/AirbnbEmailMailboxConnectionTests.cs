@@ -100,4 +100,53 @@ public class AirbnbEmailMailboxConnectionTests
         connection.HomeAccountId.Should().Be("home-account-1", "historical account identity is retained for a future reconnect");
         connection.MailboxAddress.Should().Be("guest@hotmail.com");
     }
+
+    [Fact]
+    public void New_connection_defaults_to_auto_publish_disabled_with_no_cutoff()
+    {
+        var connection = AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), TenantId, Now);
+
+        connection.AutoPublishEnabled.Should().BeFalse();
+        connection.AutoPublishNotBeforeUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void EnableAutoPublish_sets_the_flag_and_persists_the_exact_cutoff_given()
+    {
+        var connection = AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), TenantId, Now);
+        var cutoff = Now.AddMinutes(5);
+
+        connection.EnableAutoPublish(cutoff, Now);
+
+        connection.AutoPublishEnabled.Should().BeTrue();
+        connection.AutoPublishNotBeforeUtc.Should().Be(cutoff);
+        connection.UpdatedAtUtc.Should().Be(Now);
+    }
+
+    [Fact]
+    public void DisableAutoPublish_clears_both_the_flag_and_the_cutoff()
+    {
+        var connection = AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), TenantId, Now);
+        connection.EnableAutoPublish(Now, Now);
+
+        connection.DisableAutoPublish(Now.AddDays(1));
+
+        connection.AutoPublishEnabled.Should().BeFalse();
+        connection.AutoPublishNotBeforeUtc.Should().BeNull("a later re-enable must always require a fresh, explicit cutoff - never silently reuse a stale one");
+    }
+
+    [Fact]
+    public void DisableAutoPublish_never_touches_the_mailbox_connection_itself()
+    {
+        var connection = AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), TenantId, Now);
+        connection.Connect("home-account-1", null, "guest@hotmail.com", "Mail.Read", Now);
+        connection.UpdateTokenCache([1, 2, 3], Now);
+        connection.EnableAutoPublish(Now, Now);
+
+        connection.DisableAutoPublish(Now.AddDays(1));
+
+        connection.IsEnabled.Should().BeTrue("disabling auto-publication must never disconnect the mailbox itself");
+        connection.AuthorizationStatus.Should().Be(AirbnbEmailAuthorizationStatus.Connected);
+        connection.TokenCacheBlob.Should().NotBeNull();
+    }
 }

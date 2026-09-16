@@ -70,6 +70,67 @@ public sealed class AirbnbEmailBridgeController : ControllerBase
             : ExternalIntegrationsResultHttpMapper.ToActionResult(result.Error);
     }
 
+    [HttpPost("enable-auto-publication")]
+    [Authorize(Policy = IdentityPermissionCodes.IntegrationsManage)]
+    [ProducesResponseType(typeof(AirbnbAutoPublicationStatusResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> EnableAutoPublication([FromBody] EnableAirbnbAutoPublicationRequest request, CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        if (!ExternalIntegrationsIdentityReader.TryRead(User, out var identity))
+            return Unauthorized();
+
+        var result = await _sender.Send(
+            new EnableAirbnbAutoPublicationCommand(identity.TenantId, identity.UserId, request.NotBeforeUtc), cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(ToStatusResponse(result.Value))
+            : ExternalIntegrationsResultHttpMapper.ToActionResult(result.Error);
+    }
+
+    [HttpPost("disable-auto-publication")]
+    [Authorize(Policy = IdentityPermissionCodes.IntegrationsManage)]
+    [ProducesResponseType(typeof(AirbnbAutoPublicationStatusResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DisableAutoPublication(CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        if (!ExternalIntegrationsIdentityReader.TryRead(User, out var identity))
+            return Unauthorized();
+
+        var result = await _sender.Send(new DisableAirbnbAutoPublicationCommand(identity.TenantId, identity.UserId), cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(ToStatusResponse(result.Value))
+            : ExternalIntegrationsResultHttpMapper.ToActionResult(result.Error);
+    }
+
+    [HttpGet("auto-publication")]
+    [Authorize(Policy = IdentityPermissionCodes.IntegrationsManage)]
+    [ProducesResponseType(typeof(AirbnbAutoPublicationStatusResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetAutoPublicationStatus(CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        if (!ExternalIntegrationsIdentityReader.TryRead(User, out var identity))
+            return Unauthorized();
+
+        var result = await _sender.Send(new GetAirbnbAutoPublicationStatusQuery(identity.TenantId), cancellationToken);
+
+        return Ok(ToStatusResponse(result.Value));
+    }
+
     private void SetNoStoreHeaders() => Response.Headers.CacheControl = "no-store";
 
     private static AirbnbEmailBridgeResponse ToResponse(AirbnbEmailMailboxConnectionResult result) => new(
@@ -80,4 +141,7 @@ public sealed class AirbnbEmailBridgeController : ControllerBase
         result.LastAuthenticatedAtUtc,
         result.CreatedAtUtc,
         result.UpdatedAtUtc);
+
+    private static AirbnbAutoPublicationStatusResponse ToStatusResponse(AirbnbAutoPublicationStatusResult result) => new(
+        result.TenantId, result.AutoPublishEnabled, result.AutoPublishNotBeforeUtc);
 }

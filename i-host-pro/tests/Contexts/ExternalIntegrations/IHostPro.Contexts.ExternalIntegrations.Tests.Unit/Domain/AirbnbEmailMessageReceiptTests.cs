@@ -70,4 +70,17 @@ public class AirbnbEmailMessageReceiptTests
         receipt.ProcessingStatus.Should().Be(AirbnbEmailMessageProcessingStatus.Failed);
         receipt.FailureReason.Should().Be("PARSER_EXCEPTION");
     }
+
+    [Fact]
+    public void MarkIgnored_never_sets_a_failure_reason_or_an_external_reservation_id()
+    {
+        var receipt = AirbnbEmailMessageReceipt.Create(Guid.NewGuid(), TenantId, "graph-message-1", null, Now, Now);
+
+        receipt.MarkIgnored("RESERVATION_REMINDER", "airbnb-reservation-reminder-v1", Now.AddSeconds(1));
+
+        receipt.ProcessingStatus.Should().Be(AirbnbEmailMessageProcessingStatus.Ignored);
+        receipt.DetectedEventType.Should().Be("RESERVATION_REMINDER");
+        receipt.FailureReason.Should().BeNull("historical-cutoff protection is never a technical failure");
+        receipt.ExternalReservationId.Should().BeNull("Ignored never resolves to a reservation identifier - nothing was published");
+    }
 }

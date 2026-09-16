@@ -27,10 +27,23 @@ public sealed record AirbnbReservationDryRunOutcome
     /// </summary>
     public string? ExternalReservationId { get; }
 
+    /// <summary>
+    /// The four fields <c>IAirbnbResolvedReservationSyncPublisher.PublishReservationImportedAsync</c>
+    /// needs beyond <see cref="ResolvedPropertyId"/>/<see cref="ExternalReservationId"/>
+    /// - present ONLY in the <see cref="Ready"/> case (Automatic Publication
+    /// Design + Safety gate). Never logged/reported by any caller - these
+    /// exist so the delta sync runner can actually invoke the publisher
+    /// without re-parsing the message itself, not for diagnostic output.
+    /// </summary>
+    public string? GuestName { get; }
+    public DateTimeOffset? CheckInAt { get; }
+    public DateTimeOffset? CheckOutAt { get; }
+    public int? GuestCount { get; }
+
     private AirbnbReservationDryRunOutcome(
         bool wouldImport, bool externalReservationIdPresent, bool datesParsed, bool guestCountParsed,
         bool propertyResolved, Guid? resolvedPropertyId, AirbnbReservationReminderParseFailureReason? parseFailureReason,
-        string? externalReservationId)
+        string? externalReservationId, string? guestName, DateTimeOffset? checkInAt, DateTimeOffset? checkOutAt, int? guestCount)
     {
         WouldImport = wouldImport;
         ExternalReservationIdPresent = externalReservationIdPresent;
@@ -40,14 +53,20 @@ public sealed record AirbnbReservationDryRunOutcome
         ResolvedPropertyId = resolvedPropertyId;
         ParseFailureReason = parseFailureReason;
         ExternalReservationId = externalReservationId;
+        GuestName = guestName;
+        CheckInAt = checkInAt;
+        CheckOutAt = checkOutAt;
+        GuestCount = guestCount;
     }
 
     public static AirbnbReservationDryRunOutcome ParseFailed(AirbnbReservationReminderParseFailureReason reason) =>
-        new(false, false, false, false, false, null, reason, null);
+        new(false, false, false, false, false, null, reason, null, null, null, null, null);
 
     public static AirbnbReservationDryRunOutcome PropertyNotResolved(string externalReservationId) =>
-        new(false, true, true, true, false, null, null, externalReservationId);
+        new(false, true, true, true, false, null, null, externalReservationId, null, null, null, null);
 
-    public static AirbnbReservationDryRunOutcome Ready(Guid resolvedPropertyId, string externalReservationId) =>
-        new(true, true, true, true, true, resolvedPropertyId, null, externalReservationId);
+    public static AirbnbReservationDryRunOutcome Ready(
+        Guid resolvedPropertyId, string externalReservationId, string guestName,
+        DateTimeOffset checkInAt, DateTimeOffset checkOutAt, int guestCount) =>
+        new(true, true, true, true, true, resolvedPropertyId, null, externalReservationId, guestName, checkInAt, checkOutAt, guestCount);
 }

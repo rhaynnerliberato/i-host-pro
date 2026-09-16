@@ -391,13 +391,20 @@ public static class ExternalIntegrationsModuleExtensions
     /// this safe/idempotent, the same accepted redundancy already present
     /// between this class's own two existing registration methods.
     ///
-    /// Uses <see cref="IAirbnbEmailUnitOfWork"/>, not
-    /// <see cref="IExternalIntegrationsTransactionExecutor"/>: the latter
-    /// also drains/publishes this context's Wolverine outbox, which requires
-    /// the <c>external_integrations_messaging</c> ancillary store to be
-    /// enrolled in the calling host — Worker's WhatsApp-outbound registration
-    /// above does not enroll it, and this gate never publishes an Integration
-    /// Event anyway (no reservation mutation).
+    /// Also registers <see cref="IIntegrationEventCollector"/>/
+    /// <see cref="IExternalIntegrationsTransactionExecutor"/>/
+    /// <see cref="IAirbnbResolvedReservationSyncPublisher"/> (Automatic
+    /// Publication Design + Safety gate) — the delta sync runner's own
+    /// activated-flow branch invokes the resolved-property publisher
+    /// directly, which drains/publishes this context's Wolverine outbox.
+    /// This is now safe to resolve here ONLY because <c>IHostPro.Worker</c>'s
+    /// own <c>Program.cs</c> was updated in the same gate to enroll the
+    /// <c>external_integrations_messaging</c> ancillary store — the earlier
+    /// version of this doc comment is no longer accurate and existed
+    /// specifically to explain why that enrollment was missing. Still uses
+    /// <see cref="IAirbnbEmailUnitOfWork"/> for the runner's own
+    /// receipt/sync-state writes (a distinct, narrower unit of work than the
+    /// outbox-draining executor).
     /// </summary>
     public static IServiceCollection AddExternalIntegrationsAirbnbEmailBridgeWorker(
         this IServiceCollection services, IConfiguration configuration)
@@ -443,6 +450,16 @@ public static class ExternalIntegrationsModuleExtensions
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbReservationParser.AirbnbReservationReminderParser>();
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser.IAirbnbReservationDryRunEvaluator,
             IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser.AirbnbReservationDryRunEvaluator>();
+
+        // Automatic Publication Design + Safety gate - required for the
+        // delta sync runner's activated-flow branch to actually invoke the
+        // resolved-property publisher and durably enqueue its event. Safe
+        // ONLY because IHostPro.Worker's own Program.cs now enrolls the
+        // external_integrations_messaging ancillary outbox store (see this
+        // method's own doc comment).
+        services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
+        services.AddScoped<IExternalIntegrationsTransactionExecutor, ExternalIntegrationsOutboxTransactionExecutor>();
+        services.AddScoped<IAirbnbResolvedReservationSyncPublisher, AirbnbResolvedReservationSyncPublisher>();
 
         return services;
     }

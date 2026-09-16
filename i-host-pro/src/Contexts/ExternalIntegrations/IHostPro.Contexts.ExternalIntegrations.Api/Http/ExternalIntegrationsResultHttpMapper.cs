@@ -32,6 +32,10 @@ public static class ExternalIntegrationsResultHttpMapper
             AirbnbEmailBridgeErrorCodes.ConsentDenied => (StatusCodes.Status409Conflict, AirbnbEmailBridgeErrorCodes.ConsentDenied),
             AirbnbEmailBridgeErrorCodes.AcquisitionFailed => (StatusCodes.Status502BadGateway, AirbnbEmailBridgeErrorCodes.AcquisitionFailed),
             AirbnbEmailBridgeErrorCodes.AccountIdentityUnavailable => (StatusCodes.Status502BadGateway, AirbnbEmailBridgeErrorCodes.AccountIdentityUnavailable),
+            AirbnbEmailBridgeErrorCodes.AutoPublicationAlreadyEnabled => (StatusCodes.Status409Conflict, AirbnbEmailBridgeErrorCodes.AutoPublicationAlreadyEnabled),
+            AirbnbEmailBridgeErrorCodes.AutoPublicationAlreadyDisabled => (StatusCodes.Status409Conflict, AirbnbEmailBridgeErrorCodes.AutoPublicationAlreadyDisabled),
+            AirbnbEmailBridgeErrorCodes.AutoPublicationCutoffRequired => (StatusCodes.Status400BadRequest, AirbnbEmailBridgeErrorCodes.AutoPublicationCutoffRequired),
+            AirbnbEmailBridgeErrorCodes.AutoPublicationMailboxNotConnected => (StatusCodes.Status409Conflict, AirbnbEmailBridgeErrorCodes.AutoPublicationMailboxNotConnected),
             AirbnbListingTitleMappingErrorCodes.DuplicateListingTitle => (StatusCodes.Status409Conflict, AirbnbListingTitleMappingErrorCodes.DuplicateListingTitle),
             _ => (StatusCodes.Status400BadRequest, "validation_error"),
         };

@@ -1,3 +1,4 @@
+using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbImports;
 using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser;
 using IHostPro.Contexts.ExternalIntegrations.Domain;
 using Microsoft.Extensions.Logging;
@@ -6,9 +7,15 @@ namespace IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge;
 
 /// <summary>
 /// Orchestrates one incremental mailbox synchronization attempt for one
-/// tenant (Fase 9 review — Delta Polling gate). DRY_RUN by construction this
-/// gate: creates <see cref="AirbnbEmailMessageReceipt"/> rows only — never
-/// calls <c>IAirbnbReservationSyncPublisher</c>, never mutates a reservation.
+/// tenant (Fase 9 review — Delta Polling gate). DRY_RUN by default: creates
+/// <see cref="AirbnbEmailMessageReceipt"/> rows and, when the connection's
+/// own <see cref="AirbnbEmailMailboxConnection.AutoPublishEnabled"/> is
+/// false (the default for every tenant), never calls
+/// <c>IAirbnbResolvedReservationSyncPublisher</c>/mutates a reservation —
+/// still never touches the ExternalListingId-based
+/// <c>IAirbnbReservationSyncPublisher</c> at all (Automatic Publication
+/// Design + Safety gate: that publisher remains reserved for a stable-id
+/// source this bridge never has).
 ///
 /// Consistency model (Fase 9 review §9-10/§36): every database write is its
 /// own committed transaction via <see cref="IAirbnbEmailUnitOfWork"/>,
@@ -19,16 +26,24 @@ namespace IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge;
 /// earlier or later page leaves the cursor exactly where it was before this
 /// run, and replaying from the same cursor is always safe because
 /// <see cref="IAirbnbEmailMessageReceiptRepository.ExistsForCurrentTenantAsync"/>
-/// makes re-observing an already-receipted message a no-op.
+/// makes re-observing an already-receipted message a no-op — this same
+/// guard is why enabling auto-publication for a tenant can never trigger a
+/// bulk replay of already-receipted historical messages (Automatic
+/// Publication Design + Safety gate item 33/34): only messages the delta
+/// cursor observes for the FIRST time from here on ever reach the
+/// publication decision below.
 /// </summary>
 public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
 {
     /// <summary>Hard safety cap — a mailbox with more pages than this in one run stops early and resumes on the next scheduled tick, rather than looping indefinitely.</summary>
     private const int MaxPagesPerRun = 25;
 
-    /// <summary>Parser version recorded on every receipt this runner marks Processed/NeedsReview/Failed via the DRY_RUN pipeline — kept here (not read from the parser type) since only the Infrastructure-layer parser implementation may reference it directly, and this runner only depends on the Application-layer evaluator abstraction.</summary>
+    /// <summary>Parser version recorded on every receipt this runner marks Processed/NeedsReview/Failed/Ignored via the DRY_RUN/publication pipeline — kept here (not read from the parser type) since only the Infrastructure-layer parser implementation may reference it directly, and this runner only depends on the Application-layer evaluator abstraction.</summary>
     private const string ReservationParserVersion = "airbnb-reservation-reminder-v1";
     private const string ReservationDetectedEventType = "RESERVATION_REMINDER";
+
+    /// <summary>Safe, non-PII diagnostic reason recorded when the resolved-property publisher itself throws — never the exception message (which could echo back input).</summary>
+    private const string PublisherFailureReason = "PublisherFailure";
 
     private readonly IAirbnbEmailMailboxConnectionRepository _connectionRepository;
     private readonly IAirbnbEmailSyncStateRepository _syncStateRepository;
@@ -36,6 +51,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
     private readonly IAirbnbEmailAuthenticator _authenticator;
     private readonly IAirbnbEmailMessageSource _messageSource;
     private readonly IAirbnbReservationDryRunEvaluator _dryRunEvaluator;
+    private readonly IAirbnbResolvedReservationSyncPublisher _resolvedPublisher;
     private readonly IAirbnbEmailUnitOfWork _unitOfWork;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<AirbnbEmailDeltaSyncRunner> _logger;
@@ -47,6 +63,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
         IAirbnbEmailAuthenticator authenticator,
         IAirbnbEmailMessageSource messageSource,
         IAirbnbReservationDryRunEvaluator dryRunEvaluator,
+        IAirbnbResolvedReservationSyncPublisher resolvedPublisher,
         IAirbnbEmailUnitOfWork unitOfWork,
         TimeProvider timeProvider,
         ILogger<AirbnbEmailDeltaSyncRunner> logger)
@@ -57,6 +74,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
         _authenticator = authenticator;
         _messageSource = messageSource;
         _dryRunEvaluator = dryRunEvaluator;
+        _resolvedPublisher = resolvedPublisher;
         _unitOfWork = unitOfWork;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -176,7 +194,8 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
                     {
                         var dryRunOutcome = await _dryRunEvaluator.EvaluateAsync(
                             message.Subject ?? string.Empty, body, message.ReceivedAtUtc, cancellationToken);
-                        ApplyDryRunOutcome(receipt, dryRunOutcome, _timeProvider.GetUtcNow());
+                        await ApplyDryRunOutcomeAsync(
+                            connection, message.ReceivedAtUtc, tenantId, receipt, dryRunOutcome, _timeProvider.GetUtcNow(), cancellationToken);
                     }
                 }
 
@@ -206,23 +225,53 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
 
     /// <summary>
     /// Maps one DRY_RUN evaluation onto the receipt's existing, already-tested
-    /// processing lifecycle (Fase 9 review — Reservation Email Parser
-    /// gate) — deliberately reuses the receipt's current 4-state
-    /// <see cref="AirbnbEmailMessageProcessingStatus"/> rather than inventing
-    /// new domain states for concepts (UNSUPPORTED_TEMPLATE, MAPPING_NOT_FOUND)
-    /// that the existing Failed/NeedsReview states, combined with the
-    /// receipt's own free-text diagnostic fields, already capture safely:
+    /// processing lifecycle (Fase 9 review — Reservation Email Parser gate —
+    /// extended by the Automatic Publication Design + Safety gate), reusing
+    /// the receipt's existing <see cref="AirbnbEmailMessageProcessingStatus"/>
+    /// states plus the one new <c>Ignored</c> value rather than inventing new
+    /// domain states for concepts (UNSUPPORTED_TEMPLATE, MAPPING_NOT_FOUND)
+    /// the existing Failed/NeedsReview states already capture safely:
     /// <list type="bullet">
-    /// <item>parse failure (any reason, including an unrecognized template) → Failed, with the safe failure-reason code as the diagnostic message</item>
-    /// <item>parsed successfully but the listing title has no mapping yet → NeedsReview (a human needs to add the mapping - not an error in the email itself)</item>
-    /// <item>parsed successfully and the listing resolved to a Property → Processed, carrying the parsed confirmation code — this is DRY_RUN evidence only, no publisher/mutation follows</item>
+    /// <item>parse failure (any reason, including an unrecognized template) → Failed, with the safe failure-reason code as the diagnostic message. Deliberately UNCHANGED by this gate - reliably telling apart a legitimate non-reservation Airbnb email (payment/review/etc.) from a genuinely-unparseable reservation template would require a content classifier this feature has no real evidence for yet, so this bucket is never reclassified to Ignored/NeedsReview here (flagged explicitly, not guessed).</item>
+    /// <item>parsed successfully but the listing title has no mapping yet → NeedsReview (a human needs to add the mapping - not an error in the email itself), regardless of <see cref="AirbnbEmailMailboxConnection.AutoPublishEnabled"/> - there is nothing to publish either way.</item>
+    /// <item>parsed successfully, the listing resolved to a Property, but <see cref="AirbnbEmailMailboxConnection.AutoPublishEnabled"/> is <c>false</c> (every tenant's default) → Processed, DRY_RUN evidence only - no publisher call, exactly the pre-existing behavior.</item>
+    /// <item>same, but AutoPublishEnabled=true AND the message predates <see cref="AirbnbEmailMailboxConnection.AutoPublishNotBeforeUtc"/> → Ignored - historical-import protection, never a bulk-publish of whatever the first delta sync after activation happens to observe.</item>
+    /// <item>same, AutoPublishEnabled=true AND at/after the cutoff → the REAL publish: <see cref="IAirbnbResolvedReservationSyncPublisher.PublishReservationImportedAsync"/> is invoked, then Processed. A publisher failure is caught HERE (never rethrown) and marks only THIS receipt Failed - one message's publish failure must never abort the transaction/block the rest of the page.</item>
     /// </list>
     /// </summary>
-    private static void ApplyDryRunOutcome(AirbnbEmailMessageReceipt receipt, AirbnbReservationDryRunOutcome outcome, DateTimeOffset processedAtUtc)
+    private async Task ApplyDryRunOutcomeAsync(
+        AirbnbEmailMailboxConnection connection, DateTimeOffset messageReceivedAtUtc, Guid tenantId,
+        AirbnbEmailMessageReceipt receipt, AirbnbReservationDryRunOutcome outcome, DateTimeOffset processedAtUtc,
+        CancellationToken cancellationToken)
     {
         if (outcome.WouldImport)
         {
-            receipt.MarkProcessed(ReservationDetectedEventType, outcome.ExternalReservationId, ReservationParserVersion, processedAtUtc);
+            if (!connection.AutoPublishEnabled)
+            {
+                receipt.MarkProcessed(ReservationDetectedEventType, outcome.ExternalReservationId, ReservationParserVersion, processedAtUtc);
+            }
+            else if (connection.AutoPublishNotBeforeUtc is { } notBeforeUtc && messageReceivedAtUtc < notBeforeUtc)
+            {
+                receipt.MarkIgnored(ReservationDetectedEventType, ReservationParserVersion, processedAtUtc);
+            }
+            else
+            {
+                try
+                {
+                    await _resolvedPublisher.PublishReservationImportedAsync(
+                        outcome.ResolvedPropertyId!.Value, outcome.ExternalReservationId!, outcome.GuestName!,
+                        outcome.CheckInAt!.Value, outcome.CheckOutAt!.Value, outcome.GuestCount!.Value,
+                        occurredAtUtc: processedAtUtc, correlationId: Guid.NewGuid(), cancellationToken);
+                    receipt.MarkProcessed(ReservationDetectedEventType, outcome.ExternalReservationId, ReservationParserVersion, processedAtUtc);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Airbnb resolved-property publish failed for tenant {TenantId} - marking this receipt Failed, other messages in this page are unaffected.",
+                        tenantId);
+                    receipt.MarkFailed(PublisherFailureReason, ReservationParserVersion, processedAtUtc);
+                }
+            }
         }
         else if (outcome.ParseFailureReason is { } failureReason)
         {

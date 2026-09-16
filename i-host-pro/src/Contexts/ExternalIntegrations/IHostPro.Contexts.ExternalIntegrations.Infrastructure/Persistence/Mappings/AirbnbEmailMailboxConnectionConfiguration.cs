@@ -40,6 +40,8 @@ public sealed class AirbnbEmailMailboxConnectionConfiguration : IEntityTypeConfi
         builder.Property(c => c.LastAuthenticatedAtUtc).HasColumnName("last_authenticated_at_utc");
         builder.Property(c => c.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
         builder.Property(c => c.UpdatedAtUtc).HasColumnName("updated_at_utc");
+        builder.Property(c => c.AutoPublishEnabled).HasColumnName("auto_publish_enabled").IsRequired().HasDefaultValue(false);
+        builder.Property(c => c.AutoPublishNotBeforeUtc).HasColumnName("auto_publish_not_before_utc");
 
         builder.HasIndex(c => c.TenantId).IsUnique();
 

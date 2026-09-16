@@ -20,7 +20,9 @@ using IHostPro.Contexts.Communication.Application;
 using IHostPro.Contexts.Communication.Infrastructure;
 using IHostPro.Contexts.Communication.Infrastructure.Persistence;
 using IHostPro.Contexts.Dashboard.Infrastructure;
+using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure;
+using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
 using IHostPro.Contexts.Dashboard.Infrastructure.Persistence;
 using IHostPro.Contexts.GuestOperations.Application;
 using IHostPro.Contexts.GuestOperations.Infrastructure;
@@ -572,6 +574,39 @@ try
             builder.Configuration.GetConnectionString("AIAgent")!,
             "ai_agent_messaging",
             typeof(AIAgentDbContext));
+
+        // External Integrations' own durable outbox, enrolled HERE (Worker)
+        // for the first time — Automatic Publication Design + Safety gate.
+        // Until now this context only ever PUBLISHED from IHostPro.Api
+        // (IAirbnbReservationSyncPublisher/WhatsApp webhook publishers) and
+        // Worker's own AddExternalIntegrationsAirbnbEmailBridgeWorker
+        // registration deliberately used IAirbnbEmailUnitOfWork instead of
+        // IExternalIntegrationsTransactionExecutor specifically BECAUSE this
+        // enrollment was absent (see that method's own doc comment). Now
+        // that the delta sync runner may invoke
+        // IAirbnbResolvedReservationSyncPublisher directly from inside
+        // Worker, IDbContextOutbox<ExternalIntegrationsDbContext>/
+        // IExternalIntegrationsTransactionExecutor must resolve here too —
+        // same empirically-confirmed requirement as every other
+        // write-capable Bounded Context in this list.
+        opts.EnrollAncillaryPostgresqlOutbox(
+            builder.Configuration.GetConnectionString("ExternalIntegrations")!,
+            "external_integrations_messaging",
+            typeof(ExternalIntegrationsDbContext));
+
+        // Sender-side routing rule for the ONE event Worker now publishes
+        // from this context — mirrors IHostPro.Api's own
+        // RouteExternalIntegrationsEvent<AirbnbReservationImported> exactly
+        // (same exchange/routing key/topic type/durable outbox/circuit
+        // breaker), since Wolverine's outbound routing is configured
+        // per-process, not shared automatically between Api and Worker.
+        // Deliberately only this one event type - Worker has no Updated/
+        // Cancelled sender yet (IAirbnbResolvedReservationSyncPublisher
+        // implements Imported only, per the gate's own scope).
+        opts.PublishMessage(typeof(AirbnbReservationImported))
+            .ToRabbitRoutingKey("external-integrations-events", "airbnb_reservation_imported", exchange => exchange.ExchangeType = ExchangeType.Topic)
+            .UseDurableOutbox()
+            .CircuitBreaking(cb => cb.FailuresBeforeCircuitBreaks = 1);
 
         // Required in addition to EnrollAncillaryPostgresqlOutbox above —
         // same empirically-confirmed requirement documented in

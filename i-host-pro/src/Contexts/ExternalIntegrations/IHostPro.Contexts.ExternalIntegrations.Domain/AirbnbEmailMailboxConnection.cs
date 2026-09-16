@@ -31,6 +31,29 @@ public sealed class AirbnbEmailMailboxConnection : AggregateRoot<Guid>, ITenantO
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset? UpdatedAtUtc { get; private set; }
 
+    /// <summary>
+    /// Automatic Publication Design + Safety gate — tenant opt-in, default
+    /// <c>false</c>. When <c>true</c>, the delta sync runner may actually
+    /// invoke <c>IAirbnbResolvedReservationSyncPublisher</c> for a supported
+    /// v1 message instead of staying DRY_RUN. Independent of
+    /// <see cref="IsEnabled"/>/<see cref="AuthorizationStatus"/> at the
+    /// domain level - the runner's own existing pre-loop guard already
+    /// short-circuits the whole page when the mailbox itself is not
+    /// Connected, so these flags are simply inert (never consulted) while
+    /// disconnected.
+    /// </summary>
+    public bool AutoPublishEnabled { get; private set; }
+
+    /// <summary>
+    /// Mandatory historical-import cutoff, set explicitly at the same moment
+    /// <see cref="AutoPublishEnabled"/> turns on - never inferred/defaulted
+    /// to the mailbox's own history. A message may only trigger a real
+    /// publish if its own <c>ReceivedAtUtc</c> is at or after this instant;
+    /// anything the initial Graph delta sync happens to observe from before
+    /// activation is classified <c>Ignored</c>, never bulk-imported.
+    /// </summary>
+    public DateTimeOffset? AutoPublishNotBeforeUtc { get; private set; }
+
     private AirbnbEmailMailboxConnection()
     {
         // EF Core materialization.
@@ -114,5 +137,36 @@ public sealed class AirbnbEmailMailboxConnection : AggregateRoot<Guid>, ITenantO
         IsEnabled = false;
         AuthorizationStatus = AirbnbEmailAuthorizationStatus.Disconnected;
         UpdatedAtUtc = disconnectedAtUtc;
+    }
+
+    /// <summary>
+    /// Turns on automatic publication for this tenant, requiring an explicit
+    /// cutoff at the moment of activation - the caller (command handler) is
+    /// responsible for rejecting a request with no cutoff supplied; this
+    /// method itself only enforces that whatever cutoff it is given is not
+    /// silently discarded.
+    /// </summary>
+    public void EnableAutoPublish(DateTimeOffset notBeforeUtc, DateTimeOffset now)
+    {
+        AutoPublishEnabled = true;
+        AutoPublishNotBeforeUtc = notBeforeUtc;
+        UpdatedAtUtc = now;
+    }
+
+    /// <summary>
+    /// Turns automatic publication back off. Deliberately touches nothing
+    /// else - the Microsoft mailbox connection, token cache, listing-title
+    /// mappings, receipts, and any already-created reservations all remain
+    /// exactly as they were (Fase 9 review item 21's same "never delete
+    /// historical record" principle <see cref="Disconnect"/> already
+    /// follows). Clears <see cref="AutoPublishNotBeforeUtc"/> back to
+    /// <c>null</c> so a later re-enable always requires a fresh, explicit
+    /// cutoff rather than silently reusing a stale one.
+    /// </summary>
+    public void DisableAutoPublish(DateTimeOffset now)
+    {
+        AutoPublishEnabled = false;
+        AutoPublishNotBeforeUtc = null;
+        UpdatedAtUtc = now;
     }
 }

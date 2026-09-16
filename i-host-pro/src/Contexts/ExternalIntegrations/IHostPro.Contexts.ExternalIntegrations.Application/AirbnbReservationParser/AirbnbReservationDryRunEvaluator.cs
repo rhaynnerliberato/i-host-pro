@@ -25,6 +25,8 @@ public sealed class AirbnbReservationDryRunEvaluator : IAirbnbReservationDryRunE
         if (mapping is null)
             return AirbnbReservationDryRunOutcome.PropertyNotResolved(parseResult.ExternalReservationId!);
 
-        return AirbnbReservationDryRunOutcome.Ready(mapping.PropertyId, parseResult.ExternalReservationId!);
+        return AirbnbReservationDryRunOutcome.Ready(
+            mapping.PropertyId, parseResult.ExternalReservationId!, parseResult.GuestName!,
+            parseResult.CheckInAt!.Value, parseResult.CheckOutAt!.Value, parseResult.GuestCount!.Value);
     }
 }

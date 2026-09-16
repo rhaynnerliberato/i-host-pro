@@ -3,6 +3,7 @@ using IHostPro.BuildingBlocks.Application;
 using IHostPro.BuildingBlocks.Domain;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.ExternalIntegrations.Application;
+using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge;
 using IHostPro.Contexts.ExternalIntegrations.Application.AirbnbListingTitleMappings;
 using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppIntegrations;
 using IHostPro.Contexts.ExternalIntegrations.Application.WhatsAppTemplateMappings;
@@ -109,6 +110,31 @@ public static class ExternalIntegrationsCommandDispatchExtensions
         services.AddScoped<
             IPipelineBehavior<ListAirbnbListingTitleMappingsQuery, Result<IReadOnlyList<AirbnbListingTitleMappingResult>>>,
             TenantTransactionBehavior<ListAirbnbListingTitleMappingsQuery, Result<IReadOnlyList<AirbnbListingTitleMappingResult>>, ExternalIntegrationsDbContext>>();
+
+        // Automatic Publication Design + Safety gate - Enable/Disable/Get
+        // commands for the tenant opt-in flag, same audit-outermost/
+        // TenantTransactionBehavior wiring as WhatsAppIntegration's own
+        // Enable/Disable above (unlike the pre-existing, still-unregistered
+        // AuditConnectAirbnbEmailMailboxBehavior/AuditDisconnectAirbnbEmailMailboxBehavior
+        // gap - flagged separately, not fixed here, since it is unrelated to
+        // this gate's own scope).
+        services.AddScoped<
+            IPipelineBehavior<EnableAirbnbAutoPublicationCommand, Result<AirbnbAutoPublicationStatusResult>>,
+            AuditEnableAirbnbAutoPublicationBehavior>();
+        services.AddScoped<
+            IPipelineBehavior<EnableAirbnbAutoPublicationCommand, Result<AirbnbAutoPublicationStatusResult>>,
+            TenantTransactionBehavior<EnableAirbnbAutoPublicationCommand, Result<AirbnbAutoPublicationStatusResult>, ExternalIntegrationsDbContext>>();
+
+        services.AddScoped<
+            IPipelineBehavior<DisableAirbnbAutoPublicationCommand, Result<AirbnbAutoPublicationStatusResult>>,
+            AuditDisableAirbnbAutoPublicationBehavior>();
+        services.AddScoped<
+            IPipelineBehavior<DisableAirbnbAutoPublicationCommand, Result<AirbnbAutoPublicationStatusResult>>,
+            TenantTransactionBehavior<DisableAirbnbAutoPublicationCommand, Result<AirbnbAutoPublicationStatusResult>, ExternalIntegrationsDbContext>>();
+
+        services.AddScoped<
+            IPipelineBehavior<GetAirbnbAutoPublicationStatusQuery, Result<AirbnbAutoPublicationStatusResult>>,
+            TenantTransactionBehavior<GetAirbnbAutoPublicationStatusQuery, Result<AirbnbAutoPublicationStatusResult>, ExternalIntegrationsDbContext>>();
 
         return services;
     }

@@ -87,4 +87,19 @@ public sealed class AirbnbEmailMessageReceipt : AggregateRoot<Guid>, ITenantOwne
         ParserVersion = parserVersion;
         ProcessedAtUtc = processedAtUtc;
     }
+
+    /// <summary>
+    /// Automatic Publication Design + Safety gate — a message that parsed
+    /// successfully and resolved to a Property (would otherwise have
+    /// published) but predates the tenant's own <c>AutoPublishNotBeforeUtc</c>
+    /// cutoff. Never a technical failure — <see cref="FailureReason"/> is
+    /// left null.
+    /// </summary>
+    public void MarkIgnored(string? detectedEventType, string parserVersion, DateTimeOffset processedAtUtc)
+    {
+        ProcessingStatus = AirbnbEmailMessageProcessingStatus.Ignored;
+        DetectedEventType = detectedEventType;
+        ParserVersion = parserVersion;
+        ProcessedAtUtc = processedAtUtc;
+    }
 }

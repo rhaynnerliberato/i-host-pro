@@ -8,4 +8,10 @@ public static class AirbnbEmailBridgeErrorCodes
     public const string ConsentDenied = "airbnb_email_authentication_consent_denied";
     public const string AcquisitionFailed = "airbnb_email_authentication_acquisition_failed";
     public const string AccountIdentityUnavailable = "airbnb_email_authentication_account_identity_unavailable";
+
+    // Automatic Publication Design + Safety gate.
+    public const string AutoPublicationAlreadyEnabled = "airbnb_email_auto_publication_already_enabled";
+    public const string AutoPublicationAlreadyDisabled = "airbnb_email_auto_publication_already_disabled";
+    public const string AutoPublicationCutoffRequired = "airbnb_email_auto_publication_cutoff_required";
+    public const string AutoPublicationMailboxNotConnected = "airbnb_email_auto_publication_mailbox_not_connected";
 }
