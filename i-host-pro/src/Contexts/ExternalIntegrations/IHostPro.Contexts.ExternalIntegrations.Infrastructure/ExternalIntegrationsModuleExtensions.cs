@@ -89,6 +89,22 @@ public static class ExternalIntegrationsModuleExtensions
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailAuthenticator,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MsalAirbnbEmailAuthenticator>();
 
+        // Airbnb Reservation Email Parser gate — DRY_RUN only, never wired to
+        // IAirbnbReservationSyncPublisher. AirbnbListingTitleMapping is a
+        // separate, exact-title-only resolution mechanism from
+        // AirbnbListingMapping above (no stable Airbnb listing id is ever
+        // observed in these emails). Whether/how the Worker's delta sync
+        // invokes this evaluator automatically per receipt is a distinct,
+        // not-yet-made decision — this registration only makes the pieces
+        // resolvable, e.g. for a future admin mapping endpoint or a
+        // deliberately separate orchestration step.
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbListingTitleMappings.IAirbnbListingTitleMappingRepository,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.AirbnbListingTitleMappingRepository>();
+        services.AddSingleton<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser.IAirbnbReservationReminderParser,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbReservationParser.AirbnbReservationReminderParser>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser.IAirbnbReservationDryRunEvaluator,
+            IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser.AirbnbReservationDryRunEvaluator>();
+
         // Fase 12, CP5.3A: outside Development, IWhatsAppCredentialProvider is
         // now backed by AWS Secrets Manager per-tenant secrets
         // (WhatsAppTenantSecretBackend=AWS_SECRETS_MANAGER_PER_TENANT)

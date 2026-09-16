@@ -46,6 +46,9 @@ public sealed class ExternalIntegrationsDbContext : BaseDbContext
     public DbSet<AirbnbEmailSyncState> AirbnbEmailSyncStates => Set<AirbnbEmailSyncState>();
     public DbSet<AirbnbEmailMessageReceipt> AirbnbEmailMessageReceipts => Set<AirbnbEmailMessageReceipt>();
 
+    /// <summary>Airbnb Email Bridge's own listing resolution — maps a free-text listing TITLE (the only listing identifier observed in these emails) to a local PropertyId, separate from <see cref="AirbnbListingMapping"/>'s stable-id mapping.</summary>
+    public DbSet<AirbnbListingTitleMapping> AirbnbListingTitleMappings => Set<AirbnbListingTitleMapping>();
+
     public ExternalIntegrationsDbContext(DbContextOptions<ExternalIntegrationsDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)
     {
