@@ -282,6 +282,13 @@ try
     // Host.CreateApplicationBuilder's default ValidateOnBuild=true here.
     builder.Services.AddExternalIntegrationsWhatsAppOutboundProvider(builder.Configuration, builder.Environment.IsDevelopment());
 
+    // Fase 9 review — Delta Polling gate: registers the Airbnb Email Bridge
+    // services AirbnbEmailDeltaPollingBackgroundService needs. Off by
+    // default (ExternalIntegrations:AirbnbEmailBridge:PollingEnabled=false) —
+    // registering this unconditionally never starts reading any mailbox.
+    builder.Services.AddExternalIntegrationsAirbnbEmailBridgeWorker(builder.Configuration);
+    builder.Services.AddHostedService<IHostPro.Worker.AirbnbEmailBridge.AirbnbEmailDeltaPollingBackgroundService>();
+
     // Communication module (Fase 9, Checkpoint 1): CommunicationDbContext +
     // its shared execution-scope/repository/transaction-executor DI graph
     // (ADR-016) — mirrors AddDashboardModule's own precedent. Fase 9,

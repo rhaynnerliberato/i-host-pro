@@ -16,4 +16,14 @@ namespace IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge;
 public interface IAirbnbEmailAuthenticator
 {
     Task<AirbnbEmailAuthenticationOutcome> ConnectInteractiveAsync(Guid tenantId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Non-interactive reacquisition using the persisted encrypted token
+    /// cache — the only auth path routine background polling may use (Fase 9
+    /// review §28). Never opens a browser and never prompts a device code;
+    /// a cache that can no longer refresh silently is reported via
+    /// <see cref="AirbnbEmailSilentAcquisitionOutcome.ReauthorizationRequired"/>,
+    /// never retried in a loop.
+    /// </summary>
+    Task<AirbnbEmailSilentAcquisitionOutcome> AcquireTokenSilentAsync(Guid tenantId, CancellationToken cancellationToken);
 }

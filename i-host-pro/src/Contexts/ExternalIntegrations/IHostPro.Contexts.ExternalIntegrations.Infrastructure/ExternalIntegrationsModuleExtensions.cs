@@ -349,4 +349,63 @@ public static class ExternalIntegrationsModuleExtensions
 
         return services;
     }
+
+    /// <summary>
+    /// Registers exactly what <c>AirbnbEmailDeltaPollingBackgroundService</c>
+    /// needs in <c>IHostPro.Worker</c> — mirrors
+    /// <see cref="AddExternalIntegrationsWhatsAppOutboundProvider"/>'s own
+    /// rationale for being a separate, trimmed method rather than the full
+    /// <see cref="AddExternalIntegrationsModule"/> (Worker never hosts a
+    /// controller, so the Api-only webhook surface must stay unreachable
+    /// there). Re-registers <see cref="ExternalIntegrationsDbContext"/> with
+    /// the identical configuration <see cref="AddExternalIntegrationsWhatsAppOutboundProvider"/>
+    /// already does — <c>AddDbContext</c>'s own <c>TryAdd</c> semantics make
+    /// this safe/idempotent, the same accepted redundancy already present
+    /// between this class's own two existing registration methods.
+    ///
+    /// Uses <see cref="IAirbnbEmailUnitOfWork"/>, not
+    /// <see cref="IExternalIntegrationsTransactionExecutor"/>: the latter
+    /// also drains/publishes this context's Wolverine outbox, which requires
+    /// the <c>external_integrations_messaging</c> ancillary store to be
+    /// enrolled in the calling host — Worker's WhatsApp-outbound registration
+    /// above does not enroll it, and this gate never publishes an Integration
+    /// Event anyway (no reservation mutation).
+    /// </summary>
+    public static IServiceCollection AddExternalIntegrationsAirbnbEmailBridgeWorker(
+        this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddDbContext<ExternalIntegrationsDbContext>(options =>
+            options.UseNpgsql(
+                configuration.GetConnectionString("ExternalIntegrations"),
+                npgsqlOptions => npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "external_integrations")));
+
+        services.AddSingleton(TimeProvider.System);
+
+        services.AddSingleton<IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.ITokenCacheProtector,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.AesGcmTokenCacheProtector>();
+        services.Configure<IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.AirbnbEmailBridgeOptions>(
+            configuration.GetSection("ExternalIntegrations:AirbnbEmailBridge"));
+
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailTokenCacheStore,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.PostgresAirbnbEmailTokenCacheStore>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailMailboxConnectionRepository,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.AirbnbEmailMailboxConnectionRepository>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailSyncStateRepository,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.AirbnbEmailSyncStateRepository>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailMessageReceiptRepository,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.AirbnbEmailMessageReceiptRepository>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailAuthenticator,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MsalAirbnbEmailAuthenticator>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailUnitOfWork,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.AirbnbEmailUnitOfWork>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailDeltaSyncRunner,
+            IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.AirbnbEmailDeltaSyncRunner>();
+
+        services.AddHttpClient(
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MicrosoftGraphEmailMessageSource.HttpClientName);
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailMessageSource,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MicrosoftGraphEmailMessageSource>();
+
+        return services;
+    }
 }

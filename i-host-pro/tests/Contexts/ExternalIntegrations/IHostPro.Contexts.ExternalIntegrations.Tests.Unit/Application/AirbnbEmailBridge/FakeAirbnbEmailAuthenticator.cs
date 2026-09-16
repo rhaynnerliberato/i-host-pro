@@ -14,6 +14,9 @@ internal sealed class FakeAirbnbEmailAuthenticator : IAirbnbEmailAuthenticator
     private readonly FakeAirbnbEmailMailboxConnectionRepository _repository;
     private readonly AirbnbEmailAuthenticationOutcome _outcome;
 
+    public AirbnbEmailSilentAcquisitionOutcome SilentOutcome { get; set; } = AirbnbEmailSilentAcquisitionOutcome.Success("fake-access-token");
+    public int SilentAcquisitionCallCount { get; private set; }
+
     private FakeAirbnbEmailAuthenticator(FakeAirbnbEmailMailboxConnectionRepository repository, AirbnbEmailAuthenticationOutcome outcome)
     {
         _repository = repository;
@@ -37,5 +40,11 @@ internal sealed class FakeAirbnbEmailAuthenticator : IAirbnbEmailAuthenticator
         }
 
         return Task.FromResult(_outcome);
+    }
+
+    public Task<AirbnbEmailSilentAcquisitionOutcome> AcquireTokenSilentAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        SilentAcquisitionCallCount++;
+        return Task.FromResult(SilentOutcome);
     }
 }

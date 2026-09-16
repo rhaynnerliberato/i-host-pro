@@ -35,4 +35,31 @@ public sealed class AirbnbEmailBridgeOptions
     /// this bridge ever writes to or sends from the connected mailbox).
     /// </summary>
     public string[] Scopes { get; set; } = ["Mail.Read"];
+
+    /// <summary>
+    /// Delta-polling gate — off by default (Fase 9 review §46): the Worker
+    /// must never start reading a mailbox merely because the process starts.
+    /// A tenant also needs a <c>Connected</c>+<c>IsEnabled</c> mailbox
+    /// connection for polling to do anything even when this is true.
+    /// </summary>
+    public bool PollingEnabled { get; set; }
+
+    public int PollingIntervalSeconds { get; set; } = 120;
+
+    /// <summary>Graph well-known folder name — avoids a separate folder-id lookup call.</summary>
+    public string MailFolderId { get; set; } = "inbox";
+
+    /// <summary>
+    /// Which tenants the Worker polls. Deliberately explicit configuration,
+    /// not a cross-tenant directory table: <c>airbnb_email_mailbox_connections</c>
+    /// is tenant-owned (RLS + Global Query Filter), so nothing can enumerate
+    /// "every tenant with a connection" without first knowing the tenant —
+    /// the same reason <c>WhatsAppTenantRoute</c> exists as a deliberate,
+    /// separate global table for WhatsApp. Building an equivalent directory
+    /// for a single local-dev mailbox would be speculative (ADR-022/023: no
+    /// framework ahead of need); this list is the minimal alternative for a
+    /// gate whose own success criteria only ever exercise one already-
+    /// authorized local connection.
+    /// </summary>
+    public Guid[] PollingTenantIds { get; set; } = [];
 }

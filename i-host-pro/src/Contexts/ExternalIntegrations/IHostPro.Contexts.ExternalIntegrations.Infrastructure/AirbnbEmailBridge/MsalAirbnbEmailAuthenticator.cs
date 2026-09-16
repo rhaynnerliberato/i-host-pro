@@ -122,6 +122,66 @@ public sealed class MsalAirbnbEmailAuthenticator : IAirbnbEmailAuthenticator
         return AirbnbEmailAuthenticationOutcome.Success(homeAccountId, accountTenantId, mailboxAddress, grantedScopes);
     }
 
+    public async Task<AirbnbEmailSilentAcquisitionOutcome> AcquireTokenSilentAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var options = _options.Value;
+        if (string.IsNullOrWhiteSpace(options.ClientId))
+        {
+            _logger.LogError("ExternalIntegrations:AirbnbEmailBridge:ClientId is not configured - cannot acquire a token silently.");
+            return AirbnbEmailSilentAcquisitionOutcome.Failure(reauthorizationRequired: false);
+        }
+
+        var connection = await _repository.GetForCurrentTenantAsync(cancellationToken);
+        if (connection?.HomeAccountId is null)
+        {
+            _logger.LogWarning("Airbnb Email Bridge silent acquisition requested for tenant {TenantId} with no connected mailbox.", tenantId);
+            return AirbnbEmailSilentAcquisitionOutcome.Failure(reauthorizationRequired: true);
+        }
+
+        var app = PublicClientApplicationBuilder.Create(options.ClientId)
+            .WithAuthority(options.Authority)
+            .WithRedirectUri(options.RedirectUri)
+            .Build();
+
+        app.UserTokenCache.SetBeforeAccessAsync(async args =>
+        {
+            var cached = await _tokenCacheStore.LoadAsync(tenantId, cancellationToken);
+            if (cached is not null)
+                args.TokenCache.DeserializeMsalV3(cached);
+        });
+
+        app.UserTokenCache.SetAfterAccessAsync(async args =>
+        {
+            if (args.HasStateChanged)
+                await _tokenCacheStore.SaveAsync(tenantId, args.TokenCache.SerializeMsalV3(), cancellationToken);
+        });
+
+        var accounts = await app.GetAccountsAsync();
+        var account = accounts.FirstOrDefault(a => a.HomeAccountId.Identifier == connection.HomeAccountId);
+        if (account is null)
+        {
+            _logger.LogWarning(
+                "Airbnb Email Bridge silent acquisition for tenant {TenantId}: no matching account in the restored token cache.", tenantId);
+            return AirbnbEmailSilentAcquisitionOutcome.Failure(reauthorizationRequired: true);
+        }
+
+        try
+        {
+            var result = await app.AcquireTokenSilent(options.Scopes, account).ExecuteAsync(cancellationToken);
+            return AirbnbEmailSilentAcquisitionOutcome.Success(result.AccessToken);
+        }
+        catch (MsalUiRequiredException)
+        {
+            _logger.LogWarning("Airbnb Email Bridge silent acquisition for tenant {TenantId} requires interactive reauthorization.", tenantId);
+            return AirbnbEmailSilentAcquisitionOutcome.Failure(reauthorizationRequired: true);
+        }
+        catch (MsalException ex)
+        {
+            _logger.LogError(ex, "Airbnb Email Bridge silent token acquisition failed transiently for tenant {TenantId}.", tenantId);
+            return AirbnbEmailSilentAcquisitionOutcome.Failure(reauthorizationRequired: false);
+        }
+    }
+
     private async Task EnsureConnectionRowExistsAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var existing = await _repository.GetForCurrentTenantAsync(cancellationToken);
