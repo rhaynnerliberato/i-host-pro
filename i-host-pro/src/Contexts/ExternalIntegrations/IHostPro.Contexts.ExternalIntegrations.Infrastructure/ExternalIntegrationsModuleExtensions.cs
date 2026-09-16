@@ -89,21 +89,33 @@ public static class ExternalIntegrationsModuleExtensions
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailAuthenticator,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MsalAirbnbEmailAuthenticator>();
 
-        // Airbnb Reservation Email Parser gate — DRY_RUN only, never wired to
-        // IAirbnbReservationSyncPublisher. AirbnbListingTitleMapping is a
-        // separate, exact-title-only resolution mechanism from
+        // Airbnb Reservation Email Parser gate — DRY_RUN only. Automatic
+        // per-receipt Worker publication remains NOT wired (a distinct,
+        // not-yet-made "Automatic Publication Design Gate" decision) — this
+        // registration only makes the pieces resolvable, e.g. for a future
+        // admin mapping endpoint, a controlled one-shot smoke, or a
+        // deliberately separate orchestration step. AirbnbListingTitleMapping
+        // is a separate, exact-title-only resolution mechanism from
         // AirbnbListingMapping above (no stable Airbnb listing id is ever
-        // observed in these emails). Whether/how the Worker's delta sync
-        // invokes this evaluator automatically per receipt is a distinct,
-        // not-yet-made decision — this registration only makes the pieces
-        // resolvable, e.g. for a future admin mapping endpoint or a
-        // deliberately separate orchestration step.
+        // observed in these emails).
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbListingTitleMappings.IAirbnbListingTitleMappingRepository,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.AirbnbListingTitleMappingRepository>();
         services.AddSingleton<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser.IAirbnbReservationReminderParser,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbReservationParser.AirbnbReservationReminderParser>();
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser.IAirbnbReservationDryRunEvaluator,
             IHostPro.Contexts.ExternalIntegrations.Application.AirbnbReservationParser.AirbnbReservationDryRunEvaluator>();
+
+        // Resolved-Property Publication Bridge gate — publishes the SAME
+        // AirbnbReservationImported event as IAirbnbReservationSyncPublisher
+        // above, but for callers (like the Email Bridge's
+        // AirbnbListingTitleMapping resolution) that already resolved a
+        // PropertyId themselves and have no stable Airbnb listing id to
+        // resolve via AirbnbListingMapping. Deliberately a separate
+        // interface, not an overload — see IAirbnbResolvedReservationSyncPublisher's
+        // own doc comment. Still never called by the Worker's normal delta
+        // polling (same Automatic Publication Design Gate boundary above).
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbImports.IAirbnbResolvedReservationSyncPublisher,
+            AirbnbResolvedReservationSyncPublisher>();
 
         // Fase 12, CP5.3A: outside Development, IWhatsAppCredentialProvider is
         // now backed by AWS Secrets Manager per-tenant secrets
