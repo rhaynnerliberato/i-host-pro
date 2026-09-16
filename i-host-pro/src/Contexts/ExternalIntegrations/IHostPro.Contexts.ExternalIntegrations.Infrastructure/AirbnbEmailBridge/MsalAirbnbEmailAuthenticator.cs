@@ -33,7 +33,7 @@ public sealed class MsalAirbnbEmailAuthenticator : IAirbnbEmailAuthenticator
 {
     private readonly IAirbnbEmailMailboxConnectionRepository _repository;
     private readonly IAirbnbEmailTokenCacheStore _tokenCacheStore;
-    private readonly ExternalIntegrationsDbContext _dbContext;
+    private readonly IAirbnbEmailUnitOfWork _unitOfWork;
     private readonly IOptions<AirbnbEmailBridgeOptions> _options;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<MsalAirbnbEmailAuthenticator> _logger;
@@ -41,14 +41,14 @@ public sealed class MsalAirbnbEmailAuthenticator : IAirbnbEmailAuthenticator
     public MsalAirbnbEmailAuthenticator(
         IAirbnbEmailMailboxConnectionRepository repository,
         IAirbnbEmailTokenCacheStore tokenCacheStore,
-        ExternalIntegrationsDbContext dbContext,
+        IAirbnbEmailUnitOfWork unitOfWork,
         IOptions<AirbnbEmailBridgeOptions> options,
         TimeProvider timeProvider,
         ILogger<MsalAirbnbEmailAuthenticator> logger)
     {
         _repository = repository;
         _tokenCacheStore = tokenCacheStore;
-        _dbContext = dbContext;
+        _unitOfWork = unitOfWork;
         _options = options;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -114,10 +114,15 @@ public sealed class MsalAirbnbEmailAuthenticator : IAirbnbEmailAuthenticator
         var accountTenantId = authResult.Account.HomeAccountId.TenantId;
         var mailboxAddress = authResult.Account.Username;
         var grantedScopes = string.Join(' ', authResult.Scopes);
+        var connectedAtUtc = _timeProvider.GetUtcNow();
 
-        var connection = await _repository.GetForCurrentTenantAsync(cancellationToken)
-            ?? throw new InvalidOperationException($"Airbnb Email Bridge connection row for tenant {tenantId:D} disappeared mid-flow.");
-        connection.Connect(homeAccountId, accountTenantId, mailboxAddress, grantedScopes, _timeProvider.GetUtcNow());
+        await _unitOfWork.ExecuteAsync(async () =>
+        {
+            var connection = await _repository.GetForCurrentTenantAsync(cancellationToken)
+                ?? throw new InvalidOperationException($"Airbnb Email Bridge connection row for tenant {tenantId:D} disappeared mid-flow.");
+            connection.Connect(homeAccountId, accountTenantId, mailboxAddress, grantedScopes, connectedAtUtc);
+            return true;
+        }, cancellationToken);
 
         return AirbnbEmailAuthenticationOutcome.Success(homeAccountId, accountTenantId, mailboxAddress, grantedScopes);
     }
@@ -131,8 +136,10 @@ public sealed class MsalAirbnbEmailAuthenticator : IAirbnbEmailAuthenticator
             return AirbnbEmailSilentAcquisitionOutcome.Failure(reauthorizationRequired: false);
         }
 
-        var connection = await _repository.GetForCurrentTenantAsync(cancellationToken);
-        if (connection?.HomeAccountId is null)
+        var homeAccountId = await _unitOfWork.ExecuteAsync(
+            async () => (await _repository.GetForCurrentTenantAsync(cancellationToken))?.HomeAccountId,
+            cancellationToken);
+        if (homeAccountId is null)
         {
             _logger.LogWarning("Airbnb Email Bridge silent acquisition requested for tenant {TenantId} with no connected mailbox.", tenantId);
             return AirbnbEmailSilentAcquisitionOutcome.Failure(reauthorizationRequired: true);
@@ -157,7 +164,7 @@ public sealed class MsalAirbnbEmailAuthenticator : IAirbnbEmailAuthenticator
         });
 
         var accounts = await app.GetAccountsAsync();
-        var account = accounts.FirstOrDefault(a => a.HomeAccountId.Identifier == connection.HomeAccountId);
+        var account = accounts.FirstOrDefault(a => a.HomeAccountId.Identifier == homeAccountId);
         if (account is null)
         {
             _logger.LogWarning(
@@ -184,16 +191,17 @@ public sealed class MsalAirbnbEmailAuthenticator : IAirbnbEmailAuthenticator
 
     private async Task EnsureConnectionRowExistsAsync(Guid tenantId, CancellationToken cancellationToken)
     {
-        var existing = await _repository.GetForCurrentTenantAsync(cancellationToken);
-        if (existing is not null)
-            return;
+        // Committed immediately (its own tenant-scoped transaction), ahead of
+        // AcquireTokenInteractive: MSAL's cache-changed callback can fire
+        // DURING that call, and IAirbnbEmailTokenCacheStore.SaveAsync needs
+        // this row to already be queryable (under RLS) when that happens.
+        await _unitOfWork.ExecuteAsync(async () =>
+        {
+            var existing = await _repository.GetForCurrentTenantAsync(cancellationToken);
+            if (existing is null)
+                _repository.Add(AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), tenantId, _timeProvider.GetUtcNow()));
 
-        _repository.Add(AirbnbEmailMailboxConnection.Create(Guid.NewGuid(), tenantId, _timeProvider.GetUtcNow()));
-
-        // Explicit save, ahead of the ambient unit-of-work's own commit at
-        // the end of the request: MSAL's cache-changed callback can fire
-        // DURING AcquireTokenInteractive, and IAirbnbEmailTokenCacheStore.SaveAsync
-        // needs this row to already be queryable when that happens.
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }, cancellationToken);
     }
 }

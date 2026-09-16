@@ -80,6 +80,8 @@ public static class ExternalIntegrationsModuleExtensions
         // the Airbnb email parser remain later, separately authorized gates.
         services.AddSingleton<IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.ITokenCacheProtector,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.AesGcmTokenCacheProtector>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailUnitOfWork,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.AirbnbEmailUnitOfWork>();
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailTokenCacheStore,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.PostgresAirbnbEmailTokenCacheStore>();
         services.Configure<IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.AirbnbEmailBridgeOptions>(

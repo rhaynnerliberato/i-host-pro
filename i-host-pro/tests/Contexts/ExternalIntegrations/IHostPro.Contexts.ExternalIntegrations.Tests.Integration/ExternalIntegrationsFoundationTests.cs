@@ -870,11 +870,14 @@ public class ExternalIntegrationsFoundationTests : IClassFixture<ExternalIntegra
         tenantContext.SetTenant(tenantId);
         await using (var writeDbContext = CreateDbContext(_appConnectionString, tenantContext))
         {
-            var store = new PostgresAirbnbEmailTokenCacheStore(writeDbContext, protector, TimeProvider.System);
-            await using var transaction = await writeDbContext.Database.BeginTransactionAsync();
-            await SetTenantAsync(writeDbContext, tenantId);
+            // No externally-managed transaction here (unlike the old version
+            // of this test): PostgresAirbnbEmailTokenCacheStore now opens its
+            // own tenant-scoped transaction internally, exactly like the
+            // real Worker background-service call path (no ambient
+            // transaction/HTTP request pipeline available there either).
+            var unitOfWork = new AirbnbEmailUnitOfWork(writeDbContext, tenantContext);
+            var store = new PostgresAirbnbEmailTokenCacheStore(writeDbContext, unitOfWork, protector, TimeProvider.System);
             await store.SaveAsync(tenantId, plaintext, CancellationToken.None);
-            await transaction.CommitAsync();
         }
 
         await using (var connection = new NpgsqlConnection(_migratorConnectionString))
@@ -889,12 +892,96 @@ public class ExternalIntegrationsFoundationTests : IClassFixture<ExternalIntegra
         }
 
         await using var readDbContext = CreateDbContext(_appConnectionString, tenantContext);
-        var readStore = new PostgresAirbnbEmailTokenCacheStore(readDbContext, protector, TimeProvider.System);
-        await using var readOnlyTransaction = await readDbContext.Database.BeginTransactionAsync();
-        await SetTenantAsync(readDbContext, tenantId);
+        var readUnitOfWork = new AirbnbEmailUnitOfWork(readDbContext, tenantContext);
+        var readStore = new PostgresAirbnbEmailTokenCacheStore(readDbContext, readUnitOfWork, protector, TimeProvider.System);
         var loaded = await readStore.LoadAsync(tenantId, CancellationToken.None);
 
         loaded.Should().Equal(plaintext);
+    }
+
+    /// <summary>
+    /// Regression test for a real bug found by the Automatic Publication
+    /// Controlled Auto-Activation Safety Smoke: <see cref="MsalAirbnbEmailAuthenticator"/>
+    /// used to call <see cref="IAirbnbEmailMailboxConnectionRepository.GetForCurrentTenantAsync"/>
+    /// directly, with no <see cref="IAirbnbEmailUnitOfWork"/> around it. That
+    /// is harmless from an ASP.NET Core request (nothing in this codebase
+    /// currently wraps it in an ambient transaction either, so this was
+    /// already latent there too), but from <c>AirbnbEmailDeltaPollingBackgroundService</c>
+    /// (Worker) there is no ambient transaction at all — PostgreSQL's
+    /// Row-Level Security then silently hid an existing, genuinely connected
+    /// row (no <c>SET LOCAL app.tenant_id</c> was ever applied), which the
+    /// authenticator misread as "mailbox not connected" and the caller then
+    /// persisted as a false <c>AuthorizationStatus.Error</c>. This test
+    /// proves the same repository call, invoked exactly as the Worker calls
+    /// it today (a fresh scope, tenant context set, no ambient transaction),
+    /// now finds the row once wrapped in <see cref="IAirbnbEmailUnitOfWork.ExecuteAsync{TResult}"/>.
+    /// </summary>
+    [Fact]
+    public async Task GetForCurrentTenantAsync_finds_a_real_connection_through_the_unit_of_work_with_no_ambient_transaction()
+    {
+        var (tenantId, connectionId) = await SeedMailboxConnectionAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        var repository = new AirbnbEmailMailboxConnectionRepository(dbContext);
+        var unitOfWork = new AirbnbEmailUnitOfWork(dbContext, tenantContext);
+
+        // Deliberately no Database.BeginTransactionAsync()/SetTenantAsync
+        // here — this is the exact shape of AirbnbEmailDeltaPollingBackgroundService's
+        // own call: a fresh DI scope with tenant context set, nothing else.
+        var found = await unitOfWork.ExecuteAsync(
+            () => repository.GetForCurrentTenantAsync(CancellationToken.None), CancellationToken.None);
+
+        found.Should().NotBeNull(
+            "a real, existing connection must remain visible under RLS once the unit of work sets app.tenant_id, even with no externally-managed ambient transaction");
+        found!.Id.Should().Be(connectionId);
+    }
+
+    /// <summary>
+    /// Companion to the regression test above: proves the historical bug
+    /// really was RLS hiding the row, not something else — calling the
+    /// repository directly (the old, buggy shape, with no unit of work at
+    /// all) against the same real connection returns null even though the
+    /// row genuinely exists.
+    /// </summary>
+    [Fact]
+    public async Task GetForCurrentTenantAsync_returns_null_under_RLS_without_a_tenant_scoped_transaction()
+    {
+        var (tenantId, _) = await SeedMailboxConnectionAsync();
+
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        await using var dbContext = CreateDbContext(_appConnectionString, tenantContext);
+        var repository = new AirbnbEmailMailboxConnectionRepository(dbContext);
+
+        var found = await repository.GetForCurrentTenantAsync(CancellationToken.None);
+
+        found.Should().BeNull("without SET LOCAL app.tenant_id inside an open transaction, RLS hides even a genuinely existing row");
+    }
+
+    /// <summary>
+    /// The other safe outcome required alongside the fix: if tenant context
+    /// was never resolved at all (a real configuration/infrastructure
+    /// problem), the unit of work must fail loudly with
+    /// <see cref="TenantContextNotResolvedException"/> — never silently
+    /// return null and be misread as "mailbox not connected".
+    /// </summary>
+    [Fact]
+    public async Task GetForCurrentTenantAsync_through_the_unit_of_work_throws_when_tenant_context_was_never_resolved()
+    {
+        await SeedMailboxConnectionAsync();
+
+        var unresolvedTenantContext = new TenantContext();
+        await using var dbContext = CreateDbContext(_appConnectionString, unresolvedTenantContext);
+        var repository = new AirbnbEmailMailboxConnectionRepository(dbContext);
+        var unitOfWork = new AirbnbEmailUnitOfWork(dbContext, unresolvedTenantContext);
+
+        var act = async () => await unitOfWork.ExecuteAsync(
+            () => repository.GetForCurrentTenantAsync(CancellationToken.None), CancellationToken.None);
+
+        await act.Should().ThrowAsync<TenantContextNotResolvedException>(
+            "an unresolved tenant context must fail loudly as an infrastructure error, never silently look like a disconnected mailbox");
     }
 
     private async Task<(Guid TenantId, Guid ConnectionId)> SeedMailboxConnectionAsync()
