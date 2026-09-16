@@ -23,17 +23,29 @@ public sealed class AirbnbReservationReminderParser : IAirbnbReservationReminder
     public const string ParserVersion = "airbnb-reservation-reminder-v1";
 
     /// <summary>
-    /// Real-mailbox validation (Fase 9 review) proved two distinct real
-    /// subject variants: "Lembrete de reserva: [GUEST] chega em [breve|DAY, DATE..]"
-    /// (colon separator, first observed via a rendered screenshot) and
-    /// "Lembrete de reserva - [GUEST] chega em ..." (dash separator, found on
-    /// a different real message in the same mailbox). Both share the same
-    /// "Lembrete de reserva" prefix and "chega em" marker around the guest
-    /// name - this pattern captures everything between them regardless of
-    /// separator or what follows "chega em".
+    /// Secondary fallback only. Real-mailbox validation (Fase 9 review) found
+    /// two real subject variants that DO carry the guest name next to "chega
+    /// em" (one colon-separated, one dash-separated), but a subsequent bounded
+    /// diagnostic across all 5 known real reminder messages found this
+    /// reliable in 0/5 - most real subjects for this template do not follow
+    /// this shape at all. Kept only in case a future variant matches it.
     /// </summary>
     private static readonly Regex SubjectPattern = new(
         @"^Lembrete de reserva\s*[:\-]?\s*(?<guest>.+?)\s+chega em\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Primary source. A bounded real-mailbox diagnostic (Fase 9 review)
+    /// found this exact phrase, immediately followed by the guest's name,
+    /// present in the body of 5/5 known real reservation-reminder messages -
+    /// the only structural signal proven consistent across every real sample
+    /// checked, unlike the subject (0/5 reliable). Captures one or two
+    /// consecutive capitalized words, which naturally stops before the
+    /// lowercase word that follows the name in every observed instance
+    /// (e.g. "...contato com [NAME] para enviar instruções...").
+    /// </summary>
+    private static readonly Regex BodyContactPhrasePattern = new(
+        @"entre em contato com\s+(?<guest>[A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)?)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly string[] PropertyTypeMarkers =
@@ -122,8 +134,11 @@ public sealed class AirbnbReservationReminderParser : IAirbnbReservationReminder
         if (checkOutAt <= checkInAt)
             checkOutAt = checkOutAt.AddYears(1);
 
+        var bodyContactMatch = BodyContactPhrasePattern.Match(fullText);
         var subjectMatch = SubjectPattern.Match(subject.Trim());
-        var guestName = subjectMatch.Success ? subjectMatch.Groups["guest"].Value.Trim() : string.Empty;
+        var guestName = bodyContactMatch.Success ? bodyContactMatch.Groups["guest"].Value.Trim()
+            : subjectMatch.Success ? subjectMatch.Groups["guest"].Value.Trim()
+            : string.Empty;
         if (guestName.Length == 0)
             return AirbnbReservationReminderParseResult.Failure(AirbnbReservationReminderParseFailureReason.MissingRequiredField, "GuestName");
 

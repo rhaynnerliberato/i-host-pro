@@ -51,6 +51,55 @@ public class AirbnbReservationReminderParserTests
     }
 
     [Fact]
+    public void Parse_extracts_guest_name_from_the_body_contact_phrase_when_the_subject_has_no_usable_pattern()
+    {
+        // Real-mailbox validation (Fase 9 review) found a 0/5-reliable subject
+        // for this template - this fixture models that reality: a subject
+        // with no "chega em"/guest-name pattern at all.
+        const string subject = "Lembrete de reserva - detalhes da sua estadia";
+        const string body = """
+            <p>Studio Exemplo Fixture</p>
+            <p>Casa/apto inteiro</p>
+            <p>Check-in</p><p>Checkout</p>
+            <p>5 de nov.</p><p>14:00</p>
+            <p>8 de nov.</p><p>11:00</p>
+            <p>Caso ainda nao tenha feito isso, entre em contato com Hospede Teste para enviar instrucoes.</p>
+            <p>Hóspedes</p>
+            <p>2 adultos</p>
+            <p>Código de reserva</p>
+            <p>TESTCODE12</p>
+            """;
+
+        var result = _parser.Parse(subject, body, ReceivedAtUtc);
+
+        result.IsSuccess.Should().BeTrue();
+        result.GuestName.Should().Be("Hospede Teste");
+    }
+
+    [Fact]
+    public void Parse_prefers_the_body_contact_phrase_over_the_subject_when_both_are_present()
+    {
+        const string subject = "Lembrete de reserva: Nome Do Subject chega em breve!";
+        const string body = """
+            <p>Studio Exemplo Fixture</p>
+            <p>Casa/apto inteiro</p>
+            <p>Check-in</p><p>Checkout</p>
+            <p>5 de nov.</p><p>14:00</p>
+            <p>8 de nov.</p><p>11:00</p>
+            <p>entre em contato com Nome Corpo para enviar instrucoes.</p>
+            <p>Hóspedes</p>
+            <p>2 adultos</p>
+            <p>Código de confirmação</p>
+            <p>TESTCODE12</p>
+            """;
+
+        var result = _parser.Parse(subject, body, ReceivedAtUtc);
+
+        result.IsSuccess.Should().BeTrue();
+        result.GuestName.Should().Be("Nome Corpo");
+    }
+
+    [Fact]
     public void Parse_infers_next_year_when_the_dates_would_otherwise_fall_far_in_the_past()
     {
         // Reminder sent in December for a stay in early January - the
