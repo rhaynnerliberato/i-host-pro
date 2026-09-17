@@ -88,6 +88,11 @@ public static class ExternalIntegrationsModuleExtensions
             configuration.GetSection("ExternalIntegrations:AirbnbEmailBridge"));
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailMailboxConnectionRepository,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.AirbnbEmailMailboxConnectionRepository>();
+        // Minimal Operations/UX gate - GetAirbnbEmailProcessingSummaryQueryHandler
+        // (Api-only, no Worker equivalent exists yet) is the first Api-side
+        // consumer of this repository; only Worker's own module registered it before.
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailMessageReceiptRepository,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.AirbnbEmailMessageReceiptRepository>();
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailAuthenticator,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MsalAirbnbEmailAuthenticator>();
 

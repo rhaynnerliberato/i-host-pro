@@ -1,0 +1,17 @@
+<h2 mat-dialog-title>{{ 'integrations.airbnbEmail.autoPublication.enableDialog.title' | transloco }}</h2>
+<mat-dialog-content>
+  <p>{{ 'integrations.airbnbEmail.autoPublication.enableDialog.message' | transloco }}</p>
+  @if (errorKey()) {
+    <p class="enable-dialog-error">{{ errorKey()! | transloco }}</p>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()">{{ 'common.cancel' | transloco }}</button>
+  <button mat-flat-button color="primary" (click)="confirm()" [disabled]="submitting()">
+    @if (submitting()) {
+      <mat-progress-spinner diameter="18" mode="indeterminate" />
+    } @else {
+      {{ 'integrations.airbnbEmail.autoPublication.enableDialog.confirm' | transloco }}
+    }
+  </button>
+</mat-dialog-actions>

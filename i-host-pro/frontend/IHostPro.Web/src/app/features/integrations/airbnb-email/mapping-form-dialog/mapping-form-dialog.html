@@ -1,0 +1,44 @@
+<h2 mat-dialog-title>{{ 'integrations.airbnbEmail.mappings.form.title' | transloco }}</h2>
+<form [formGroup]="form" (ngSubmit)="submit()">
+  <mat-dialog-content>
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'integrations.airbnbEmail.mappings.form.listingTitle' | transloco }}</mat-label>
+      <input matInput formControlName="listingTitle" />
+      @if (form.controls.listingTitle.hasError('required') && form.controls.listingTitle.touched) {
+        <mat-error>{{ 'integrations.airbnbEmail.mappings.form.errors.listingTitleRequired' | transloco }}</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>{{ 'integrations.airbnbEmail.mappings.form.property' | transloco }}</mat-label>
+      @if (loadingProperties()) {
+        <mat-progress-spinner matSuffix diameter="20" mode="indeterminate" />
+      }
+      <mat-select formControlName="propertyId">
+        @for (property of properties(); track property.id) {
+          <mat-option [value]="property.id">{{ property.name }} ({{ property.code }})</mat-option>
+        }
+      </mat-select>
+      @if (form.controls.propertyId.hasError('required') && form.controls.propertyId.touched) {
+        <mat-error>{{ 'integrations.airbnbEmail.mappings.form.errors.propertyRequired' | transloco }}</mat-error>
+      }
+    </mat-form-field>
+
+    <p class="mapping-form-hint">{{ 'integrations.airbnbEmail.mappings.form.exactMatchHint' | transloco }}</p>
+
+    @if (errorKey()) {
+      <p class="mapping-form-error">{{ errorKey()! | transloco }}</p>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" (click)="cancel()">{{ 'common.cancel' | transloco }}</button>
+    <button mat-flat-button color="primary" type="submit" [disabled]="submitting()">
+      @if (submitting()) {
+        <mat-progress-spinner diameter="18" mode="indeterminate" />
+      } @else {
+        {{ 'common.save' | transloco }}
+      }
+    </button>
+  </mat-dialog-actions>
+</form>

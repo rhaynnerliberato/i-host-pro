@@ -38,7 +38,8 @@
       "policies": "Policies",
       "housekeeping": "Housekeeping",
       "schedule": "Schedule",
-      "dashboard": "Dashboard"
+      "dashboard": "Dashboard",
+      "airbnbEmail": "Airbnb Email Bridge"
     }
   },
   "home": {
@@ -703,6 +704,87 @@
           "Noise": "Noise",
           "MaterialShortage": "Material shortage"
         }
+      }
+    }
+  },
+  "integrations": {
+    "airbnbEmail": {
+      "title": "Airbnb Email Bridge",
+      "connection": {
+        "title": "Mailbox connection",
+        "loadError": "Could not load the connection status.",
+        "status": {
+          "notConfigured": "Not configured",
+          "disconnected": "Disconnected",
+          "connected": "Connected",
+          "error": "Error"
+        },
+        "notConfiguredHint": "Initial connection still requires operational setup.",
+        "mailboxAddress": "Mailbox",
+        "lastAuthenticatedAtUtc": "Last authenticated",
+        "disconnect": "Disconnect",
+        "disconnectConfirmTitle": "Disconnect mailbox",
+        "disconnectConfirmMessage": "Are you sure you want to disconnect the mailbox? Email synchronization will stop.",
+        "disconnectedSuccess": "Mailbox disconnected successfully.",
+        "errors": {
+          "generic": "Could not complete the action. Please try again."
+        }
+      },
+      "autoPublication": {
+        "title": "Automatic publication",
+        "loadError": "Could not load the automatic publication status.",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "cutoff": "Active from",
+        "safetyHint": "Only new emails received after activation will be published.",
+        "enable": "Enable",
+        "disable": "Disable",
+        "disableConfirmTitle": "Disable automatic publication",
+        "disableConfirmMessage": "Are you sure you want to disable automatic publication?",
+        "enabledSuccess": "Automatic publication enabled successfully.",
+        "disabledSuccess": "Automatic publication disabled successfully.",
+        "errors": {
+          "generic": "Could not complete the action. Please try again."
+        },
+        "enableDialog": {
+          "title": "Enable automatic publication",
+          "message": "Only emails received from now on will be published automatically. No historical email will be imported.",
+          "confirm": "Enable now",
+          "errors": {
+            "generic": "Could not enable automatic publication. Please try again."
+          }
+        }
+      },
+      "mappings": {
+        "title": "Listing mappings",
+        "create": "New mapping",
+        "loadError": "Could not load the mappings.",
+        "empty": "No mapping registered yet.",
+        "columns": {
+          "listingTitle": "Listing title (Airbnb)",
+          "propertyId": "Property"
+        },
+        "createdSuccess": "Mapping created successfully.",
+        "form": {
+          "title": "New mapping",
+          "listingTitle": "Listing title (Airbnb)",
+          "property": "Property",
+          "exactMatchHint": "The title must exactly match the title used on Airbnb.",
+          "errors": {
+            "listingTitleRequired": "Enter the listing title.",
+            "propertyRequired": "Select a property.",
+            "generic": "Could not create the mapping. Please try again."
+          }
+        }
+      },
+      "processing": {
+        "title": "Email processing",
+        "loadError": "Could not load the processing summary.",
+        "needsReview": "Needs review",
+        "failed": "Failed",
+        "pending": "Pending",
+        "processed": "Processed",
+        "ignored": "Ignored"
       }
     }
   }

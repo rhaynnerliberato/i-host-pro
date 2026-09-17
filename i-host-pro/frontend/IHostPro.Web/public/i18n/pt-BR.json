@@ -38,7 +38,8 @@
       "policies": "Políticas",
       "housekeeping": "Limpezas",
       "schedule": "Agenda",
-      "dashboard": "Dashboard"
+      "dashboard": "Dashboard",
+      "airbnbEmail": "Airbnb - Email Bridge"
     }
   },
   "home": {
@@ -703,6 +704,87 @@
           "Noise": "Barulho",
           "MaterialShortage": "Falta de material"
         }
+      }
+    }
+  },
+  "integrations": {
+    "airbnbEmail": {
+      "title": "Airbnb - Email Bridge",
+      "connection": {
+        "title": "Conexão da mailbox",
+        "loadError": "Não foi possível carregar o status da conexão.",
+        "status": {
+          "notConfigured": "Não configurado",
+          "disconnected": "Desconectado",
+          "connected": "Conectado",
+          "error": "Erro"
+        },
+        "notConfiguredHint": "Conexão inicial ainda requer configuração operacional.",
+        "mailboxAddress": "Mailbox",
+        "lastAuthenticatedAtUtc": "Última autenticação",
+        "disconnect": "Desconectar",
+        "disconnectConfirmTitle": "Desconectar mailbox",
+        "disconnectConfirmMessage": "Tem certeza de que deseja desconectar a mailbox? A sincronização de e-mails será interrompida.",
+        "disconnectedSuccess": "Mailbox desconectada com sucesso.",
+        "errors": {
+          "generic": "Não foi possível concluir a ação. Tente novamente."
+        }
+      },
+      "autoPublication": {
+        "title": "Publicação automática",
+        "loadError": "Não foi possível carregar o status da publicação automática.",
+        "enabled": "Ativada",
+        "disabled": "Desativada",
+        "cutoff": "Ativa a partir de",
+        "safetyHint": "Somente novos e-mails recebidos a partir da ativação serão publicados.",
+        "enable": "Ativar",
+        "disable": "Desativar",
+        "disableConfirmTitle": "Desativar publicação automática",
+        "disableConfirmMessage": "Tem certeza de que deseja desativar a publicação automática?",
+        "enabledSuccess": "Publicação automática ativada com sucesso.",
+        "disabledSuccess": "Publicação automática desativada com sucesso.",
+        "errors": {
+          "generic": "Não foi possível concluir a ação. Tente novamente."
+        },
+        "enableDialog": {
+          "title": "Ativar publicação automática",
+          "message": "Somente novos e-mails recebidos a partir de agora serão publicados automaticamente. Nenhum e-mail histórico será importado.",
+          "confirm": "Ativar agora",
+          "errors": {
+            "generic": "Não foi possível ativar a publicação automática. Tente novamente."
+          }
+        }
+      },
+      "mappings": {
+        "title": "Mapeamento de anúncios",
+        "create": "Novo mapeamento",
+        "loadError": "Não foi possível carregar os mapeamentos.",
+        "empty": "Nenhum mapeamento cadastrado.",
+        "columns": {
+          "listingTitle": "Título do anúncio (Airbnb)",
+          "propertyId": "Imóvel"
+        },
+        "createdSuccess": "Mapeamento criado com sucesso.",
+        "form": {
+          "title": "Novo mapeamento",
+          "listingTitle": "Título do anúncio (Airbnb)",
+          "property": "Imóvel",
+          "exactMatchHint": "O título deve corresponder exatamente ao título usado no Airbnb.",
+          "errors": {
+            "listingTitleRequired": "Informe o título do anúncio.",
+            "propertyRequired": "Selecione um imóvel.",
+            "generic": "Não foi possível criar o mapeamento. Tente novamente."
+          }
+        }
+      },
+      "processing": {
+        "title": "Processamento de e-mails",
+        "loadError": "Não foi possível carregar o resumo de processamento.",
+        "needsReview": "Requer revisão",
+        "failed": "Falharam",
+        "pending": "Pendentes",
+        "processed": "Processados",
+        "ignored": "Ignorados"
       }
     }
   }

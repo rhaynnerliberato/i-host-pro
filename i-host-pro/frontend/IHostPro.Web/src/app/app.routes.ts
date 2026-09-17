@@ -70,6 +70,12 @@ export const routes: Routes = [
         data: { titleKey: 'layout.nav.dashboard', permissions: ['DASHBOARD:MANAGE', 'DASHBOARD:READ'] },
         loadComponent: () => import('./features/dashboard/dashboard-overview/dashboard-overview').then((m) => m.DashboardOverview),
       },
+      {
+        path: 'integrations/airbnb-email',
+        canActivate: [permissionGuard],
+        data: { titleKey: 'layout.nav.airbnbEmail', permissions: ['INTEGRATIONS:MANAGE'] },
+        loadComponent: () => import('./features/integrations/airbnb-email/airbnb-email-page/airbnb-email-page').then((m) => m.AirbnbEmailPage),
+      },
     ],
   },
   {
