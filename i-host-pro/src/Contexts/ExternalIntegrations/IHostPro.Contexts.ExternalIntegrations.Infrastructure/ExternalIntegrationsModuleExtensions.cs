@@ -96,6 +96,16 @@ public static class ExternalIntegrationsModuleExtensions
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailAuthenticator,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MsalAirbnbEmailAuthenticator>();
 
+        // Web OAuth architecture gate — Api-only (only the Api hosts the new
+        // OAuth start/callback controller; the Worker never does). Shares the
+        // same AES-256-GCM key as ITokenCacheProtector above through a
+        // separate, narrower contract (AesGcmOAuthTransactionSecretProtector's
+        // own remarks) — no second key to provision, no duplicated crypto.
+        services.AddSingleton<IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.IOAuthTransactionSecretProtector,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.AesGcmOAuthTransactionSecretProtector>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailOAuthTransactionRepository,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.AirbnbEmailOAuthTransactionRepository>();
+
         // Airbnb Reservation Email Parser gate — DRY_RUN only. Automatic
         // per-receipt Worker publication remains NOT wired (a distinct,
         // not-yet-made "Automatic Publication Design Gate" decision) — this

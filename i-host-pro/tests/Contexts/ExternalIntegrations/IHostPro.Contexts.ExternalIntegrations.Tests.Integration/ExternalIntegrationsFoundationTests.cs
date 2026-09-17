@@ -1150,6 +1150,172 @@ public class ExternalIntegrationsFoundationTests : IClassFixture<ExternalIntegra
         tenantBCounts.GetValueOrDefault(AirbnbEmailMessageProcessingStatus.Failed).Should().Be(0);
     }
 
+    // ---- Web OAuth architecture gate — AirbnbEmailOAuthTransaction (pre-authentication security state) ----
+
+    [Fact]
+    public async Task Migration_creates_the_airbnb_email_oauth_transactions_table()
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+
+        var tableNames = new HashSet<string>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'external_integrations'";
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                tableNames.Add(reader.GetString(0));
+        }
+
+        tableNames.Should().Contain("airbnb_email_oauth_transactions");
+    }
+
+    [Fact]
+    public async Task Row_Level_Security_is_NOT_enabled_on_airbnb_email_oauth_transactions()
+    {
+        await using var connection = new NpgsqlConnection(_migratorConnectionString);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'airbnb_email_oauth_transactions' AND relnamespace = 'external_integrations'::regnamespace";
+        await using var reader = await command.ExecuteReaderAsync();
+        (await reader.ReadAsync()).Should().BeTrue();
+
+        reader.GetBoolean(0).Should().BeFalse(
+            "the tenant is not yet known at oauth/callback time — discovering it IS the point of this table, so RLS keyed on app.tenant_id would make every row unreadable exactly when it needs to be read (Web OAuth architecture gate, item 13)");
+        reader.GetBoolean(1).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ConsumeByStateHashAsync_returns_the_trusted_correlation_data_and_marks_the_row_consumed()
+    {
+        await using var dbContext = CreateDbContext(_appConnectionString, new TenantContext());
+        var repository = new AirbnbEmailOAuthTransactionRepository(dbContext);
+        var tenantId = Guid.NewGuid();
+        var actorUserId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        repository.CreatePending(Guid.NewGuid(), tenantId, actorUserId, "hash-happy-path", [9, 9, 9], now, now.AddMinutes(10));
+        await dbContext.SaveChangesAsync();
+
+        var result = await repository.ConsumeByStateHashAsync("hash-happy-path", now.AddMinutes(1), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.TenantId.Should().Be(tenantId);
+        result.ActorUserId.Should().Be(actorUserId);
+        result.ProtectedPkceVerifier.Should().Equal(9, 9, 9);
+    }
+
+    [Fact]
+    public async Task ConsumeByStateHashAsync_returns_null_for_an_unknown_state_hash()
+    {
+        await using var dbContext = CreateDbContext(_appConnectionString, new TenantContext());
+        var repository = new AirbnbEmailOAuthTransactionRepository(dbContext);
+
+        var result = await repository.ConsumeByStateHashAsync("never-created", DateTimeOffset.UtcNow, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ConsumeByStateHashAsync_returns_null_for_an_expired_transaction()
+    {
+        await using var dbContext = CreateDbContext(_appConnectionString, new TenantContext());
+        var repository = new AirbnbEmailOAuthTransactionRepository(dbContext);
+        var now = DateTimeOffset.UtcNow;
+
+        repository.CreatePending(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "hash-expired", [1], now.AddMinutes(-20), now.AddMinutes(-10));
+        await dbContext.SaveChangesAsync();
+
+        var result = await repository.ConsumeByStateHashAsync("hash-expired", now, CancellationToken.None);
+
+        result.Should().BeNull("an expired transaction must never be consumable, even though the row still exists");
+    }
+
+    /// <summary>
+    /// Proves single-use: the second call with the same state hash — even
+    /// well within the expiry window — must fail, never silently succeed
+    /// again (Web OAuth architecture gate, item 16).
+    /// </summary>
+    [Fact]
+    public async Task ConsumeByStateHashAsync_returns_null_when_called_a_second_time()
+    {
+        await using var dbContext = CreateDbContext(_appConnectionString, new TenantContext());
+        var repository = new AirbnbEmailOAuthTransactionRepository(dbContext);
+        var now = DateTimeOffset.UtcNow;
+
+        repository.CreatePending(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "hash-single-use", [1], now, now.AddMinutes(10));
+        await dbContext.SaveChangesAsync();
+
+        var first = await repository.ConsumeByStateHashAsync("hash-single-use", now, CancellationToken.None);
+        var second = await repository.ConsumeByStateHashAsync("hash-single-use", now, CancellationToken.None);
+
+        first.Should().NotBeNull();
+        second.Should().BeNull("a replayed callback presenting an already-consumed state must never succeed a second time");
+    }
+
+    /// <summary>
+    /// The central atomicity proof ChatGPT's own architecture gate demanded
+    /// (item 15-16/9): two callbacks racing to consume the SAME state must
+    /// leave AT MOST ONE successful — never both, which a naive
+    /// SELECT-then-UPDATE would allow.
+    /// </summary>
+    [Fact]
+    public async Task ConsumeByStateHashAsync_lets_at_most_one_of_two_concurrent_callers_succeed()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await using (var seedDbContext = CreateDbContext(_appConnectionString, new TenantContext()))
+        {
+            new AirbnbEmailOAuthTransactionRepository(seedDbContext)
+                .CreatePending(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "hash-race", [1], now, now.AddMinutes(10));
+            await seedDbContext.SaveChangesAsync();
+        }
+
+        await using var dbContextA = CreateDbContext(_appConnectionString, new TenantContext());
+        await using var dbContextB = CreateDbContext(_appConnectionString, new TenantContext());
+        var repositoryA = new AirbnbEmailOAuthTransactionRepository(dbContextA);
+        var repositoryB = new AirbnbEmailOAuthTransactionRepository(dbContextB);
+
+        var taskA = repositoryA.ConsumeByStateHashAsync("hash-race", now, CancellationToken.None);
+        var taskB = repositoryB.ConsumeByStateHashAsync("hash-race", now, CancellationToken.None);
+        var results = await Task.WhenAll(taskA, taskB);
+
+        results.Count(r => r is not null).Should().Be(1, "concurrent callbacks presenting the same state must leave exactly one successful consumption, never zero or two");
+    }
+
+    /// <summary>
+    /// The whole reason this table has no RLS/Global Query Filter (Web OAuth
+    /// architecture gate's circularity correction): this call must succeed
+    /// with NO tenant context ever set on this DbContext — proving the
+    /// callback bootstrap sequence (consume state BEFORE SetTenant) is
+    /// actually possible against the real schema, not just in the design.
+    /// </summary>
+    [Fact]
+    public async Task ConsumeByStateHashAsync_works_with_no_ambient_tenant_context_at_all()
+    {
+        var tenantId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        await using (var seedDbContext = CreateDbContext(_appConnectionString, new TenantContext()))
+        {
+            new AirbnbEmailOAuthTransactionRepository(seedDbContext)
+                .CreatePending(Guid.NewGuid(), tenantId, Guid.NewGuid(), "hash-no-tenant-context", [1], now, now.AddMinutes(10));
+            await seedDbContext.SaveChangesAsync();
+        }
+
+        // Deliberately an unresolved TenantContext (IsResolved == false) —
+        // unlike every other repository call in this Bounded Context, this
+        // must NOT throw TenantContextNotResolvedException and must NOT
+        // require IAirbnbEmailUnitOfWork at all.
+        await using var dbContext = CreateDbContext(_appConnectionString, new TenantContext());
+        var repository = new AirbnbEmailOAuthTransactionRepository(dbContext);
+
+        var result = await repository.ConsumeByStateHashAsync("hash-no-tenant-context", now, CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.TenantId.Should().Be(tenantId, "the tenant is RECOVERED from this call, not required as a precondition of it");
+    }
+
     private async Task<(Guid TenantId, Guid ConnectionId)> SeedMailboxConnectionAsync()
     {
         var tenantId = Guid.NewGuid();

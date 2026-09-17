@@ -1,11 +1,7 @@
 namespace IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge;
 
 /// <summary>
-/// Bound from <c>ExternalIntegrations:AirbnbEmailBridge</c>. No
-/// <c>ClientSecret</c> setting exists by design — this is a public client
-/// (Fase 9 review §1-2): the Microsoft Entra app registration must use the
-/// "Mobile and desktop applications" platform with redirect URI
-/// <c>http://localhost</c>, never a Web/confidential-client registration.
+/// Bound from <c>ExternalIntegrations:AirbnbEmailBridge</c>.
 ///
 /// <see cref="ClientId"/> being unset is a legitimate, common state (no
 /// developer has connected a mailbox yet) — resolving it happens lazily,
@@ -13,6 +9,15 @@ namespace IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridg
 /// startup, so its absence never blocks Api/Worker startup for anyone not
 /// using this feature (same lazy-fail-on-use philosophy as
 /// <see cref="AesGcmTokenCacheProtector"/>'s own master key).
+///
+/// Web OAuth architecture gate: the SAME Entra app registration now also
+/// carries a Web platform redirect URI + a Client Secret credential
+/// (<see cref="ClientSecret"/>/<see cref="WebRedirectUri"/>), ALONGSIDE the
+/// original "Mobile and desktop applications" platform (<see cref="RedirectUri"/>)
+/// — the local interactive public-client flow is preserved unchanged, never
+/// removed. <see cref="ClientSecret"/> is resolved the same lazy, never-
+/// validated-at-startup way as <see cref="ClientId"/> — via .NET User Secrets
+/// or an environment variable, never committed.
 /// </summary>
 public sealed class AirbnbEmailBridgeOptions
 {
@@ -20,6 +25,27 @@ public sealed class AirbnbEmailBridgeOptions
 
     /// <summary>Must match the Entra app registration's "Mobile and desktop applications" redirect URI exactly.</summary>
     public string RedirectUri { get; set; } = "http://localhost";
+
+    /// <summary>
+    /// The Web OAuth confidential-client credential. Never committed, never
+    /// logged, never returned through any endpoint (Web OAuth architecture
+    /// gate, item 34). Absent by default: everywhere the confidential-client
+    /// web flow has not been set up yet (including every environment before
+    /// the Entra human handoff step), the legacy local public-client flow
+    /// keeps working exactly as before — see <see cref="MsalAirbnbEmailAuthenticator"/>'s
+    /// silent-auth client-selection remarks.
+    /// </summary>
+    public string? ClientSecret { get; set; }
+
+    /// <summary>
+    /// The Web OAuth callback URL registered as a "Web" platform redirect URI
+    /// on the same Entra app registration — e.g.
+    /// <c>http://localhost:5140/api/v1/integrations/airbnb-email/oauth/callback</c>
+    /// locally. Environment-specific, never a secret — deliberately separate
+    /// from <see cref="RedirectUri"/> (the legacy loopback redirect, kept
+    /// unchanged for the local interactive flow).
+    /// </summary>
+    public string? WebRedirectUri { get; set; }
 
     /// <summary>
     /// <c>common</c> supports both work/school accounts and personal

@@ -49,6 +49,9 @@ public sealed class ExternalIntegrationsDbContext : BaseDbContext
     /// <summary>Airbnb Email Bridge's own listing resolution — maps a free-text listing TITLE (the only listing identifier observed in these emails) to a local PropertyId, separate from <see cref="AirbnbListingMapping"/>'s stable-id mapping.</summary>
     public DbSet<AirbnbListingTitleMapping> AirbnbListingTitleMappings => Set<AirbnbListingTitleMapping>();
 
+    /// <summary>Web OAuth architecture gate — pre-authentication OAuth state; see <see cref="AirbnbEmailOAuthTransaction"/>'s remarks for why it is deliberately not tenant-owned.</summary>
+    public DbSet<AirbnbEmailOAuthTransaction> AirbnbEmailOAuthTransactions => Set<AirbnbEmailOAuthTransaction>();
+
     public ExternalIntegrationsDbContext(DbContextOptions<ExternalIntegrationsDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)
     {
@@ -59,6 +62,14 @@ public sealed class ExternalIntegrationsDbContext : BaseDbContext
         modelBuilder.UsePropertyAccessMode(PropertyAccessMode.PreferField);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ExternalIntegrationsDbContext).Assembly);
+
+        // Keyless materialization shape for AirbnbEmailOAuthTransactionRepository's
+        // atomic UPDATE ... RETURNING — never a real table/view.
+        modelBuilder.Entity<AirbnbEmailOAuthTransactionConsumptionRow>(builder =>
+        {
+            builder.HasNoKey();
+            builder.ToView(null);
+        });
 
         modelBuilder.MapWolverineEnvelopeStorage("external_integrations_messaging");
 
