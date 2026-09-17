@@ -715,6 +715,136 @@ export class Client {
     /**
      * @return OK
      */
+    start(): Observable<AirbnbEmailWebOAuthStartResponse> {
+        let url_ = this.baseUrl + "/api/v1/integrations/airbnb-email/oauth/start";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processStart(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processStart(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<AirbnbEmailWebOAuthStartResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<AirbnbEmailWebOAuthStartResponse>;
+        }));
+    }
+
+    protected processStart(response: HttpResponseBase): Observable<AirbnbEmailWebOAuthStartResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as AirbnbEmailWebOAuthStartResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @param state (optional) 
+     * @param code (optional) 
+     * @param error (optional) 
+     * @return OK
+     */
+    callback(state?: string | undefined, code?: string | undefined, error?: string | undefined): Observable<void> {
+        let url_ = this.baseUrl + "/api/v1/integrations/airbnb-email/oauth/callback?";
+        if (state === null)
+            throw new globalThis.Error("The parameter 'state' cannot be null.");
+        else if (state !== undefined)
+            url_ += "state=" + encodeURIComponent("" + state) + "&";
+        if (code === null)
+            throw new globalThis.Error("The parameter 'code' cannot be null.");
+        else if (code !== undefined)
+            url_ += "code=" + encodeURIComponent("" + code) + "&";
+        if (error === null)
+            throw new globalThis.Error("The parameter 'error' cannot be null.");
+        else if (error !== undefined)
+            url_ += "error=" + encodeURIComponent("" + error) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processCallback(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processCallback(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<void>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<void>;
+        }));
+    }
+
+    protected processCallback(response: HttpResponseBase): Observable<void> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return _observableOf(null as any);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @return OK
+     */
     listingTitleMappingsAll(): Observable<AirbnbListingTitleMappingResponse[]> {
         let url_ = this.baseUrl + "/api/v1/integrations/airbnb-email/listing-title-mappings";
         url_ = url_.replace(/[?&]$/, "");
@@ -1338,7 +1468,7 @@ export class Client {
     /**
      * @return OK
      */
-    start(cleaningId: string): Observable<CleaningDetailResponse> {
+    start2(cleaningId: string): Observable<CleaningDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/cleanings/{cleaningId}/start";
         if (cleaningId === undefined || cleaningId === null)
             throw new globalThis.Error("The parameter 'cleaningId' must be defined.");
@@ -1354,11 +1484,11 @@ export class Client {
         };
 
         return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
-            return this.processStart(response_);
+            return this.processStart2(response_);
         })).pipe(_observableCatch((response_: any) => {
             if (response_ instanceof HttpResponseBase) {
                 try {
-                    return this.processStart(response_ as any);
+                    return this.processStart2(response_ as any);
                 } catch (e) {
                     return _observableThrow(e) as any as Observable<CleaningDetailResponse>;
                 }
@@ -1367,7 +1497,7 @@ export class Client {
         }));
     }
 
-    protected processStart(response: HttpResponseBase): Observable<CleaningDetailResponse> {
+    protected processStart2(response: HttpResponseBase): Observable<CleaningDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -7384,6 +7514,10 @@ export interface AirbnbEmailProcessingSummaryResponse {
     needsReview?: number;
     failed?: number;
     ignored?: number;
+}
+
+export interface AirbnbEmailWebOAuthStartResponse {
+    authorizationUrl?: string | undefined;
 }
 
 export interface AirbnbListingTitleMappingResponse {

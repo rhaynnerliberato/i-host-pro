@@ -8,7 +8,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
+import { ActivatedRoute, Router } from '@angular/router';
 import { TranslocoPipe, TranslocoService } from '@jsverse/transloco';
+import { take } from 'rxjs';
 
 import { AirbnbListingTitleMappingResponse } from '../../../../core/api/generated/api-client';
 import { ConfirmDialog, ConfirmDialogData } from '../../../users/confirm-dialog/confirm-dialog';
@@ -27,18 +29,23 @@ interface AutoPublicationView {
   notBeforeUtc: Date | undefined;
 }
 
+/** Bounded result codes the oauth/callback redirect appends — never anything else (Web OAuth architecture gate, item 21). */
+type ConnectResultCode = 'success' | 'denied' | 'expired' | 'error';
+
 /**
  * Airbnb Email Bridge Minimal Operations/UX gate — one compact page, four
  * sections (Connection / Automatic publication / Listing mappings /
  * Processing attention), each with its own independent load state so one
  * section's failure never blocks the others.
  *
- * Deliberately has NO "Connect" action: the backend's interactive OAuth flow
- * opens a system browser on the machine running the Api process, not the
- * operator's own browser — not a real capability for a deployed multi-tenant
- * web UI (see AirbnbEmailBridgeController's own remarks). Initial mailbox
- * connection remains an operational/engineering setup step until a separate,
- * future redirect-based web OAuth gate is designed.
+ * Web OAuth architecture gate: the "Connect" action IS now exposed here —
+ * self-service Authorization Code + PKCE, no developer/engineering setup
+ * step. It only ever appears when there is no active connection
+ * (NotConfigured/Disconnected/Error); a Connected mailbox never shows it
+ * (see the template's own status guard). Clicking it does a full-page
+ * navigation to the backend-issued Microsoft authorization URL — this
+ * component never generates, sees, or stores any `state`/PKCE material
+ * itself.
  */
 @Component({
   selector: 'app-airbnb-email-page',
@@ -51,11 +58,14 @@ export class AirbnbEmailPage {
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly transloco = inject(TranslocoService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
   protected readonly displayedMappingColumns = ['listingTitle', 'propertyId'];
 
   protected readonly connectionState = signal<LoadState>('loading');
   protected readonly connection = signal<AirbnbEmailMailboxStatus | null>(null);
+  protected readonly connecting = signal(false);
 
   protected readonly autoPublicationState = signal<LoadState>('loading');
   protected readonly autoPublication = signal<AutoPublicationView | null>(null);
@@ -67,10 +77,63 @@ export class AirbnbEmailPage {
   protected readonly summary = signal<AirbnbEmailProcessingSummary | null>(null);
 
   constructor() {
+    this.handleConnectCallbackResult();
     this.loadConnection();
     this.loadAutoPublication();
     this.loadMappings();
     this.loadSummary();
+  }
+
+  /**
+   * Reads the bounded `connect` result code the oauth/callback redirect may
+   * have appended, shows a one-time toast for it, then strips it from the
+   * URL — never re-shown on a later reload/refresh of this same page.
+   *
+   * Uses `selectTranslate` (never the synchronous `translate()`), mirroring
+   * ScheduleCalendar's own precedent: this runs from the constructor, before
+   * the i18n JSON's async HTTP load is guaranteed to have completed —
+   * `translate()` would silently return the raw key in that window and the
+   * snackbar, being a one-shot imperative call, would never self-correct
+   * once the real translation arrived.
+   */
+  private handleConnectCallbackResult(): void {
+    const resultCode = this.route.snapshot.queryParamMap.get('connect') as ConnectResultCode | null;
+    if (!resultCode) return;
+
+    const messageKeys: Record<ConnectResultCode, string> = {
+      success: 'integrations.airbnbEmail.connection.connectSuccess',
+      denied: 'integrations.airbnbEmail.connection.connectDenied',
+      expired: 'integrations.airbnbEmail.connection.connectExpired',
+      error: 'integrations.airbnbEmail.connection.connectError',
+    };
+    const messageKey = messageKeys[resultCode] ?? messageKeys.error;
+
+    this.transloco
+      .selectTranslate(messageKey)
+      .pipe(take(1))
+      .subscribe((message) => this.snackBar.open(message, undefined, { duration: 5000 }));
+
+    this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+  }
+
+  protected connect(): void {
+    if (this.connecting()) return;
+
+    this.connecting.set(true);
+    this.airbnbEmailService.connect().subscribe({
+      next: (authorizationUrl) => {
+        if (!authorizationUrl) {
+          this.connecting.set(false);
+          this.snackBar.open(this.transloco.translate('integrations.airbnbEmail.connection.errors.generic'), undefined, { duration: 4000 });
+          return;
+        }
+        window.location.href = authorizationUrl;
+      },
+      error: () => {
+        this.connecting.set(false);
+        this.snackBar.open(this.transloco.translate('integrations.airbnbEmail.connection.errors.generic'), undefined, { duration: 4000 });
+      },
+    });
   }
 
   protected loadConnection(): void {

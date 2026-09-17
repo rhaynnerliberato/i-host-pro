@@ -13,6 +13,7 @@ describe('AirbnbEmailService', () => {
     client = {
       airbnbEmail: vi.fn().mockReturnValue(of({})),
       disconnect: vi.fn().mockReturnValue(of({})),
+      start: vi.fn().mockReturnValue(of({ authorizationUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=abc' })),
       autoPublication: vi.fn().mockReturnValue(of({})),
       enableAutoPublication: vi.fn().mockReturnValue(of({})),
       disableAutoPublication: vi.fn().mockReturnValue(of({})),
@@ -60,6 +61,23 @@ describe('AirbnbEmailService', () => {
   it('disconnect delegates to Client.disconnect', () => {
     service.disconnect().subscribe();
     expect(client['disconnect']).toHaveBeenCalledWith();
+  });
+
+  it('connect delegates to Client.start and returns the authorization URL', () => {
+    let result: string | undefined;
+    service.connect().subscribe((value) => (result = value));
+
+    expect(client['start']).toHaveBeenCalledWith();
+    expect(result).toBe('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=abc');
+  });
+
+  it('connect returns an empty string when the backend omits authorizationUrl', () => {
+    client['start'].mockReturnValue(of({}));
+
+    let result: string | undefined;
+    service.connect().subscribe((value) => (result = value));
+
+    expect(result).toBe('');
   });
 
   it('getAutoPublicationStatus delegates to Client.autoPublication', () => {

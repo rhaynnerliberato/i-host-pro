@@ -719,13 +719,18 @@
           "connected": "Connected",
           "error": "Error"
         },
-        "notConfiguredHint": "Initial connection still requires operational setup.",
+        "notConfiguredHint": "Click Connect to authorize access to your Airbnb mailbox.",
         "mailboxAddress": "Mailbox",
         "lastAuthenticatedAtUtc": "Last authenticated",
+        "connect": "Connect",
         "disconnect": "Disconnect",
         "disconnectConfirmTitle": "Disconnect mailbox",
         "disconnectConfirmMessage": "Are you sure you want to disconnect the mailbox? Email synchronization will stop.",
         "disconnectedSuccess": "Mailbox disconnected successfully.",
+        "connectSuccess": "Mailbox connected successfully.",
+        "connectDenied": "The connection was cancelled or access was denied at Microsoft.",
+        "connectExpired": "The connection request expired or was already used. Please try again.",
+        "connectError": "Could not complete the connection. Please try again.",
         "errors": {
           "generic": "Could not complete the action. Please try again."
         }

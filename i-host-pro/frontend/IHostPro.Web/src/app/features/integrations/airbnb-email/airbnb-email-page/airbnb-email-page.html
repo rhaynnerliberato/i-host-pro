@@ -38,6 +38,17 @@
               </p>
             }
 
+            @if (connection.status !== 'connected') {
+              <button mat-flat-button color="primary" [disabled]="connecting()" (click)="connect()">
+                @if (connecting()) {
+                  <mat-progress-spinner diameter="18" mode="indeterminate" />
+                } @else {
+                  <mat-icon>link</mat-icon>
+                }
+                {{ 'integrations.airbnbEmail.connection.connect' | transloco }}
+              </button>
+            }
+
             @if (connection.status === 'connected' || connection.status === 'error') {
               <button mat-stroked-button color="warn" (click)="confirmDisconnect()">
                 <mat-icon>link_off</mat-icon>

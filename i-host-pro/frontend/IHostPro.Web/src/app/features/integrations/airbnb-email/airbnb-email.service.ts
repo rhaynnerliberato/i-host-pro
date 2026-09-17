@@ -66,6 +66,16 @@ export class AirbnbEmailService {
     return this.client.disconnect().pipe(map(() => undefined));
   }
 
+  /**
+   * Web OAuth architecture gate: asks the backend for a fresh, single-use
+   * Microsoft authorization URL. The caller navigates the browser there with
+   * a full-page redirect — never opened in an iframe/popup, and never any
+   * `state`/PKCE material handled on this side (both stay server-side).
+   */
+  connect(): Observable<string> {
+    return this.client.start().pipe(map((response) => response.authorizationUrl ?? ''));
+  }
+
   getAutoPublicationStatus(): Observable<AirbnbAutoPublicationStatusResponse> {
     return this.client.autoPublication();
   }

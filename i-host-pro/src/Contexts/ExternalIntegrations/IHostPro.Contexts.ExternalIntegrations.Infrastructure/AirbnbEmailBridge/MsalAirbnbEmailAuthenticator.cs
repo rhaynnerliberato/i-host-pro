@@ -9,14 +9,23 @@ using Microsoft.Identity.Client;
 namespace IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge;
 
 /// <summary>
-/// MSAL.NET (Microsoft.Identity.Client)-backed <see cref="IAirbnbEmailAuthenticator"/>.
-/// Public client + Authorization Code/PKCE via <see cref="PublicClientApplicationBuilder"/>
-/// — no client secret (Fase 9 review §1-2). Runs
+/// MSAL.NET (Microsoft.Identity.Client)-backed <see cref="IAirbnbEmailAuthenticator"/>
+/// for the LOCAL interactive flow. <see cref="ConnectInteractiveAsync"/> is
+/// always a public client + Authorization Code/PKCE via
+/// <see cref="PublicClientApplicationBuilder"/> — no client secret (Fase 9
+/// review §1-2), unchanged by the Web OAuth architecture gate (item 25:
+/// "preserve current local interactive flow"). It runs
 /// <see cref="IPublicClientApplication.AcquireTokenInteractive"/> with a
 /// system-browser loopback listener on <c>http://localhost</c>; this blocks
 /// the calling request until the developer completes sign-in in their own
 /// browser, so it is only ever meant to be invoked against a local Api
 /// instance (Fase 9 review §21).
+///
+/// <see cref="AcquireTokenSilentAsync"/> is different: it is shared by BOTH
+/// the local flow above and the Worker's background polling, and now also
+/// by mailboxes connected through the separate confidential-client Web OAuth
+/// flow (<c>MsalAirbnbEmailWebOAuthAuthenticator</c>) — see that method's own
+/// remarks for the deterministic public-vs-confidential client selection.
 ///
 /// Sequencing note: <see cref="IAirbnbEmailTokenCacheStore.SaveAsync"/>
 /// requires an existing <see cref="AirbnbEmailMailboxConnection"/> row (it
@@ -145,10 +154,27 @@ public sealed class MsalAirbnbEmailAuthenticator : IAirbnbEmailAuthenticator
             return AirbnbEmailSilentAcquisitionOutcome.Failure(reauthorizationRequired: true);
         }
 
-        var app = PublicClientApplicationBuilder.Create(options.ClientId)
-            .WithAuthority(options.Authority)
-            .WithRedirectUri(options.RedirectUri)
-            .Build();
+        // Web OAuth architecture gate, items 23-29: a token cache populated
+        // through the confidential-client Web OAuth flow may need the client
+        // credential to refresh (Microsoft's own web-app refresh model).
+        // Deterministic rule (the smallest one that avoids inventing an
+        // AuthenticationMode field, per the gate's own item 28 — see
+        // MsalAirbnbEmailWebOAuthAuthenticator's remarks for the parallel
+        // confidential-client construction): a configured ClientSecret always
+        // switches silent acquisition to IConfidentialClientApplication, for
+        // EVERY cached account regardless of which flow connected it. Absent
+        // a secret, this is exactly the pre-existing public-client path. Both
+        // implement the common IClientApplicationBase surface used below, so
+        // only the few lines constructing `app` differ.
+        IClientApplicationBase app = string.IsNullOrWhiteSpace(options.ClientSecret)
+            ? PublicClientApplicationBuilder.Create(options.ClientId)
+                .WithAuthority(options.Authority)
+                .WithRedirectUri(options.RedirectUri)
+                .Build()
+            : ConfidentialClientApplicationBuilder.Create(options.ClientId)
+                .WithClientSecret(options.ClientSecret)
+                .WithAuthority(options.Authority)
+                .Build();
 
         app.UserTokenCache.SetBeforeAccessAsync(async args =>
         {

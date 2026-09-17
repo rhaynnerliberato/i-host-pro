@@ -719,13 +719,18 @@
           "connected": "Conectado",
           "error": "Erro"
         },
-        "notConfiguredHint": "Conexão inicial ainda requer configuração operacional.",
+        "notConfiguredHint": "Clique em Conectar para autorizar o acesso à sua caixa de e-mail do Airbnb.",
         "mailboxAddress": "Mailbox",
         "lastAuthenticatedAtUtc": "Última autenticação",
+        "connect": "Conectar",
         "disconnect": "Desconectar",
         "disconnectConfirmTitle": "Desconectar mailbox",
         "disconnectConfirmMessage": "Tem certeza de que deseja desconectar a mailbox? A sincronização de e-mails será interrompida.",
         "disconnectedSuccess": "Mailbox desconectada com sucesso.",
+        "connectSuccess": "Mailbox conectada com sucesso.",
+        "connectDenied": "A conexão foi cancelada ou o acesso foi negado na Microsoft.",
+        "connectExpired": "A solicitação de conexão expirou ou já foi utilizada. Tente novamente.",
+        "connectError": "Não foi possível concluir a conexão. Tente novamente.",
         "errors": {
           "generic": "Não foi possível concluir a ação. Tente novamente."
         }

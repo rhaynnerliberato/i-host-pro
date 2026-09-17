@@ -37,7 +37,7 @@ export class HousekeepingService {
   }
 
   start(cleaningId: string): Observable<CleaningDetailResponse> {
-    return this.client.start(cleaningId);
+    return this.client.start2(cleaningId);
   }
 
   startInspection(cleaningId: string): Observable<CleaningDetailResponse> {

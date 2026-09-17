@@ -15,7 +15,7 @@ describe('HousekeepingService', () => {
       cleaningsGET2: vi.fn().mockReturnValue(of({})),
       cleaningsPOST: vi.fn().mockReturnValue(of({})),
       assign: vi.fn().mockReturnValue(of({})),
-      start: vi.fn().mockReturnValue(of({})),
+      start2: vi.fn().mockReturnValue(of({})),
       startInspection: vi.fn().mockReturnValue(of({})),
       complete: vi.fn().mockReturnValue(of({})),
       cancelCleaning: vi.fn().mockReturnValue(of({})),
@@ -53,9 +53,9 @@ describe('HousekeepingService', () => {
     expect(client['assign']).toHaveBeenCalledWith('cleaning-1', { housekeeperUserId: 'user-1' });
   });
 
-  it('start delegates to Client.start with the cleaning id', () => {
+  it('start delegates to Client.start2 with the cleaning id', () => {
     service.start('cleaning-1').subscribe();
-    expect(client['start']).toHaveBeenCalledWith('cleaning-1');
+    expect(client['start2']).toHaveBeenCalledWith('cleaning-1');
   });
 
   it('startInspection delegates to Client.startInspection with the cleaning id', () => {
