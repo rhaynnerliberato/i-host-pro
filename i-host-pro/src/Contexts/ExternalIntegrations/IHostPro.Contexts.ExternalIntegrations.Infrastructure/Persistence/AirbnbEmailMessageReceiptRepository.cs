@@ -16,6 +16,17 @@ public sealed class AirbnbEmailMessageReceiptRepository : IAirbnbEmailMessageRec
     public Task<bool> ExistsForCurrentTenantAsync(string graphMessageId, CancellationToken cancellationToken) =>
         _dbContext.AirbnbEmailMessageReceipts.AnyAsync(r => r.GraphMessageId == graphMessageId, cancellationToken);
 
+    public async Task<IReadOnlyDictionary<AirbnbEmailMessageProcessingStatus, int>> CountByProcessingStatusForCurrentTenantAsync(
+        CancellationToken cancellationToken)
+    {
+        var counts = await _dbContext.AirbnbEmailMessageReceipts
+            .GroupBy(r => r.ProcessingStatus)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        return counts.ToDictionary(x => x.Status, x => x.Count);
+    }
+
     public void Add(AirbnbEmailMessageReceipt aggregate) => _dbContext.AirbnbEmailMessageReceipts.Add(aggregate);
 
     public void Update(AirbnbEmailMessageReceipt aggregate) => _dbContext.AirbnbEmailMessageReceipts.Update(aggregate);

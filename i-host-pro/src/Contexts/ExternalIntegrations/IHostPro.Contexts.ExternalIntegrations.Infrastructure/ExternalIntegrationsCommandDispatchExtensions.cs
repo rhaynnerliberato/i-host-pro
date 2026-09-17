@@ -153,6 +153,18 @@ public static class ExternalIntegrationsCommandDispatchExtensions
             IPipelineBehavior<GetAirbnbAutoPublicationStatusQuery, Result<AirbnbAutoPublicationStatusResult>>,
             TenantTransactionBehavior<GetAirbnbAutoPublicationStatusQuery, Result<AirbnbAutoPublicationStatusResult>, ExternalIntegrationsDbContext>>();
 
+        // Airbnb Email Bridge Minimal Operations/UX gate - read-only status
+        // and processing-summary queries, same TenantTransactionBehavior
+        // wiring as GetAirbnbAutoPublicationStatusQuery above (plain
+        // single-repository reads, no authenticator call inside them, so no
+        // nested-transaction concern here).
+        services.AddScoped<
+            IPipelineBehavior<GetAirbnbEmailBridgeStatusQuery, Result<AirbnbEmailBridgeStatusResult>>,
+            TenantTransactionBehavior<GetAirbnbEmailBridgeStatusQuery, Result<AirbnbEmailBridgeStatusResult>, ExternalIntegrationsDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<GetAirbnbEmailProcessingSummaryQuery, Result<AirbnbEmailProcessingSummaryResult>>,
+            TenantTransactionBehavior<GetAirbnbEmailProcessingSummaryQuery, Result<AirbnbEmailProcessingSummaryResult>, ExternalIntegrationsDbContext>>();
+
         return services;
     }
 }

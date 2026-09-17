@@ -8,4 +8,12 @@ public interface IAirbnbEmailMessageReceiptRepository : IRepository<AirbnbEmailM
 {
     /// <summary>Ingestion-level idempotency check — mirrors the unique (tenant_id, graph_message_id) index.</summary>
     Task<bool> ExistsForCurrentTenantAsync(string graphMessageId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Database-side aggregation (GROUP BY) for the Minimal Operations/UX
+    /// gate's processing-summary read model — never loads individual receipt
+    /// rows into memory just to count them. Absent statuses are simply
+    /// missing from the returned dictionary (callers default to 0).
+    /// </summary>
+    Task<IReadOnlyDictionary<AirbnbEmailMessageProcessingStatus, int>> CountByProcessingStatusForCurrentTenantAsync(CancellationToken cancellationToken);
 }

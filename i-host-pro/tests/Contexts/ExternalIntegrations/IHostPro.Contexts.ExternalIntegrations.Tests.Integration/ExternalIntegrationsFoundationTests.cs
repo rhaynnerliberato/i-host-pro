@@ -1087,6 +1087,69 @@ public class ExternalIntegrationsFoundationTests : IClassFixture<ExternalIntegra
         outcome.Subject.Value.AuthorizationStatus.Should().Be(AirbnbEmailAuthorizationStatus.Disconnected);
     }
 
+    /// <summary>
+    /// Airbnb Email Bridge Minimal Operations/UX gate: proves the
+    /// processing-summary count aggregation is genuinely tenant-scoped under
+    /// real RLS - a pure mocked-repository test is not enough proof for a
+    /// cross-tenant aggregate concern (ChatGPT's own item 13 requirement for
+    /// this gate).
+    /// </summary>
+    [Fact]
+    public async Task CountByProcessingStatusForCurrentTenantAsync_never_counts_another_tenants_receipts()
+    {
+        var tenantAId = Guid.NewGuid();
+        var tenantBId = Guid.NewGuid();
+
+        async Task SeedReceiptAsync(Guid tenantId, Action<AirbnbEmailMessageReceipt> mutate)
+        {
+            var tenantContext = new TenantContext();
+            tenantContext.SetTenant(tenantId);
+            await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+            await using var transaction = await dbContext.Database.BeginTransactionAsync();
+            await SetTenantAsync(dbContext, tenantId);
+
+            var receipt = AirbnbEmailMessageReceipt.Create(Guid.NewGuid(), tenantId, Guid.NewGuid().ToString(), null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+            mutate(receipt);
+            dbContext.AirbnbEmailMessageReceipts.Add(receipt);
+            await dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+
+        // Tenant A: 2 NeedsReview, 1 Failed.
+        await SeedReceiptAsync(tenantAId, r => r.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", DateTimeOffset.UtcNow));
+        await SeedReceiptAsync(tenantAId, r => r.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", DateTimeOffset.UtcNow));
+        await SeedReceiptAsync(tenantAId, r => r.MarkFailed("PARSER_EXCEPTION", "parser-v1", DateTimeOffset.UtcNow));
+
+        // Tenant B: 1 Processed only - must never leak into Tenant A's counts or vice versa.
+        await SeedReceiptAsync(tenantBId, r => r.MarkProcessed("RESERVATION_REMINDER", "HMZZZZZZZZ", "parser-v1", DateTimeOffset.UtcNow));
+
+        var tenantAContext = new TenantContext();
+        tenantAContext.SetTenant(tenantAId);
+        await using var tenantADbContext = CreateDbContext(_appConnectionString, tenantAContext);
+        var tenantARepository = new AirbnbEmailMessageReceiptRepository(tenantADbContext);
+        var tenantAUnitOfWork = new AirbnbEmailUnitOfWork(tenantADbContext, tenantAContext);
+        var tenantACounts = await tenantAUnitOfWork.ExecuteAsync(
+            () => tenantARepository.CountByProcessingStatusForCurrentTenantAsync(CancellationToken.None), CancellationToken.None);
+
+        tenantACounts.GetValueOrDefault(AirbnbEmailMessageProcessingStatus.NeedsReview).Should().Be(2);
+        tenantACounts.GetValueOrDefault(AirbnbEmailMessageProcessingStatus.Failed).Should().Be(1);
+        tenantACounts.GetValueOrDefault(AirbnbEmailMessageProcessingStatus.Processed).Should().Be(0,
+            "Tenant B's Processed receipt must never appear in Tenant A's counts");
+
+        var tenantBContext = new TenantContext();
+        tenantBContext.SetTenant(tenantBId);
+        await using var tenantBDbContext = CreateDbContext(_appConnectionString, tenantBContext);
+        var tenantBRepository = new AirbnbEmailMessageReceiptRepository(tenantBDbContext);
+        var tenantBUnitOfWork = new AirbnbEmailUnitOfWork(tenantBDbContext, tenantBContext);
+        var tenantBCounts = await tenantBUnitOfWork.ExecuteAsync(
+            () => tenantBRepository.CountByProcessingStatusForCurrentTenantAsync(CancellationToken.None), CancellationToken.None);
+
+        tenantBCounts.GetValueOrDefault(AirbnbEmailMessageProcessingStatus.Processed).Should().Be(1);
+        tenantBCounts.GetValueOrDefault(AirbnbEmailMessageProcessingStatus.NeedsReview).Should().Be(0,
+            "Tenant A's NeedsReview receipts must never appear in Tenant B's counts");
+        tenantBCounts.GetValueOrDefault(AirbnbEmailMessageProcessingStatus.Failed).Should().Be(0);
+    }
+
     private async Task<(Guid TenantId, Guid ConnectionId)> SeedMailboxConnectionAsync()
     {
         var tenantId = Guid.NewGuid();

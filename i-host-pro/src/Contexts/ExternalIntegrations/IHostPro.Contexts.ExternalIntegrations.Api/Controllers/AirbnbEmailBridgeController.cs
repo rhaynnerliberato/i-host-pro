@@ -12,14 +12,19 @@ namespace IHostPro.Contexts.ExternalIntegrations.Api.Controllers;
 /// <summary>
 /// Administrative Airbnb Email Bridge connection endpoints — mirrors
 /// <c>WhatsAppIntegrationController</c>'s structure, same
-/// <see cref="IdentityPermissionCodes.IntegrationsManage"/> policy. Minimal
-/// by design (Fase 9 review §20): only Connect/Disconnect exist, no
-/// speculative full configuration UI yet.
+/// <see cref="IdentityPermissionCodes.IntegrationsManage"/> policy.
 ///
 /// <see cref="Connect"/> runs an interactive Microsoft sign-in with a system
 /// browser on the machine hosting this Api process — it blocks until the
 /// caller completes (or cancels) that sign-in, so it is intended to be
 /// called against a local development Api instance only (Fase 9 review §21).
+/// This is exactly why the Minimal Operations/UX gate's product UI never
+/// exposes a "Connect" action: a real deployed multi-tenant frontend cannot
+/// drive this flow (it would open a browser on the Api's own host, not the
+/// operator's machine). <see cref="GetStatus"/>/<see cref="Disconnect"/> are
+/// the only mailbox-connection actions that surface there; initial
+/// connection remains an operational/engineering setup step until a
+/// separate, future redirect-based web OAuth gate is designed.
 /// </summary>
 [ApiController]
 [Route("api/v1/integrations/airbnb-email")]
@@ -131,6 +136,49 @@ public sealed class AirbnbEmailBridgeController : ControllerBase
         return Ok(ToStatusResponse(result.Value));
     }
 
+    /// <summary>
+    /// Minimal Operations/UX gate — the mailbox connection status read model.
+    /// Always 200, never 404: a tenant that has never connected a mailbox
+    /// gets <see cref="AirbnbEmailConnectionStatus.NotConfigured"/>, not an
+    /// error. This is the ONLY connection-status source the frontend uses -
+    /// it must never infer status from a previous Connect/Disconnect
+    /// response.
+    /// </summary>
+    [HttpGet]
+    [Authorize(Policy = IdentityPermissionCodes.IntegrationsManage)]
+    [ProducesResponseType(typeof(AirbnbEmailBridgeStatusResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetStatus(CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        if (!ExternalIntegrationsIdentityReader.TryRead(User, out var identity))
+            return Unauthorized();
+
+        var result = await _sender.Send(new GetAirbnbEmailBridgeStatusQuery(identity.TenantId), cancellationToken);
+
+        return Ok(ToStatusResponse(result.Value));
+    }
+
+    /// <summary>Minimal Operations/UX gate — tenant-scoped receipt processing counts only, never individual receipts (deliberately deferred).</summary>
+    [HttpGet("processing-summary")]
+    [Authorize(Policy = IdentityPermissionCodes.IntegrationsManage)]
+    [ProducesResponseType(typeof(AirbnbEmailProcessingSummaryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetProcessingSummary(CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        if (!ExternalIntegrationsIdentityReader.TryRead(User, out var identity))
+            return Unauthorized();
+
+        var result = await _sender.Send(new GetAirbnbEmailProcessingSummaryQuery(identity.TenantId), cancellationToken);
+
+        return Ok(ToProcessingSummaryResponse(result.Value));
+    }
+
     private void SetNoStoreHeaders() => Response.Headers.CacheControl = "no-store";
 
     private static AirbnbEmailBridgeResponse ToResponse(AirbnbEmailMailboxConnectionResult result) => new(
@@ -144,4 +192,10 @@ public sealed class AirbnbEmailBridgeController : ControllerBase
 
     private static AirbnbAutoPublicationStatusResponse ToStatusResponse(AirbnbAutoPublicationStatusResult result) => new(
         result.TenantId, result.AutoPublishEnabled, result.AutoPublishNotBeforeUtc);
+
+    private static AirbnbEmailBridgeStatusResponse ToStatusResponse(AirbnbEmailBridgeStatusResult result) => new(
+        result.TenantId, result.Status, result.IsEnabled, result.LastAuthenticatedAtUtc, result.MailboxAddress);
+
+    private static AirbnbEmailProcessingSummaryResponse ToProcessingSummaryResponse(AirbnbEmailProcessingSummaryResult result) => new(
+        result.TenantId, result.Pending, result.Processed, result.NeedsReview, result.Failed, result.Ignored);
 }

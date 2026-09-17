@@ -13,6 +13,15 @@ internal sealed class FakeAirbnbEmailMessageReceiptRepository : IAirbnbEmailMess
     public Task<bool> ExistsForCurrentTenantAsync(string graphMessageId, CancellationToken cancellationToken) =>
         Task.FromResult(Added.Any(r => r.GraphMessageId == graphMessageId));
 
+    public Task<IReadOnlyDictionary<AirbnbEmailMessageProcessingStatus, int>> CountByProcessingStatusForCurrentTenantAsync(
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyDictionary<AirbnbEmailMessageProcessingStatus, int> counts = Added
+            .GroupBy(r => r.ProcessingStatus)
+            .ToDictionary(g => g.Key, g => g.Count());
+        return Task.FromResult(counts);
+    }
+
     public void Add(AirbnbEmailMessageReceipt aggregate) => Added.Add(aggregate);
 
     public void Update(AirbnbEmailMessageReceipt aggregate)
