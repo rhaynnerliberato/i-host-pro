@@ -7,6 +7,7 @@ using IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge;
 using IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -1314,6 +1315,97 @@ public class ExternalIntegrationsFoundationTests : IClassFixture<ExternalIntegra
 
         result.Should().NotBeNull();
         result!.TenantId.Should().Be(tenantId, "the tenant is RECOVERED from this call, not required as a precondition of it");
+    }
+
+    /// <summary>
+    /// A minimal <see cref="IAirbnbEmailWebOAuthAuthenticator"/> stand-in,
+    /// mirroring <see cref="SucceedingAirbnbEmailAuthenticatorStub"/>'s own
+    /// approach: on success it uses the REAL <see cref="IAirbnbEmailUnitOfWork"/>/
+    /// <see cref="IAirbnbEmailMailboxConnectionRepository"/> to call
+    /// <see cref="AirbnbEmailMailboxConnection.Connect"/> against a REAL,
+    /// already-seeded row — proving the processor's SetTenant call genuinely
+    /// unlocks RLS-protected access for whatever runs after it.
+    /// </summary>
+    private sealed class SucceedingWebOAuthAuthenticatorStub(
+        IAirbnbEmailMailboxConnectionRepository repository, IAirbnbEmailUnitOfWork unitOfWork) : IAirbnbEmailWebOAuthAuthenticator
+    {
+        public AirbnbEmailWebOAuthAuthorizationRequest? BuildAuthorizationRequest() =>
+            throw new NotSupportedException("Not exercised by this stub - only CompleteAsync is.");
+
+        public async Task<AirbnbEmailWebOAuthCallbackOutcome> CompleteAsync(
+            Guid tenantId, string authorizationCode, byte[] protectedPkceVerifier, CancellationToken cancellationToken)
+        {
+            await unitOfWork.ExecuteAsync(async () =>
+            {
+                var connection = await repository.GetForCurrentTenantAsync(cancellationToken)
+                    ?? throw new InvalidOperationException("Connection row must be seeded before calling this stub.");
+                connection.Connect("web-home-account-1", "web-entra-tenant-1", "webguest@hotmail.com", "Mail.Read", DateTimeOffset.UtcNow);
+                return true;
+            }, cancellationToken);
+
+            return AirbnbEmailWebOAuthCallbackOutcome.Success();
+        }
+    }
+
+    /// <summary>
+    /// The central end-to-end proof for the Web OAuth architecture gate's
+    /// circularity correction: starting with ZERO ambient tenant context (a
+    /// fresh <see cref="TenantContext"/>, never resolved), the callback
+    /// processor must (1) consume the state with no tenant, (2) recover and
+    /// trust ONLY the tenant from that consumed row, (3) establish it via
+    /// SetTenant, and (4) successfully complete a REAL RLS-protected write
+    /// afterward - all against real PostgreSQL, not fakes.
+    /// </summary>
+    [Fact]
+    public async Task Callback_processor_completes_the_full_bootstrap_and_connects_the_mailbox_with_no_prior_tenant_context()
+    {
+        var (tenantId, connectionId) = await SeedMailboxConnectionAsync();
+        var actorUserId = Guid.NewGuid();
+
+        // The "oauth/start" half: create the pending transaction using a
+        // TenantContext that IS resolved (mirrors the real authenticated
+        // command) - but the callback below uses a COMPLETELY SEPARATE,
+        // never-resolved TenantContext, exactly like the real callback
+        // request would.
+        var startTenantContext = new TenantContext();
+        startTenantContext.SetTenant(tenantId);
+        await using var startDbContext = CreateDbContext(_appConnectionString, startTenantContext);
+        var startTransactionRepository = new AirbnbEmailOAuthTransactionRepository(startDbContext);
+        var rawState = "integration-test-state-" + Guid.NewGuid();
+        startTransactionRepository.CreatePending(
+            Guid.NewGuid(), tenantId, actorUserId, AirbnbEmailOAuthStateHasher.Hash(rawState), [1, 2, 3],
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(10));
+        await startDbContext.SaveChangesAsync();
+
+        // The "oauth/callback" half: a FRESH DbContext and a FRESH,
+        // never-resolved TenantContext - nothing here knows the tenant yet.
+        var callbackTenantContext = new TenantContext();
+        callbackTenantContext.IsResolved.Should().BeFalse();
+        await using var callbackDbContext = CreateDbContext(_appConnectionString, callbackTenantContext);
+        var callbackTransactionRepository = new AirbnbEmailOAuthTransactionRepository(callbackDbContext);
+        var mailboxRepository = new AirbnbEmailMailboxConnectionRepository(callbackDbContext);
+        var callbackUnitOfWork = new AirbnbEmailUnitOfWork(callbackDbContext, callbackTenantContext);
+        var authenticatorStub = new SucceedingWebOAuthAuthenticatorStub(mailboxRepository, callbackUnitOfWork);
+        var options = Options.Create(new AirbnbEmailBridgeOptions { WebFrontendReturnUrl = "http://localhost:4200/integrations/airbnb-email" });
+        var processor = new AirbnbEmailWebOAuthCallbackProcessor(
+            callbackTransactionRepository, authenticatorStub, callbackTenantContext, options, TimeProvider.System,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AirbnbEmailWebOAuthCallbackProcessor>.Instance);
+
+        var report = await processor.ProcessAsync(rawState, "auth-code-integration-test", microsoftError: null, CancellationToken.None);
+
+        report.Result.Should().Be(AirbnbEmailWebOAuthCallbackResult.Success);
+        callbackTenantContext.IsResolved.Should().BeTrue();
+        callbackTenantContext.TenantId.Should().Be(tenantId);
+
+        var verifyTenantContext = new TenantContext();
+        verifyTenantContext.SetTenant(tenantId);
+        await using var verifyDbContext = CreateDbContext(_appConnectionString, verifyTenantContext);
+        await using var verifyTransaction = await verifyDbContext.Database.BeginTransactionAsync();
+        await SetTenantAsync(verifyDbContext, tenantId);
+        var connection = await verifyDbContext.AirbnbEmailMailboxConnections.SingleAsync(c => c.Id == connectionId);
+
+        connection.AuthorizationStatus.Should().Be(AirbnbEmailAuthorizationStatus.Connected);
+        connection.MailboxAddress.Should().Be("webguest@hotmail.com");
     }
 
     private async Task<(Guid TenantId, Guid ConnectionId)> SeedMailboxConnectionAsync()

@@ -48,6 +48,22 @@ public sealed class AirbnbEmailBridgeOptions
     public string? WebRedirectUri { get; set; }
 
     /// <summary>
+    /// Where the Api's own <c>oauth/callback</c> 302-redirects the browser
+    /// back to after completing (or failing) the exchange — e.g.
+    /// <c>http://localhost:4200/integrations/airbnb-email</c> locally,
+    /// <c>https://app.homolog.ihostpro.com.br/integrations/airbnb-email</c>
+    /// in homolog. A gap discovered only during implementation of the
+    /// architecture gate's approved design, not called out by name in the
+    /// original report: the Api and the Angular SPA are served from
+    /// DIFFERENT origins (confirmed by this same gate's own audit — separate
+    /// CloudFront/S3 static hosting vs. the ALB-fronted Api), so a relative
+    /// redirect would resolve against the Api's own origin and 404. Never a
+    /// secret — just the frontend's own public base URL plus its integration
+    /// route.
+    /// </summary>
+    public string? WebFrontendReturnUrl { get; set; }
+
+    /// <summary>
     /// <c>common</c> supports both work/school accounts and personal
     /// Microsoft accounts (Outlook.com/Hotmail) in the same authority —
     /// required since the app registration's supported account type is

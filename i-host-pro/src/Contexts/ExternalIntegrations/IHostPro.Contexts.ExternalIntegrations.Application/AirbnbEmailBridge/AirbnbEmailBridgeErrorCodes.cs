@@ -14,4 +14,7 @@ public static class AirbnbEmailBridgeErrorCodes
     public const string AutoPublicationAlreadyDisabled = "airbnb_email_auto_publication_already_disabled";
     public const string AutoPublicationCutoffRequired = "airbnb_email_auto_publication_cutoff_required";
     public const string AutoPublicationMailboxNotConnected = "airbnb_email_auto_publication_mailbox_not_connected";
+
+    // Web OAuth architecture gate.
+    public const string WebOAuthNotConfigured = "airbnb_email_web_oauth_not_configured";
 }

@@ -105,6 +105,10 @@ public static class ExternalIntegrationsModuleExtensions
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.AesGcmOAuthTransactionSecretProtector>();
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailOAuthTransactionRepository,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.Persistence.AirbnbEmailOAuthTransactionRepository>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailWebOAuthAuthenticator,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MsalAirbnbEmailWebOAuthAuthenticator>();
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailWebOAuthCallbackProcessor,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.AirbnbEmailWebOAuthCallbackProcessor>();
 
         // Airbnb Reservation Email Parser gate — DRY_RUN only. Automatic
         // per-receipt Worker publication remains NOT wired (a distinct,

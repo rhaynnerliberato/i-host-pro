@@ -165,6 +165,19 @@ public static class ExternalIntegrationsCommandDispatchExtensions
             IPipelineBehavior<GetAirbnbEmailProcessingSummaryQuery, Result<AirbnbEmailProcessingSummaryResult>>,
             TenantTransactionBehavior<GetAirbnbEmailProcessingSummaryQuery, Result<AirbnbEmailProcessingSummaryResult>, ExternalIntegrationsDbContext>>();
 
+        // Web OAuth architecture gate - oauth/start is a NORMAL authenticated
+        // command (unlike Connect/Disconnect): nothing inside it manages its
+        // own nested transaction, so the standard audit-outermost/
+        // TenantTransactionBehavior pair applies with no nesting concern.
+        // oauth/callback deliberately bypasses this Mediator dispatch
+        // entirely - see IAirbnbEmailWebOAuthCallbackProcessor's own remarks.
+        services.AddScoped<
+            IPipelineBehavior<StartAirbnbEmailWebOAuthCommand, Result<AirbnbEmailWebOAuthStartResult>>,
+            AuditStartAirbnbEmailWebOAuthBehavior>();
+        services.AddScoped<
+            IPipelineBehavior<StartAirbnbEmailWebOAuthCommand, Result<AirbnbEmailWebOAuthStartResult>>,
+            TenantTransactionBehavior<StartAirbnbEmailWebOAuthCommand, Result<AirbnbEmailWebOAuthStartResult>, ExternalIntegrationsDbContext>>();
+
         return services;
     }
 }
