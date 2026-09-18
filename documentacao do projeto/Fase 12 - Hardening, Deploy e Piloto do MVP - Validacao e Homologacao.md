@@ -432,4 +432,28 @@ Achado relacionado, confirmado empiricamente: `wslrelay.exe` (processo de port-r
 - MFA/Support Impersonation — não implementados, candidatos à futura auditoria de SaaS Commercial Readiness (§6.13).
 - Backend concreto de secrets/JWT de Produção — decisão do CP5 (§6.11).
 - Correção da porta fixa RabbitMQ nos testes / dívidas de test harness — registradas, não corrigidas neste checkpoint (exceto o timeout de CI, §6.15).
+
+## 7. Nota adicional — Airbnb Email Bridge: Gate "Web OAuth Multi-Tenant Connect"
+
+**Status:** Concluído e aprovado (`AirbnbEmailBridgeWebOAuthGate=GREEN`). Trabalho de prontidão do piloto (Airbnb Email Bridge, ver ADR-032) conduzido em paralelo à sequência de Checkpoints CP1–CP4 acima — não é um CP numerado desta sequência de Hardening/Deploy, e não altera nenhuma das seções 2–6.
+
+Escopo: adicionar um fluxo de conexão self-service (Authorization Code + PKCE, `ConfidentialClientApplication`) à capability já existente do Airbnb Email Bridge, que antes só podia ser conectada por um fluxo interativo local restrito a engenharia. Arquitetura completa registrada em ADR-032 — esta seção registra apenas a execução e a prova real.
+
+**Etapas executadas e aprovadas, nesta ordem:**
+- Arquitetura proposta, revisada e aprovada antes de qualquer código (incluindo a correção de uma circularidade de RLS identificada na proposta original — a tabela de transação OAuth não pode ser tenant-owned/RLS-protegida, pois o tenant ainda não é conhecido no momento do bootstrap).
+- Implementação em estágios (persistência da transação OAuth, autenticador confidencial, controller start/callback, seleção determinística de cliente MSAL no Worker, UI de Connect no Angular), com testes focados a cada estágio.
+- Handoff humano no Microsoft Entra ID (App Registration existente, `ClientId=255b194e-fa0d-4ddd-9867-b082fe21c020`): nova plataforma Web com o redirect URI de desenvolvimento, preservando a plataforma "Mobile and desktop applications" já existente; criação de um Client Secret de desenvolvimento, armazenado via `dotnet user-secrets` em `IHostPro.Api` e `IHostPro.Worker` — nunca visto ou manuseado por texto puro por nenhuma automação, apenas verificado de forma booleana (configurado/não configurado).
+- **Smoke real do Web OAuth** (tenant de smoke, mailbox real já conectada `rhay_liberato@hotmail.com`): ciclo Desconectar→Conectar pela UI real, `oauth/start` real (200 OK), navegação de página inteira real para a Microsoft, retorno com a conexão `Connected`, `home_account_id` renovado, exatamente 1 linha de conexão (sem duplicata), mapeamentos de anúncio e configuração de auto-publicação preservados intactos. Executado duas vezes de forma independente.
+- **Smoke real do Worker** (prova crítica final): um processo **novo** do Worker (nunca reaproveitando a instância MSAL da Api) autenticou silenciosamente via `AcquireTokenSilent`, com o caminho confidencial selecionado pela regra determinística (`ClientSecret` configurado → `ConfidentialClientApplication`), sem nenhuma interação humana possível (processo headless), e acessou o Microsoft Graph real (25 páginas de delta processadas, 10 mensagens por página). Conexão permaneceu `Connected` após o teste, sem duplicata, sem perda de identidade da mailbox.
+
+**Achados/decisões registrados durante a execução (documentados com honestidade, não escondidos):**
+- Um `WebFrontendReturnUrl` ausente é tratado como `NotFound()` (nunca 500) — achado durante teste manual real, não por revisão de código isolada.
+- Uma colisão de nome de operação NSwag (`start`→`start2` em `Cleanings`) foi causada pela nova rota `oauth/start` e corrigida no único call site afetado.
+- Um bug real de timing do Transloco (tradução síncrona antes do carregamento assíncrono do JSON de i18n) foi encontrado por teste manual ao vivo e corrigido com `selectTranslate`.
+- A senha do admin sintético do tenant de smoke foi perdida entre sessões; resetada usando o `Argon2PasswordHasher` real e `User.SetPasswordHash` do próprio domínio, via uma ferramenta descartável não commitada (removida ao final), nunca por SQL bruto ou hash manual — o usuário digitou a nova senha diretamente, nunca vista por nenhuma automação.
+- `RefreshRedemptionProven=false`: a prova real confirmou `AcquireTokenSilent` e acesso ao Graph, mas não observou uma renovação via refresh token (token de acesso ainda não havia expirado) — não bloqueia o gate; será observável naturalmente quando o token expirar.
+
+**Não implementado/fora de escopo deste gate** (ver ADR-032, seção Consequências, para o registro completo): suporte a e-mails de cancelamento, mensagem de hóspede, pagamento/avaliação; um eventual template "v2"; update/delete de mapeamento de anúncio; qualquer infraestrutura de produção/AWS.
+
+`ProductionReady=false` permanece válido para toda a plataforma — este gate prova a capability em ambiente local de desenvolvimento, contra um tenant de smoke, nunca em produção.
 - `SaaSCommercialReadinessAudit=MANDATORY_BEFORE_PHASE12_PLANNING_CLOSURE` — preservado, ainda não executado.

@@ -85,6 +85,33 @@ dela em nada. O job de deploy do CI (`.github/workflows/ci.yml`, branch
 retomada — os demais jobs (build, testes de arquitetura, unitários, integração,
 E2E de frontend) não têm nenhuma dependência de AWS.
 
+### Configuração adicional — Airbnb Email Bridge (conexão via Web OAuth)
+
+Para testar localmente o fluxo self-service de conexão de mailbox (ver
+`documentacao do projeto/ADRs/ADR-032 - Airbnb Email Bridge Web OAuth and Microsoft Graph Mailbox Connection.md`),
+além do fluxo interativo local já suportado, é necessário:
+
+1. No App Registration existente do Microsoft Entra ID usado pelo fluxo local,
+   adicionar uma plataforma **Web** (nunca remover a plataforma "Mobile and
+   desktop applications" já existente) com o redirect URI
+   `http://localhost:5140/api/v1/integrations/airbnb-email/oauth/callback`.
+2. Criar um Client Secret de desenvolvimento nesse App Registration e
+   armazená-lo via `dotnet user-secrets`, **nos dois processos** (Api e
+   Worker, que têm cada um seu próprio user-secrets store — não é um segredo
+   compartilhado automaticamente entre projetos .NET):
+   ```bash
+   dotnet user-secrets set "ExternalIntegrations:AirbnbEmailBridge:ClientSecret" "<valor>" --project src/Host/IHostPro.Api
+   dotnet user-secrets set "ExternalIntegrations:AirbnbEmailBridge:ClientSecret" "<valor>" --project src/Host/IHostPro.Worker
+   ```
+3. Confirmar em `appsettings.Development.json` (não-secreto, já versionado) os
+   valores de `ExternalIntegrations:AirbnbEmailBridge:WebRedirectUri` (deve
+   bater exatamente com o registrado no Entra) e `WebFrontendReturnUrl`
+   (aponta para a página `/integrations/airbnb-email` do Angular local).
+
+Nunca rode `dotnet user-secrets list` para verificar isso — o valor do
+Client Secret nunca deve ser impresso; a própria aplicação falha de forma
+segura (`404`/erro tratado) quando ele está ausente.
+
 ## Estado atual (Fase 0)
 
 > Esta seção descreve apenas o estado inicial do projeto (Fase 0). O código

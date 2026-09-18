@@ -59,7 +59,9 @@ Esta é a MESMA semântica que o Checkpoint 3.2 já implementava de fato (os pro
 
 ### Bloqueado por parceria Airbnb — registrado, não implementado
 
-`AirbnbPartnerAccessRequired=true`, `AirbnbPartnerAccessAvailable=false`, `RealIntegrationTestingBlocked=true` permanecem registrados (CP3.0/CP3.1). Este checkpoint não implementa: cliente HTTP real, OAuth, sync orchestration/polling/scheduler, endpoints administrativos públicos (`AirbnbIntegrationController`/etc. — deliberadamente não criados; sem uso real ainda, evitando NSwag/Angular especulativos), iCal (capacidade futura separada, calendário-only, sem dados de reserva/hóspede). `AirbnbSyncStarted` foi formalizado em `ExternalIntegrations.Contracts` mas deliberadamente não publicado/consumido — sem orquestração de sync real para o disparar.
+`AirbnbPartnerAccessRequired=true`, `AirbnbPartnerAccessAvailable=false`, `RealIntegrationTestingBlocked=true` permanecem registrados (CP3.0/CP3.1). Este checkpoint não implementa: cliente HTTP real, OAuth **com a Airbnb**, sync orchestration/polling/scheduler, endpoints administrativos públicos (`AirbnbIntegrationController`/etc. — deliberadamente não criados; sem uso real ainda, evitando NSwag/Angular especulativos), iCal (capacidade futura separada, calendário-only, sem dados de reserva/hóspede). `AirbnbSyncStarted` foi formalizado em `ExternalIntegrations.Contracts` mas deliberadamente não publicado/consumido — sem orquestração de sync real para o disparar.
+
+**Nota (2026-09-18, não reabre esta ADR)**: uma capability distinta, o "Airbnb Email Bridge" (ADR-032), implementa OAuth — mas com a **Microsoft** (Graph, para ler uma caixa de e-mail que o próprio tenant conecta, onde a Airbnb já envia notificações), nunca com a Airbnb. `AirbnbPartnerAccessAvailable` continua `false`; nenhum cliente HTTP fala com a Airbnb; `AirbnbIntegration`/`AirbnbListingMapping` (este ADR) e `AirbnbEmailMailboxConnection`/`AirbnbListingTitleMapping` (ADR-032) são agregados inteiramente distintos, sem relação de banco entre si.
 
 ## Alternativas Consideradas
 

@@ -13,7 +13,7 @@ Este documento é o procedimento operacional que o operador do piloto deve segui
 
 **O que este piloto NÃO É** (nunca descrever de outra forma):
 - Não existe integração técnica real com a API do Airbnb.
-- Não existe OAuth, client HTTP, webhook, polling ou qualquer sincronização automática com o Airbnb (ADR-023, `AirbnbIntegration.cs` — `IsEnabled` permanentemente `false`, sem `Enable()`/`Disable()`).
+- Não existe OAuth, client HTTP, webhook, polling ou qualquer sincronização automática **com o Airbnb** (ADR-023, `AirbnbIntegration.cs` — `IsEnabled` permanentemente `false`, sem `Enable()`/`Disable()`). Isso não conflita com o Airbnb Email Bridge (ADR-032), que faz OAuth com a **Microsoft** para ler uma caixa de e-mail conectada pelo próprio tenant — uma capability distinta, sem nenhum cliente HTTP falando com a Airbnb, que não altera nada descrito neste runbook.
 - Não existe SLA de sincronia (nunca "sincroniza em 5 minutos", "sincroniza em tempo real", ou qualquer prazo comercial) — reconciliação manual não é integração automática, e nenhum prazo numérico foi aprovado.
 - Não existe `ExternalReservationReference` ou qualquer campo técnico que vincule uma reserva do iHostPro a um identificador do Airbnb — foi uma decisão explícita não construir isso agora (ver §5).
 

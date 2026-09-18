@@ -16,15 +16,14 @@ namespace IHostPro.Contexts.ExternalIntegrations.Api.Controllers;
 ///
 /// <see cref="Connect"/> runs an interactive Microsoft sign-in with a system
 /// browser on the machine hosting this Api process — it blocks until the
-/// caller completes (or cancels) that sign-in, so it is intended to be
-/// called against a local development Api instance only (Fase 9 review §21).
-/// This is exactly why the Minimal Operations/UX gate's product UI never
-/// exposes a "Connect" action: a real deployed multi-tenant frontend cannot
-/// drive this flow (it would open a browser on the Api's own host, not the
-/// operator's machine). <see cref="GetStatus"/>/<see cref="Disconnect"/> are
-/// the only mailbox-connection actions that surface there; initial
-/// connection remains an operational/engineering setup step until a
-/// separate, future redirect-based web OAuth gate is designed.
+/// caller completes (or cancels) that sign-in, so it remains an
+/// operational/engineering-only endpoint, called against a local development
+/// Api instance directly (Fase 9 review §21). It is never called from the
+/// product UI, which instead drives the redirect-based Web OAuth flow
+/// (<see cref="AirbnbEmailWebOAuthController"/>, <c>oauth/start</c>/
+/// <c>oauth/callback</c>) added by the Web OAuth Multi-Tenant Connect gate —
+/// the self-service path a real deployed multi-tenant frontend can actually
+/// drive, since it never opens a browser on the Api's own host.
 /// </summary>
 [ApiController]
 [Route("api/v1/integrations/airbnb-email")]
