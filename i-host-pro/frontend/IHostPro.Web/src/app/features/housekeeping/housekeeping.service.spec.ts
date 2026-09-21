@@ -15,9 +15,9 @@ describe('HousekeepingService', () => {
       cleaningsGET2: vi.fn().mockReturnValue(of({})),
       cleaningsPOST: vi.fn().mockReturnValue(of({})),
       assign: vi.fn().mockReturnValue(of({})),
-      start2: vi.fn().mockReturnValue(of({})),
+      start3: vi.fn().mockReturnValue(of({})),
       startInspection: vi.fn().mockReturnValue(of({})),
-      complete: vi.fn().mockReturnValue(of({})),
+      complete2: vi.fn().mockReturnValue(of({})),
       cancelCleaning: vi.fn().mockReturnValue(of({})),
       interrupt: vi.fn().mockReturnValue(of({})),
       waitingMaterials: vi.fn().mockReturnValue(of({})),
@@ -53,9 +53,9 @@ describe('HousekeepingService', () => {
     expect(client['assign']).toHaveBeenCalledWith('cleaning-1', { housekeeperUserId: 'user-1' });
   });
 
-  it('start delegates to Client.start2 with the cleaning id', () => {
+  it('start delegates to Client.start3 with the cleaning id', () => {
     service.start('cleaning-1').subscribe();
-    expect(client['start2']).toHaveBeenCalledWith('cleaning-1');
+    expect(client['start3']).toHaveBeenCalledWith('cleaning-1');
   });
 
   it('startInspection delegates to Client.startInspection with the cleaning id', () => {
@@ -63,9 +63,9 @@ describe('HousekeepingService', () => {
     expect(client['startInspection']).toHaveBeenCalledWith('cleaning-1');
   });
 
-  it('complete delegates to Client.complete with the cleaning id', () => {
+  it('complete delegates to Client.complete2 with the cleaning id', () => {
     service.complete('cleaning-1').subscribe();
-    expect(client['complete']).toHaveBeenCalledWith('cleaning-1');
+    expect(client['complete2']).toHaveBeenCalledWith('cleaning-1');
   });
 
   it('cancel delegates to Client.cancelCleaning with the cleaning id', () => {

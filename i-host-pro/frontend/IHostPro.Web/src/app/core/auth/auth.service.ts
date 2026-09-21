@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, finalize, map, of, shareReplay, switchMap, tap, throwError } from 'rxjs';
 
-import { AuthTokensResponse, Client } from '../api/generated/api-client';
+import { AuthTokensResponse, Client, SignupResponse } from '../api/generated/api-client';
 import { AuthStateService } from './auth-state.service';
 import { UserProfileService } from './user-profile.service';
 
@@ -19,6 +19,28 @@ export class AuthService {
       tap((tokens) => this.authState.setTokens(tokens)),
       switchMap((tokens) => this.userProfile.load().pipe(map(() => tokens))),
     );
+  }
+
+  /** Self-service signup: creates a brand-new tenant/admin and logs them in immediately, same profile-loading rationale as login. */
+  signup(companyName: string, adminFullName: string, adminEmail: string, password: string): Observable<SignupResponse> {
+    return this.client.signup({ companyName, adminFullName, adminEmail, password }).pipe(
+      tap((response) => {
+        if (response.tokens) {
+          this.authState.setTokens(response.tokens);
+        }
+      }),
+      switchMap((response) => this.userProfile.load().pipe(map(() => response))),
+    );
+  }
+
+  /** Always resolves the same way regardless of whether the tenant/email exists — the backend never signals that distinction to the caller. */
+  requestPasswordReset(tenantSlug: string, email: string): Observable<void> {
+    return this.client.start2({ tenantSlug, email });
+  }
+
+  /** No tokens are returned on success — the backend never auto-logs-in after a reset; the caller must sign in again with the new password. */
+  completePasswordReset(token: string, newPassword: string): Observable<void> {
+    return this.client.complete({ token, newPassword });
   }
 
   /** Always resolves and always clears local state, even when the backend call fails. */

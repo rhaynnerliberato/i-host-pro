@@ -1154,6 +1154,116 @@ export class Client {
 
     /**
      * @param body (optional) 
+     * @return Accepted
+     */
+    start2(body?: ForgotPasswordStartRequest | undefined): Observable<void> {
+        let url_ = this.baseUrl + "/api/v1/auth/forgot-password/start";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(body);
+
+        let options_ : any = {
+            body: content_,
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Content-Type": "application/json",
+            })
+        };
+
+        return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processStart2(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processStart2(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<void>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<void>;
+        }));
+    }
+
+    protected processStart2(response: HttpResponseBase): Observable<void> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 202) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return _observableOf(null as any);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @param body (optional) 
+     * @return No Content
+     */
+    complete(body?: ForgotPasswordCompleteRequest | undefined): Observable<void> {
+        let url_ = this.baseUrl + "/api/v1/auth/forgot-password/complete";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(body);
+
+        let options_ : any = {
+            body: content_,
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Content-Type": "application/json",
+            })
+        };
+
+        return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processComplete(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processComplete(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<void>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<void>;
+        }));
+    }
+
+    protected processComplete(response: HttpResponseBase): Observable<void> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return _observableOf(null as any);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @param body (optional) 
      * @return Created
      */
     cleaningsPOST(body?: CreateCleaningRequest | undefined): Observable<CleaningDetailResponse> {
@@ -1468,7 +1578,7 @@ export class Client {
     /**
      * @return OK
      */
-    start2(cleaningId: string): Observable<CleaningDetailResponse> {
+    start3(cleaningId: string): Observable<CleaningDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/cleanings/{cleaningId}/start";
         if (cleaningId === undefined || cleaningId === null)
             throw new globalThis.Error("The parameter 'cleaningId' must be defined.");
@@ -1484,11 +1594,11 @@ export class Client {
         };
 
         return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
-            return this.processStart2(response_);
+            return this.processStart3(response_);
         })).pipe(_observableCatch((response_: any) => {
             if (response_ instanceof HttpResponseBase) {
                 try {
-                    return this.processStart2(response_ as any);
+                    return this.processStart3(response_ as any);
                 } catch (e) {
                     return _observableThrow(e) as any as Observable<CleaningDetailResponse>;
                 }
@@ -1497,7 +1607,7 @@ export class Client {
         }));
     }
 
-    protected processStart2(response: HttpResponseBase): Observable<CleaningDetailResponse> {
+    protected processStart3(response: HttpResponseBase): Observable<CleaningDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -1610,7 +1720,7 @@ export class Client {
     /**
      * @return OK
      */
-    complete(cleaningId: string): Observable<CleaningDetailResponse> {
+    complete2(cleaningId: string): Observable<CleaningDetailResponse> {
         let url_ = this.baseUrl + "/api/v1/cleanings/{cleaningId}/complete";
         if (cleaningId === undefined || cleaningId === null)
             throw new globalThis.Error("The parameter 'cleaningId' must be defined.");
@@ -1626,11 +1736,11 @@ export class Client {
         };
 
         return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
-            return this.processComplete(response_);
+            return this.processComplete2(response_);
         })).pipe(_observableCatch((response_: any) => {
             if (response_ instanceof HttpResponseBase) {
                 try {
-                    return this.processComplete(response_ as any);
+                    return this.processComplete2(response_ as any);
                 } catch (e) {
                     return _observableThrow(e) as any as Observable<CleaningDetailResponse>;
                 }
@@ -1639,7 +1749,7 @@ export class Client {
         }));
     }
 
-    protected processComplete(response: HttpResponseBase): Observable<CleaningDetailResponse> {
+    protected processComplete2(response: HttpResponseBase): Observable<CleaningDetailResponse> {
         const status = response.status;
         const responseBlob =
             response instanceof HttpResponse ? response.body :
@@ -5723,6 +5833,67 @@ export class Client {
     }
 
     /**
+     * @param body (optional) 
+     * @return OK
+     */
+    signup(body?: SignupRequest | undefined): Observable<SignupResponse> {
+        let url_ = this.baseUrl + "/api/v1/signup";
+        url_ = url_.replace(/[?&]$/, "");
+
+        const content_ = JSON.stringify(body);
+
+        let options_ : any = {
+            body: content_,
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processSignup(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processSignup(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<SignupResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<SignupResponse>;
+        }));
+    }
+
+    protected processSignup(response: HttpResponseBase): Observable<SignupResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as SignupResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 400) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result400: any = null;
+            result400 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Bad Request", status, _responseText, _headers, result400);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
      * @return OK
      */
     templatesGET(key: string): Observable<TemplateResponse> {
@@ -7752,6 +7923,16 @@ export interface EnableAirbnbAutoPublicationRequest {
     notBeforeUtc?: Date | undefined;
 }
 
+export interface ForgotPasswordCompleteRequest {
+    token?: string | undefined;
+    newPassword?: string | undefined;
+}
+
+export interface ForgotPasswordStartRequest {
+    tenantSlug?: string | undefined;
+    email?: string | undefined;
+}
+
 export interface FrontDeskContactResponse {
     id?: string;
     condominiumId?: string;
@@ -8019,6 +8200,18 @@ export interface SetPropertyAccessConfigurationRequest {
     accessCredentialSecretReference?: string | undefined;
     accessInstructions?: string | undefined;
     isActive?: boolean;
+}
+
+export interface SignupRequest {
+    companyName?: string | undefined;
+    adminFullName?: string | undefined;
+    adminEmail?: string | undefined;
+    password?: string | undefined;
+}
+
+export interface SignupResponse {
+    tenantSlug?: string | undefined;
+    tokens?: AuthTokensResponse;
 }
 
 export interface TemplateResponse {

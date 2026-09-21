@@ -5,15 +5,20 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { TranslocoPipe } from '@jsverse/transloco';
 
 import { AuthService } from '../../../core/auth/auth.service';
-import { isSafeRedirectPath } from '../../../core/auth/redirect-url';
-import { isInvalidCredentialsError } from './login-error';
 
+/**
+ * The backend always responds 202 Accepted regardless of whether the tenant
+ * or email exists (StartPasswordResetProcessor) — this page mirrors that by
+ * always showing the same "check your email" confirmation on submit, and
+ * only ever falling back to a generic error for a genuine network/server
+ * failure that prevented the request from being sent at all.
+ */
 @Component({
-  selector: 'app-login',
+  selector: 'app-forgot-password',
   imports: [
     ReactiveFormsModule,
     RouterLink,
@@ -24,26 +29,23 @@ import { isInvalidCredentialsError } from './login-error';
     MatCardModule,
     MatProgressSpinnerModule,
   ],
-  templateUrl: './login.html',
-  styleUrl: './login.scss',
+  templateUrl: './forgot-password.html',
+  styleUrl: './forgot-password.scss',
 })
-export class Login {
+export class ForgotPassword {
   private readonly formBuilder = inject(FormBuilder);
   private readonly authService = inject(AuthService);
-  private readonly router = inject(Router);
-  private readonly route = inject(ActivatedRoute);
 
   protected readonly submitting = signal(false);
+  protected readonly submitted = signal(false);
   protected readonly errorKey = signal<string | null>(null);
 
   protected readonly form = this.formBuilder.nonNullable.group({
     tenantSlug: ['', [Validators.required]],
     email: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required]],
   });
 
   protected submit(): void {
-    // Blocks concurrent submits — a second click/Enter while a login request is already in flight is a no-op.
     if (this.submitting() || this.form.invalid) {
       this.form.markAllAsTouched();
       return;
@@ -52,17 +54,16 @@ export class Login {
     this.submitting.set(true);
     this.errorKey.set(null);
 
-    const { tenantSlug, email, password } = this.form.getRawValue();
+    const { tenantSlug, email } = this.form.getRawValue();
 
-    this.authService.login(tenantSlug, email, password).subscribe({
+    this.authService.requestPasswordReset(tenantSlug, email).subscribe({
       next: () => {
         this.submitting.set(false);
-        const redirectTo = this.route.snapshot.queryParamMap.get('redirectTo');
-        this.router.navigateByUrl(isSafeRedirectPath(redirectTo) ? redirectTo : '/');
+        this.submitted.set(true);
       },
-      error: (error: unknown) => {
+      error: () => {
         this.submitting.set(false);
-        this.errorKey.set(isInvalidCredentialsError(error) ? 'auth.login.invalidCredentials' : 'auth.login.genericError');
+        this.errorKey.set('auth.forgotPassword.errors.generic');
       },
     });
   }

@@ -19,11 +19,74 @@
       "submit": "Sign in",
       "invalidCredentials": "Invalid email, password or company.",
       "genericError": "Unable to sign in. Please try again.",
+      "forgotPassword": "Forgot your password?",
+      "createAccount": "Create an account",
       "validation": {
         "tenantRequired": "Enter the company.",
         "emailRequired": "Enter the email.",
         "emailInvalid": "Enter a valid email.",
         "passwordRequired": "Enter the password."
+      }
+    },
+    "signup": {
+      "title": "Create your account",
+      "companyName": "Company name",
+      "adminFullName": "Your full name",
+      "adminEmail": "Your email",
+      "password": "Password",
+      "passwordHint": "At least 10 characters, with uppercase, lowercase, a digit and a special character.",
+      "confirmPassword": "Confirm password",
+      "submit": "Create account",
+      "backToLogin": "Already have an account? Sign in",
+      "errors": {
+        "validation": "Check your password meets the requirements above and try again.",
+        "generic": "Unable to create your account. Please try again."
+      },
+      "validation": {
+        "companyNameRequired": "Enter the company name.",
+        "adminFullNameRequired": "Enter your full name.",
+        "emailRequired": "Enter the email.",
+        "emailInvalid": "Enter a valid email.",
+        "passwordTooShort": "Password must be at least 10 characters.",
+        "confirmPasswordRequired": "Confirm the password.",
+        "passwordMismatch": "Passwords do not match."
+      }
+    },
+    "forgotPassword": {
+      "title": "Reset your password",
+      "tenant": "Company",
+      "email": "Email",
+      "submit": "Send reset link",
+      "confirmation": "If an account exists for that company and email, we've sent a password reset link.",
+      "backToLogin": "Back to sign in",
+      "errors": {
+        "generic": "Unable to send the reset link right now. Please try again."
+      },
+      "validation": {
+        "tenantRequired": "Enter the company.",
+        "emailRequired": "Enter the email.",
+        "emailInvalid": "Enter a valid email."
+      }
+    },
+    "resetPassword": {
+      "title": "Choose a new password",
+      "newPassword": "New password",
+      "passwordHint": "At least 10 characters, with uppercase, lowercase, a digit and a special character.",
+      "confirmPassword": "Confirm new password",
+      "submit": "Reset password",
+      "confirmation": "Your password has been reset. You can now sign in with your new password.",
+      "backToLogin": "Back to sign in",
+      "requestNewLink": "Request a new reset link",
+      "errors": {
+        "tokenMissing": "This reset link is missing its token. Request a new one below.",
+        "tokenInvalid": "This reset link is invalid, expired, or already used.",
+        "validation": "Check your password meets the requirements above and try again.",
+        "generic": "Unable to reset your password right now. Please try again."
+      },
+      "validation": {
+        "passwordTooShort": "Password must be at least 10 characters.",
+        "confirmPasswordRequired": "Confirm the password.",
+        "passwordMismatch": "Passwords do not match."
       }
     },
     "logout": "Sign out"
@@ -43,7 +106,13 @@
     }
   },
   "home": {
-    "welcome": "Welcome, {{name}}"
+    "welcome": "Welcome, {{name}}",
+    "onboarding": {
+      "title": "Getting started",
+      "createProperty": "Create your first property",
+      "connectAirbnb": "Connect your Airbnb email",
+      "createMapping": "Set up a listing mapping"
+    }
   },
   "errors": {
     "forbidden": "You do not have permission to access this resource.",

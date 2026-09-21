@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 
-import { AuthTokensResponse, Client, OwnProfileResponse } from '../api/generated/api-client';
+import { AuthTokensResponse, Client, OwnProfileResponse, SignupResponse } from '../api/generated/api-client';
 import { AuthService } from './auth.service';
 import { AuthStateService } from './auth-state.service';
 import { UserProfileService } from './user-profile.service';
@@ -15,15 +15,26 @@ function profile(): OwnProfileResponse {
   return { id: 'user-1', permissions: ['USERS:MANAGE'] };
 }
 
+function signupResponse(overrides: Partial<SignupResponse> = {}): SignupResponse {
+  return { tenantSlug: 'acme', tokens: tokens(), ...overrides };
+}
+
 describe('AuthService', () => {
   let service: AuthService;
-  let client: { login: ReturnType<typeof vi.fn>; logout: ReturnType<typeof vi.fn>; refresh: ReturnType<typeof vi.fn> };
+  let client: {
+    login: ReturnType<typeof vi.fn>;
+    logout: ReturnType<typeof vi.fn>;
+    refresh: ReturnType<typeof vi.fn>;
+    signup: ReturnType<typeof vi.fn>;
+    start2: ReturnType<typeof vi.fn>;
+    complete: ReturnType<typeof vi.fn>;
+  };
   let authState: AuthStateService;
   let userProfile: { load: ReturnType<typeof vi.fn>; clear: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     sessionStorage.clear();
-    client = { login: vi.fn(), logout: vi.fn(), refresh: vi.fn() };
+    client = { login: vi.fn(), logout: vi.fn(), refresh: vi.fn(), signup: vi.fn(), start2: vi.fn(), complete: vi.fn() };
     userProfile = { load: vi.fn(), clear: vi.fn() };
 
     TestBed.configureTestingModule({
@@ -45,6 +56,36 @@ describe('AuthService', () => {
 
     expect(authState.isAuthenticated()).toBe(true);
     expect(userProfile.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('signup stores the returned tokens and then loads the real permissions profile', () => {
+    client.signup.mockReturnValue(of(signupResponse()));
+    userProfile.load.mockReturnValue(of(profile()));
+
+    let result: SignupResponse | undefined;
+    service.signup('Acme Inc', 'Jane Admin', 'jane@acme.com', 'Sup3r$ecret').subscribe((value) => (result = value));
+
+    expect(authState.isAuthenticated()).toBe(true);
+    expect(userProfile.load).toHaveBeenCalledTimes(1);
+    expect(result?.tenantSlug).toBe('acme');
+  });
+
+  it('requestPasswordReset delegates to Client.start2 without touching local session state', () => {
+    client.start2.mockReturnValue(of(undefined));
+
+    service.requestPasswordReset('acme', 'jane@acme.com').subscribe();
+
+    expect(client.start2).toHaveBeenCalledWith({ tenantSlug: 'acme', email: 'jane@acme.com' });
+    expect(authState.isAuthenticated()).toBe(false);
+  });
+
+  it('completePasswordReset delegates to Client.complete without auto-login', () => {
+    client.complete.mockReturnValue(of(undefined));
+
+    service.completePasswordReset('raw-token', 'N3wPassw0rd!').subscribe();
+
+    expect(client.complete).toHaveBeenCalledWith({ token: 'raw-token', newPassword: 'N3wPassw0rd!' });
+    expect(authState.isAuthenticated()).toBe(false);
   });
 
   it('logout clears the local session, including the cached permissions, even when the backend call succeeds', () => {

@@ -43,6 +43,11 @@
             {{ 'auth.login.submit' | transloco }}
           }
         </button>
+
+        <p class="login-links">
+          <a routerLink="/forgot-password">{{ 'auth.login.forgotPassword' | transloco }}</a>
+          <a routerLink="/signup">{{ 'auth.login.createAccount' | transloco }}</a>
+        </p>
       </form>
     </mat-card-content>
   </mat-card>

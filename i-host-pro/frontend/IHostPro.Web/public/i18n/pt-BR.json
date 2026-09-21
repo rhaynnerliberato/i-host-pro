@@ -19,11 +19,74 @@
       "submit": "Entrar",
       "invalidCredentials": "E-mail, senha ou empresa inválidos.",
       "genericError": "Não foi possível entrar. Tente novamente.",
+      "forgotPassword": "Esqueceu sua senha?",
+      "createAccount": "Criar uma conta",
       "validation": {
         "tenantRequired": "Informe a empresa.",
         "emailRequired": "Informe o e-mail.",
         "emailInvalid": "Informe um e-mail válido.",
         "passwordRequired": "Informe a senha."
+      }
+    },
+    "signup": {
+      "title": "Crie sua conta",
+      "companyName": "Nome da empresa",
+      "adminFullName": "Seu nome completo",
+      "adminEmail": "Seu e-mail",
+      "password": "Senha",
+      "passwordHint": "Mínimo de 10 caracteres, com maiúscula, minúscula, número e caractere especial.",
+      "confirmPassword": "Confirme a senha",
+      "submit": "Criar conta",
+      "backToLogin": "Já tem uma conta? Entrar",
+      "errors": {
+        "validation": "Verifique se a senha atende aos requisitos acima e tente novamente.",
+        "generic": "Não foi possível criar sua conta. Tente novamente."
+      },
+      "validation": {
+        "companyNameRequired": "Informe o nome da empresa.",
+        "adminFullNameRequired": "Informe seu nome completo.",
+        "emailRequired": "Informe o e-mail.",
+        "emailInvalid": "Informe um e-mail válido.",
+        "passwordTooShort": "A senha deve ter pelo menos 10 caracteres.",
+        "confirmPasswordRequired": "Confirme a senha.",
+        "passwordMismatch": "As senhas não coincidem."
+      }
+    },
+    "forgotPassword": {
+      "title": "Redefinir sua senha",
+      "tenant": "Empresa",
+      "email": "E-mail",
+      "submit": "Enviar link de redefinição",
+      "confirmation": "Se existir uma conta para essa empresa e e-mail, enviamos um link de redefinição de senha.",
+      "backToLogin": "Voltar para o login",
+      "errors": {
+        "generic": "Não foi possível enviar o link de redefinição no momento. Tente novamente."
+      },
+      "validation": {
+        "tenantRequired": "Informe a empresa.",
+        "emailRequired": "Informe o e-mail.",
+        "emailInvalid": "Informe um e-mail válido."
+      }
+    },
+    "resetPassword": {
+      "title": "Escolha uma nova senha",
+      "newPassword": "Nova senha",
+      "passwordHint": "Mínimo de 10 caracteres, com maiúscula, minúscula, número e caractere especial.",
+      "confirmPassword": "Confirme a nova senha",
+      "submit": "Redefinir senha",
+      "confirmation": "Sua senha foi redefinida. Agora você pode entrar com a nova senha.",
+      "backToLogin": "Voltar para o login",
+      "requestNewLink": "Solicitar um novo link de redefinição",
+      "errors": {
+        "tokenMissing": "Este link de redefinição está sem o token. Solicite um novo abaixo.",
+        "tokenInvalid": "Este link de redefinição é inválido, expirou ou já foi utilizado.",
+        "validation": "Verifique se a senha atende aos requisitos acima e tente novamente.",
+        "generic": "Não foi possível redefinir sua senha no momento. Tente novamente."
+      },
+      "validation": {
+        "passwordTooShort": "A senha deve ter pelo menos 10 caracteres.",
+        "confirmPasswordRequired": "Confirme a senha.",
+        "passwordMismatch": "As senhas não coincidem."
       }
     },
     "logout": "Sair"
@@ -43,7 +106,13 @@
     }
   },
   "home": {
-    "welcome": "Bem-vindo(a), {{name}}"
+    "welcome": "Bem-vindo(a), {{name}}",
+    "onboarding": {
+      "title": "Primeiros passos",
+      "createProperty": "Cadastre seu primeiro imóvel",
+      "connectAirbnb": "Conecte seu e-mail do Airbnb",
+      "createMapping": "Configure um mapeamento de anúncio"
+    }
   },
   "errors": {
     "forbidden": "Você não tem permissão para acessar este recurso.",

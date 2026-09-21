@@ -2,4 +2,24 @@
   @if (userProfile.profile(); as profile) {
     <h1>{{ 'home.welcome' | transloco: { name: profile.fullName } }}</h1>
   }
+
+  @if (checklistLoaded() && !checklistComplete()) {
+    <div class="onboarding-checklist">
+      <h2>{{ 'home.onboarding.title' | transloco }}</h2>
+      <ul>
+        <li [class.done]="hasProperty()">
+          <span class="status">{{ hasProperty() ? '✅' : '⬜' }}</span>
+          <a routerLink="/properties">{{ 'home.onboarding.createProperty' | transloco }}</a>
+        </li>
+        <li [class.done]="airbnbConnected()">
+          <span class="status">{{ airbnbConnected() ? '✅' : '⬜' }}</span>
+          <a routerLink="/integrations/airbnb-email">{{ 'home.onboarding.connectAirbnb' | transloco }}</a>
+        </li>
+        <li [class.done]="hasListingMapping()">
+          <span class="status">{{ hasListingMapping() ? '✅' : '⬜' }}</span>
+          <a routerLink="/integrations/airbnb-email">{{ 'home.onboarding.createMapping' | transloco }}</a>
+        </li>
+      </ul>
+    </div>
+  }
 </div>
