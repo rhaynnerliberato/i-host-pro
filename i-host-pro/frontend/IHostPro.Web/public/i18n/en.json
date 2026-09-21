@@ -11,6 +11,11 @@
     "retry": "Retry"
   },
   "auth": {
+    "tagline": "Complete management for stays, housekeeping, and Airbnb integrations in one place.",
+    "password": {
+      "show": "Show password",
+      "hide": "Hide password"
+    },
     "login": {
       "title": "Sign in",
       "tenant": "Company",

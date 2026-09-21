@@ -4,14 +4,22 @@
 // Learn more about theming and how to use it for your application's
 // custom components at https://material.angular.dev/guide/theming
 @use '@angular/material' as mat;
+// UI/UX Visual Foundation gate — custom brand palette generated via
+// `ng generate @angular/material:m3-theme --primary-color=#4F46E5
+// --tertiary-color=#0EA5E9` (approved brand direction: deep indigo primary,
+// cyan/blue tertiary used sparingly, neutral derived from the primary reads
+// as a cool slate). Replaces the previous stock azure/blue Material demo
+// palette everywhere in the app, since every component consumes the same
+// `--mat-sys-*` system tokens this mixin generates.
+@use './theme-colors' as brand;
 
 html {
   height: 100%;
   @include mat.theme(
     (
       color: (
-        primary: mat.$azure-palette,
-        tertiary: mat.$blue-palette,
+        primary: brand.$primary-palette,
+        tertiary: brand.$tertiary-palette,
       ),
       typography: Roboto,
       density: 0,
@@ -35,5 +43,27 @@ body {
   // Reset the user agent margin.
   margin: 0;
   height: 100%;
+
+  // UI/UX Visual Foundation gate — the app's one deliberate spacing scale.
+  // Feature stylesheets should reference these instead of inventing their
+  // own rem/px values, so equivalent layout roles (page padding, card gaps,
+  // section spacing) stay consistent across features.
+  --app-space-1: 0.25rem;
+  --app-space-2: 0.5rem;
+  --app-space-3: 0.75rem;
+  --app-space-4: 1rem;
+  --app-space-5: 1.5rem;
+  --app-space-6: 2rem;
+  --app-space-7: 3rem;
 }
+
+// UI/UX Visual Foundation gate — typography scale. Material 3 already
+// generates a full type scale as system variables (--mat-sys-display-*,
+// --mat-sys-headline-*, --mat-sys-title-*, --mat-sys-body-*,
+// --mat-sys-label-*) via `mat.theme()` above; feature stylesheets should
+// reference those (e.g. `font: var(--mat-sys-headline-small)`) instead of
+// hardcoding ad hoc font-size values, so equivalent semantic roles (a page
+// title, a card heading, a stat number, a caption) render at one consistent
+// size everywhere rather than a different value per file.
+
 /* You can add global styles to this file, and also import other style files */

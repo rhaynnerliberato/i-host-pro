@@ -1,0 +1,8 @@
+<span class="brand-mark" [class.brand-mark--inverse]="inverse()">
+  <span class="brand-mark__monogram" aria-hidden="true">iH</span>
+  @if (!compact()) {
+    <span class="brand-mark__wordmark">iHostPro</span>
+  } @else {
+    <span class="brand-mark__visually-hidden">iHostPro</span>
+  }
+</span>

@@ -1,0 +1,22 @@
+<div class="auth-shell">
+  <aside class="auth-shell__brand-panel" aria-hidden="true">
+    <app-brand-mark [inverse]="true" />
+    <p class="auth-shell__tagline">{{ 'auth.tagline' | transloco }}</p>
+  </aside>
+
+  <main class="auth-shell__form-panel">
+    <mat-card class="auth-shell__card">
+      <div class="auth-shell__mobile-brand">
+        <app-brand-mark />
+      </div>
+
+      <mat-card-header>
+        <mat-card-title>{{ titleKey() | transloco }}</mat-card-title>
+      </mat-card-header>
+
+      <mat-card-content>
+        <ng-content />
+      </mat-card-content>
+    </mat-card>
+  </main>
+</div>

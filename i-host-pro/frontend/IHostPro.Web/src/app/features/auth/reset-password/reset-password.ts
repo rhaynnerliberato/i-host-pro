@@ -1,14 +1,15 @@
 import { Component, inject, signal } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslocoPipe } from '@jsverse/transloco';
 
 import { AuthService } from '../../../core/auth/auth.service';
+import { AuthShell } from '../../../shared/auth-shell/auth-shell';
 import { classifyAuthActionError } from '../auth-action-error';
 
 /** Mirrors the backend's IdentityErrorCodes.PasswordResetTokenInvalid — the single undifferentiated code for an invalid, expired, or already-consumed token. */
@@ -33,10 +34,11 @@ function passwordsMatchValidator(control: AbstractControl): ValidationErrors | n
     ReactiveFormsModule,
     RouterLink,
     TranslocoPipe,
+    AuthShell,
     MatFormFieldModule,
     MatInputModule,
+    MatIconModule,
     MatButtonModule,
-    MatCardModule,
     MatProgressSpinnerModule,
   ],
   templateUrl: './reset-password.html',
@@ -53,6 +55,8 @@ export class ResetPassword {
   protected readonly submitting = signal(false);
   protected readonly submitted = signal(false);
   protected readonly errorKey = signal<string | null>(null);
+  protected readonly hidePassword = signal(true);
+  protected readonly hideConfirmPassword = signal(true);
 
   protected readonly form = this.formBuilder.nonNullable.group(
     {

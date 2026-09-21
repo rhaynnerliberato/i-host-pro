@@ -1,0 +1,38 @@
+// UI/UX Visual Foundation gate — shared declarations for the form content
+// each auth page (login/signup/forgot-password/reset-password) projects
+// into AuthShell. A Sass mixin, not a runtime shared stylesheet: Angular's
+// view encapsulation scopes each component's own compiled CSS, so the rules
+// below are copied into each page's stylesheet at compile time rather than
+// shared as one runtime class — the point is that every page includes the
+// exact same declarations instead of retyping its own slightly different
+// version of the same handful of rules.
+@mixin controls {
+  .full-width {
+    width: 100%;
+  }
+
+  .submit-button {
+    margin-top: var(--app-space-2);
+  }
+
+  .auth-error,
+  .auth-confirmation {
+    margin: 0 0 var(--app-space-4);
+    font-size: 0.875rem;
+  }
+
+  .auth-error {
+    color: var(--mat-sys-error);
+
+    a {
+      display: block;
+      margin-top: var(--app-space-1);
+    }
+  }
+
+  .auth-links {
+    margin: var(--app-space-4) 0 0;
+    text-align: center;
+    font-size: 0.875rem;
+  }
+}

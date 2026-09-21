@@ -1,7 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -9,6 +8,7 @@ import { RouterLink } from '@angular/router';
 import { TranslocoPipe } from '@jsverse/transloco';
 
 import { AuthService } from '../../../core/auth/auth.service';
+import { AuthShell } from '../../../shared/auth-shell/auth-shell';
 
 /**
  * The backend always responds 202 Accepted regardless of whether the tenant
@@ -23,10 +23,10 @@ import { AuthService } from '../../../core/auth/auth.service';
     ReactiveFormsModule,
     RouterLink,
     TranslocoPipe,
+    AuthShell,
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
-    MatCardModule,
     MatProgressSpinnerModule,
   ],
   templateUrl: './forgot-password.html',

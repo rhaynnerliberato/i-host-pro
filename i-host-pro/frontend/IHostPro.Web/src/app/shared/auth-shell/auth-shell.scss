@@ -1,0 +1,54 @@
+.auth-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+// Decorative brand/context panel — hidden below the split-panel breakpoint
+// (see the media query at the bottom), where the mobile brand mark inside
+// the card takes over instead.
+.auth-shell__brand-panel {
+  display: none;
+  flex: 1 1 42%;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--app-space-4);
+  padding: var(--app-space-7);
+  background: linear-gradient(135deg, var(--mat-sys-primary), var(--mat-sys-tertiary));
+  color: var(--mat-sys-on-primary);
+}
+
+.auth-shell__tagline {
+  max-width: 22rem;
+  margin: 0;
+  font: var(--mat-sys-title-medium);
+  opacity: 0.92;
+}
+
+.auth-shell__form-panel {
+  flex: 1 1 58%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--app-space-4);
+}
+
+.auth-shell__card {
+  width: 100%;
+  max-width: 26rem;
+}
+
+// Shown only when the split brand panel above is hidden, so there is still
+// some product identity on a narrow viewport.
+.auth-shell__mobile-brand {
+  margin-bottom: var(--app-space-4);
+}
+
+@media (min-width: 900px) {
+  .auth-shell__brand-panel {
+    display: flex;
+  }
+
+  .auth-shell__mobile-brand {
+    display: none;
+  }
+}

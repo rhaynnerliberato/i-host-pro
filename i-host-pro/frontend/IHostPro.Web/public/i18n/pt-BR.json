@@ -11,6 +11,11 @@
     "retry": "Tentar novamente"
   },
   "auth": {
+    "tagline": "Gestão completa de hospedagens, limpezas e integrações com o Airbnb em um só lugar.",
+    "password": {
+      "show": "Mostrar senha",
+      "hide": "Ocultar senha"
+    },
     "login": {
       "title": "Entrar",
       "tenant": "Empresa",

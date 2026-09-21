@@ -1,14 +1,15 @@
 import { Component, inject, signal } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router, RouterLink } from '@angular/router';
 import { TranslocoPipe } from '@jsverse/transloco';
 
 import { AuthService } from '../../../core/auth/auth.service';
+import { AuthShell } from '../../../shared/auth-shell/auth-shell';
 import { classifyAuthActionError } from '../auth-action-error';
 
 /** Client-side mirror of the *shape* of the check only — the backend's PasswordPolicyOptions remains the sole authority on length/complexity. */
@@ -24,10 +25,11 @@ function passwordsMatchValidator(control: AbstractControl): ValidationErrors | n
     ReactiveFormsModule,
     RouterLink,
     TranslocoPipe,
+    AuthShell,
     MatFormFieldModule,
     MatInputModule,
+    MatIconModule,
     MatButtonModule,
-    MatCardModule,
     MatProgressSpinnerModule,
   ],
   templateUrl: './signup.html',
@@ -40,6 +42,8 @@ export class Signup {
 
   protected readonly submitting = signal(false);
   protected readonly errorKey = signal<string | null>(null);
+  protected readonly hidePassword = signal(true);
+  protected readonly hideConfirmPassword = signal(true);
 
   protected readonly form = this.formBuilder.nonNullable.group(
     {
