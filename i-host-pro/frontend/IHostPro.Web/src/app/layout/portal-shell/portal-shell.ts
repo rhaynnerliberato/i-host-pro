@@ -5,6 +5,7 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
 import { TranslocoPipe } from '@jsverse/transloco';
 
 import { AuthService } from '../../core/auth/auth.service';
+import { BrandMark } from '../../shared/brand-mark/brand-mark';
 
 /**
  * Dedicated mobile-first shell for the Portal da Faxineira (Fase 6,
@@ -18,7 +19,7 @@ import { AuthService } from '../../core/auth/auth.service';
  */
 @Component({
   selector: 'app-portal-shell',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet, TranslocoPipe, MatIconModule, MatToolbarModule],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, TranslocoPipe, BrandMark, MatIconModule, MatToolbarModule],
   templateUrl: './portal-shell.html',
   styleUrl: './portal-shell.scss',
 })

@@ -1,22 +1,22 @@
 .my-cleaning-detail__back {
-  margin-bottom: 8px;
+  margin-bottom: var(--app-space-2);
 }
 
 .my-cleaning-detail__centered {
   display: flex;
   justify-content: center;
-  padding: 32px 0;
+  padding: var(--app-space-6) 0;
 }
 
 .my-cleaning-detail__summary {
-  margin-bottom: 16px;
+  margin-bottom: var(--app-space-4);
 }
 
 .my-cleaning-detail__row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--app-space-2);
 }
 
 .my-cleaning-detail__property {
@@ -25,19 +25,19 @@
 }
 
 .my-cleaning-detail__schedule {
-  margin-top: 4px;
-  color: rgba(0, 0, 0, 0.6);
+  margin-top: var(--app-space-1);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .my-cleaning-detail__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 24px;
+  gap: var(--app-space-2);
+  margin-bottom: var(--app-space-5);
 }
 
 .my-cleaning-detail__section {
-  margin-bottom: 24px;
+  margin-bottom: var(--app-space-5);
 }
 
 .my-cleaning-detail__section-header {
@@ -49,8 +49,8 @@
 .my-cleaning-detail__occurrence-form {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin: 8px 0;
+  gap: var(--app-space-1);
+  margin: var(--app-space-2) 0;
 }
 
 .my-cleaning-detail__occurrence-list {
@@ -59,8 +59,8 @@
   padding: 0;
 
   li {
-    padding: 6px 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding: var(--app-space-2) 0;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
   }
 }
 
@@ -70,9 +70,9 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--app-space-1);
 }
 
 .my-cleaning-detail__empty {
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--mat-sys-on-surface-variant);
 }

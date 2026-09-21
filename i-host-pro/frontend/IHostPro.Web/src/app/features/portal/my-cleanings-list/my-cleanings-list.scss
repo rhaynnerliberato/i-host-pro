@@ -1,29 +1,36 @@
 .my-cleanings-list__title {
-  font-size: 20px;
-  margin: 4px 0 16px;
+  font: var(--mat-sys-headline-small);
+  margin: var(--app-space-1) 0 var(--app-space-4);
 }
 
 .my-cleanings-list__centered {
   display: flex;
   justify-content: center;
-  padding: 32px 0;
+  padding: var(--app-space-6) 0;
 }
 
 .my-cleanings-list__cards {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--app-space-3);
 }
 
 .my-cleanings-list__card {
   cursor: pointer;
+
+  // Now keyboard-focusable (tabindex + role="button" in the template) — it
+  // needs its own visible focus indicator, since mat-card has none by default.
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+  }
 }
 
 .my-cleanings-list__row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--app-space-2);
 }
 
 .my-cleanings-list__property {
@@ -34,7 +41,7 @@
 }
 
 .my-cleanings-list__schedule {
-  margin-top: 4px;
-  color: rgba(0, 0, 0, 0.6);
+  margin-top: var(--app-space-1);
+  color: var(--mat-sys-on-surface-variant);
   font-size: 14px;
 }
