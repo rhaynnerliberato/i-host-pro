@@ -1,5 +1,7 @@
 <div class="airbnb-email-page">
-  <h1>{{ 'integrations.airbnbEmail.title' | transloco }}</h1>
+  <div class="airbnb-email-header">
+    <h1>{{ 'integrations.airbnbEmail.title' | transloco }}</h1>
+  </div>
 
   <!-- Connection -->
   <mat-card class="airbnb-email-section">
@@ -19,6 +21,7 @@
           @if (connection(); as connection) {
             <mat-chip-set>
               <mat-chip [class]="'status-chip status-chip--' + connection.status">
+                <mat-icon matChipAvatar aria-hidden="true">{{ connectionStatusIcon(connection.status) }}</mat-icon>
                 {{ 'integrations.airbnbEmail.connection.status.' + connection.status | transloco }}
               </mat-chip>
             </mat-chip-set>
@@ -79,6 +82,7 @@
           @if (autoPublication(); as autoPublication) {
             <mat-chip-set>
               <mat-chip [class]="autoPublication.enabled ? 'status-chip status-chip--connected' : 'status-chip status-chip--disconnected'">
+                <mat-icon matChipAvatar aria-hidden="true">{{ autoPublication.enabled ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
                 {{ (autoPublication.enabled ? 'integrations.airbnbEmail.autoPublication.enabled' : 'integrations.airbnbEmail.autoPublication.disabled') | transloco }}
               </mat-chip>
             </mat-chip-set>
@@ -130,6 +134,7 @@
           @if (mappings().length === 0) {
             <p>{{ 'integrations.airbnbEmail.mappings.empty' | transloco }}</p>
           } @else {
+            <div class="list-table-scroll">
             <table mat-table [dataSource]="mappings()" class="full-width">
               <ng-container matColumnDef="listingTitle">
                 <th mat-header-cell *matHeaderCellDef>{{ 'integrations.airbnbEmail.mappings.columns.listingTitle' | transloco }}</th>
@@ -144,6 +149,7 @@
               <tr mat-header-row *matHeaderRowDef="displayedMappingColumns"></tr>
               <tr mat-row *matRowDef="let row; columns: displayedMappingColumns"></tr>
             </table>
+            </div>
           }
         }
       }
@@ -168,10 +174,12 @@
           @if (summary(); as summary) {
             <div class="airbnb-email-summary-grid">
               <div class="airbnb-email-summary-item airbnb-email-summary-item--attention">
+                <mat-icon aria-hidden="true">warning</mat-icon>
                 <span class="airbnb-email-summary-count">{{ summary.needsReview }}</span>
                 <span>{{ 'integrations.airbnbEmail.processing.needsReview' | transloco }}</span>
               </div>
               <div class="airbnb-email-summary-item airbnb-email-summary-item--attention">
+                <mat-icon aria-hidden="true">warning</mat-icon>
                 <span class="airbnb-email-summary-count">{{ summary.failed }}</span>
                 <span>{{ 'integrations.airbnbEmail.processing.failed' | transloco }}</span>
               </div>

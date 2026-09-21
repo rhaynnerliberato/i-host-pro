@@ -45,10 +45,12 @@
     }
     @case ('empty') {
       <div class="cleanings-list-state">
+        <mat-icon aria-hidden="true">inbox</mat-icon>
         <p>{{ 'housekeeping.list.empty' | transloco }}</p>
       </div>
     }
     @case ('loaded') {
+      <div class="list-table-scroll">
       <table mat-table [dataSource]="cleanings()" class="full-width">
         <ng-container matColumnDef="propertyId">
           <th mat-header-cell *matHeaderCellDef>{{ 'housekeeping.list.columns.propertyId' | transloco }}</th>
@@ -121,6 +123,7 @@
         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
       </table>
+      </div>
 
       <mat-paginator
         [length]="totalCount()"

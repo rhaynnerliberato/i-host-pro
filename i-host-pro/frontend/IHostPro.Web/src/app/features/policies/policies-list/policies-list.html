@@ -17,10 +17,12 @@
     }
     @case ('empty') {
       <div class="policies-list-state">
+        <mat-icon aria-hidden="true">inbox</mat-icon>
         <p>{{ 'policies.list.empty' | transloco }}</p>
       </div>
     }
     @case ('loaded') {
+      <div class="list-table-scroll">
       <table mat-table [dataSource]="policies()" class="full-width">
         <ng-container matColumnDef="code">
           <th mat-header-cell *matHeaderCellDef>{{ 'policies.list.columns.code' | transloco }}</th>
@@ -47,6 +49,7 @@
         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
       </table>
+      </div>
     }
   }
 </div>

@@ -55,6 +55,15 @@ body {
   --app-space-5: 1.5rem;
   --app-space-6: 2rem;
   --app-space-7: 3rem;
+
+  // Material 3 has no built-in "success" semantic (only primary/secondary/
+  // tertiary/error) — this is the one deliberate exception to "reuse an
+  // existing token," added here (not as a feature-local hardcode) so every
+  // "connected/healthy" status indicator in the app shares one definition,
+  // and resolves correctly under both color-scheme values via light-dark().
+  --app-color-success: light-dark(#1e7e34, #81c995);
+  --app-color-success-container: light-dark(#e6f4ea, #1e4620);
+  --app-color-on-success-container: light-dark(#1e7e34, #e6f4ea);
 }
 
 // UI/UX Visual Foundation gate — typography scale. Material 3 already

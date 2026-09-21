@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
+import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTableModule } from '@angular/material/table';
 import { TranslocoPipe } from '@jsverse/transloco';
@@ -14,7 +15,7 @@ type LoadState = 'loading' | 'loaded' | 'empty' | 'error';
 /** The catalog (§3) is fixed and seeded — never created/edited/removed from this UI (Fase 5, Incremento 1, Checkpoint 5: only PolicyDefinition READ is in scope). */
 @Component({
   selector: 'app-policies-list',
-  imports: [TranslocoPipe, MatButtonModule, MatProgressSpinnerModule, MatTableModule],
+  imports: [TranslocoPipe, MatButtonModule, MatIconModule, MatProgressSpinnerModule, MatTableModule],
   templateUrl: './policies-list.html',
   styleUrl: './policies-list.scss',
 })

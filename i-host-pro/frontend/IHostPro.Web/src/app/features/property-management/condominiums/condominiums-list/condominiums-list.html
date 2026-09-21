@@ -21,10 +21,12 @@
     }
     @case ('empty') {
       <div class="condominiums-list-state">
+        <mat-icon aria-hidden="true">inbox</mat-icon>
         <p>{{ 'propertyManagement.condominiums.list.empty' | transloco }}</p>
       </div>
     }
     @case ('loaded') {
+      <div class="list-table-scroll">
       <table mat-table [dataSource]="condominiums()" class="full-width">
         <ng-container matColumnDef="name">
           <th mat-header-cell *matHeaderCellDef>{{ 'propertyManagement.condominiums.list.columns.name' | transloco }}</th>
@@ -46,6 +48,7 @@
         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
       </table>
+      </div>
 
       <mat-paginator
         [length]="totalCount()"

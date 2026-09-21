@@ -1,7 +1,13 @@
 .airbnb-email-page {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--app-space-4);
+}
+
+.airbnb-email-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .airbnb-email-section {
@@ -9,39 +15,46 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.75rem;
+    gap: var(--app-space-3);
   }
 }
 
 .airbnb-email-hint {
-  color: rgba(0, 0, 0, 0.6);
+  color: var(--mat-sys-on-surface-variant);
   font-size: 0.875rem;
 }
 
 .status-chip--connected {
-  background-color: #e6f4ea;
-  color: #1e7e34;
+  background-color: var(--app-color-success-container);
+  color: var(--app-color-on-success-container);
 }
 
 .status-chip--disconnected,
 .status-chip--notConfigured {
-  background-color: #f1f1f1;
-  color: rgba(0, 0, 0, 0.6);
+  background-color: var(--mat-sys-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .status-chip--error {
-  background-color: #fdecea;
-  color: #c62828;
+  background-color: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
 }
 
 .full-width {
   width: 100%;
 }
 
+// Never let a narrow-viewport table force the whole page to scroll
+// horizontally — only the table's own container scrolls.
+.list-table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
 .airbnb-email-summary-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem;
+  gap: var(--app-space-5);
 }
 
 .airbnb-email-summary-item {
@@ -51,11 +64,14 @@
   min-width: 96px;
 }
 
-.airbnb-email-summary-item--attention .airbnb-email-summary-count {
-  color: #c62828;
+.airbnb-email-summary-item--attention {
+  mat-icon,
+  .airbnb-email-summary-count {
+    color: var(--mat-sys-error);
+  }
 }
 
 .airbnb-email-summary-count {
-  font-size: 1.5rem;
+  font: var(--mat-sys-headline-small);
   font-weight: 600;
 }

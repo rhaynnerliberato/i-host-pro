@@ -49,10 +49,12 @@
     }
     @case ('empty') {
       <div class="reservations-list-state">
+        <mat-icon aria-hidden="true">inbox</mat-icon>
         <p>{{ 'reservations.list.empty' | transloco }}</p>
       </div>
     }
     @case ('loaded') {
+      <div class="list-table-scroll">
       <table mat-table [dataSource]="reservations()" class="full-width">
         <ng-container matColumnDef="guestName">
           <th mat-header-cell *matHeaderCellDef>{{ 'reservations.list.columns.guestName' | transloco }}</th>
@@ -108,6 +110,7 @@
         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
       </table>
+      </div>
 
       <mat-paginator
         [length]="totalCount()"

@@ -15,6 +15,7 @@ import { take } from 'rxjs';
 import { AirbnbListingTitleMappingResponse } from '../../../../core/api/generated/api-client';
 import { ConfirmDialog, ConfirmDialogData } from '../../../users/confirm-dialog/confirm-dialog';
 import {
+  AirbnbEmailConnectionStatusLabel,
   AirbnbEmailMailboxStatus,
   AirbnbEmailProcessingSummary,
   AirbnbEmailService,
@@ -47,6 +48,16 @@ type ConnectResultCode = 'success' | 'denied' | 'expired' | 'error';
  * component never generates, sees, or stores any `state`/PKCE material
  * itself.
  */
+// UI/UX Visual Foundation gate — status must never be conveyed by color
+// alone (mandate §3): every connection-status chip pairs its color with one
+// of these icons plus its own translated text label.
+const CONNECTION_STATUS_ICONS: Record<AirbnbEmailConnectionStatusLabel, string> = {
+  connected: 'check_circle',
+  disconnected: 'radio_button_unchecked',
+  notConfigured: 'radio_button_unchecked',
+  error: 'error',
+};
+
 @Component({
   selector: 'app-airbnb-email-page',
   imports: [DatePipe, TranslocoPipe, MatButtonModule, MatCardModule, MatChipsModule, MatIconModule, MatProgressSpinnerModule, MatTableModule],
@@ -75,6 +86,10 @@ export class AirbnbEmailPage {
 
   protected readonly summaryState = signal<LoadState>('loading');
   protected readonly summary = signal<AirbnbEmailProcessingSummary | null>(null);
+
+  protected connectionStatusIcon(status: AirbnbEmailConnectionStatusLabel): string {
+    return CONNECTION_STATUS_ICONS[status];
+  }
 
   constructor() {
     this.handleConnectCallbackResult();
