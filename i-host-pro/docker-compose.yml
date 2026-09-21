@@ -76,6 +76,23 @@ services:
       timeout: 5s
       retries: 10
 
+  # Self-Service Identity & Onboarding Foundation gate — local SMTP sink for
+  # the Development transactional-email sender (MailpitTransactionalEmailSender).
+  # Never the production email provider (deliberately deferred, separate
+  # future gate) — Development-only, no cloud dependency.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    container_name: ihostpro-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8025/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.117.0
     container_name: ihostpro-otel-collector

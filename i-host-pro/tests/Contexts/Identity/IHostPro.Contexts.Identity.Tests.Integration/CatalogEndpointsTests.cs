@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using FluentAssertions;
 using IHostPro.BuildingBlocks.Application;
+using IHostPro.BuildingBlocks.Infrastructure.Email;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Api.Authorization;
@@ -169,7 +170,13 @@ public class CatalogEndpointsTests : IClassFixture<CatalogEndpointsTests.Fixture
                     services.AddIdentityJwtIssuance(configuration);
                     services.AddIdentityJwtBearerAuthentication();
                     services.AddIdentityAuthorization();
-                    services.AddIdentityCommandDispatch();
+                    // AuthController (needed transitively by the login test
+                    // helper below) now depends on IStartPasswordResetProcessor,
+                    // which needs ITransactionalEmailSender — this fixture never
+                    // exercises forgot-password, so the real fail-loud production
+                    // stub is enough to satisfy the DI graph.
+                    services.AddSingleton<ITransactionalEmailSender, UnconfiguredTransactionalEmailSender>();
+                    services.AddIdentityCommandDispatch(configuration);
                 });
                 webHost.Configure(app =>
                 {

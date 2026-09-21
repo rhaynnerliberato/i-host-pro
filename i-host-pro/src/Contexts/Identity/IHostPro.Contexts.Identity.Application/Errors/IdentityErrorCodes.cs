@@ -126,4 +126,13 @@ public static class IdentityErrorCodes
     /// alteração com dados possivelmente obsoletos").
     /// </summary>
     public const string UserConcurrencyConflict = "Identity.UserConcurrencyConflict";
+
+    /// <summary>
+    /// Self-Service Identity &amp; Onboarding Foundation gate — a
+    /// forgot-password completion presented a token that is invalid,
+    /// expired, or already consumed. Deliberately a single undifferentiated
+    /// code: the caller must never learn which of the three actually
+    /// happened (that would be a token-status oracle).
+    /// </summary>
+    public const string PasswordResetTokenInvalid = "Identity.PasswordResetTokenInvalid";
 }

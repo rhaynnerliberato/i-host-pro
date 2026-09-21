@@ -21,8 +21,18 @@ namespace IHostPro.Contexts.Identity.Api.Controllers;
 public sealed class AuthController : ControllerBase
 {
     private readonly IIdentityRequestDispatcher _sender;
+    private readonly IStartPasswordResetProcessor _startPasswordResetProcessor;
+    private readonly ICompletePasswordResetProcessor _completePasswordResetProcessor;
 
-    public AuthController(IIdentityRequestDispatcher sender) => _sender = sender;
+    public AuthController(
+        IIdentityRequestDispatcher sender,
+        IStartPasswordResetProcessor startPasswordResetProcessor,
+        ICompletePasswordResetProcessor completePasswordResetProcessor)
+    {
+        _sender = sender;
+        _startPasswordResetProcessor = startPasswordResetProcessor;
+        _completePasswordResetProcessor = completePasswordResetProcessor;
+    }
 
     [HttpPost("login")]
     [AllowAnonymous]
@@ -89,6 +99,54 @@ public sealed class AuthController : ControllerBase
 
         var command = new LogoutCommand(identity.TenantId, identity.UserId, identity.SessionId);
         var result = await _sender.Send(command, cancellationToken);
+
+        return result.IsSuccess ? NoContent() : ResultHttpMapper.ToActionResult(result.Error);
+    }
+
+    /// <summary>
+    /// Self-Service Identity &amp; Onboarding Foundation gate. Calls
+    /// <see cref="IStartPasswordResetProcessor"/> DIRECTLY — bypassing
+    /// <see cref="IIdentityRequestDispatcher"/>, since no trusted tenant
+    /// exists yet for an anonymous request (mirrors why the Airbnb Email
+    /// Bridge's OAuth callback bypasses its own dispatcher). Always returns
+    /// the exact same 202 regardless of whether the tenant/account was
+    /// resolved — never an account/tenant-enumeration oracle.
+    /// </summary>
+    [HttpPost("forgot-password/start")]
+    [AllowAnonymous]
+    [EnableRateLimiting("Authentication")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    public async Task<IActionResult> ForgotPasswordStart([FromBody] ForgotPasswordStartRequest request, CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        await _startPasswordResetProcessor.ProcessAsync(request.TenantSlug ?? string.Empty, request.Email ?? string.Empty, cancellationToken);
+
+        return Accepted();
+    }
+
+    /// <summary>
+    /// Self-Service Identity &amp; Onboarding Foundation gate. Calls
+    /// <see cref="ICompletePasswordResetProcessor"/> DIRECTLY, same reason as
+    /// <see cref="ForgotPasswordStart"/>. Every failure (invalid/expired/
+    /// already-consumed token) maps through the same
+    /// <see cref="ResultHttpMapper"/> generic-400 branch as any other
+    /// unmapped error code — never distinguished for the caller. A password-
+    /// policy violation returns the same shape FluentValidation already uses
+    /// elsewhere (comma-joined stable codes), since the token itself is
+    /// still valid at that point (checked before consumption).
+    /// </summary>
+    [HttpPost("forgot-password/complete")]
+    [AllowAnonymous]
+    [EnableRateLimiting("Authentication")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ForgotPasswordComplete([FromBody] ForgotPasswordCompleteRequest request, CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        var result = await _completePasswordResetProcessor.ProcessAsync(
+            request.Token ?? string.Empty, request.NewPassword ?? string.Empty, cancellationToken);
 
         return result.IsSuccess ? NoContent() : ResultHttpMapper.ToActionResult(result.Error);
     }

@@ -1,6 +1,7 @@
 using IHostPro.Api.RateLimiting;
 using IHostPro.Api.Security;
 using IHostPro.BuildingBlocks.Application;
+using IHostPro.BuildingBlocks.Infrastructure.Email;
 using IHostPro.BuildingBlocks.Infrastructure.Messaging;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
@@ -232,6 +233,13 @@ try
     // tenant/user seed configuration (Incremento 2 plan, ajuste 3-4).
     builder.Services.AddIdentityModule(builder.Configuration, builder.Environment.IsDevelopment());
 
+    // Self-Service Identity & Onboarding Foundation gate — provider-neutral
+    // transactional email (password-reset link today). Development gets a
+    // real local Mailpit SMTP transport; every other environment gets a
+    // fail-loud stub, since no production provider is selected yet
+    // (deliberately deferred, separate future gate).
+    builder.Services.AddIHostProTransactionalEmail(builder.Configuration, builder.Environment.IsDevelopment());
+
     // JWT access-token issuance (RSA signing key + IJwtTokenGenerator) — kept
     // deliberately separate from AddIdentityModule and registered ONLY here,
     // never in IHostPro.Worker's Program.cs: the Worker never issues or
@@ -270,7 +278,7 @@ try
     // HTTP-request concern. AuthController (IHostPro.Contexts.Identity.Api,
     // discovered by AddControllers() below via the project reference) only
     // ever calls ISender.Send(...) — never a concrete handler.
-    builder.Services.AddIdentityCommandDispatch();
+    builder.Services.AddIdentityCommandDispatch(builder.Configuration);
 
     // Property Management module (Fase 2, Incremento 1, Checkpoint 1) —
     // DbContext registration.

@@ -66,7 +66,7 @@ public class TenantAwareDbContextResolutionTests
         services.AddPropertyManagementModule(configuration, isDevelopmentEnvironment: false);
         services.AddReservationsModule(configuration);
 
-        services.AddIdentityCommandDispatch();
+        services.AddIdentityCommandDispatch(configuration);
         services.AddPropertyManagementCommandDispatch();
         services.AddReservationsCommandDispatch();
 

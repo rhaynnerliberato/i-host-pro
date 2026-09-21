@@ -7,7 +7,10 @@ using IHostPro.Contexts.Identity.Application.Catalog;
 using IHostPro.Contexts.Identity.Application.Profile;
 using IHostPro.Contexts.Identity.Application.Sessions;
 using IHostPro.Contexts.Identity.Application.Users;
+using IHostPro.Contexts.Identity.Infrastructure.PasswordReset;
+using IHostPro.Contexts.Identity.Infrastructure.Signup;
 using Mediator;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace IHostPro.Contexts.Identity.Infrastructure.Persistence;
@@ -122,7 +125,7 @@ namespace IHostPro.Contexts.Identity.Infrastructure.Persistence;
 /// </summary>
 public static class IdentityCommandDispatchExtensions
 {
-    public static IServiceCollection AddIdentityCommandDispatch(this IServiceCollection services)
+    public static IServiceCollection AddIdentityCommandDispatch(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddIdentityApplicationMediator();
 
@@ -248,6 +251,24 @@ public static class IdentityCommandDispatchExtensions
         services.AddScoped<
             IPipelineBehavior<GetUserByIdQuery, Result<UserResult>>,
             TenantTransactionBehavior<GetUserByIdQuery, Result<UserResult>, IdentityDbContext>>();
+
+        // Self-Service Identity & Onboarding Foundation gate — the two
+        // forgot-password processors are called DIRECTLY by AuthController,
+        // never dispatched through Mediator (mirrors why the Airbnb Email
+        // Bridge's Web OAuth callback bypasses its own dispatcher: no trusted
+        // tenant claim exists yet for an anonymous request). Both depend on
+        // IIdentityTransactionExecutor above, so — like RefreshTokenExchangeExecutor/
+        // LogoutExecutor — they belong in this Api-only dispatch wiring, never
+        // AddIdentityModule.
+        services.Configure<PasswordResetOptions>(configuration.GetSection(PasswordResetOptions.SectionName));
+        services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
+        services.AddScoped<IStartPasswordResetProcessor, StartPasswordResetProcessor>();
+        services.AddScoped<ICompletePasswordResetProcessor, CompletePasswordResetProcessor>();
+
+        // Self-Service Identity & Onboarding Foundation gate — same
+        // direct-call/bypass-the-dispatcher reasoning as the two processors
+        // above; also depends on IIdentityTransactionExecutor.
+        services.AddScoped<ISignupProcessor, SignupProcessor>();
 
         return services;
     }

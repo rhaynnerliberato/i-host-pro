@@ -209,7 +209,14 @@ public class AuthEndpointsTests : IClassFixture<AuthEndpointsTests.Fixture>
                     services.AddIdentityJwtIssuance(configuration);
                     services.AddIdentitySessionRevocationCache(configuration);
                     services.AddIdentityJwtBearerAuthentication();
-                    services.AddIdentityCommandDispatch();
+                    // Self-Service Identity & Onboarding Foundation gate —
+                    // the real Mailpit sender needs a real local SMTP sink
+                    // that does not exist in this Testcontainers environment;
+                    // a singleton in-memory fake lets tests capture the sent
+                    // reset link/token without any real network I/O.
+                    services.AddSingleton<FakeTransactionalEmailSender>();
+                    services.AddSingleton<ITransactionalEmailSender>(sp => sp.GetRequiredService<FakeTransactionalEmailSender>());
+                    services.AddIdentityCommandDispatch(configuration);
                 });
                 webHost.Configure(app =>
                 {
@@ -489,9 +496,258 @@ public class AuthEndpointsTests : IClassFixture<AuthEndpointsTests.Fixture>
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // ---- Tests: signup (Self-Service Identity & Onboarding Foundation gate) ----
+    // Added here rather than a new SignupEndpointsTests.cs to reuse this
+    // fixture's already-real Postgres/Redis/TestServer wiring without
+    // duplicating ~170 lines of setup for a closely-related concern
+    // (issuing the exact same kind of session Login does).
+
+    [Fact]
+    public async Task Signup_with_valid_data_creates_a_tenant_and_returns_a_working_session()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var companyName = $"Acme Ltda {Guid.NewGuid():N}"[..30];
+        var email = $"{Guid.NewGuid():N}@example.com";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/signup", new SignupRequest(companyName, "Ada Lovelace", email, "Strong-Password-123!"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<SignupResponse>(JsonWebDefaults);
+        body!.TenantSlug.Should().NotBeNullOrWhiteSpace();
+        body.Tokens.AccessToken.Should().NotBeNullOrWhiteSpace();
+        body.Tokens.RefreshToken.Should().NotBeNullOrWhiteSpace();
+
+        // The issued session must actually work end to end.
+        var refreshResponse = await client.PostAsJsonAsync("/api/v1/auth/refresh", new RefreshRequest(body.Tokens.RefreshToken));
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // The new admin can log back in with the slug the response returned.
+        var loginResponse = await client.PostAsJsonAsync(
+            "/api/v1/auth/login", new LoginRequest(body.TenantSlug, email, "Strong-Password-123!"));
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Signup_twice_with_the_same_company_name_never_joins_the_first_tenant()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var companyName = $"Same Company {Guid.NewGuid():N}"[..30];
+
+        var first = await client.PostAsJsonAsync(
+            "/api/v1/signup",
+            new SignupRequest(companyName, "First Admin", $"{Guid.NewGuid():N}@example.com", "Strong-Password-123!"));
+        var second = await client.PostAsJsonAsync(
+            "/api/v1/signup",
+            new SignupRequest(companyName, "Second Admin", $"{Guid.NewGuid():N}@example.com", "Strong-Password-456!"));
+
+        first.StatusCode.Should().Be(HttpStatusCode.OK);
+        second.StatusCode.Should().Be(HttpStatusCode.OK);
+        var firstBody = await first.Content.ReadFromJsonAsync<SignupResponse>(JsonWebDefaults);
+        var secondBody = await second.Content.ReadFromJsonAsync<SignupResponse>(JsonWebDefaults);
+
+        // Two genuinely different tenants — never the CLI's "attach to the
+        // existing tenant" behavior, which would be a real security defect here.
+        secondBody!.TenantSlug.Should().NotBe(firstBody!.TenantSlug);
+    }
+
+    [Fact]
+    public async Task Signup_with_a_weak_password_returns_400_and_creates_no_tenant()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var companyName = $"Weak Password Co {Guid.NewGuid():N}"[..30];
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/signup", new SignupRequest(companyName, "Some Admin", $"{Guid.NewGuid():N}@example.com", "weak"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // ---- Tests: forgot-password (Self-Service Identity & Onboarding Foundation gate) ----
+
+    [Fact]
+    public async Task ForgotPasswordStart_for_a_real_account_returns_202_and_sends_exactly_one_email()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (_, email) = await SeedUserAsync(tenantId);
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/forgot-password/start", new ForgotPasswordStartRequest(slug, email));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var sender = host.Services.GetRequiredService<FakeTransactionalEmailSender>();
+        sender.SentMessages.Should().ContainSingle(m => m.ToAddress == email);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordStart_for_an_unknown_email_returns_the_same_202_and_sends_no_email()
+    {
+        var tenantId = await SeedTenantAsync();
+        await SeedUserAsync(tenantId);
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/auth/forgot-password/start", new ForgotPasswordStartRequest(slug, "nobody-real@example.com"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        host.Services.GetRequiredService<FakeTransactionalEmailSender>().SentMessages.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ForgotPasswordStart_for_an_unknown_tenant_slug_returns_the_same_202()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/auth/forgot-password/start", new ForgotPasswordStartRequest("no-such-tenant", "anyone@example.com"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordComplete_with_a_valid_token_changes_the_password_and_revokes_the_existing_session()
+    {
+        const string newPassword = "Brand-New-Horse-Battery-99!";
+        var tenantId = await SeedTenantAsync();
+        var (_, email) = await SeedUserAsync(tenantId);
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        var login = await LoginAsync(client, slug, email, KnownPassword);
+
+        await client.PostAsJsonAsync("/api/v1/auth/forgot-password/start", new ForgotPasswordStartRequest(slug, email));
+        var token = ExtractTokenFromLastEmail(host);
+
+        var completeResponse = await client.PostAsJsonAsync(
+            "/api/v1/auth/forgot-password/complete", new ForgotPasswordCompleteRequest(token, newPassword));
+
+        completeResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // The pre-reset refresh token must no longer work (session revocation).
+        var refreshWithOldSession = await client.PostAsJsonAsync("/api/v1/auth/refresh", new RefreshRequest(login.RefreshToken));
+        refreshWithOldSession.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        // The new password must work; the old one must not.
+        var loginWithNewPassword = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest(slug, email, newPassword));
+        loginWithNewPassword.StatusCode.Should().Be(HttpStatusCode.OK);
+        var loginWithOldPassword = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest(slug, email, KnownPassword));
+        loginWithOldPassword.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordComplete_with_the_same_token_twice_only_succeeds_once()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (_, email) = await SeedUserAsync(tenantId);
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        await client.PostAsJsonAsync("/api/v1/auth/forgot-password/start", new ForgotPasswordStartRequest(slug, email));
+        var token = ExtractTokenFromLastEmail(host);
+
+        var first = await client.PostAsJsonAsync(
+            "/api/v1/auth/forgot-password/complete", new ForgotPasswordCompleteRequest(token, "First-New-Password-1!"));
+        var second = await client.PostAsJsonAsync(
+            "/api/v1/auth/forgot-password/complete", new ForgotPasswordCompleteRequest(token, "Second-New-Password-2!"));
+
+        first.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        second.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordComplete_with_a_garbage_token_returns_400_with_no_leakage()
+    {
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/auth/forgot-password/complete", new ForgotPasswordCompleteRequest("not-a-real-token", "Some-New-Password-1!"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task ForgotPasswordComplete_with_a_weak_password_returns_400_without_consuming_the_token()
+    {
+        var tenantId = await SeedTenantAsync();
+        var (_, email) = await SeedUserAsync(tenantId);
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var client = host.GetTestClient();
+        await client.PostAsJsonAsync("/api/v1/auth/forgot-password/start", new ForgotPasswordStartRequest(slug, email));
+        var token = ExtractTokenFromLastEmail(host);
+
+        var weakAttempt = await client.PostAsJsonAsync(
+            "/api/v1/auth/forgot-password/complete", new ForgotPasswordCompleteRequest(token, "weak"));
+        weakAttempt.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        // The token must still be usable — a fixable client error must never burn it.
+        var retryWithGoodPassword = await client.PostAsJsonAsync(
+            "/api/v1/auth/forgot-password/complete", new ForgotPasswordCompleteRequest(token, "Now-A-Strong-Password-1!"));
+        retryWithGoodPassword.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Two_concurrent_forgot_password_complete_requests_for_the_same_token_converge_to_exactly_one_success()
+    {
+        // Mirrors Two_concurrent_refresh_requests_over_HTTP_for_the_same_token_converge_to_exactly_one_success
+        // exactly — proves PasswordResetTokenRepository.ConsumeByTokenHashAsync's
+        // single UPDATE ... RETURNING is genuinely atomic under real concurrent
+        // load, not just correct when called sequentially.
+        var tenantId = await SeedTenantAsync();
+        var (_, email) = await SeedUserAsync(tenantId);
+        var slug = await GetTenantSlugAsync(tenantId);
+        using var host = await BuildHostAsync();
+        using var startClient = host.GetTestClient();
+        await startClient.PostAsJsonAsync("/api/v1/auth/forgot-password/start", new ForgotPasswordStartRequest(slug, email));
+        var token = ExtractTokenFromLastEmail(host);
+
+        using var clientA = host.GetTestClient();
+        using var clientB = host.GetTestClient();
+        var first = clientA.PostAsJsonAsync(
+            "/api/v1/auth/forgot-password/complete", new ForgotPasswordCompleteRequest(token, "Race-Winner-Password-1!"));
+        var second = clientB.PostAsJsonAsync(
+            "/api/v1/auth/forgot-password/complete", new ForgotPasswordCompleteRequest(token, "Race-Loser-Password-1!"));
+        var responses = await Task.WhenAll(first, second);
+
+        responses.Count(r => r.StatusCode == HttpStatusCode.NoContent).Should().Be(1);
+        responses.Count(r => r.StatusCode == HttpStatusCode.BadRequest).Should().Be(1);
+    }
+
     // ---- Helpers ----------------------------------------------------------
 
     private static readonly JsonSerializerOptions JsonWebDefaults = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Singleton fake used in place of the real Mailpit sender — see <c>BuildHostAsync</c>. Captures every message so a test can extract the raw reset token from its body.</summary>
+    private sealed class FakeTransactionalEmailSender : ITransactionalEmailSender
+    {
+        private readonly List<EmailMessage> _sentMessages = new();
+        public IReadOnlyList<EmailMessage> SentMessages => _sentMessages;
+
+        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+        {
+            lock (_sentMessages)
+                _sentMessages.Add(message);
+            return Task.CompletedTask;
+        }
+    }
+
+    private static string ExtractTokenFromLastEmail(IHost host)
+    {
+        var sender = host.Services.GetRequiredService<FakeTransactionalEmailSender>();
+        var body = sender.SentMessages.Last().PlainTextBody;
+        var tokenStart = body.IndexOf("token=", StringComparison.Ordinal) + "token=".Length;
+        var tokenEnd = body.IndexOfAny(['&', '\n'], tokenStart);
+        return tokenEnd < 0 ? body[tokenStart..] : body[tokenStart..tokenEnd];
+    }
 
     private static async Task<AuthTokensResponse> LoginAsync(HttpClient client, string tenantSlug, string email, string password)
     {

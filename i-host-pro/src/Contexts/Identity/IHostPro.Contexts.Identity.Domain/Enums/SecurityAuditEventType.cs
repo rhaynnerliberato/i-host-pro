@@ -41,4 +41,10 @@ public enum SecurityAuditEventType
     UserRoleRemoved = 14,
     PasswordChangedBySelf = 15,
     PasswordResetByAdmin = 16,
+
+    /// <summary>Self-Service Identity &amp; Onboarding Foundation gate — an anonymous forgot-password request resolved to a real account. Never recorded when the tenant/account could not be resolved (no tenant context exists to scope the row under).</summary>
+    PasswordResetRequested = 17,
+
+    /// <summary>Self-Service Identity &amp; Onboarding Foundation gate — a forgot-password token was successfully consumed and the password changed. Distinct from <see cref="PasswordResetByAdmin"/> (no administrator actor) and <see cref="PasswordChangedBySelf"/> (that one requires the current password).</summary>
+    PasswordResetCompleted = 18,
 }

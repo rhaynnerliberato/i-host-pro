@@ -72,7 +72,7 @@ public class IdentityCommandDispatchExtensionsTests
         hostBuilder.Services.AddIHostProTenantAwarePipeline();
         hostBuilder.Services.AddIdentityModule(configuration, isDevelopmentEnvironment: false);
         hostBuilder.Services.AddIdentityJwtIssuance(configuration);
-        hostBuilder.Services.AddIdentityCommandDispatch();
+        hostBuilder.Services.AddIdentityCommandDispatch(configuration);
         hostBuilder.UseWolverine(opts =>
         {
             opts.EnrollAncillaryPostgresqlOutbox(

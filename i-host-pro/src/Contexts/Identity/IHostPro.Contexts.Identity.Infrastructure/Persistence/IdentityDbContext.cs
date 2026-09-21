@@ -47,6 +47,9 @@ public sealed class IdentityDbContext : BaseDbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<SecurityAuditEntry> SecurityAuditLog => Set<SecurityAuditEntry>();
 
+    /// <summary>Self-Service Identity &amp; Onboarding Foundation gate — pre-authentication OAuth-style state; see <see cref="PasswordResetToken"/>'s remarks for why it is deliberately not tenant-owned.</summary>
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+
     public IdentityDbContext(DbContextOptions<IdentityDbContext> options, ITenantContext tenantContext)
         : base(options, tenantContext)
     {
@@ -61,6 +64,14 @@ public sealed class IdentityDbContext : BaseDbContext
         modelBuilder.UsePropertyAccessMode(PropertyAccessMode.PreferField);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(IdentityDbContext).Assembly);
+
+        // Keyless materialization shape for PasswordResetTokenRepository's
+        // atomic UPDATE ... RETURNING — never a real table/view.
+        modelBuilder.Entity<PasswordResetTokenConsumptionRow>(builder =>
+        {
+            builder.HasNoKey();
+            builder.ToView(null);
+        });
 
         // Must match Program.cs's own EnrollAncillaryPostgresqlOutbox(...,
         // "identity_messaging", typeof(IdentityDbContext)) schema literal exactly.

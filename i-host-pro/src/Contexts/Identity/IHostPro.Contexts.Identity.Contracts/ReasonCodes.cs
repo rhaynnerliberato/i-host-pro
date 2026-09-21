@@ -54,4 +54,7 @@ public static class PasswordChangeTypeCodes
 {
     public const string Self = "self";
     public const string AdminReset = "admin_reset";
+
+    /// <summary>Self-Service Identity &amp; Onboarding Foundation gate — completed via an anonymous forgot-password token, never requires the current password.</summary>
+    public const string SelfServiceReset = "self_service_reset";
 }
