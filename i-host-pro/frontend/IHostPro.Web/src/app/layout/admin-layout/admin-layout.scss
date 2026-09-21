@@ -11,7 +11,10 @@
   top: 0;
   z-index: 1;
   display: flex;
-  gap: 0.5rem;
+  align-items: center;
+  gap: var(--app-space-2);
+  background: var(--mat-sys-surface-container);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
 }
 
 .layout-spacer {
@@ -19,7 +22,7 @@
 }
 
 .layout-user {
-  margin-right: 0.5rem;
+  margin-right: var(--app-space-2);
   font-size: 0.875rem;
 }
 
@@ -27,7 +30,14 @@
   min-height: calc(100vh - 64px);
 }
 
+// Restrained M3-style "selected" pill, not just a text/icon recolor — an
+// inset rounded surface behind the active item, matching the tonal
+// container pairing a navigation-drawer selected state uses in the spec.
 .active-nav-item {
-  --mdc-list-list-item-label-text-color: var(--mat-sys-primary);
-  --mdc-list-list-item-leading-icon-color: var(--mat-sys-primary);
+  --mat-list-list-item-container-color: var(--mat-sys-secondary-container);
+  --mat-list-list-item-container-shape: 999px;
+  --mat-list-list-item-label-text-color: var(--mat-sys-on-secondary-container);
+  --mat-list-list-item-leading-icon-color: var(--mat-sys-on-secondary-container);
+  margin: 0 var(--app-space-2);
+  width: auto;
 }

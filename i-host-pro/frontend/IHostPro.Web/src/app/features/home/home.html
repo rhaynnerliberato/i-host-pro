@@ -4,22 +4,26 @@
   }
 
   @if (checklistLoaded() && !checklistComplete()) {
-    <div class="onboarding-checklist">
-      <h2>{{ 'home.onboarding.title' | transloco }}</h2>
-      <ul>
-        <li [class.done]="hasProperty()">
-          <span class="status">{{ hasProperty() ? '✅' : '⬜' }}</span>
-          <a routerLink="/properties">{{ 'home.onboarding.createProperty' | transloco }}</a>
-        </li>
-        <li [class.done]="airbnbConnected()">
-          <span class="status">{{ airbnbConnected() ? '✅' : '⬜' }}</span>
-          <a routerLink="/integrations/airbnb-email">{{ 'home.onboarding.connectAirbnb' | transloco }}</a>
-        </li>
-        <li [class.done]="hasListingMapping()">
-          <span class="status">{{ hasListingMapping() ? '✅' : '⬜' }}</span>
-          <a routerLink="/integrations/airbnb-email">{{ 'home.onboarding.createMapping' | transloco }}</a>
-        </li>
-      </ul>
-    </div>
+    <mat-card class="onboarding-checklist">
+      <mat-card-header>
+        <mat-card-title>{{ 'home.onboarding.title' | transloco }}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <ul>
+          <li [class.done]="hasProperty()">
+            <mat-icon aria-hidden="true">{{ hasProperty() ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+            <a routerLink="/properties">{{ 'home.onboarding.createProperty' | transloco }}</a>
+          </li>
+          <li [class.done]="airbnbConnected()">
+            <mat-icon aria-hidden="true">{{ airbnbConnected() ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+            <a routerLink="/integrations/airbnb-email">{{ 'home.onboarding.connectAirbnb' | transloco }}</a>
+          </li>
+          <li [class.done]="hasListingMapping()">
+            <mat-icon aria-hidden="true">{{ hasListingMapping() ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+            <a routerLink="/integrations/airbnb-email">{{ 'home.onboarding.createMapping' | transloco }}</a>
+          </li>
+        </ul>
+      </mat-card-content>
+    </mat-card>
   }
 </div>

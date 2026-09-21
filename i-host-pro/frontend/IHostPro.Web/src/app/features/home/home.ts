@@ -1,4 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { MatCardModule } from '@angular/material/card';
+import { MatIconModule } from '@angular/material/icon';
 import { RouterLink } from '@angular/router';
 import { TranslocoPipe } from '@jsverse/transloco';
 import { catchError, of } from 'rxjs';
@@ -24,7 +26,7 @@ import { PropertiesService } from '../property-management/properties.service';
  */
 @Component({
   selector: 'app-home',
-  imports: [TranslocoPipe, RouterLink],
+  imports: [TranslocoPipe, RouterLink, MatCardModule, MatIconModule],
   templateUrl: './home.html',
   styleUrl: './home.scss',
 })

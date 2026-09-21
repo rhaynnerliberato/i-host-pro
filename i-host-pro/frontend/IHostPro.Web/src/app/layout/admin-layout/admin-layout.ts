@@ -12,6 +12,7 @@ import { map } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/auth/auth.service';
 import { UserProfileService } from '../../core/auth/user-profile.service';
+import { BrandMark } from '../../shared/brand-mark/brand-mark';
 
 interface NavItem {
   labelKey: string;
@@ -48,6 +49,7 @@ const NAV_ITEMS: NavItem[] = [
     RouterLink,
     RouterLinkActive,
     TranslocoPipe,
+    BrandMark,
     MatSidenavModule,
     MatToolbarModule,
     MatButtonModule,

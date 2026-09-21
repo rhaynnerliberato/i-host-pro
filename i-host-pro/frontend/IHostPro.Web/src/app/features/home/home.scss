@@ -1,15 +1,10 @@
 .home-page {
-  padding: 1.5rem;
+  padding: var(--app-space-5);
 }
 
 .onboarding-checklist {
-  margin-top: 1.5rem;
+  margin-top: var(--app-space-5);
   max-width: 32rem;
-
-  h2 {
-    font-size: 1.1rem;
-    margin-bottom: 0.5rem;
-  }
 
   ul {
     list-style: none;
@@ -20,12 +15,22 @@
   li {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0;
+    gap: var(--app-space-2);
+    padding: var(--app-space-2) 0;
 
-    &.done a {
-      text-decoration: line-through;
-      opacity: 0.6;
+    mat-icon {
+      color: var(--mat-sys-primary);
+    }
+
+    &.done {
+      mat-icon {
+        color: var(--mat-sys-outline);
+      }
+
+      a {
+        text-decoration: line-through;
+        opacity: 0.6;
+      }
     }
   }
 }

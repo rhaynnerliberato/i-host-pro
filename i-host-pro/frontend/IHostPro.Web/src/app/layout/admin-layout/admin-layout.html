@@ -23,13 +23,13 @@
   </mat-sidenav>
 
   <mat-sidenav-content>
-    <mat-toolbar color="primary" class="layout-toolbar">
+    <mat-toolbar class="layout-toolbar">
       @if (isHandset()) {
         <button mat-icon-button (click)="toggleSidenav()" aria-label="Toggle navigation">
           <mat-icon>menu</mat-icon>
         </button>
       }
-      <span>{{ 'app.title' | transloco }}</span>
+      <app-brand-mark [compact]="isHandset()" />
       <span class="layout-spacer"></span>
       @if (userProfile.profile(); as profile) {
         <span class="layout-user">{{ profile.fullName }}</span>
