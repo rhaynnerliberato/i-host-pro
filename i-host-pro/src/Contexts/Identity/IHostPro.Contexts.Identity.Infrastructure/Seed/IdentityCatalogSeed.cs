@@ -138,8 +138,21 @@ public static class IdentityCatalogSeed
         new RolePermission("ADMIN", "SCHEDULE:MANAGE"),
         new RolePermission("ADMIN", "CLEANINGS:MANAGE"),
         new RolePermission("ADMIN", "POLICIES:MANAGE"),
+        // Self-Service Signup Permission Parity gate — Documento 09 §15
+        // ("Matriz Simplificada") lists Admin as X ("Controle total") for
+        // Políticas/Templates/Configurações, but only the *:MANAGE grant was
+        // ever seeded for these three; PoliciesController/TemplatesController
+        // gate their GET endpoints on *:READ specifically (never inferring it
+        // from *:MANAGE), so ADMIN could create a policy version but never
+        // read the policy list/value/history — for every tenant, however
+        // provisioned, since this catalog is global, not tenant-scoped. Fixed
+        // here for all three for consistency, even though SettingsController
+        // has no consumer yet (SETTINGS:READ has no live effect today).
+        new RolePermission("ADMIN", "POLICIES:READ"),
         new RolePermission("ADMIN", "TEMPLATES:MANAGE"),
+        new RolePermission("ADMIN", "TEMPLATES:READ"),
         new RolePermission("ADMIN", "SETTINGS:MANAGE"),
+        new RolePermission("ADMIN", "SETTINGS:READ"),
         new RolePermission("ADMIN", "AUDIT:READ"), // override — §5 "Não poderá: Alterar/Excluir auditoria"
         new RolePermission("ADMIN", "DASHBOARD:MANAGE"),
         new RolePermission("ADMIN", "REPORTS:MANAGE"),

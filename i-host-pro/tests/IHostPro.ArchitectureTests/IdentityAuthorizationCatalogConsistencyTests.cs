@@ -138,6 +138,31 @@ public class IdentityAuthorizationCatalogConsistencyTests
     }
 
     [Fact]
+    public void ADMIN_role_is_granted_the_read_counterpart_of_every_manage_permission_it_holds_with_a_split_read_policy()
+    {
+        // Self-Service Signup Permission Parity gate — guards against the
+        // exact regression this gate found and fixed: ADMIN had
+        // POLICIES:MANAGE but not POLICIES:READ, even though
+        // PoliciesController's GET endpoints require POLICIES:READ
+        // specifically (never inferring it from POLICIES:MANAGE) and
+        // Documento 09 §15 lists Admin as full control ("X") over Políticas.
+        // TEMPLATES:READ is the same live gap, confirmed against
+        // TemplatesController. Not exhaustive over the whole catalog — just
+        // the two codes with a real controller enforcing the split today.
+        var adminPermissionCodes = IdentityCatalogSeed.RolePermissions
+            .Where(rp => rp.RoleCode == "ADMIN")
+            .Select(rp => rp.PermissionCode)
+            .ToHashSet();
+
+        adminPermissionCodes.Should().Contain(IdentityPermissionCodes.PoliciesManage);
+        adminPermissionCodes.Should().Contain(IdentityPermissionCodes.PoliciesRead,
+            "PoliciesController's GET endpoints require POLICIES:READ specifically, and Documento 09 §15 lists Admin as full control over Políticas");
+        adminPermissionCodes.Should().Contain(IdentityPermissionCodes.TemplatesManage);
+        adminPermissionCodes.Should().Contain(IdentityPermissionCodes.TemplatesRead,
+            "TemplatesController's GET endpoint requires TEMPLATES:READ specifically, and Documento 09 §15 lists Admin as full control over Templates");
+    }
+
+    [Fact]
     public void PROPERTY_OWNER_role_is_granted_the_own_owner_read_policy_permission_code()
     {
         // Mirrors ADMIN_role_is_granted_every_policy_permission_code above,
