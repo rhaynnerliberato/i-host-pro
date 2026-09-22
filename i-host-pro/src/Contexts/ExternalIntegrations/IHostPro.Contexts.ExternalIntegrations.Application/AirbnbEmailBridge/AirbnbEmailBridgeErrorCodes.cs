@@ -17,4 +17,11 @@ public static class AirbnbEmailBridgeErrorCodes
 
     // Web OAuth architecture gate.
     public const string WebOAuthNotConfigured = "airbnb_email_web_oauth_not_configured";
+
+    // Airbnb Email Operational Exception Resolution gate.
+    public const string ReceiptNotFound = "airbnb_email_receipt_not_found";
+    public const string ReceiptNotRetryable = "airbnb_email_receipt_not_retryable";
+    public const string ReceiptMailboxNotConnected = "airbnb_email_receipt_mailbox_not_connected";
+    public const string ReceiptSourceMessageUnavailable = "airbnb_email_receipt_source_message_unavailable";
+    public const string ReceiptRetryConflict = "airbnb_email_receipt_retry_conflict";
 }

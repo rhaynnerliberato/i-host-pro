@@ -30,6 +30,16 @@ public sealed class AirbnbEmailMessageReceipt : AggregateRoot<Guid>, ITenantOwne
     public string? FailureReason { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
 
+    /// <summary>
+    /// The parsed listing title that could not be resolved to a
+    /// <c>AirbnbListingTitleMapping</c> — set only by <see cref="MarkNeedsReview"/>,
+    /// never by any other transition (Airbnb Email Operational Exception
+    /// Resolution gate). Lets an operator reviewing this receipt know which
+    /// listing title still needs a mapping, without ever persisting the raw
+    /// email body or any guest PII.
+    /// </summary>
+    public string? UnmatchedListingTitle { get; private set; }
+
     private AirbnbEmailMessageReceipt()
     {
         // EF Core materialization.
@@ -66,14 +76,17 @@ public sealed class AirbnbEmailMessageReceipt : AggregateRoot<Guid>, ITenantOwne
         ExternalReservationId = externalReservationId;
         ParserVersion = parserVersion;
         ProcessedAtUtc = processedAtUtc;
+        UnmatchedListingTitle = null;
     }
 
-    public void MarkNeedsReview(string? detectedEventType, string parserVersion, DateTimeOffset processedAtUtc)
+    /// <summary><paramref name="unmatchedListingTitle"/> is the parsed listing title that has no matching <c>AirbnbListingTitleMapping</c> yet — never the raw email body or any guest PII.</summary>
+    public void MarkNeedsReview(string? detectedEventType, string parserVersion, DateTimeOffset processedAtUtc, string? unmatchedListingTitle)
     {
         ProcessingStatus = AirbnbEmailMessageProcessingStatus.NeedsReview;
         DetectedEventType = detectedEventType;
         ParserVersion = parserVersion;
         ProcessedAtUtc = processedAtUtc;
+        UnmatchedListingTitle = unmatchedListingTitle;
     }
 
     /// <summary><paramref name="failureReason"/> must never contain the raw email body, tokens, or guest PII — a bounded, sanitized diagnostic code/message only.</summary>
@@ -86,6 +99,7 @@ public sealed class AirbnbEmailMessageReceipt : AggregateRoot<Guid>, ITenantOwne
         FailureReason = failureReason;
         ParserVersion = parserVersion;
         ProcessedAtUtc = processedAtUtc;
+        UnmatchedListingTitle = null;
     }
 
     /// <summary>

@@ -173,16 +173,24 @@
         @case ('loaded') {
           @if (summary(); as summary) {
             <div class="airbnb-email-summary-grid">
-              <div class="airbnb-email-summary-item airbnb-email-summary-item--attention">
+              <button
+                type="button"
+                class="airbnb-email-summary-item airbnb-email-summary-item--attention airbnb-email-summary-item--clickable"
+                (click)="filterExceptionsByStatus('NeedsReview')"
+              >
                 <mat-icon aria-hidden="true">warning</mat-icon>
                 <span class="airbnb-email-summary-count">{{ summary.needsReview }}</span>
                 <span>{{ 'integrations.airbnbEmail.processing.needsReview' | transloco }}</span>
-              </div>
-              <div class="airbnb-email-summary-item airbnb-email-summary-item--attention">
+              </button>
+              <button
+                type="button"
+                class="airbnb-email-summary-item airbnb-email-summary-item--attention airbnb-email-summary-item--clickable"
+                (click)="filterExceptionsByStatus('Failed')"
+              >
                 <mat-icon aria-hidden="true">warning</mat-icon>
                 <span class="airbnb-email-summary-count">{{ summary.failed }}</span>
                 <span>{{ 'integrations.airbnbEmail.processing.failed' | transloco }}</span>
-              </div>
+              </button>
               <div class="airbnb-email-summary-item">
                 <span class="airbnb-email-summary-count">{{ summary.pending }}</span>
                 <span>{{ 'integrations.airbnbEmail.processing.pending' | transloco }}</span>
@@ -199,6 +207,77 @@
           }
         }
       }
+
+      <div id="airbnb-email-exceptions" class="airbnb-email-exceptions">
+        <mat-form-field appearance="outline" class="airbnb-email-exceptions-filter">
+          <mat-label>{{ 'integrations.airbnbEmail.exceptions.filters.status' | transloco }}</mat-label>
+          <mat-select [value]="exceptionsStatusFilter()" (selectionChange)="onExceptionsStatusFilterChange($event.value)">
+            <mat-option value="">{{ 'integrations.airbnbEmail.exceptions.filters.statusAll' | transloco }}</mat-option>
+            <mat-option value="NeedsReview">{{ 'integrations.airbnbEmail.exceptions.status.NeedsReview' | transloco }}</mat-option>
+            <mat-option value="Failed">{{ 'integrations.airbnbEmail.exceptions.status.Failed' | transloco }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        @switch (exceptionsState()) {
+          @case ('loading') {
+            <mat-progress-spinner diameter="28" mode="indeterminate" />
+          }
+          @case ('error') {
+            <p>{{ 'integrations.airbnbEmail.exceptions.loadError' | transloco }}</p>
+            <button mat-button (click)="loadExceptions()">{{ 'common.retry' | transloco }}</button>
+          }
+          @case ('loaded') {
+            @if (exceptions().length === 0) {
+              <p>{{ 'integrations.airbnbEmail.exceptions.empty' | transloco }}</p>
+            } @else {
+              <div class="list-table-scroll">
+                <table mat-table [dataSource]="exceptions()" class="full-width">
+                  <ng-container matColumnDef="receivedAtUtc">
+                    <th mat-header-cell *matHeaderCellDef>{{ 'integrations.airbnbEmail.exceptions.columns.receivedAtUtc' | transloco }}</th>
+                    <td mat-cell *matCellDef="let receipt">{{ receipt.receivedAtUtc | date: 'short' }}</td>
+                  </ng-container>
+
+                  <ng-container matColumnDef="status">
+                    <th mat-header-cell *matHeaderCellDef>{{ 'integrations.airbnbEmail.exceptions.columns.status' | transloco }}</th>
+                    <td mat-cell *matCellDef="let receipt">
+                      {{ 'integrations.airbnbEmail.exceptions.status.' + receipt.processingStatus | transloco }}
+                    </td>
+                  </ng-container>
+
+                  <ng-container matColumnDef="reason">
+                    <th mat-header-cell *matHeaderCellDef>{{ 'integrations.airbnbEmail.exceptions.columns.reason' | transloco }}</th>
+                    <td mat-cell *matCellDef="let receipt">
+                      @if (receipt.failureReason) {
+                        {{ 'integrations.airbnbEmail.exceptions.reason.' + receipt.failureReason | transloco }}
+                      } @else if (receipt.unmatchedListingTitle) {
+                        {{ receipt.unmatchedListingTitle }}
+                      } @else {
+                        —
+                      }
+                    </td>
+                  </ng-container>
+
+                  <tr mat-header-row *matHeaderRowDef="displayedExceptionColumns"></tr>
+                  <tr
+                    mat-row
+                    *matRowDef="let row; columns: displayedExceptionColumns"
+                    class="airbnb-email-exceptions-row"
+                    (click)="openReceiptDetailDialog(row)"
+                  ></tr>
+                </table>
+              </div>
+
+              <mat-paginator
+                [length]="exceptionsTotalCount()"
+                [pageIndex]="exceptionsPageIndex()"
+                [pageSize]="exceptionsPageSize()"
+                [pageSizeOptions]="[10, 25, 50]"
+                (page)="onExceptionsPageChange($event)"
+              />
+            }
+          }
+        }
+      </div>
     </mat-card-content>
   </mat-card>
 </div>

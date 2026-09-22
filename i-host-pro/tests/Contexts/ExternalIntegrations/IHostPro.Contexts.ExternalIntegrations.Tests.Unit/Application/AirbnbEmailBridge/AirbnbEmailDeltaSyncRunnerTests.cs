@@ -289,7 +289,7 @@ public class AirbnbEmailDeltaSyncRunnerTests
         var messageSource = new FakeAirbnbEmailMessageSource(
             AirbnbEmailDeltaFetchOutcome.Success(new AirbnbEmailDeltaPage([message], null, "https://graph.microsoft.com/v1.0/delta-1")));
         messageSource.BodiesByMessageId["msg-1"] = "<html>fake body</html>";
-        var evaluator = new FakeAirbnbReservationDryRunEvaluator(AirbnbReservationDryRunOutcome.PropertyNotResolved("TESTCODE12"));
+        var evaluator = new FakeAirbnbReservationDryRunEvaluator(AirbnbReservationDryRunOutcome.PropertyNotResolved("TESTCODE12", "Studio Sem Mapeamento"));
         var runner = new AirbnbEmailDeltaSyncRunner(
             connectionRepository, syncStateRepository, receiptRepository, authenticator, messageSource,
             evaluator, new FakeAirbnbResolvedReservationSyncPublisher(), new PassThroughExternalIntegrationsTransactionExecutor(), TimeProvider.System, NullLogger<AirbnbEmailDeltaSyncRunner>.Instance);
@@ -299,6 +299,7 @@ public class AirbnbEmailDeltaSyncRunnerTests
         var receipt = receiptRepository.Added.Should().ContainSingle().Subject;
         receipt.ProcessingStatus.Should().Be(AirbnbEmailMessageProcessingStatus.NeedsReview,
             "the email itself parsed fine - a human just needs to add the listing-title mapping, this is not an error in the email");
+        receipt.UnmatchedListingTitle.Should().Be("Studio Sem Mapeamento");
     }
 
     [Fact]

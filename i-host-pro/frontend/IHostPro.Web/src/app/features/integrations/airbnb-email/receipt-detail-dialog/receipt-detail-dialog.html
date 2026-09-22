@@ -1,0 +1,44 @@
+<h2 mat-dialog-title>{{ 'integrations.airbnbEmail.exceptions.detail.title' | transloco }}</h2>
+
+<mat-dialog-content>
+  <dl class="detail-grid">
+    <dt>{{ 'integrations.airbnbEmail.exceptions.columns.receivedAtUtc' | transloco }}</dt>
+    <dd>{{ receipt().receivedAtUtc | date: 'short' }}</dd>
+
+    <dt>{{ 'integrations.airbnbEmail.exceptions.columns.status' | transloco }}</dt>
+    <dd>{{ 'integrations.airbnbEmail.exceptions.status.' + receipt().processingStatus | transloco }}</dd>
+
+    @if (receipt().failureReason) {
+      <dt>{{ 'integrations.airbnbEmail.exceptions.columns.reason' | transloco }}</dt>
+      <dd>{{ 'integrations.airbnbEmail.exceptions.reason.' + receipt().failureReason | transloco }}</dd>
+    }
+
+    @if (receipt().unmatchedListingTitle) {
+      <dt>{{ 'integrations.airbnbEmail.exceptions.columns.unmatchedListingTitle' | transloco }}</dt>
+      <dd>{{ receipt().unmatchedListingTitle }}</dd>
+    }
+
+    @if (receipt().processedAtUtc) {
+      <dt>{{ 'integrations.airbnbEmail.exceptions.columns.processedAtUtc' | transloco }}</dt>
+      <dd>{{ receipt().processedAtUtc | date: 'short' }}</dd>
+    }
+  </dl>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  @if (canCreateMapping()) {
+    <button mat-stroked-button color="primary" (click)="openCreateMappingDialog()">
+      {{ 'integrations.airbnbEmail.exceptions.createMapping' | transloco }}
+    </button>
+  }
+  @if (canRetry()) {
+    <button mat-flat-button color="primary" [disabled]="retrying()" (click)="retry()">
+      @if (retrying()) {
+        <mat-progress-spinner diameter="18" mode="indeterminate" />
+      } @else {
+        {{ 'integrations.airbnbEmail.exceptions.retry.action' | transloco }}
+      }
+    </button>
+  }
+  <button mat-button (click)="close()">{{ 'common.close' | transloco }}</button>
+</mat-dialog-actions>

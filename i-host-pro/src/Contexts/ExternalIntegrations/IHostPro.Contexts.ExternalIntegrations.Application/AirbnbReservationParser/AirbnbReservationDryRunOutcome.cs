@@ -18,6 +18,16 @@ public sealed record AirbnbReservationDryRunOutcome
     public AirbnbReservationReminderParseFailureReason? ParseFailureReason { get; }
 
     /// <summary>
+    /// The parsed listing title that failed to resolve to a mapping — present
+    /// only in the <see cref="PropertyNotResolved"/> case (Airbnb Email
+    /// Operational Exception Resolution gate). Lets the caller persist it on
+    /// the receipt so an operator reviewing a NeedsReview item later knows
+    /// which listing title still needs a mapping, without re-parsing the
+    /// original email.
+    /// </summary>
+    public string? UnmatchedListingTitle { get; }
+
+    /// <summary>
     /// The parsed confirmation code, present only when parsing succeeded
     /// (regardless of whether the listing resolved to a Property). This is an
     /// operational identifier meant for storage on the message receipt row -
@@ -43,7 +53,8 @@ public sealed record AirbnbReservationDryRunOutcome
     private AirbnbReservationDryRunOutcome(
         bool wouldImport, bool externalReservationIdPresent, bool datesParsed, bool guestCountParsed,
         bool propertyResolved, Guid? resolvedPropertyId, AirbnbReservationReminderParseFailureReason? parseFailureReason,
-        string? externalReservationId, string? guestName, DateTimeOffset? checkInAt, DateTimeOffset? checkOutAt, int? guestCount)
+        string? unmatchedListingTitle, string? externalReservationId, string? guestName, DateTimeOffset? checkInAt,
+        DateTimeOffset? checkOutAt, int? guestCount)
     {
         WouldImport = wouldImport;
         ExternalReservationIdPresent = externalReservationIdPresent;
@@ -52,6 +63,7 @@ public sealed record AirbnbReservationDryRunOutcome
         PropertyResolved = propertyResolved;
         ResolvedPropertyId = resolvedPropertyId;
         ParseFailureReason = parseFailureReason;
+        UnmatchedListingTitle = unmatchedListingTitle;
         ExternalReservationId = externalReservationId;
         GuestName = guestName;
         CheckInAt = checkInAt;
@@ -60,13 +72,13 @@ public sealed record AirbnbReservationDryRunOutcome
     }
 
     public static AirbnbReservationDryRunOutcome ParseFailed(AirbnbReservationReminderParseFailureReason reason) =>
-        new(false, false, false, false, false, null, reason, null, null, null, null, null);
+        new(false, false, false, false, false, null, reason, null, null, null, null, null, null);
 
-    public static AirbnbReservationDryRunOutcome PropertyNotResolved(string externalReservationId) =>
-        new(false, true, true, true, false, null, null, externalReservationId, null, null, null, null);
+    public static AirbnbReservationDryRunOutcome PropertyNotResolved(string externalReservationId, string unmatchedListingTitle) =>
+        new(false, true, true, true, false, null, null, unmatchedListingTitle, externalReservationId, null, null, null, null);
 
     public static AirbnbReservationDryRunOutcome Ready(
         Guid resolvedPropertyId, string externalReservationId, string guestName,
         DateTimeOffset checkInAt, DateTimeOffset checkOutAt, int guestCount) =>
-        new(true, true, true, true, true, resolvedPropertyId, null, externalReservationId, guestName, checkInAt, checkOutAt, guestCount);
+        new(true, true, true, true, true, resolvedPropertyId, null, null, externalReservationId, guestName, checkInAt, checkOutAt, guestCount);
 }

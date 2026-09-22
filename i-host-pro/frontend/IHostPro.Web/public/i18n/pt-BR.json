@@ -864,6 +864,51 @@
         "pending": "Pendentes",
         "processed": "Processados",
         "ignored": "Ignorados"
+      },
+      "exceptions": {
+        "filters": {
+          "status": "Status",
+          "statusAll": "Todos"
+        },
+        "status": {
+          "Pending": "Pendente",
+          "Processed": "Processado",
+          "NeedsReview": "Requer revisão",
+          "Failed": "Falhou",
+          "Ignored": "Ignorado"
+        },
+        "loadError": "Não foi possível carregar a lista de exceções.",
+        "empty": "Nenhuma exceção para revisar.",
+        "columns": {
+          "receivedAtUtc": "Recebido em",
+          "status": "Status",
+          "reason": "Motivo",
+          "unmatchedListingTitle": "Título do anúncio sem mapeamento",
+          "processedAtUtc": "Processado em"
+        },
+        "reason": {
+          "UnsupportedTemplate": "Modelo de e-mail não suportado",
+          "MissingRequiredField": "Não foi possível ler um campo obrigatório",
+          "InvalidConfirmationCodeContext": "Formato do código de confirmação não reconhecido",
+          "PublisherFailure": "Falha na publicação"
+        },
+        "detail": {
+          "title": "Detalhe da exceção"
+        },
+        "createMapping": "Criar mapeamento",
+        "retry": {
+          "action": "Tentar novamente",
+          "success": "Nova tentativa concluída com sucesso.",
+          "stillNeedsReview": "O título do anúncio ainda não tem um mapeamento correspondente.",
+          "errors": {
+            "mailboxNotConnected": "A mailbox não está conectada. Reconecte antes de tentar novamente.",
+            "sourceUnavailable": "O e-mail original não está mais disponível.",
+            "conflict": "Já existe outra tentativa em andamento para este item.",
+            "notRetryable": "Este item não pode mais ser reprocessado.",
+            "notFound": "Este item não existe mais.",
+            "generic": "Não foi possível concluir a nova tentativa. Tente novamente."
+          }
+        }
       }
     }
   }

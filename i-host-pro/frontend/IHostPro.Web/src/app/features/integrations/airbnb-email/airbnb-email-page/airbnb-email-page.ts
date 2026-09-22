@@ -4,8 +4,11 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -18,10 +21,12 @@ import {
   AirbnbEmailConnectionStatusLabel,
   AirbnbEmailMailboxStatus,
   AirbnbEmailProcessingSummary,
+  AirbnbEmailReceipt,
   AirbnbEmailService,
 } from '../airbnb-email.service';
 import { EnableAutoPublicationDialog } from '../enable-auto-publication-dialog/enable-auto-publication-dialog';
 import { MappingFormDialog } from '../mapping-form-dialog/mapping-form-dialog';
+import { ReceiptDetailDialog, ReceiptDetailDialogData } from '../receipt-detail-dialog/receipt-detail-dialog';
 
 type LoadState = 'loading' | 'loaded' | 'error';
 
@@ -60,7 +65,19 @@ const CONNECTION_STATUS_ICONS: Record<AirbnbEmailConnectionStatusLabel, string> 
 
 @Component({
   selector: 'app-airbnb-email-page',
-  imports: [DatePipe, TranslocoPipe, MatButtonModule, MatCardModule, MatChipsModule, MatIconModule, MatProgressSpinnerModule, MatTableModule],
+  imports: [
+    DatePipe,
+    TranslocoPipe,
+    MatButtonModule,
+    MatCardModule,
+    MatChipsModule,
+    MatFormFieldModule,
+    MatIconModule,
+    MatPaginatorModule,
+    MatProgressSpinnerModule,
+    MatSelectModule,
+    MatTableModule,
+  ],
   templateUrl: './airbnb-email-page.html',
   styleUrl: './airbnb-email-page.scss',
 })
@@ -87,6 +104,14 @@ export class AirbnbEmailPage {
   protected readonly summaryState = signal<LoadState>('loading');
   protected readonly summary = signal<AirbnbEmailProcessingSummary | null>(null);
 
+  protected readonly displayedExceptionColumns = ['receivedAtUtc', 'status', 'reason'];
+  protected readonly exceptionsState = signal<LoadState>('loading');
+  protected readonly exceptions = signal<AirbnbEmailReceipt[]>([]);
+  protected readonly exceptionsTotalCount = signal(0);
+  protected readonly exceptionsPageIndex = signal(0);
+  protected readonly exceptionsPageSize = signal(10);
+  protected readonly exceptionsStatusFilter = signal<string>('');
+
   protected connectionStatusIcon(status: AirbnbEmailConnectionStatusLabel): string {
     return CONNECTION_STATUS_ICONS[status];
   }
@@ -97,6 +122,7 @@ export class AirbnbEmailPage {
     this.loadAutoPublication();
     this.loadMappings();
     this.loadSummary();
+    this.loadExceptions();
   }
 
   /**
@@ -252,6 +278,53 @@ export class AirbnbEmailPage {
     ref.afterClosed().subscribe((created) => {
       if (!created) return;
       this.snackBar.open(this.transloco.translate('integrations.airbnbEmail.mappings.createdSuccess'), undefined, { duration: 3000 });
+      this.loadMappings();
+    });
+  }
+
+  protected loadExceptions(): void {
+    this.exceptionsState.set('loading');
+    this.airbnbEmailService
+      .listReceipts(this.exceptionsStatusFilter() || undefined, undefined, this.exceptionsPageIndex() + 1, this.exceptionsPageSize())
+      .subscribe({
+        next: (result) => {
+          this.exceptions.set(result.items);
+          this.exceptionsTotalCount.set(result.totalCount);
+          this.exceptionsState.set('loaded');
+        },
+        error: () => this.exceptionsState.set('error'),
+      });
+  }
+
+  /** Clicking a "Processing attention" count filters the exception list to that exact status and scrolls it into view — never a separate page (smallest useful UX). */
+  protected filterExceptionsByStatus(status: 'NeedsReview' | 'Failed'): void {
+    this.exceptionsStatusFilter.set(status);
+    this.exceptionsPageIndex.set(0);
+    this.loadExceptions();
+    document.getElementById('airbnb-email-exceptions')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  protected onExceptionsStatusFilterChange(status: string): void {
+    this.exceptionsStatusFilter.set(status);
+    this.exceptionsPageIndex.set(0);
+    this.loadExceptions();
+  }
+
+  protected onExceptionsPageChange(event: PageEvent): void {
+    this.exceptionsPageIndex.set(event.pageIndex);
+    this.exceptionsPageSize.set(event.pageSize);
+    this.loadExceptions();
+  }
+
+  protected openReceiptDetailDialog(receipt: AirbnbEmailReceipt): void {
+    const ref = this.dialog.open<ReceiptDetailDialog, ReceiptDetailDialogData, boolean>(ReceiptDetailDialog, {
+      data: { receipt },
+      width: '480px',
+    });
+    ref.afterClosed().subscribe((changed) => {
+      if (!changed) return;
+      this.loadExceptions();
+      this.loadSummary();
       this.loadMappings();
     });
   }

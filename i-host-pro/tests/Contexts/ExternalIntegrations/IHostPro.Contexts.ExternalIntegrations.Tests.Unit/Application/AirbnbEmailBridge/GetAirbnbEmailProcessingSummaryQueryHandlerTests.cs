@@ -46,7 +46,7 @@ public class GetAirbnbEmailProcessingSummaryQueryHandlerTests
         repository.Add(processed2);
 
         var needsReview = NewReceipt();
-        needsReview.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", Now);
+        needsReview.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", Now, "Studio Sem Mapeamento");
         repository.Add(needsReview);
 
         var failed = NewReceipt();

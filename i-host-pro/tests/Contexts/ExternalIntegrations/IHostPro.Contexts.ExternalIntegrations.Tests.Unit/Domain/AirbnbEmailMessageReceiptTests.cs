@@ -44,10 +44,31 @@ public class AirbnbEmailMessageReceiptTests
     {
         var receipt = AirbnbEmailMessageReceipt.Create(Guid.NewGuid(), TenantId, "graph-message-1", null, Now, Now);
 
-        receipt.MarkNeedsReview("UNKNOWN_TEMPLATE", "parser-v1", Now.AddSeconds(1));
+        receipt.MarkNeedsReview("UNKNOWN_TEMPLATE", "parser-v1", Now.AddSeconds(1), "Studio Sem Mapeamento");
 
         receipt.ProcessingStatus.Should().Be(AirbnbEmailMessageProcessingStatus.NeedsReview);
         receipt.ExternalReservationId.Should().BeNull("low-confidence parsing must never resolve to a reservation identifier");
+    }
+
+    [Fact]
+    public void MarkNeedsReview_records_the_unmatched_listing_title()
+    {
+        var receipt = AirbnbEmailMessageReceipt.Create(Guid.NewGuid(), TenantId, "graph-message-1", null, Now, Now);
+
+        receipt.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", Now.AddSeconds(1), "Studio Sem Mapeamento");
+
+        receipt.UnmatchedListingTitle.Should().Be("Studio Sem Mapeamento");
+    }
+
+    [Fact]
+    public void MarkProcessed_clears_a_previously_recorded_unmatched_listing_title()
+    {
+        var receipt = AirbnbEmailMessageReceipt.Create(Guid.NewGuid(), TenantId, "graph-message-1", null, Now, Now);
+        receipt.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", Now.AddSeconds(1), "Studio Sem Mapeamento");
+
+        receipt.MarkProcessed("RESERVATION_REMINDER", "HMABCDEF12", "parser-v1", Now.AddSeconds(2));
+
+        receipt.UnmatchedListingTitle.Should().BeNull("once processed, a stale unmatched listing title from an earlier NeedsReview attempt must not remain visible");
     }
 
     [Fact]

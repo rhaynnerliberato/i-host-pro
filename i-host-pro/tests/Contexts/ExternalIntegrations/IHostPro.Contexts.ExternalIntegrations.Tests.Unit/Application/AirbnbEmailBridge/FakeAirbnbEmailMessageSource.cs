@@ -23,9 +23,10 @@ internal sealed class FakeAirbnbEmailMessageSource : IAirbnbEmailMessageSource
     public Dictionary<string, string?> BodiesByMessageId { get; } = [];
     public List<string> BodyFetchCalls { get; } = [];
 
-    public Task<string?> GetMessageBodyAsync(string accessToken, string messageId, CancellationToken cancellationToken)
+    public Task<AirbnbEmailMessageContent?> GetMessageContentAsync(string accessToken, string messageId, CancellationToken cancellationToken)
     {
         BodyFetchCalls.Add(messageId);
-        return Task.FromResult(BodiesByMessageId.GetValueOrDefault(messageId));
+        var body = BodiesByMessageId.GetValueOrDefault(messageId);
+        return Task.FromResult(body is null ? null : new AirbnbEmailMessageContent(Subject: null, body));
     }
 }

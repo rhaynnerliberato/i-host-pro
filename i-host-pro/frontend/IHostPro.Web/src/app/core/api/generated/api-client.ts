@@ -713,6 +713,236 @@ export class Client {
     }
 
     /**
+     * @param status (optional) 
+     * @param reasonCode (optional) 
+     * @param page (optional) 
+     * @param pageSize (optional) 
+     * @return OK
+     */
+    receipts(status?: string | undefined, reasonCode?: string | undefined, page?: number | undefined, pageSize?: number | undefined): Observable<PagedAirbnbEmailMessageReceiptResponse> {
+        let url_ = this.baseUrl + "/api/v1/integrations/airbnb-email/receipts?";
+        if (status === null)
+            throw new globalThis.Error("The parameter 'status' cannot be null.");
+        else if (status !== undefined)
+            url_ += "status=" + encodeURIComponent("" + status) + "&";
+        if (reasonCode === null)
+            throw new globalThis.Error("The parameter 'reasonCode' cannot be null.");
+        else if (reasonCode !== undefined)
+            url_ += "reasonCode=" + encodeURIComponent("" + reasonCode) + "&";
+        if (page === null)
+            throw new globalThis.Error("The parameter 'page' cannot be null.");
+        else if (page !== undefined)
+            url_ += "page=" + encodeURIComponent("" + page) + "&";
+        if (pageSize === null)
+            throw new globalThis.Error("The parameter 'pageSize' cannot be null.");
+        else if (pageSize !== undefined)
+            url_ += "pageSize=" + encodeURIComponent("" + pageSize) + "&";
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processReceipts(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processReceipts(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<PagedAirbnbEmailMessageReceiptResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<PagedAirbnbEmailMessageReceiptResponse>;
+        }));
+    }
+
+    protected processReceipts(response: HttpResponseBase): Observable<PagedAirbnbEmailMessageReceiptResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as PagedAirbnbEmailMessageReceiptResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @return OK
+     */
+    receipts2(receiptId: string): Observable<AirbnbEmailMessageReceiptResponse> {
+        let url_ = this.baseUrl + "/api/v1/integrations/airbnb-email/receipts/{receiptId}";
+        if (receiptId === undefined || receiptId === null)
+            throw new globalThis.Error("The parameter 'receiptId' must be defined.");
+        url_ = url_.replace("{receiptId}", encodeURIComponent("" + receiptId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("get", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processReceipts2(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processReceipts2(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<AirbnbEmailMessageReceiptResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<AirbnbEmailMessageReceiptResponse>;
+        }));
+    }
+
+    protected processReceipts2(response: HttpResponseBase): Observable<AirbnbEmailMessageReceiptResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as AirbnbEmailMessageReceiptResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
+     * @return OK
+     */
+    retry(receiptId: string): Observable<AirbnbEmailMessageReceiptResponse> {
+        let url_ = this.baseUrl + "/api/v1/integrations/airbnb-email/receipts/{receiptId}/retry";
+        if (receiptId === undefined || receiptId === null)
+            throw new globalThis.Error("The parameter 'receiptId' must be defined.");
+        url_ = url_.replace("{receiptId}", encodeURIComponent("" + receiptId));
+        url_ = url_.replace(/[?&]$/, "");
+
+        let options_ : any = {
+            observe: "response",
+            responseType: "blob",
+            headers: new HttpHeaders({
+                "Accept": "application/json"
+            })
+        };
+
+        return this.http.request("post", url_, options_).pipe(_observableMergeMap((response_ : any) => {
+            return this.processRetry(response_);
+        })).pipe(_observableCatch((response_: any) => {
+            if (response_ instanceof HttpResponseBase) {
+                try {
+                    return this.processRetry(response_ as any);
+                } catch (e) {
+                    return _observableThrow(e) as any as Observable<AirbnbEmailMessageReceiptResponse>;
+                }
+            } else
+                return _observableThrow(response_) as any as Observable<AirbnbEmailMessageReceiptResponse>;
+        }));
+    }
+
+    protected processRetry(response: HttpResponseBase): Observable<AirbnbEmailMessageReceiptResponse> {
+        const status = response.status;
+        const responseBlob =
+            response instanceof HttpResponse ? response.body :
+            (response as any).error instanceof Blob ? (response as any).error : undefined;
+
+        let _headers: any = {}; if (response.headers) { for (let key of response.headers.keys()) { _headers[key] = response.headers.get(key); }}
+        if (status === 200) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result200: any = null;
+            result200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as AirbnbEmailMessageReceiptResponse;
+            return _observableOf(result200);
+            }));
+        } else if (status === 401) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result401: any = null;
+            result401 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Unauthorized", status, _responseText, _headers, result401);
+            }));
+        } else if (status === 403) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result403: any = null;
+            result403 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Forbidden", status, _responseText, _headers, result403);
+            }));
+        } else if (status === 404) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result404: any = null;
+            result404 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Not Found", status, _responseText, _headers, result404);
+            }));
+        } else if (status === 409) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            let result409: any = null;
+            result409 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver) as ProblemDetails;
+            return throwException("Conflict", status, _responseText, _headers, result409);
+            }));
+        } else if (status !== 200 && status !== 204) {
+            return blobToText(responseBlob).pipe(_observableMergeMap((_responseText: string) => {
+            return throwException("An unexpected server error occurred.", status, _responseText, _headers);
+            }));
+        }
+        return _observableOf(null as any);
+    }
+
+    /**
      * @return OK
      */
     start(): Observable<AirbnbEmailWebOAuthStartResponse> {
@@ -7678,6 +7908,18 @@ export enum AirbnbEmailConnectionStatus {
     _3 = 3,
 }
 
+export interface AirbnbEmailMessageReceiptResponse {
+    id?: string;
+    receivedAtUtc?: Date;
+    processingStatus?: string | undefined;
+    detectedEventType?: string | undefined;
+    parserVersion?: string | undefined;
+    failureReason?: string | undefined;
+    unmatchedListingTitle?: string | undefined;
+    processedAtUtc?: Date | undefined;
+    createdAtUtc?: Date;
+}
+
 export interface AirbnbEmailProcessingSummaryResponse {
     tenantId?: string;
     pending?: number;
@@ -7987,6 +8229,13 @@ export interface OwnProfileResponse {
     permissions?: string[] | undefined;
     createdAt?: Date;
     lastLoginAt?: Date | undefined;
+}
+
+export interface PagedAirbnbEmailMessageReceiptResponse {
+    page?: number;
+    pageSize?: number;
+    totalCount?: number;
+    items?: AirbnbEmailMessageReceiptResponse[] | undefined;
 }
 
 export interface PagedCleaningResponse {

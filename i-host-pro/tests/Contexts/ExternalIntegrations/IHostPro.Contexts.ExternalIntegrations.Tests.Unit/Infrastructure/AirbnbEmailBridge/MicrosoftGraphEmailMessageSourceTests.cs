@@ -161,4 +161,36 @@ public class MicrosoftGraphEmailMessageSourceTests
         outcome.IsSuccess.Should().BeFalse();
         outcome.FailureReason.Should().Be(AirbnbEmailDeltaFetchFailureReason.TransientFailure);
     }
+
+    [Fact]
+    public async Task GetMessageContentAsync_fetches_subject_and_body_in_one_request()
+    {
+        const string body = """{"subject":"Reservation confirmed","body":{"content":"<html>full body</html>"}}""";
+        var handler = RecordingHttpMessageHandler.Returning(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
+        });
+        var source = BuildSource(handler);
+
+        var content = await source.GetMessageContentAsync("token-1", "msg-1", CancellationToken.None);
+
+        handler.Requests.Should().ContainSingle("subject and body must be fetched in the same Graph request, never two separate calls");
+        var request = handler.Requests[0];
+        request.Uri.ToString().Should().Be("https://graph.microsoft.com/v1.0/me/messages/msg-1?$select=subject,body");
+        request.AuthorizationHeader.Should().Be("Bearer token-1");
+        content.Should().NotBeNull();
+        content!.Subject.Should().Be("Reservation confirmed");
+        content.Body.Should().Be("<html>full body</html>");
+    }
+
+    [Fact]
+    public async Task GetMessageContentAsync_returns_null_when_the_message_no_longer_exists()
+    {
+        var handler = RecordingHttpMessageHandler.Returning(new HttpResponseMessage(HttpStatusCode.NotFound));
+        var source = BuildSource(handler);
+
+        var content = await source.GetMessageContentAsync("token-1", "msg-1", CancellationToken.None);
+
+        content.Should().BeNull();
+    }
 }

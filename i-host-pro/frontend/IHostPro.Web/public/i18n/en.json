@@ -864,6 +864,51 @@
         "pending": "Pending",
         "processed": "Processed",
         "ignored": "Ignored"
+      },
+      "exceptions": {
+        "filters": {
+          "status": "Status",
+          "statusAll": "All"
+        },
+        "status": {
+          "Pending": "Pending",
+          "Processed": "Processed",
+          "NeedsReview": "Needs review",
+          "Failed": "Failed",
+          "Ignored": "Ignored"
+        },
+        "loadError": "Could not load the exception list.",
+        "empty": "No exception to review.",
+        "columns": {
+          "receivedAtUtc": "Received at",
+          "status": "Status",
+          "reason": "Reason",
+          "unmatchedListingTitle": "Unmatched listing title",
+          "processedAtUtc": "Processed at"
+        },
+        "reason": {
+          "UnsupportedTemplate": "Unsupported email template",
+          "MissingRequiredField": "A required field could not be read",
+          "InvalidConfirmationCodeContext": "Confirmation code format not recognized",
+          "PublisherFailure": "Publishing failed"
+        },
+        "detail": {
+          "title": "Exception detail"
+        },
+        "createMapping": "Create mapping",
+        "retry": {
+          "action": "Retry",
+          "success": "Retry completed successfully.",
+          "stillNeedsReview": "The listing title still has no matching mapping.",
+          "errors": {
+            "mailboxNotConnected": "The mailbox is not connected. Reconnect it before retrying.",
+            "sourceUnavailable": "The original email is no longer available.",
+            "conflict": "Another retry is already in progress for this item.",
+            "notRetryable": "This item can no longer be retried.",
+            "notFound": "This item no longer exists.",
+            "generic": "Could not complete the retry. Please try again."
+          }
+        }
       }
     }
   }

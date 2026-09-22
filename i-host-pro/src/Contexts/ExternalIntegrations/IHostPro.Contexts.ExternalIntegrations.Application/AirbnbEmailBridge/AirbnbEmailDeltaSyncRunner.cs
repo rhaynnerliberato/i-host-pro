@@ -185,17 +185,18 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
 
             var deltaPage = fetchOutcome.Page!;
 
-            // Full body is fetched OUTSIDE the transaction below (an external
-            // HTTP call has no place holding a DB transaction open), and only
-            // for messages whose sender domain already looks like Airbnb's -
-            // never for the rest of the tenant's mail, and never widening the
-            // delta page's own $select (Fase 9 review - avoid overfetching).
-            var candidateBodies = new Dictionary<string, string?>();
+            // Full content is fetched OUTSIDE the transaction below (an
+            // external HTTP call has no place holding a DB transaction open),
+            // and only for messages whose sender domain already looks like
+            // Airbnb's - never for the rest of the tenant's mail, and never
+            // widening the delta page's own $select (Fase 9 review - avoid
+            // overfetching).
+            var candidateContents = new Dictionary<string, AirbnbEmailMessageContent?>();
             foreach (var message in deltaPage.Messages)
             {
                 var domain = ExtractDomain(message.FromAddress) ?? ExtractDomain(message.SenderAddress);
                 if (domain is not null && domain.Contains("airbnb", StringComparison.OrdinalIgnoreCase))
-                    candidateBodies[message.MessageId] = await _messageSource.GetMessageBodyAsync(authOutcome.AccessToken!, message.MessageId, cancellationToken);
+                    candidateContents[message.MessageId] = await _messageSource.GetMessageContentAsync(authOutcome.AccessToken!, message.MessageId, cancellationToken);
             }
 
             await _transactionExecutor.ExecuteAsync(async () =>
@@ -210,10 +211,10 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
                         message.ReceivedAtUtc, _timeProvider.GetUtcNow());
                     _receiptRepository.Add(receipt);
 
-                    if (candidateBodies.TryGetValue(message.MessageId, out var body) && body is not null)
+                    if (candidateContents.TryGetValue(message.MessageId, out var content) && content?.Body is not null)
                     {
                         var dryRunOutcome = await _dryRunEvaluator.EvaluateAsync(
-                            message.Subject ?? string.Empty, body, message.ReceivedAtUtc, cancellationToken);
+                            message.Subject ?? string.Empty, content.Body, message.ReceivedAtUtc, cancellationToken);
                         await ApplyDryRunOutcomeAsync(
                             connection, message.ReceivedAtUtc, tenantId, receipt, dryRunOutcome, _timeProvider.GetUtcNow(), cancellationToken);
                     }
@@ -303,7 +304,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
             // present) but PropertyResolved=false - the email itself is fine,
             // a tenant just has not mapped this listing title to a Property
             // yet. Never invented/guessed - see AirbnbListingTitleMapping.
-            receipt.MarkNeedsReview(ReservationDetectedEventType, ReservationParserVersion, processedAtUtc);
+            receipt.MarkNeedsReview(ReservationDetectedEventType, ReservationParserVersion, processedAtUtc, outcome.UnmatchedListingTitle);
         }
     }
 

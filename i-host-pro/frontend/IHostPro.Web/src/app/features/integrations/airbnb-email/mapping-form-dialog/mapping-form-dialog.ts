@@ -1,7 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -11,6 +11,11 @@ import { TranslocoPipe } from '@jsverse/transloco';
 import { PropertySummaryResponse } from '../../../../core/api/generated/api-client';
 import { PropertiesService } from '../../../property-management/properties.service';
 import { AirbnbEmailService } from '../airbnb-email.service';
+
+/** Optional pre-fill (Airbnb Email Operational Exception Resolution gate) — the "Create Mapping" action from a NeedsReview receipt's detail passes its own `unmatchedListingTitle` here. */
+export interface MappingFormDialogData {
+  listingTitle?: string;
+}
 
 /**
  * A single Property page is fetched (no search/autocomplete) — an
@@ -40,6 +45,7 @@ export class MappingFormDialog implements OnInit {
   private readonly formBuilder = inject(FormBuilder);
   private readonly airbnbEmailService = inject(AirbnbEmailService);
   private readonly propertiesService = inject(PropertiesService);
+  private readonly data = inject<MappingFormDialogData | null>(MAT_DIALOG_DATA, { optional: true });
 
   protected readonly submitting = signal(false);
   protected readonly errorKey = signal<string | null>(null);
@@ -47,7 +53,7 @@ export class MappingFormDialog implements OnInit {
   protected readonly loadingProperties = signal(true);
 
   protected readonly form = this.formBuilder.nonNullable.group({
-    listingTitle: ['', [Validators.required, Validators.maxLength(200)]],
+    listingTitle: [this.data?.listingTitle ?? '', [Validators.required, Validators.maxLength(200)]],
     propertyId: ['', [Validators.required]],
   });
 

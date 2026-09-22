@@ -509,8 +509,8 @@ public sealed class AirbnbAutoPublishNestedTransactionRegressionTests : IClassFi
             Task.FromResult(AirbnbEmailDeltaFetchOutcome.Success(
                 new AirbnbEmailDeltaPage([message], null, "https://fake.local/delta-1")));
 
-        public Task<string?> GetMessageBodyAsync(string accessToken, string messageId, CancellationToken cancellationToken) =>
-            Task.FromResult(messageId == message.MessageId ? body : null);
+        public Task<AirbnbEmailMessageContent?> GetMessageContentAsync(string accessToken, string messageId, CancellationToken cancellationToken) =>
+            Task.FromResult(messageId == message.MessageId ? new AirbnbEmailMessageContent(message.Subject, body) : null);
     }
 
     /// <summary>Captures every logged exception (with its logger category) across the whole test host, so the test can assert on the EXACT exception type the runner caught — never inferred from side effects alone.</summary>

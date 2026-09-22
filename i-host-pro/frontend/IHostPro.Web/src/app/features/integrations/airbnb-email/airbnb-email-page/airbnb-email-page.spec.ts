@@ -14,6 +14,7 @@ function configure(queryParam: string | null = null) {
     getAutoPublicationStatus: vi.fn().mockReturnValue(of({ autoPublishEnabled: false })),
     listMappings: vi.fn().mockReturnValue(of([])),
     getProcessingSummary: vi.fn().mockReturnValue(of({ pending: 0, processed: 0, needsReview: 0, failed: 0, ignored: 0 })),
+    listReceipts: vi.fn().mockReturnValue(of({ page: 1, pageSize: 10, totalCount: 0, items: [] })),
     connect: vi.fn().mockReturnValue(of('https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=abc')),
     disconnect: vi.fn().mockReturnValue(of(undefined)),
   };
@@ -97,6 +98,36 @@ describe('AirbnbEmailPage', () => {
 
       expect(snackBar.open).not.toHaveBeenCalled();
       expect(router.navigate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('exceptions', () => {
+    it('loads the exception list on construction with no status filter', () => {
+      const { component, airbnbEmailService } = configure();
+
+      expect(airbnbEmailService.listReceipts).toHaveBeenCalledWith(undefined, undefined, 1, 10);
+      expect(component['exceptionsState']()).toBe('loaded');
+    });
+
+    it('filterExceptionsByStatus sets the status filter, resets to page 1, and reloads', () => {
+      const { component, airbnbEmailService } = configure();
+      airbnbEmailService.listReceipts.mockClear();
+      component['exceptionsPageIndex'].set(2);
+
+      component['filterExceptionsByStatus']('NeedsReview');
+
+      expect(component['exceptionsStatusFilter']()).toBe('NeedsReview');
+      expect(component['exceptionsPageIndex']()).toBe(0);
+      expect(airbnbEmailService.listReceipts).toHaveBeenCalledWith('NeedsReview', undefined, 1, 10);
+    });
+
+    it('sets exceptionsState to error when the listing call fails', () => {
+      const { component, airbnbEmailService } = configure();
+      airbnbEmailService.listReceipts.mockReturnValue(throwError(() => new Error('network error')));
+
+      component['loadExceptions']();
+
+      expect(component['exceptionsState']()).toBe('error');
     });
   });
 });

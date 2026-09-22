@@ -1117,8 +1117,8 @@ public class ExternalIntegrationsFoundationTests : IClassFixture<ExternalIntegra
         }
 
         // Tenant A: 2 NeedsReview, 1 Failed.
-        await SeedReceiptAsync(tenantAId, r => r.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", DateTimeOffset.UtcNow));
-        await SeedReceiptAsync(tenantAId, r => r.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", DateTimeOffset.UtcNow));
+        await SeedReceiptAsync(tenantAId, r => r.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", DateTimeOffset.UtcNow, "Studio Sem Mapeamento"));
+        await SeedReceiptAsync(tenantAId, r => r.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", DateTimeOffset.UtcNow, "Studio Sem Mapeamento"));
         await SeedReceiptAsync(tenantAId, r => r.MarkFailed("PARSER_EXCEPTION", "parser-v1", DateTimeOffset.UtcNow));
 
         // Tenant B: 1 Processed only - must never leak into Tenant A's counts or vice versa.
@@ -1149,6 +1149,149 @@ public class ExternalIntegrationsFoundationTests : IClassFixture<ExternalIntegra
         tenantBCounts.GetValueOrDefault(AirbnbEmailMessageProcessingStatus.NeedsReview).Should().Be(0,
             "Tenant A's NeedsReview receipts must never appear in Tenant B's counts");
         tenantBCounts.GetValueOrDefault(AirbnbEmailMessageProcessingStatus.Failed).Should().Be(0);
+    }
+
+    // ---- Airbnb Email Operational Exception Resolution gate ----
+
+    /// <summary>
+    /// Proves the new paginated exception listing under real RLS: tenant
+    /// isolation, status/reasonCode filtering, and pagination — mirrors
+    /// <see cref="CountByProcessingStatusForCurrentTenantAsync_never_counts_another_tenants_receipts"/>'s
+    /// own real-database rationale (a mocked-repository test is not enough
+    /// proof for a cross-tenant listing concern).
+    /// </summary>
+    [Fact]
+    public async Task ListForCurrentTenantAsync_never_lists_another_tenants_receipts_and_applies_filters_and_pagination()
+    {
+        var tenantAId = Guid.NewGuid();
+        var tenantBId = Guid.NewGuid();
+
+        async Task SeedReceiptAsync(Guid tenantId, DateTimeOffset createdAtUtc, Action<AirbnbEmailMessageReceipt> mutate)
+        {
+            var tenantContext = new TenantContext();
+            tenantContext.SetTenant(tenantId);
+            await using var dbContext = CreateDbContext(_migratorConnectionString, tenantContext);
+            await using var transaction = await dbContext.Database.BeginTransactionAsync();
+            await SetTenantAsync(dbContext, tenantId);
+
+            var receipt = AirbnbEmailMessageReceipt.Create(Guid.NewGuid(), tenantId, Guid.NewGuid().ToString(), null, createdAtUtc, createdAtUtc);
+            mutate(receipt);
+            dbContext.AirbnbEmailMessageReceipts.Add(receipt);
+            await dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+
+        var baseTime = new DateTimeOffset(2026, 11, 3, 9, 0, 0, TimeSpan.Zero);
+
+        // Tenant A: 3 NeedsReview (created at increasing timestamps) + 1 Failed/PublisherFailure.
+        await SeedReceiptAsync(tenantAId, baseTime, r => r.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", baseTime, "Studio Um"));
+        await SeedReceiptAsync(tenantAId, baseTime.AddMinutes(1), r => r.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", baseTime, "Studio Dois"));
+        await SeedReceiptAsync(tenantAId, baseTime.AddMinutes(2), r => r.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", baseTime, "Studio Tres"));
+        await SeedReceiptAsync(tenantAId, baseTime.AddMinutes(3), r => r.MarkFailed("PublisherFailure", "parser-v1", baseTime));
+
+        // Tenant B: must never leak into Tenant A's listing.
+        await SeedReceiptAsync(tenantBId, baseTime, r => r.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", baseTime, "Outro Tenant"));
+
+        var tenantAContext = new TenantContext();
+        tenantAContext.SetTenant(tenantAId);
+        await using var tenantADbContext = CreateDbContext(_appConnectionString, tenantAContext);
+        var tenantARepository = new AirbnbEmailMessageReceiptRepository(tenantADbContext);
+        var tenantAUnitOfWork = new AirbnbEmailUnitOfWork(tenantADbContext, tenantAContext);
+
+        // Unfiltered, page 1 of size 2 — most recent first (CreatedAtUtc DESC).
+        var page1 = await tenantAUnitOfWork.ExecuteAsync(
+            () => tenantARepository.ListForCurrentTenantAsync(status: null, reasonCode: null, page: 1, pageSize: 2, CancellationToken.None),
+            CancellationToken.None);
+        page1.TotalCount.Should().Be(4, "Tenant B's receipt must never be counted for Tenant A");
+        page1.Items.Should().HaveCount(2);
+        page1.Items.First().UnmatchedListingTitle.Should().Be(null, "the most recent seeded receipt is the Failed one, which never carries an unmatched listing title");
+
+        // Status filter.
+        var tenantANeedsReview = await tenantAUnitOfWork.ExecuteAsync(
+            () => tenantARepository.ListForCurrentTenantAsync(status: "NeedsReview", reasonCode: null, page: 1, pageSize: 20, CancellationToken.None),
+            CancellationToken.None);
+        tenantANeedsReview.TotalCount.Should().Be(3);
+        tenantANeedsReview.Items.Should().OnlyContain(i => i.ProcessingStatus == "NeedsReview");
+
+        // ReasonCode filter.
+        var tenantAPublisherFailures = await tenantAUnitOfWork.ExecuteAsync(
+            () => tenantARepository.ListForCurrentTenantAsync(status: "Failed", reasonCode: "PublisherFailure", page: 1, pageSize: 20, CancellationToken.None),
+            CancellationToken.None);
+        tenantAPublisherFailures.TotalCount.Should().Be(1);
+
+        var tenantBContext = new TenantContext();
+        tenantBContext.SetTenant(tenantBId);
+        await using var tenantBDbContext = CreateDbContext(_appConnectionString, tenantBContext);
+        var tenantBRepository = new AirbnbEmailMessageReceiptRepository(tenantBDbContext);
+        var tenantBUnitOfWork = new AirbnbEmailUnitOfWork(tenantBDbContext, tenantBContext);
+        var tenantBList = await tenantBUnitOfWork.ExecuteAsync(
+            () => tenantBRepository.ListForCurrentTenantAsync(status: null, reasonCode: null, page: 1, pageSize: 20, CancellationToken.None),
+            CancellationToken.None);
+        tenantBList.TotalCount.Should().Be(1, "Tenant A's receipts must never appear in Tenant B's listing");
+    }
+
+    /// <summary>
+    /// Proves the new <c>xmin</c> optimistic-concurrency mapping
+    /// (<see cref="AirbnbEmailMessageReceiptConfiguration"/>) genuinely
+    /// protects a receipt row against a lost update — the exact guard the
+    /// Airbnb Email Operational Exception Resolution retry flow depends on to
+    /// reject two concurrent retries of the same receipt. Two separate
+    /// <see cref="ExternalIntegrationsDbContext"/> instances load the SAME
+    /// row (mirroring two concurrent HTTP requests, each with its own scoped
+    /// DbContext); the first save wins, the second must fail with
+    /// <see cref="DbUpdateConcurrencyException"/> — never silently overwrite.
+    /// </summary>
+    [Fact]
+    public async Task AirbnbEmailMessageReceipt_row_update_fails_with_a_stale_xmin()
+    {
+        var tenantId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var receiptId = Guid.NewGuid();
+
+        var seedTenantContext = new TenantContext();
+        seedTenantContext.SetTenant(tenantId);
+        await using (var seedDbContext = CreateDbContext(_migratorConnectionString, seedTenantContext))
+        await using (var seedTransaction = await seedDbContext.Database.BeginTransactionAsync())
+        {
+            await SetTenantAsync(seedDbContext, tenantId);
+            var receipt = AirbnbEmailMessageReceipt.Create(receiptId, tenantId, "concurrency-proof-msg-1", null, now, now);
+            receipt.MarkNeedsReview("RESERVATION_REMINDER", "parser-v1", now, "Studio Concorrencia");
+            seedDbContext.AirbnbEmailMessageReceipts.Add(receipt);
+            await seedDbContext.SaveChangesAsync();
+            await seedTransaction.CommitAsync();
+        }
+
+        var tenantContextA = new TenantContext();
+        tenantContextA.SetTenant(tenantId);
+        await using var dbContextA = CreateDbContext(_appConnectionString, tenantContextA);
+        var unitOfWorkA = new AirbnbEmailUnitOfWork(dbContextA, tenantContextA);
+        var receiptA = await unitOfWorkA.ExecuteAsync(
+            () => dbContextA.AirbnbEmailMessageReceipts.SingleAsync(r => r.Id == receiptId), CancellationToken.None);
+
+        var tenantContextB = new TenantContext();
+        tenantContextB.SetTenant(tenantId);
+        await using var dbContextB = CreateDbContext(_appConnectionString, tenantContextB);
+        var unitOfWorkB = new AirbnbEmailUnitOfWork(dbContextB, tenantContextB);
+        var receiptB = await unitOfWorkB.ExecuteAsync(
+            () => dbContextB.AirbnbEmailMessageReceipts.SingleAsync(r => r.Id == receiptId), CancellationToken.None);
+
+        // "Retry A" wins first — mirrors one admin's retry committing.
+        await unitOfWorkA.ExecuteAsync(() =>
+        {
+            receiptA.MarkProcessed("RESERVATION_REMINDER", "HMABCDEF12", "parser-v1", DateTimeOffset.UtcNow);
+            return Task.FromResult(true);
+        }, CancellationToken.None);
+
+        // "Retry B" — loaded before A committed, so its tracked xmin is now
+        // stale. Must be rejected, never silently overwrite A's result.
+        var act = async () => await unitOfWorkB.ExecuteAsync(() =>
+        {
+            receiptB.MarkFailed("PublisherFailure", "parser-v1", DateTimeOffset.UtcNow);
+            return Task.FromResult(true);
+        }, CancellationToken.None);
+
+        await act.Should().ThrowAsync<DbUpdateConcurrencyException>(
+            "a second concurrent retry against the same stale row must never silently overwrite the first one's result");
     }
 
     // ---- Web OAuth architecture gate — AirbnbEmailOAuthTransaction (pre-authentication security state) ----

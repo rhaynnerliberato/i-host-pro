@@ -62,6 +62,10 @@
   flex-direction: column;
   align-items: center;
   min-width: 96px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  padding: 0;
 }
 
 .airbnb-email-summary-item--attention {
@@ -71,7 +75,36 @@
   }
 }
 
+.airbnb-email-summary-item--clickable {
+  cursor: pointer;
+  border-radius: var(--app-radius-2, 8px);
+
+  &:hover,
+  &:focus-visible {
+    background-color: var(--mat-sys-surface-variant);
+  }
+}
+
 .airbnb-email-summary-count {
   font: var(--mat-sys-headline-small);
   font-weight: 600;
+}
+
+.airbnb-email-exceptions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.airbnb-email-exceptions-filter {
+  align-self: flex-start;
+}
+
+.airbnb-email-exceptions-row {
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--mat-sys-surface-variant);
+  }
 }

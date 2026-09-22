@@ -1,3 +1,4 @@
+using IHostPro.BuildingBlocks.Application;
 using IHostPro.Contexts.ExternalIntegrations.Api.Contracts;
 using IHostPro.Contexts.ExternalIntegrations.Api.Http;
 using IHostPro.Contexts.ExternalIntegrations.Application;
@@ -178,6 +179,69 @@ public sealed class AirbnbEmailBridgeController : ControllerBase
         return Ok(ToProcessingSummaryResponse(result.Value));
     }
 
+    /// <summary>Airbnb Email Operational Exception Resolution gate — paginated, filterable receipt listing.</summary>
+    [HttpGet("receipts")]
+    [Authorize(Policy = IdentityPermissionCodes.IntegrationsManage)]
+    [ProducesResponseType(typeof(PagedAirbnbEmailMessageReceiptResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ListReceipts(
+        [FromQuery] string? status, [FromQuery] string? reasonCode, [FromQuery] int? page, [FromQuery] int? pageSize,
+        CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        if (!ExternalIntegrationsIdentityReader.TryRead(User, out var identity))
+            return Unauthorized();
+
+        var result = await _sender.Send(
+            new ListAirbnbEmailMessageReceiptsQuery(identity.TenantId, status, reasonCode, page, pageSize), cancellationToken);
+
+        return Ok(ToPagedResponse(result.Value));
+    }
+
+    /// <summary>Airbnb Email Operational Exception Resolution gate — one receipt's safe operational detail.</summary>
+    [HttpGet("receipts/{receiptId:guid}")]
+    [Authorize(Policy = IdentityPermissionCodes.IntegrationsManage)]
+    [ProducesResponseType(typeof(AirbnbEmailMessageReceiptResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetReceipt(Guid receiptId, CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        if (!ExternalIntegrationsIdentityReader.TryRead(User, out var identity))
+            return Unauthorized();
+
+        var result = await _sender.Send(new GetAirbnbEmailMessageReceiptQuery(identity.TenantId, receiptId), cancellationToken);
+
+        return result.Value is null ? NotFound() : Ok(ToReceiptResponse(result.Value));
+    }
+
+    /// <summary>Airbnb Email Operational Exception Resolution gate — manual reprocessing, only for the approved retryable cases.</summary>
+    [HttpPost("receipts/{receiptId:guid}/retry")]
+    [Authorize(Policy = IdentityPermissionCodes.IntegrationsManage)]
+    [ProducesResponseType(typeof(AirbnbEmailMessageReceiptResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RetryReceipt(Guid receiptId, CancellationToken cancellationToken)
+    {
+        SetNoStoreHeaders();
+
+        if (!ExternalIntegrationsIdentityReader.TryRead(User, out var identity))
+            return Unauthorized();
+
+        var result = await _sender.Send(
+            new RetryAirbnbEmailMessageReceiptCommand(identity.TenantId, receiptId, identity.UserId), cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(ToReceiptResponse(result.Value))
+            : ExternalIntegrationsResultHttpMapper.ToActionResult(result.Error);
+    }
+
     private void SetNoStoreHeaders() => Response.Headers.CacheControl = "no-store";
 
     private static AirbnbEmailBridgeResponse ToResponse(AirbnbEmailMailboxConnectionResult result) => new(
@@ -197,4 +261,11 @@ public sealed class AirbnbEmailBridgeController : ControllerBase
 
     private static AirbnbEmailProcessingSummaryResponse ToProcessingSummaryResponse(AirbnbEmailProcessingSummaryResult result) => new(
         result.TenantId, result.Pending, result.Processed, result.NeedsReview, result.Failed, result.Ignored);
+
+    private static PagedAirbnbEmailMessageReceiptResponse ToPagedResponse(PagedResult<AirbnbEmailMessageReceiptResult> result) => new(
+        result.Page, result.PageSize, result.TotalCount, result.Items.Select(ToReceiptResponse).ToArray());
+
+    private static AirbnbEmailMessageReceiptResponse ToReceiptResponse(AirbnbEmailMessageReceiptResult result) => new(
+        result.Id, result.ReceivedAtUtc, result.ProcessingStatus, result.DetectedEventType, result.ParserVersion,
+        result.FailureReason, result.UnmatchedListingTitle, result.ProcessedAtUtc, result.CreatedAtUtc);
 }

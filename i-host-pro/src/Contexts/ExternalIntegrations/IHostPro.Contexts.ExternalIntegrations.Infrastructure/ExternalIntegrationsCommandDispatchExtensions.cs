@@ -178,6 +178,31 @@ public static class ExternalIntegrationsCommandDispatchExtensions
             IPipelineBehavior<StartAirbnbEmailWebOAuthCommand, Result<AirbnbEmailWebOAuthStartResult>>,
             TenantTransactionBehavior<StartAirbnbEmailWebOAuthCommand, Result<AirbnbEmailWebOAuthStartResult>, ExternalIntegrationsDbContext>>();
 
+        // Airbnb Email Operational Exception Resolution gate — the two
+        // read-only queries are plain single-repository reads (no
+        // authenticator/Graph call inside them), same TenantTransactionBehavior
+        // wiring as GetAirbnbEmailProcessingSummaryQuery above.
+        services.AddScoped<
+            IPipelineBehavior<ListAirbnbEmailMessageReceiptsQuery, Result<PagedResult<AirbnbEmailMessageReceiptResult>>>,
+            TenantTransactionBehavior<ListAirbnbEmailMessageReceiptsQuery, Result<PagedResult<AirbnbEmailMessageReceiptResult>>, ExternalIntegrationsDbContext>>();
+        services.AddScoped<
+            IPipelineBehavior<GetAirbnbEmailMessageReceiptQuery, Result<AirbnbEmailMessageReceiptResult?>>,
+            TenantTransactionBehavior<GetAirbnbEmailMessageReceiptQuery, Result<AirbnbEmailMessageReceiptResult?>, ExternalIntegrationsDbContext>>();
+
+        // The retry command deliberately gets NO TenantTransactionBehavior —
+        // mirrors ConnectAirbnbEmailMailboxCommand/DisconnectAirbnbEmailMailboxCommand's
+        // own registration above exactly, for the same reason: the handler
+        // owns its own transaction(s) via IExternalIntegrationsTransactionExecutor
+        // so its publish path can enqueue into the SAME transaction that
+        // mutates the receipt. Wrapping it in an ADDITIONAL ambient
+        // TenantTransactionBehavior would nest a second transaction on the
+        // same ExternalIntegrationsDbContext and throw NestedUnitOfWorkException
+        // (the exact defect AirbnbAutoPublishNestedTransactionRegressionTests
+        // proved and fixed for the delta-sync path).
+        services.AddScoped<
+            IPipelineBehavior<RetryAirbnbEmailMessageReceiptCommand, Result<AirbnbEmailMessageReceiptResult>>,
+            AuditRetryAirbnbEmailReceiptBehavior>();
+
         return services;
     }
 }

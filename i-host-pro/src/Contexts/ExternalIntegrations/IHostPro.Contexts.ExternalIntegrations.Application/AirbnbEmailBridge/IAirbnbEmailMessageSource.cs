@@ -19,15 +19,21 @@ public interface IAirbnbEmailMessageSource
         string accessToken, string mailFolderId, string? deltaOrNextLink, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Fetches the full body of one specific message, by id - deliberately a
-    /// separate, targeted call rather than widening the delta page's own
-    /// <c>$select</c> (which would fetch every message's full body on every
-    /// poll, most of which are never candidates for any parser). Callers are
-    /// expected to only invoke this for messages that already look like a
-    /// candidate (e.g. sender domain) from the cheap summary fields the delta
-    /// page already returns. Returns <c>null</c> on any failure - the caller
-    /// treats a missing body the same as "cannot parse this message right
-    /// now", never as a reason to fail the whole polling run.
+    /// Fetches the full subject and body of one specific message, by id -
+    /// deliberately a separate, targeted call rather than widening the delta
+    /// page's own <c>$select</c> (which would fetch every message's full
+    /// content on every poll, most of which are never candidates for any
+    /// parser). Callers are expected to only invoke this for messages that
+    /// already look like a candidate (e.g. sender domain) from the cheap
+    /// summary fields the delta page already returns, OR to reconstruct an
+    /// already-receipted message for a manual retry via its persisted
+    /// <c>GraphMessageId</c> (Airbnb Email Operational Exception Resolution
+    /// gate) - in both cases the SAME single request returns both fields the
+    /// parser needs, never a second round trip for whichever one the delta
+    /// page's summary already happened to carry. Returns <c>null</c> on any
+    /// failure, including the source message no longer existing - the caller
+    /// treats this the same as "cannot parse this message right now", never
+    /// as a reason to fail the whole polling run or mutate a retry's receipt.
     /// </summary>
-    Task<string?> GetMessageBodyAsync(string accessToken, string messageId, CancellationToken cancellationToken);
+    Task<AirbnbEmailMessageContent?> GetMessageContentAsync(string accessToken, string messageId, CancellationToken cancellationToken);
 }

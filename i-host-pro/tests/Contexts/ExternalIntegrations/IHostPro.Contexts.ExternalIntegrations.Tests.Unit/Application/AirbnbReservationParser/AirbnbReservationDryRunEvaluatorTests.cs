@@ -36,6 +36,7 @@ public class AirbnbReservationDryRunEvaluatorTests
         outcome.DatesParsed.Should().BeTrue();
         outcome.GuestCountParsed.Should().BeTrue();
         outcome.PropertyResolved.Should().BeFalse();
+        outcome.UnmatchedListingTitle.Should().Be("Studio Sem Mapeamento");
     }
 
     [Fact]

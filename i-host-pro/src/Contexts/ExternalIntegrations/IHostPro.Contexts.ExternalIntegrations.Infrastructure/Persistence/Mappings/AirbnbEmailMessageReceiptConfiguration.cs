@@ -35,7 +35,15 @@ public sealed class AirbnbEmailMessageReceiptConfiguration : IEntityTypeConfigur
         builder.Property(r => r.ProcessedAtUtc).HasColumnName("processed_at_utc");
         builder.Property(r => r.FailureReason).HasColumnName("failure_reason").HasMaxLength(500);
         builder.Property(r => r.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        builder.Property(r => r.UnmatchedListingTitle).HasColumnName("unmatched_listing_title").HasMaxLength(500);
 
         builder.HasIndex(r => new { r.TenantId, r.GraphMessageId }).IsUnique();
+
+        // Optimistic concurrency for the Airbnb Email Operational Exception
+        // Resolution retry flow — mirrors ReservationConfiguration's own
+        // native PostgreSQL `xmin` mapping. Two concurrent retries (or a
+        // retry racing the delta-sync worker) on the same receipt must never
+        // both apply their mutation.
+        builder.Property<uint>("xmin").HasColumnName("xmin").IsRowVersion();
     }
 }

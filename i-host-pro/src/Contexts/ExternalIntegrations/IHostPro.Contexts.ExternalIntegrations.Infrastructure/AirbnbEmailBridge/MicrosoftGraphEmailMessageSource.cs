@@ -109,10 +109,10 @@ public sealed class MicrosoftGraphEmailMessageSource : IAirbnbEmailMessageSource
         }
     }
 
-    public async Task<string?> GetMessageBodyAsync(string accessToken, string messageId, CancellationToken cancellationToken)
+    public async Task<AirbnbEmailMessageContent?> GetMessageContentAsync(string accessToken, string messageId, CancellationToken cancellationToken)
     {
         var httpClient = _httpClientFactory.CreateClient(HttpClientName);
-        var requestUri = $"{GraphBaseUrl}me/messages/{Uri.EscapeDataString(messageId)}?$select=body";
+        var requestUri = $"{GraphBaseUrl}me/messages/{Uri.EscapeDataString(messageId)}?$select=subject,body";
 
         using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
@@ -124,7 +124,7 @@ public sealed class MicrosoftGraphEmailMessageSource : IAirbnbEmailMessageSource
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            _logger.LogWarning(ex, "Airbnb Email Bridge message body fetch failed.");
+            _logger.LogWarning(ex, "Airbnb Email Bridge message content fetch failed.");
             return null;
         }
 
@@ -134,12 +134,12 @@ public sealed class MicrosoftGraphEmailMessageSource : IAirbnbEmailMessageSource
         try
         {
             var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            var parsed = JsonSerializer.Deserialize<GraphMessageBodyResponse>(responseBody);
-            return parsed?.Body?.Content;
+            var parsed = JsonSerializer.Deserialize<GraphMessageContentResponse>(responseBody);
+            return parsed is null ? null : new AirbnbEmailMessageContent(parsed.Subject, parsed.Body?.Content);
         }
         catch (JsonException ex)
         {
-            _logger.LogWarning(ex, "Airbnb Email Bridge message body fetch returned malformed JSON.");
+            _logger.LogWarning(ex, "Airbnb Email Bridge message content fetch returned malformed JSON.");
             return null;
         }
     }
@@ -231,8 +231,11 @@ public sealed class MicrosoftGraphEmailMessageSource : IAirbnbEmailMessageSource
         public string? Address { get; set; }
     }
 
-    private sealed class GraphMessageBodyResponse
+    private sealed class GraphMessageContentResponse
     {
+        [JsonPropertyName("subject")]
+        public string? Subject { get; set; }
+
         [JsonPropertyName("body")]
         public GraphItemBody? Body { get; set; }
     }

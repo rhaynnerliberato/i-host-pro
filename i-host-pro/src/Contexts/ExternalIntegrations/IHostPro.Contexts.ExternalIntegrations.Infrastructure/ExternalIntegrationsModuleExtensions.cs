@@ -96,6 +96,16 @@ public static class ExternalIntegrationsModuleExtensions
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailAuthenticator,
             IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MsalAirbnbEmailAuthenticator>();
 
+        // Airbnb Email Operational Exception Resolution gate — the retry
+        // command needs the SAME Graph message source the Worker's delta
+        // sync already uses, to refetch one message by its persisted
+        // GraphMessageId. Only the Worker registered this before now (the
+        // Api host never made a live Graph call itself).
+        services.AddHttpClient(
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MicrosoftGraphEmailMessageSource.HttpClientName);
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IAirbnbEmailMessageSource,
+            IHostPro.Contexts.ExternalIntegrations.Infrastructure.AirbnbEmailBridge.MicrosoftGraphEmailMessageSource>();
+
         // Web OAuth architecture gate — Api-only (only the Api hosts the new
         // OAuth start/callback controller; the Worker never does). Shares the
         // same AES-256-GCM key as ITokenCacheProtector above through a
@@ -137,6 +147,12 @@ public static class ExternalIntegrationsModuleExtensions
         // polling (same Automatic Publication Design Gate boundary above).
         services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbImports.IAirbnbResolvedReservationSyncPublisher,
             AirbnbResolvedReservationSyncPublisher>();
+
+        // Airbnb Email Operational Exception Resolution gate — the retry
+        // command's own concurrency-conflict translation (mirrors
+        // Reservations' IUpdateReservationExecutor precedent).
+        services.AddScoped<IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge.IRetryAirbnbEmailMessageReceiptExecutor,
+            RetryAirbnbEmailMessageReceiptExecutor>();
 
         // Fase 12, CP5.3A: outside Development, IWhatsAppCredentialProvider is
         // now backed by AWS Secrets Manager per-tenant secrets

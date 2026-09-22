@@ -4,6 +4,7 @@ import { Observable, map } from 'rxjs';
 import {
   AirbnbAutoPublicationStatusResponse,
   AirbnbEmailConnectionStatus,
+  AirbnbEmailMessageReceiptResponse,
   AirbnbListingTitleMappingResponse,
   Client,
   CreateAirbnbListingTitleMappingRequest,
@@ -31,6 +32,36 @@ export interface AirbnbEmailProcessingSummary {
   needsReview: number;
   failed: number;
   ignored: number;
+}
+
+/** Airbnb Email Operational Exception Resolution gate — one exception receipt, list item and detail alike. */
+export interface AirbnbEmailReceipt {
+  id: string;
+  receivedAtUtc: Date | undefined;
+  processingStatus: string;
+  failureReason: string | undefined;
+  unmatchedListingTitle: string | undefined;
+  processedAtUtc: Date | undefined;
+  createdAtUtc: Date | undefined;
+}
+
+export interface AirbnbEmailReceiptPage {
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  items: AirbnbEmailReceipt[];
+}
+
+function toReceipt(response: AirbnbEmailMessageReceiptResponse): AirbnbEmailReceipt {
+  return {
+    id: response.id ?? '',
+    receivedAtUtc: response.receivedAtUtc,
+    processingStatus: response.processingStatus ?? '',
+    failureReason: response.failureReason,
+    unmatchedListingTitle: response.unmatchedListingTitle,
+    processedAtUtc: response.processedAtUtc,
+    createdAtUtc: response.createdAtUtc,
+  };
 }
 
 function toStatusLabel(status: AirbnbEmailConnectionStatus | undefined): AirbnbEmailConnectionStatusLabel {
@@ -106,5 +137,25 @@ export class AirbnbEmailService {
 
   createMapping(request: CreateAirbnbListingTitleMappingRequest): Observable<AirbnbListingTitleMappingResponse> {
     return this.client.listingTitleMappings(request);
+  }
+
+  /** Airbnb Email Operational Exception Resolution gate — paginated, filterable exception listing. */
+  listReceipts(status: string | undefined, reasonCode: string | undefined, page: number, pageSize: number): Observable<AirbnbEmailReceiptPage> {
+    return this.client.receipts(status, reasonCode, page, pageSize).pipe(
+      map((response) => ({
+        page: response.page ?? 1,
+        pageSize: response.pageSize ?? pageSize,
+        totalCount: response.totalCount ?? 0,
+        items: (response.items ?? []).map(toReceipt),
+      })),
+    );
+  }
+
+  getReceipt(receiptId: string): Observable<AirbnbEmailReceipt> {
+    return this.client.receipts2(receiptId).pipe(map(toReceipt));
+  }
+
+  retryReceipt(receiptId: string): Observable<AirbnbEmailReceipt> {
+    return this.client.retry(receiptId).pipe(map(toReceipt));
   }
 }

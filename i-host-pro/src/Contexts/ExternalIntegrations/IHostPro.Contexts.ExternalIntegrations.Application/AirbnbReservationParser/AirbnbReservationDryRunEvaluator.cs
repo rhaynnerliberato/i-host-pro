@@ -23,7 +23,7 @@ public sealed class AirbnbReservationDryRunEvaluator : IAirbnbReservationDryRunE
 
         var mapping = await _listingTitleMappingRepository.GetByListingTitleAsync(parseResult.ListingName!, cancellationToken);
         if (mapping is null)
-            return AirbnbReservationDryRunOutcome.PropertyNotResolved(parseResult.ExternalReservationId!);
+            return AirbnbReservationDryRunOutcome.PropertyNotResolved(parseResult.ExternalReservationId!, parseResult.ListingName!);
 
         return AirbnbReservationDryRunOutcome.Ready(
             mapping.PropertyId, parseResult.ExternalReservationId!, parseResult.GuestName!,
