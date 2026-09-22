@@ -25,8 +25,7 @@ public class AirbnbResolvedReservationSyncPublisherTests
         var tenantContext = new TenantContext();
         tenantContext.SetTenant(TenantId);
         var collector = new RecordingIntegrationEventCollector();
-        var publisher = new AirbnbResolvedReservationSyncPublisher(
-            new PassThroughExternalIntegrationsTransactionExecutor(), collector, tenantContext);
+        var publisher = new AirbnbResolvedReservationSyncPublisher(collector, tenantContext);
 
         return (publisher, collector);
     }
@@ -71,8 +70,7 @@ public class AirbnbResolvedReservationSyncPublisherTests
     public async Task PublishReservationImportedAsync_throws_when_no_tenant_is_resolved()
     {
         var collector = new RecordingIntegrationEventCollector();
-        var publisher = new AirbnbResolvedReservationSyncPublisher(
-            new PassThroughExternalIntegrationsTransactionExecutor(), collector, new TenantContext());
+        var publisher = new AirbnbResolvedReservationSyncPublisher(collector, new TenantContext());
 
         var act = () => publisher.PublishReservationImportedAsync(
             PropertyId, "TESTCODE12", "Hospede Teste", CheckIn, CheckOut, 2, OccurredAt, Guid.NewGuid(), CancellationToken.None);

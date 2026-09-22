@@ -37,6 +37,12 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.1.0" />
+    <!-- AIRBNB AUTO-PUBLISH REAL TRANSACTION REGRESSION PROOF (emergency gate) —
+         AirbnbAutoPublishNestedTransactionRegressionTests needs a real RabbitMQ
+         broker (Testcontainers.RabbitMq has no transitive source in this
+         project's graph, unlike WolverineFx.Postgresql/RabbitMQ which already
+         flow transitively via IHostPro.BuildingBlocks.Infrastructure). -->
+    <PackageReference Include="Testcontainers.RabbitMq" Version="4.1.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

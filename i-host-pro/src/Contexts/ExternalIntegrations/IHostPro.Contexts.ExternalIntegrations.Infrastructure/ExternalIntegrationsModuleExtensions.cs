@@ -415,17 +415,29 @@ public static class ExternalIntegrationsModuleExtensions
     /// Also registers <see cref="IIntegrationEventCollector"/>/
     /// <see cref="IExternalIntegrationsTransactionExecutor"/>/
     /// <see cref="IAirbnbResolvedReservationSyncPublisher"/> (Automatic
-    /// Publication Design + Safety gate) — the delta sync runner's own
-    /// activated-flow branch invokes the resolved-property publisher
-    /// directly, which drains/publishes this context's Wolverine outbox.
-    /// This is now safe to resolve here ONLY because <c>IHostPro.Worker</c>'s
-    /// own <c>Program.cs</c> was updated in the same gate to enroll the
-    /// <c>external_integrations_messaging</c> ancillary store — the earlier
-    /// version of this doc comment is no longer accurate and existed
-    /// specifically to explain why that enrollment was missing. Still uses
-    /// <see cref="IAirbnbEmailUnitOfWork"/> for the runner's own
-    /// receipt/sync-state writes (a distinct, narrower unit of work than the
-    /// outbox-draining executor).
+    /// Publication Design + Safety gate) — requires <c>IHostPro.Worker</c>'s
+    /// own <c>Program.cs</c> to enroll the <c>external_integrations_messaging</c>
+    /// ancillary store, exactly like every other write-capable Bounded
+    /// Context registered there.
+    ///
+    /// AIRBNB AUTO-PUBLISH REAL TRANSACTION REGRESSION PROOF (emergency
+    /// gate): the delta sync runner's own transactional block — including the
+    /// activated-flow branch that invokes the resolved-property publisher —
+    /// now uses <see cref="IExternalIntegrationsTransactionExecutor"/>
+    /// exclusively, the SAME executor the publisher's own event enqueue
+    /// relies on being already open, so both the receipt/sync-state writes
+    /// and the outbox envelope commit atomically in ONE transaction. An
+    /// earlier version of the runner used <see cref="IAirbnbEmailUnitOfWork"/>
+    /// for these same writes while the publisher separately opened
+    /// <see cref="IExternalIntegrationsTransactionExecutor"/> itself, which
+    /// nested a second transaction on the same <c>ExternalIntegrationsDbContext</c>
+    /// instance and always threw <c>NestedUnitOfWorkException</c> on every
+    /// real auto-publish attempt (confirmed empirically by
+    /// <c>AirbnbAutoPublishNestedTransactionRegressionTests</c>).
+    /// <see cref="IAirbnbEmailUnitOfWork"/> is still registered here — it
+    /// remains the correct abstraction for every OTHER consumer in this
+    /// Bounded Context that never publishes an event (mailbox
+    /// connect/disconnect command handlers, the MSAL token cache store).
     /// </summary>
     public static IServiceCollection AddExternalIntegrationsAirbnbEmailBridgeWorker(
         this IServiceCollection services, IConfiguration configuration)

@@ -18,7 +18,7 @@ namespace IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge;
 /// source this bridge never has).
 ///
 /// Consistency model (Fase 9 review §9-10/§36): every database write is its
-/// own committed transaction via <see cref="IAirbnbEmailUnitOfWork"/>,
+/// own committed transaction via <see cref="IExternalIntegrationsTransactionExecutor"/>,
 /// re-reading the sync state fresh each time rather than threading a tracked
 /// entity across calls. The delta cursor is only ever advanced
 /// (<see cref="AirbnbEmailSyncState.RecordSuccess"/>) in the SAME transaction
@@ -32,6 +32,26 @@ namespace IHostPro.Contexts.ExternalIntegrations.Application.AirbnbEmailBridge;
 /// Publication Design + Safety gate item 33/34): only messages the delta
 /// cursor observes for the FIRST time from here on ever reach the
 /// publication decision below.
+///
+/// AIRBNB AUTO-PUBLISH REAL TRANSACTION REGRESSION PROOF (emergency gate):
+/// this runner uses <see cref="IExternalIntegrationsTransactionExecutor"/>
+/// — not <see cref="IAirbnbEmailUnitOfWork"/> — precisely because the
+/// receipt-processing block below may invoke
+/// <see cref="IAirbnbResolvedReservationSyncPublisher.PublishReservationImportedAsync"/>,
+/// which must enqueue its <c>AirbnbReservationImported</c> event into the
+/// SAME already-open transaction so the receipt mutation, sync-state
+/// mutation and outbox envelope commit or roll back together atomically.
+/// Using <see cref="IAirbnbEmailUnitOfWork"/> here previously caused the
+/// publisher's own transaction attempt to nest inside this one on the same
+/// <c>ExternalIntegrationsDbContext</c> instance, which
+/// <see cref="IHostPro.BuildingBlocks.Infrastructure.Persistence.TenantAwareTransactionScope"/>
+/// correctly rejected with <c>NestedUnitOfWorkException</c> on every real
+/// auto-publish attempt — confirmed empirically by
+/// <c>AirbnbAutoPublishNestedTransactionRegressionTests</c>.
+/// <see cref="IAirbnbEmailUnitOfWork"/> remains the correct abstraction for
+/// every OTHER consumer in this Bounded Context that never publishes an
+/// event (mailbox connect/disconnect, token cache updates) — only this
+/// runner's transaction ownership changed.
 /// </summary>
 public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
 {
@@ -52,7 +72,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
     private readonly IAirbnbEmailMessageSource _messageSource;
     private readonly IAirbnbReservationDryRunEvaluator _dryRunEvaluator;
     private readonly IAirbnbResolvedReservationSyncPublisher _resolvedPublisher;
-    private readonly IAirbnbEmailUnitOfWork _unitOfWork;
+    private readonly IExternalIntegrationsTransactionExecutor _transactionExecutor;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<AirbnbEmailDeltaSyncRunner> _logger;
 
@@ -64,7 +84,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
         IAirbnbEmailMessageSource messageSource,
         IAirbnbReservationDryRunEvaluator dryRunEvaluator,
         IAirbnbResolvedReservationSyncPublisher resolvedPublisher,
-        IAirbnbEmailUnitOfWork unitOfWork,
+        IExternalIntegrationsTransactionExecutor transactionExecutor,
         TimeProvider timeProvider,
         ILogger<AirbnbEmailDeltaSyncRunner> logger)
     {
@@ -75,14 +95,14 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
         _messageSource = messageSource;
         _dryRunEvaluator = dryRunEvaluator;
         _resolvedPublisher = resolvedPublisher;
-        _unitOfWork = unitOfWork;
+        _transactionExecutor = transactionExecutor;
         _timeProvider = timeProvider;
         _logger = logger;
     }
 
     public async Task RunAsync(Guid tenantId, string mailFolderId, CancellationToken cancellationToken)
     {
-        var connection = await _unitOfWork.ExecuteAsync(
+        var connection = await _transactionExecutor.ExecuteAsync(
             () => _connectionRepository.GetForCurrentTenantAsync(cancellationToken), cancellationToken);
 
         if (connection is null || !connection.IsEnabled || connection.AuthorizationStatus != AirbnbEmailAuthorizationStatus.Connected)
@@ -99,7 +119,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
         {
             if (authOutcome.ReauthorizationRequired)
             {
-                await _unitOfWork.ExecuteAsync(async () =>
+                await _transactionExecutor.ExecuteAsync(async () =>
                 {
                     var c = await _connectionRepository.GetForCurrentTenantAsync(cancellationToken);
                     c?.MarkError(_timeProvider.GetUtcNow());
@@ -123,7 +143,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
         // Ensure the sync-state row exists before any page work, so every
         // later step only ever needs to update it, never decide whether to
         // insert it — avoids re-adding an already-tracked/committed entity.
-        await _unitOfWork.ExecuteAsync(async () =>
+        await _transactionExecutor.ExecuteAsync(async () =>
         {
             var existing = await _syncStateRepository.GetForCurrentTenantAsync(connectionId, mailFolderId, cancellationToken);
             if (existing is null)
@@ -135,7 +155,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
             return true;
         }, cancellationToken);
 
-        var cursor = await _unitOfWork.ExecuteAsync(
+        var cursor = await _transactionExecutor.ExecuteAsync(
             async () => (await _syncStateRepository.GetForCurrentTenantAsync(connectionId, mailFolderId, cancellationToken))!.DeltaLink,
             cancellationToken);
 
@@ -146,7 +166,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
 
             if (!fetchOutcome.IsSuccess)
             {
-                await _unitOfWork.ExecuteAsync(async () =>
+                await _transactionExecutor.ExecuteAsync(async () =>
                 {
                     var state = (await _syncStateRepository.GetForCurrentTenantAsync(connectionId, mailFolderId, cancellationToken))!;
                     if (fetchOutcome.FailureReason == AirbnbEmailDeltaFetchFailureReason.InvalidDeltaLink)
@@ -178,7 +198,7 @@ public sealed class AirbnbEmailDeltaSyncRunner : IAirbnbEmailDeltaSyncRunner
                     candidateBodies[message.MessageId] = await _messageSource.GetMessageBodyAsync(authOutcome.AccessToken!, message.MessageId, cancellationToken);
             }
 
-            await _unitOfWork.ExecuteAsync(async () =>
+            await _transactionExecutor.ExecuteAsync(async () =>
             {
                 foreach (var message in deltaPage.Messages)
                 {
