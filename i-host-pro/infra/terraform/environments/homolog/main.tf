@@ -39,7 +39,10 @@ module "credentials" {
 #   module, so Api never needs it.
 # - Both api_task and worker_task also get the per-tenant WhatsApp secret
 #   namespace via a scoped wildcard (an outbound send could originate from
-#   either host) - never an unscoped secretsmanager:* wildcard.
+#   either host) - never an unscoped secretsmanager:* wildcard. (This grant
+#   was briefly Api-only between CP5.3D-A's corrective audit and the Real
+#   Tenant WhatsApp Activation Readiness gate - see modules/ecs-iam's own
+#   updated comment for why it is restored to both.)
 # - migrationrunner_task: no policy at all - it consumes database/migrator
 #   and rabbitmq via the execution role's environment-variable injection,
 #   never an AWS SDK call of its own.
@@ -72,7 +75,7 @@ module "ecs_iam" {
   # Per-tenant WhatsApp secrets are created dynamically (one per tenant, at
   # WhatsApp-configuration time), never enumerable as fixed ARNs up front -
   # scoped to our own namespace only, never a bare secretsmanager:* wildcard.
-  tenant_secret_arn_pattern = "arn:aws:secretsmanager:*:*:secret:ihostpro/homolog/tenants/*"
+  tenant_secret_arn_pattern = "arn:aws:secretsmanager:*:*:secret:${local.whatsapp_tenant_secret_prefix}/*"
 
   # CP5.3C corrective Decision Gate item 5/24: EXACTLY these 3 - the RDS
   # master credential plus the two role connection strings it bootstraps.
@@ -239,6 +242,14 @@ module "ecs" {
 locals {
   route53_zone_enabled = var.enable_route53_zone
   runtime_edge_enabled = var.enable_runtime_edge && var.enable_route53_zone
+
+  # Real Tenant WhatsApp Activation Readiness gate (Controlled Smoke
+  # Readiness plan): single source of truth for the per-tenant WhatsApp
+  # secret namespace, reused both by ecs_iam's tenant_secret_arn_pattern
+  # below and by the app's own runtime config (ExternalIntegrations__WhatsApp__Secrets__SecretsManagerSecretPrefix,
+  # passed to ecs_services) - so the IAM resource scope and the app's own
+  # expectation can never drift apart.
+  whatsapp_tenant_secret_prefix = "ihostpro/homolog/tenants"
 }
 
 # CP5.3D-B: one hosted zone for the whole registered apex domain (item 4 -
@@ -339,6 +350,13 @@ module "ecs_services" {
   meta_webhook_app_secret_arn          = module.credentials.secret_arns["meta/webhook/app-secret"]
   meta_webhook_verify_token_secret_arn = module.credentials.secret_arns["meta/webhook/verify-token"]
   otlp_secret_arn                      = module.credentials.secret_arns["observability/otlp"]
+
+  # Real Tenant WhatsApp Activation Readiness gate (Controlled Smoke
+  # Readiness plan): a plain (non-secret) runtime config value - only the
+  # path PREFIX, never a secret value itself - so SecretsManagerWhatsAppCredentialProvider
+  # (Api's Enable preflight, Worker's real Meta send) can resolve
+  # {prefix}/{TenantId:D}/whatsapp/{secretReference}.
+  whatsapp_tenant_secret_prefix = local.whatsapp_tenant_secret_prefix
 }
 
 # CP6 Plan B (Active Alert Delivery) - approved via the F12 CP6 planning

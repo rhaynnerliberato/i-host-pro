@@ -155,6 +155,10 @@ resource "aws_ecs_task_definition" "api" {
         { name = "AIAgent__Anthropic__Secrets__SecretsManagerSecretId", value = var.anthropic_secret_arn },
         { name = "ExternalIntegrations__WhatsApp__Webhook__Secrets__AppSecretSecretsManagerSecretId", value = var.meta_webhook_app_secret_arn },
         { name = "ExternalIntegrations__WhatsApp__Webhook__Secrets__VerifyTokenSecretsManagerSecretId", value = var.meta_webhook_verify_token_secret_arn },
+        # Real Tenant WhatsApp Activation Readiness gate (Controlled Smoke
+        # Readiness plan): Enable's credential preflight (SecretsManagerWhatsAppCredentialProvider,
+        # runs here in Api) needs this to resolve {prefix}/{TenantId:D}/whatsapp/{secretReference}.
+        { name = "ExternalIntegrations__WhatsApp__Secrets__SecretsManagerSecretPrefix", value = var.whatsapp_tenant_secret_prefix },
         # CP5.3E (Observability Architecture): the app-side code's own
         # fallback (http://localhost:4317, appropriate for local
         # Development/docker-compose - ADR-007) is never a usable value in a
@@ -214,13 +218,20 @@ resource "aws_ecs_task_definition" "worker" {
         # CP5.3E (Observability Architecture) - see the identical comment on
         # the Api container above.
         { name = "OpenTelemetry__OtlpEndpoint", value = "http://${local.collector_service_discovery_name}.${local.collector_namespace_name}:4317" },
+        # Real Tenant WhatsApp Activation Readiness gate (Controlled Smoke
+        # Readiness plan): Worker's own AddExternalIntegrationsWhatsAppOutboundProvider
+        # (narrow registration, commit e887c52) now runs MetaWhatsAppMessagingProvider
+        # for real here, and needs this to resolve {prefix}/{TenantId:D}/whatsapp/{secretReference}
+        # via SecretsManagerWhatsAppCredentialProvider - same value as Api's.
+        { name = "ExternalIntegrations__WhatsApp__Secrets__SecretsManagerSecretPrefix", value = var.whatsapp_tenant_secret_prefix },
       ]
       # No jwt_signing_key here - AddIdentityJwtIssuance is never called
-      # from IHostPro.Worker (confirmed in Program.cs). No Meta webhook
-      # secret ARNs here either - AddExternalIntegrationsModule is
-      # Api-only; Worker only calls AddExternalIntegrationsPixProvider
-      # (confirmed via IHostPro.Worker.csproj's own comment), which needs
-      # neither.
+      # from IHostPro.Worker (confirmed in Program.cs). No Meta WEBHOOK
+      # secret ARNs here either - the webhook itself (WhatsAppWebhookController,
+      # AddExternalIntegrationsModule's full registration) is still Api-only;
+      # Worker only calls the narrow AddExternalIntegrationsWhatsAppOutboundProvider
+      # (real outbound send) plus AddExternalIntegrationsPixProvider, neither
+      # of which needs the webhook App Secret/Verify Token ARNs above.
       secrets = concat(
         local.app_connection_string_secrets,
         local.rabbitmq_secrets,

@@ -286,17 +286,27 @@ resource "aws_iam_role_policy" "homolog_scenario_provisioning_task" {
 }
 
 locals {
-  # CP5.3D-A corrective audit: the tenant WhatsApp wildcard was originally
-  # granted to BOTH task roles (CP5.3A) on the assumption that an outbound
-  # send could originate from either host. Re-auditing the real DI
-  # composition (IHostPro.Worker.csproj's own comment: only
-  # AddExternalIntegrationsPixProvider is called from Worker - never the
-  # full AddExternalIntegrationsModule that registers the WhatsApp
-  # messaging/tenant-credential providers) confirms Worker never resolves
-  # IWhatsAppCredentialProvider at all - the grant was over-privileged.
-  # Api keeps it (ExternalIntegrations lives there); Worker no longer does.
+  # CP5.3D-A corrective audit (now superseded, see below): the tenant
+  # WhatsApp wildcard was originally granted to BOTH task roles (CP5.3A) on
+  # the assumption that an outbound send could originate from either host.
+  # Re-auditing the real DI composition at the time (IHostPro.Worker.csproj's
+  # own comment: only AddExternalIntegrationsPixProvider was called from
+  # Worker - never the full AddExternalIntegrationsModule that registers the
+  # WhatsApp messaging/tenant-credential providers) confirmed Worker never
+  # resolved IWhatsAppCredentialProvider at all, so the grant was removed as
+  # over-privileged.
+  #
+  # Real Tenant WhatsApp Activation Readiness gate (Controlled Smoke
+  # Readiness plan): that assumption is now stale. Worker gained its own
+  # narrow AddExternalIntegrationsWhatsAppOutboundProvider registration
+  # (commit e887c52) specifically so MetaWhatsAppMessagingProvider can run a
+  # real Meta send from Worker (the process that actually hosts the AI
+  # Agent's outbound response delivery) - it resolves
+  # IWhatsAppCredentialProvider for real now. The wildcard is restored to
+  # worker_secret_arns, mirroring api_secret_arns exactly - never a bare
+  # secretsmanager:* wildcard, never write/create permissions.
   api_secret_arns    = concat(var.api_task_secret_arns, var.tenant_secret_arn_pattern != "" ? [var.tenant_secret_arn_pattern] : [])
-  worker_secret_arns = var.worker_task_secret_arns
+  worker_secret_arns = concat(var.worker_task_secret_arns, var.tenant_secret_arn_pattern != "" ? [var.tenant_secret_arn_pattern] : [])
 }
 
 data "aws_iam_policy_document" "api_task_permissions" {

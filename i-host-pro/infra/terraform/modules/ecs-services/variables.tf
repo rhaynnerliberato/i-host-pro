@@ -111,6 +111,13 @@ variable "meta_webhook_verify_token_secret_arn" {
   type = string
 }
 
+# Real Tenant WhatsApp Activation Readiness gate (Controlled Smoke Readiness
+# plan): Api AND Worker both need this now - a plain path prefix, never a
+# secret value, so it is a regular environment variable, never in `secrets`.
+variable "whatsapp_tenant_secret_prefix" {
+  type = string
+}
+
 # CP5.3E (Observability Architecture)
 variable "collector_task_role_arn" {
   type = string
