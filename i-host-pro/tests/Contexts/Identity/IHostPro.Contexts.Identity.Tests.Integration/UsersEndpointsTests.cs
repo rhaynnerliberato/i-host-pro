@@ -5,7 +5,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using FluentAssertions;
 using IHostPro.BuildingBlocks.Application;
-using IHostPro.BuildingBlocks.Infrastructure.Email;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.BuildingBlocks.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Api.Contracts;
@@ -207,9 +206,9 @@ public class UsersEndpointsTests : IClassFixture<UsersEndpointsTests.Fixture>
                     // AuthController (needed transitively by the LoginAsync test
                     // helper below) now depends on IStartPasswordResetProcessor,
                     // which needs ITransactionalEmailSender — this fixture never
-                    // exercises forgot-password, so the real fail-loud production
-                    // stub is enough to satisfy the DI graph.
-                    services.AddSingleton<ITransactionalEmailSender, UnconfiguredTransactionalEmailSender>();
+                    // exercises forgot-password, so a fail-loud test-only
+                    // stub (ThrowingTransactionalEmailSender) is enough to satisfy the DI graph.
+                    services.AddSingleton<ITransactionalEmailSender, ThrowingTransactionalEmailSender>();
                     services.AddIdentityCommandDispatch(configuration);
                 });
                 webHost.Configure(app =>
