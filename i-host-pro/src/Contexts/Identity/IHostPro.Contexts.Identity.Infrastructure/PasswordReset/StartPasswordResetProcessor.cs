@@ -95,15 +95,28 @@ public sealed class StartPasswordResetProcessor : IStartPasswordResetProcessor
         }
 
         var resetUrl = $"{_options.Value.FrontendResetUrlBase}?token={pending.Value.RawToken}&tenant={tenant.Slug}";
-        await _emailSender.SendAsync(
-            new EmailMessage(
-                pending.Value.Email,
-                pending.Value.FullName,
-                "Redefinição de senha — iHostPro",
-                $"Recebemos uma solicitação para redefinir sua senha. Se foi você, acesse o link abaixo " +
-                $"(válido por {_options.Value.TokenLifetimeMinutes} minutos):\n\n{resetUrl}\n\n" +
-                "Se você não solicitou isso, ignore este e-mail."),
-            cancellationToken);
+
+        // The token is already durably persisted above - a delivery provider
+        // failure here must never surface as a different outcome than the
+        // normal, always-silent forgot-password response (that would itself
+        // be an account-enumeration/availability side channel). Safe
+        // metadata only is logged - never the token or the reset URL.
+        try
+        {
+            await _emailSender.SendAsync(
+                new EmailMessage(
+                    pending.Value.Email,
+                    pending.Value.FullName,
+                    "Redefinição de senha — iHostPro",
+                    $"Recebemos uma solicitação para redefinir sua senha. Se foi você, acesse o link abaixo " +
+                    $"(válido por {_options.Value.TokenLifetimeMinutes} minutos):\n\n{resetUrl}\n\n" +
+                    "Se você não solicitou isso, ignore este e-mail."),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Password-reset email delivery failed for tenant {TenantSlug} - the reset token remains valid and usable.", tenantSlug);
+        }
     }
 
     private static string GenerateUrlSafeRandomToken() =>

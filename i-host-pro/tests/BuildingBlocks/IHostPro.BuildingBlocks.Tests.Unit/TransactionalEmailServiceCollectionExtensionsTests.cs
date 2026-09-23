@@ -22,7 +22,7 @@ public class TransactionalEmailServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddIHostProTransactionalEmail_registers_the_fail_loud_stub_outside_Development()
+    public void AddIHostProTransactionalEmail_registers_the_Resend_sender_outside_Development()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -31,6 +31,6 @@ public class TransactionalEmailServiceCollectionExtensionsTests
         services.AddIHostProTransactionalEmail(configuration, isDevelopmentEnvironment: false);
         var provider = services.BuildServiceProvider();
 
-        provider.GetRequiredService<ITransactionalEmailSender>().Should().BeOfType<UnconfiguredTransactionalEmailSender>();
+        provider.GetRequiredService<ITransactionalEmailSender>().Should().BeOfType<ResendTransactionalEmailSender>();
     }
 }

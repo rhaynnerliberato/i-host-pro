@@ -5,10 +5,12 @@ namespace IHostPro.BuildingBlocks.Application;
 /// &amp; Onboarding Foundation gate — Architecture + Security Design Gate,
 /// approved). Application-layer code (e.g. Identity's password-reset
 /// handler) depends only on this — never on a vendor SDK (SES/SendGrid/
-/// Postmark/Resend/SMTP client) directly. The real production
-/// implementation is deliberately deferred (no live production environment
-/// exists yet, AWS remains paused) — only a Development transport exists
-/// today (see <c>IHostPro.BuildingBlocks.Infrastructure.Email</c>).
+/// Postmark/Resend/SMTP client) directly. Production Transactional Email
+/// Provider gate: Resend is the selected/implemented production provider
+/// (<c>ResendTransactionalEmailSender</c>), used for every non-Development
+/// environment; Development keeps its own local Mailpit transport (see
+/// <c>IHostPro.BuildingBlocks.Infrastructure.Email</c>). Password reset is
+/// the only email currently sent through this boundary.
 /// </summary>
 public interface ITransactionalEmailSender
 {

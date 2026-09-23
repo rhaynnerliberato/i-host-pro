@@ -20,10 +20,12 @@
          the shared, host-agnostic distributed rate limiter (RateLimiting/). -->
     <PackageReference Include="StackExchange.Redis" Version="3.0.17" />
     <!-- Self-Service Identity & Onboarding Foundation gate — Development-only
-         transactional email transport (local Mailpit SMTP sink). No
-         production email provider is selected yet (deferred, separate
-         future gate); this is never used outside Development. -->
+         transactional email transport (local Mailpit SMTP sink). -->
     <PackageReference Include="MailKit" Version="4.18.0" />
+    <!-- Production Transactional Email Provider gate — IHttpClientFactory for
+         ResendTransactionalEmailSender (mirrors ExternalIntegrations.Infrastructure's
+         own reference for the same pattern). -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
   </ItemGroup>
 
   <PropertyGroup>
