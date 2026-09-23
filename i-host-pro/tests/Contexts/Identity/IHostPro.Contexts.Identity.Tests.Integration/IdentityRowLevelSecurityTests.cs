@@ -131,8 +131,12 @@ public class IdentityRowLevelSecurityTests : IClassFixture<IdentityRowLevelSecur
         // single ADMIN role mapping — guards the Resume endpoint and the
         // AdministratorNotificationContact management endpoints, same
         // ADMIN-only precedent as INTEGRATIONS:MANAGE/GUEST_OPERATIONS:MANAGE.
+        // Self-Service Signup Permission Parity gate (commit 06480a7): +3
+        // ADMIN role mappings to already-existing permissions (POLICIES:READ,
+        // TEMPLATES:READ, SETTINGS:READ) — no new Permission rows, ADMIN was
+        // just missing the :READ mapping alongside its existing :MANAGE one.
         (await dbContext.Permissions.CountAsync()).Should().Be(36);
-        (await dbContext.RolePermissions.CountAsync()).Should().Be(43);
+        (await dbContext.RolePermissions.CountAsync()).Should().Be(46);
     }
 
     [Fact]
