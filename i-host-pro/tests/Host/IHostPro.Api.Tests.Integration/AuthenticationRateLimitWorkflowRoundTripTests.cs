@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using StackExchange.Redis;
 
 namespace IHostPro.Api.Tests.Integration;
 
@@ -33,17 +34,36 @@ public sealed class AuthenticationRateLimitWorkflowRoundTripTests : IClassFixtur
     [Fact]
     public async Task Login_returns_429_once_the_Authentication_policys_configured_limit_is_exceeded()
     {
-        // appsettings.json default: RateLimiting:Policies:Authentication:PermitLimit = 30.
-        // Credentials are deliberately invalid — the rate limiter runs before
-        // LoginCommandHandler, so every one of these returns 401 until the
-        // limit trips, regardless of whether the account is real.
-        var request = new { tenantSlug = "does-not-exist", email = "nobody@example.com", password = "wrong" };
+        try
+        {
+            // appsettings.json default: RateLimiting:Policies:Authentication:PermitLimit = 30.
+            // Credentials are deliberately invalid — the rate limiter runs before
+            // LoginCommandHandler, so every one of these returns 401 until the
+            // limit trips, regardless of whether the account is real.
+            var request = new { tenantSlug = "does-not-exist", email = "nobody@example.com", password = "wrong" };
 
-        HttpResponseMessage? lastResponse = null;
-        for (var i = 0; i < 31; i++)
-            lastResponse = await _fixture.ApiClient.PostAsJsonAsync("/api/v1/auth/login", request);
+            HttpResponseMessage? lastResponse = null;
+            for (var i = 0; i < 31; i++)
+                lastResponse = await _fixture.ApiClient.PostAsJsonAsync("/api/v1/auth/login", request);
 
-        lastResponse!.StatusCode.Should().Be(HttpStatusCode.TooManyRequests, "the 31st call in this window must exceed the configured limit of 30");
-        lastResponse.Headers.RetryAfter.Should().NotBeNull("mandate §25 — Retry-After must be set when the implementation can compute it");
+            lastResponse!.StatusCode.Should().Be(HttpStatusCode.TooManyRequests, "the 31st call in this window must exceed the configured limit of 30");
+            lastResponse.Headers.RetryAfter.Should().NotBeNull("mandate §25 — Retry-After must be set when the implementation can compute it");
+        }
+        finally
+        {
+            // The "Authentication" partition key is the TestServer's own synthetic
+            // loopback IP (see this class's own doc comment) — the exact same
+            // partition every OTHER test class hitting an Authentication-limited
+            // endpoint (Login/Refresh/Signup) also uses against this same real,
+            // shared dev Redis (RateLimiting:Redis:ConnectionString, appsettings.json).
+            // Without this cleanup, this test's own deliberate exhaustion leaks into
+            // any other test sharing that window, causing spurious 429s elsewhere
+            // (e.g. SelfServiceSignupAuthorizationParityTests) - always runs, pass or fail.
+            await using var redisConnection = await ConnectionMultiplexer.ConnectAsync("localhost:6379");
+            var server = redisConnection.GetServer(redisConnection.GetEndPoints()[0]);
+            var keys = server.KeysAsync(pattern: "ihostpro:ratelimit:Authentication:*");
+            await foreach (var key in keys)
+                await redisConnection.GetDatabase().KeyDeleteAsync(key);
+        }
     }
 }

@@ -244,6 +244,12 @@ public sealed class CommunicationEnvironmentGateTests : IAsyncLifetime
     {
         ["ASPNETCORE_ENVIRONMENT"] = environmentName,
         ["DOTNET_ENVIRONMENT"] = environmentName,
+        // Staging/Production construct an AmazonSecretsManagerClient (AIAgent,
+        // ExternalIntegrations' WhatsApp outbound provider) whose bare
+        // constructor throws without a resolvable region - never actually
+        // called in this test (no AI Agent/WhatsApp send is exercised), but
+        // required just for DI construction not to crash Worker's startup.
+        ["AWS_REGION"] = "sa-east-1",
         ["ConnectionStrings__Identity"] = _appConnectionString,
         ["ConnectionStrings__PropertyManagement"] = _appConnectionString,
         ["ConnectionStrings__Reservations"] = _appConnectionString,
