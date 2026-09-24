@@ -37,7 +37,7 @@ public sealed class PortalAuthorizationE2ETests
         await page.GotoAsync(_fixture.WebBaseUrl + "/login");
         await page.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await page.GetByLabel("E-mail").FillAsync(WebE2EFixture.AdminEmail);
-        await page.GetByLabel("Senha").FillAsync(WebE2EFixture.AdminPassword);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(WebE2EFixture.AdminPassword);
 
         var profileRequest = await page.RunAndWaitForRequestAsync(
             async () => await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync(),
@@ -146,7 +146,7 @@ public sealed class PortalAuthorizationE2ETests
     {
         await page.GetByLabel("Empresa").FillAsync(tenantSlug);
         await page.GetByLabel("E-mail").FillAsync(email);
-        await page.GetByLabel("Senha").FillAsync(password);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(password);
         await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync();
     }
 
@@ -197,7 +197,7 @@ public sealed class PortalAuthorizationE2ETests
         await outsiderPage.GotoAsync(_fixture.WebBaseUrl + "/login");
         await outsiderPage.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await outsiderPage.GetByLabel("E-mail").FillAsync(outsiderEmail);
-        await outsiderPage.GetByLabel("Senha").FillAsync(HousekeeperPassword);
+        await outsiderPage.GetByLabel("Senha", new() { Exact = true }).FillAsync(HousekeeperPassword);
         var profileRequest = await outsiderPage.RunAndWaitForRequestAsync(
             async () => await outsiderPage.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync(),
             req => req.Url.Contains("/api/v1/users/me") && req.Method == "GET");

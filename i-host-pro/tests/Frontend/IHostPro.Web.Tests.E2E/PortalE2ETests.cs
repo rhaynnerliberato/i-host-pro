@@ -38,7 +38,7 @@ public sealed class PortalE2ETests
         await page.GotoAsync(_fixture.WebBaseUrl + "/login");
         await page.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await page.GetByLabel("E-mail").FillAsync(WebE2EFixture.AdminEmail);
-        await page.GetByLabel("Senha").FillAsync(WebE2EFixture.AdminPassword);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(WebE2EFixture.AdminPassword);
 
         var profileRequest = await page.RunAndWaitForRequestAsync(
             async () => await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync(),
@@ -162,7 +162,7 @@ public sealed class PortalE2ETests
         await page.WaitForURLAsync(url => url.Contains("/login"));
         await page.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await page.GetByLabel("E-mail").FillAsync(email);
-        await page.GetByLabel("Senha").FillAsync(HousekeeperPassword);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(HousekeeperPassword);
         await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync();
         await page.WaitForURLAsync(_fixture.WebBaseUrl + "/my-cleanings");
         return page;

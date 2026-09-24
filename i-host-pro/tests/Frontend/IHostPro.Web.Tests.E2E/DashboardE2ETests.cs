@@ -54,7 +54,7 @@ public sealed class DashboardE2ETests
         await page.GotoAsync(_fixture.WebBaseUrl + "/login");
         await page.GetByLabel("Empresa").FillAsync(tenantSlug);
         await page.GetByLabel("E-mail").FillAsync(email);
-        await page.GetByLabel("Senha").FillAsync(password);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(password);
 
         var profileRequest = await page.RunAndWaitForRequestAsync(
             async () => await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync(),
@@ -507,7 +507,7 @@ public sealed class DashboardE2ETests
         await page.GotoAsync(_fixture.WebBaseUrl + "/login");
         await page.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await page.GetByLabel("E-mail").FillAsync(WebE2EFixture.AdminEmail);
-        await page.GetByLabel("Senha").FillAsync(WebE2EFixture.AdminPassword);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(WebE2EFixture.AdminPassword);
         await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync();
         await page.WaitForURLAsync(_fixture.WebBaseUrl + "/");
         await OpenDashboardAsync(page);

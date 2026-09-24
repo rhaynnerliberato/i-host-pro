@@ -51,7 +51,7 @@ public sealed class ScheduleAgendaE2ETests
         await page.GotoAsync(_fixture.WebBaseUrl + "/login");
         await page.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await page.GetByLabel("E-mail").FillAsync(WebE2EFixture.AdminEmail);
-        await page.GetByLabel("Senha").FillAsync(WebE2EFixture.AdminPassword);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(WebE2EFixture.AdminPassword);
 
         var profileRequest = await page.RunAndWaitForRequestAsync(
             async () => await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync(),
@@ -72,7 +72,7 @@ public sealed class ScheduleAgendaE2ETests
         await page.GotoAsync(_fixture.WebBaseUrl + "/login");
         await page.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await page.GetByLabel("E-mail").FillAsync(WebE2EFixture.OperatorEmail);
-        await page.GetByLabel("Senha").FillAsync(WebE2EFixture.OperatorPassword);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(WebE2EFixture.OperatorPassword);
 
         var profileRequest = await page.RunAndWaitForRequestAsync(
             async () => await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync(),
@@ -290,7 +290,7 @@ public sealed class ScheduleAgendaE2ETests
         await adminPage.GotoAsync(_fixture.WebBaseUrl + "/login");
         await adminPage.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await adminPage.GetByLabel("E-mail").FillAsync(WebE2EFixture.AdminEmail);
-        await adminPage.GetByLabel("Senha").FillAsync(WebE2EFixture.AdminPassword);
+        await adminPage.GetByLabel("Senha", new() { Exact = true }).FillAsync(WebE2EFixture.AdminPassword);
         var adminProfileRequest = await adminPage.RunAndWaitForRequestAsync(
             async () => await adminPage.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync(),
             req => req.Url.Contains("/api/v1/users/me") && req.Method == "GET");
@@ -312,7 +312,7 @@ public sealed class ScheduleAgendaE2ETests
         await page.GotoAsync(_fixture.WebBaseUrl + "/login");
         await page.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await page.GetByLabel("E-mail").FillAsync(ownerEmail);
-        await page.GetByLabel("Senha").FillAsync(ownerPassword);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(ownerPassword);
         await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync();
         await page.WaitForURLAsync(_fixture.WebBaseUrl + "/");
 
@@ -412,7 +412,7 @@ public sealed class ScheduleAgendaE2ETests
         await loginPage.GotoAsync(_fixture.WebBaseUrl + "/login");
         await loginPage.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await loginPage.GetByLabel("E-mail").FillAsync(WebE2EFixture.AdminEmail);
-        await loginPage.GetByLabel("Senha").FillAsync(WebE2EFixture.AdminPassword);
+        await loginPage.GetByLabel("Senha", new() { Exact = true }).FillAsync(WebE2EFixture.AdminPassword);
         await loginPage.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync();
         await loginPage.WaitForURLAsync(_fixture.WebBaseUrl + "/");
 
@@ -503,7 +503,7 @@ public sealed class ScheduleAgendaE2ETests
         await page.GotoAsync(_fixture.WebBaseUrl + "/login");
         await page.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await page.GetByLabel("E-mail").FillAsync(WebE2EFixture.AdminEmail);
-        await page.GetByLabel("Senha").FillAsync(WebE2EFixture.AdminPassword);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(WebE2EFixture.AdminPassword);
         await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync();
         await page.WaitForURLAsync(_fixture.WebBaseUrl + "/");
 
@@ -536,7 +536,7 @@ public sealed class ScheduleAgendaE2ETests
         await secondPage.GotoAsync(_fixture.WebBaseUrl + "/login");
         await secondPage.GetByLabel("Empresa").FillAsync(secondSlug);
         await secondPage.GetByLabel("E-mail").FillAsync(secondAdminEmail);
-        await secondPage.GetByLabel("Senha").FillAsync(secondAdminPassword);
+        await secondPage.GetByLabel("Senha", new() { Exact = true }).FillAsync(secondAdminPassword);
         await secondPage.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync();
         await secondPage.WaitForURLAsync(_fixture.WebBaseUrl + "/");
         await secondPage.GetByRole(AriaRole.Link, new() { Name = "Agenda" }).ClickAsync();
@@ -559,7 +559,7 @@ public sealed class ScheduleAgendaE2ETests
         await page.GotoAsync(_fixture.WebBaseUrl + "/login");
         await page.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await page.GetByLabel("E-mail").FillAsync(WebE2EFixture.AdminEmail);
-        await page.GetByLabel("Senha").FillAsync(WebE2EFixture.AdminPassword);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(WebE2EFixture.AdminPassword);
         await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync();
         await page.WaitForURLAsync(_fixture.WebBaseUrl + "/");
         await page.GotoAsync(_fixture.WebBaseUrl + "/schedule");

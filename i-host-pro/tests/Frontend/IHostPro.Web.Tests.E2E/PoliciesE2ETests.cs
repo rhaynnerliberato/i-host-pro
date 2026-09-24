@@ -46,7 +46,7 @@ public sealed class PoliciesE2ETests
         await page.GotoAsync(_fixture.WebBaseUrl + "/login");
         await page.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await page.GetByLabel("E-mail").FillAsync(WebE2EFixture.PolicyAdminEmail);
-        await page.GetByLabel("Senha").FillAsync(WebE2EFixture.PolicyAdminPassword);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(WebE2EFixture.PolicyAdminPassword);
         await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync();
 
         await page.WaitForURLAsync(_fixture.WebBaseUrl + "/");

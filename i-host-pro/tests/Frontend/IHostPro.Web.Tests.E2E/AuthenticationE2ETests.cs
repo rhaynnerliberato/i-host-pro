@@ -36,7 +36,7 @@ public sealed class AuthenticationE2ETests
     {
         await page.GetByLabel("Empresa").FillAsync(tenantSlug);
         await page.GetByLabel("E-mail").FillAsync(email);
-        await page.GetByLabel("Senha").FillAsync(password);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(password);
         await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync();
     }
 
@@ -61,7 +61,7 @@ public sealed class AuthenticationE2ETests
 
         await page.GetByLabel("Empresa").FillAsync(WebE2EFixture.TenantSlugValue);
         await page.GetByLabel("E-mail").FillAsync(WebE2EFixture.AdminEmail);
-        await page.GetByLabel("Senha").FillAsync("definitely-the-wrong-password");
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync("definitely-the-wrong-password");
 
         // Asserts on the real network response too, not just the rendered
         // text — this is what originally caught the NSwag-generated client

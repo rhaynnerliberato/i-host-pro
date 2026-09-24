@@ -38,7 +38,7 @@ public sealed class PoliciesAuthorizationE2ETests
     {
         await page.GetByLabel("Empresa").FillAsync(tenantSlug);
         await page.GetByLabel("E-mail").FillAsync(email);
-        await page.GetByLabel("Senha").FillAsync(password);
+        await page.GetByLabel("Senha", new() { Exact = true }).FillAsync(password);
         await page.GetByRole(AriaRole.Button, new() { Name = "Entrar" }).ClickAsync();
     }
 
