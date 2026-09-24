@@ -1,5 +1,6 @@
 using IHostPro.Contexts.Communication.Application;
 using IHostPro.Contexts.Configuration.Contracts;
+using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
 
 namespace IHostPro.Contexts.Communication.Tests.Integration;
@@ -61,4 +62,24 @@ internal sealed class FakeOutboundMessageConnector : IOutboundMessageConnector
         ReceivedDispatches.Add(dispatch);
         return Task.FromResult(_behavior(dispatch));
     }
+}
+
+/// <summary>
+/// Real Tenant WhatsApp Activation Readiness gate: fakes <see cref="IMessagingProvider"/>
+/// itself (never <see cref="IOutboundMessageConnector"/>) — for tests that need the
+/// real <see cref="ExternalIntegrationsWhatsAppConnector"/> exercised (its own DI
+/// resolution, its own OutboundMessageResult-to-OutboundMessageDispatchResult mapping),
+/// without a real Meta HTTP call.
+/// </summary>
+internal sealed class FakeMessagingProvider : IMessagingProvider
+{
+    private readonly OutboundMessageResult _result;
+
+    private FakeMessagingProvider(OutboundMessageResult result) => _result = result;
+
+    public static FakeMessagingProvider Rejecting(string failureCode) =>
+        new(new OutboundMessageResult(Accepted: false, ProviderMessageId: null, FailureCode: failureCode, FailureCategory: ProviderFailureCategory.PermanentFailure));
+
+    public Task<OutboundMessageResult> SendAsync(OutboundMessageRequest request, CancellationToken cancellationToken) =>
+        Task.FromResult(_result);
 }

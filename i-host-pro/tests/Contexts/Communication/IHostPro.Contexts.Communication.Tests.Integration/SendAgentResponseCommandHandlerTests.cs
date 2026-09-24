@@ -6,6 +6,7 @@ using IHostPro.Contexts.Communication.Application;
 using IHostPro.Contexts.Communication.Domain;
 using IHostPro.Contexts.Communication.Infrastructure;
 using IHostPro.Contexts.Communication.Infrastructure.Persistence;
+using IHostPro.Contexts.ExternalIntegrations.Contracts;
 using IHostPro.Contexts.Reservations.Contracts;
 using JasperFx;
 using Microsoft.EntityFrameworkCore;
@@ -135,27 +136,29 @@ public class SendAgentResponseCommandHandlerTests : IClassFixture<CommunicationM
     }
 
     /// <summary>
-    /// CP5.3E corrective fix: reproduces the real Homolog/production
-    /// composition — <see cref="AddCommunicationModule"/> called with
-    /// <c>isDevelopmentEnvironment: false</c> and NO connector override —
-    /// the exact shape that previously threw
-    /// <c>InvalidOperationException: Unable to resolve service for type
-    /// IOutboundMessageConnector</c> instead of resolving and failing
-    /// explicitly.
+    /// Real Tenant WhatsApp Activation Readiness gate: reproduces the real
+    /// Homolog/production composition — <see cref="AddCommunicationModule"/>
+    /// called with <c>isDevelopmentEnvironment: false</c> and no connector
+    /// override, so the real <c>ExternalIntegrationsWhatsAppConnector</c> is
+    /// resolved (superseding the older <c>NotConfiguredOutboundMessageConnector</c>
+    /// default this test used to exercise). Its own <c>IMessagingProvider</c>
+    /// dependency is faked here to a rejection — proving the real connector
+    /// resolves via DI and translates a provider rejection into a graceful
+    /// <see cref="Result{T}"/> failure, never an unhandled exception.
     /// </summary>
     [Fact]
-    public async Task Send_resolves_via_DI_and_fails_explicitly_when_no_real_connector_is_configured_for_a_non_Development_environment()
+    public async Task Send_resolves_the_real_WhatsApp_connector_via_DI_and_fails_explicitly_when_the_messaging_provider_rejects()
     {
         var tenantId = Guid.NewGuid();
         var reservationId = Guid.NewGuid();
         var conversationId = await SeedConversationAsync(tenantId, reservationId);
         var guestContact = new ReservationGuestContact(reservationId, "+5511999998888", "Ana Silva");
-        using var host = BuildHostWithoutConnectorOverride(guestContact);
+        using var host = BuildHostWithRealConnector(guestContact, FakeMessagingProvider.Rejecting("provider_rejected"));
 
         var result = await SendAsync(host, tenantId, conversationId, reservationId, Guid.NewGuid(), "Olá");
 
         result.IsFailure.Should().BeTrue("DI resolution must succeed and the connector must fail explicitly, never throw");
-        result.Error.Code.Should().Be("outbound_channel_not_configured");
+        result.Error.Code.Should().Be("provider_rejected");
 
         (await CountMessagesAsync(tenantId, conversationId)).Should().Be(1, "the Message row is still created before the connector call");
         var message = await ReadOnlyMessageForConversationAsync(tenantId, conversationId);
@@ -164,8 +167,8 @@ public class SendAgentResponseCommandHandlerTests : IClassFixture<CommunicationM
 
     // ---- Composition root -------------------------------------------------
 
-    /// <summary>Mirrors <see cref="BuildHost"/> but never overrides <see cref="IOutboundMessageConnector"/> and passes <c>isDevelopmentEnvironment: false</c> — the real non-Development composition.</summary>
-    private IHost BuildHostWithoutConnectorOverride(ReservationGuestContact? guestContact)
+    /// <summary>Mirrors <see cref="BuildHost"/> but registers the real <c>ExternalIntegrationsWhatsAppConnector</c> (via <c>isDevelopmentEnvironment: false</c>, no connector override) plus a fake <c>IMessagingProvider</c> — the real non-Development composition, minus the real Meta HTTP call.</summary>
+    private IHost BuildHostWithRealConnector(ReservationGuestContact? guestContact, IMessagingProvider messagingProvider)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:Communication"] = _fixture.AppConnectionString })
@@ -175,6 +178,7 @@ public class SendAgentResponseCommandHandlerTests : IClassFixture<CommunicationM
         hostBuilder.Services.AddScoped<ITenantContext, TenantContext>();
         hostBuilder.Services.AddLogging();
         hostBuilder.Services.AddCommunicationModule(configuration, isDevelopmentEnvironment: false);
+        hostBuilder.Services.AddScoped(_ => messagingProvider);
         hostBuilder.Services.AddScoped<IReservationGuestContactReader>(_ => FakeReservationGuestContactReader.Returning(guestContact));
 
         hostBuilder.UseWolverine(opts =>
