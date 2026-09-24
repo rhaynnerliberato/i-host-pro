@@ -74,7 +74,7 @@ public sealed class AuthenticationE2ETests
             resp => resp.Url.Contains("/api/v1/auth/login") && resp.Request.Method == "POST");
         response.Status.Should().Be(401, "a wrong password must be rejected as unauthorized, not any other status");
 
-        var errorText = await page.Locator(".login-error").InnerTextAsync();
+        var errorText = await page.Locator(".auth-error").InnerTextAsync();
         errorText.Should().Be("E-mail, senha ou empresa inválidos.", "a 401 must render the invalid-credentials message, not the generic one");
         page.Url.Should().StartWith(_fixture.WebBaseUrl + "/login", "an invalid login must never navigate away from the login page");
     }

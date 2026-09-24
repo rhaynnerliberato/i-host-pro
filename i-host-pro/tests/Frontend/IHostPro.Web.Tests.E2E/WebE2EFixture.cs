@@ -952,6 +952,20 @@ public sealed class WebE2EFixture : IAsyncLifetime
         psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         psi.Environment["DOTNET_ENVIRONMENT"] = "Development";
         psi.Environment["ConnectionStrings__Identity"] = _appConnectionString;
+        // Real GitHub Actions CI diagnostics gate: the exact same class of gap
+        // as every other ConnectionStrings entry documented below (Housekeeping/
+        // Platform/Reservations/Dashboard/AIAgent/Communication/GuestOperations/
+        // Payments), just never audited for these three - Program.cs calls
+        // AddConfigurationModule (needs Configuration), AddPropertyManagementModule
+        // (needs PropertyManagement), and reads ConnectionStrings:ExternalIntegrations
+        // directly for its own ancillary outbox enrollment. Missing them meant this
+        // fixture's real Worker subprocess crashed at boot in CI - the actual root
+        // cause behind every WaitUntilKnownToHousekeepingAsync timeout across the
+        // whole E2E suite (PropertyManagement never processed, so nothing was ever
+        // there for Housekeeping to consume), not a timing/performance issue.
+        psi.Environment["ConnectionStrings__Configuration"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__PropertyManagement"] = _appConnectionString;
+        psi.Environment["ConnectionStrings__ExternalIntegrations"] = _appConnectionString;
         // Fase 6, Checkpoint 6 homologação: was missing entirely — the real
         // Worker subprocess this fixture starts calls AddHousekeepingModule,
         // which needs ConnectionStrings:Housekeeping to point at THIS
