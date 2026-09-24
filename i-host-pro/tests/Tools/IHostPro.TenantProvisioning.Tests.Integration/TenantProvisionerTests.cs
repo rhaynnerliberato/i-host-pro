@@ -1,7 +1,9 @@
 using FluentAssertions;
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
 using IHostPro.Contexts.Identity.Domain;
+using IHostPro.Contexts.Identity.Domain.Enums;
 using IHostPro.Contexts.Identity.Domain.ValueObjects;
+using IHostPro.Contexts.Identity.Infrastructure.Caching;
 using IHostPro.Contexts.Identity.Infrastructure.Persistence;
 using IHostPro.Contexts.Identity.Infrastructure.Security;
 using Microsoft.AspNetCore.Identity;
@@ -80,11 +82,21 @@ public class TenantProvisionerTests : IClassFixture<TenantProvisionerTests.Fixtu
     private static TenantSlug NewSlug() => TenantSlug.Create($"prov-{Guid.NewGuid():N}"[..20]);
     private static string NewEmail() => $"admin-{Guid.NewGuid():N}@prov.local";
 
-    private TenantProvisioner CreateProvisioner(out IdentityDbContext dbContext)
+    private TenantProvisioner CreateProvisioner(out IdentityDbContext dbContext) =>
+        CreateProvisioner(out dbContext, TimeProvider.System);
+
+    private TenantProvisioner CreateProvisioner(out IdentityDbContext dbContext, TimeProvider timeProvider)
     {
         var tenantContext = new TenantContext();
         dbContext = CreateDbContext(_fixture.AppConnectionString, tenantContext);
-        return new TenantProvisioner(dbContext, tenantContext, TimeProvider.System);
+
+        // Suspend/Reactivate's real, Redis-backed cache-write behavior is
+        // proven end-to-end (real JWT pipeline, real Redis) by
+        // TenantSuspensionEnforcementTests (Identity.Tests.Integration) — the
+        // tests here focus on what's unique to this tool: PostgreSQL's own
+        // lifecycle correctness (not-found/already-suspended/already-active
+        // guards, Status transitions). A no-op cache is enough for that.
+        return new TenantProvisioner(dbContext, tenantContext, new NullTenantAccessStateCache(), timeProvider);
     }
 
     private static ProvisioningRequest NewRequest(TenantSlug slug, string email) =>
@@ -265,6 +277,92 @@ public class TenantProvisionerTests : IClassFixture<TenantProvisionerTests.Fixtu
             .Which.Message.Should().NotContain(distinctiveWeakPassword);
 
         (await FindTenantAsync(slug)).Should().BeNull("validation must fail before any row is created, including the tenant");
+    }
+
+    // ---- Suspend/Reactivate (Tenant Suspension/Reactivation Enforcement workstream) ----
+
+    [Fact]
+    public async Task SuspendAsync_for_an_unknown_slug_throws_and_creates_nothing()
+    {
+        var slug = NewSlug();
+        var provisioner = CreateProvisioner(out var dbContext);
+        await using var _ = dbContext;
+
+        var act = async () => await provisioner.SuspendAsync(slug, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task SuspendAsync_transitions_an_Active_tenant_to_Suspended()
+    {
+        var slug = NewSlug();
+        var provisioningProvisioner = CreateProvisioner(out var provisioningDbContext);
+        await using (provisioningDbContext)
+            await provisioningProvisioner.ProvisionAsync(NewRequest(slug, NewEmail()), CancellationToken.None);
+
+        var provisioner = CreateProvisioner(out var dbContext);
+        TenantLifecycleResult result;
+        await using (dbContext)
+            result = await provisioner.SuspendAsync(slug, CancellationToken.None);
+
+        result.PreviousStatus.Should().Be(TenantStatus.Active);
+        result.NewStatus.Should().Be(TenantStatus.Suspended);
+        (await FindTenantAsync(slug))!.Status.Should().Be(TenantStatus.Suspended);
+    }
+
+    [Fact]
+    public async Task SuspendAsync_for_an_already_suspended_tenant_throws()
+    {
+        var slug = NewSlug();
+        var provisioningProvisioner = CreateProvisioner(out var provisioningDbContext);
+        await using (provisioningDbContext)
+            await provisioningProvisioner.ProvisionAsync(NewRequest(slug, NewEmail()), CancellationToken.None);
+        var firstSuspend = CreateProvisioner(out var firstSuspendDbContext);
+        await using (firstSuspendDbContext)
+            await firstSuspend.SuspendAsync(slug, CancellationToken.None);
+
+        var provisioner = CreateProvisioner(out var dbContext);
+        await using var _ = dbContext;
+        var act = async () => await provisioner.SuspendAsync(slug, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task ReactivateAsync_for_an_already_active_tenant_throws()
+    {
+        var slug = NewSlug();
+        var provisioningProvisioner = CreateProvisioner(out var provisioningDbContext);
+        await using (provisioningDbContext)
+            await provisioningProvisioner.ProvisionAsync(NewRequest(slug, NewEmail()), CancellationToken.None);
+
+        var provisioner = CreateProvisioner(out var dbContext);
+        await using var _ = dbContext;
+        var act = async () => await provisioner.ReactivateAsync(slug, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task ReactivateAsync_transitions_a_Suspended_tenant_back_to_Active()
+    {
+        var slug = NewSlug();
+        var provisioningProvisioner = CreateProvisioner(out var provisioningDbContext);
+        await using (provisioningDbContext)
+            await provisioningProvisioner.ProvisionAsync(NewRequest(slug, NewEmail()), CancellationToken.None);
+        var suspendProvisioner = CreateProvisioner(out var suspendDbContext);
+        await using (suspendDbContext)
+            await suspendProvisioner.SuspendAsync(slug, CancellationToken.None);
+
+        var provisioner = CreateProvisioner(out var dbContext);
+        TenantLifecycleResult result;
+        await using (dbContext)
+            result = await provisioner.ReactivateAsync(slug, CancellationToken.None);
+
+        result.PreviousStatus.Should().Be(TenantStatus.Suspended);
+        result.NewStatus.Should().Be(TenantStatus.Active);
+        (await FindTenantAsync(slug))!.Status.Should().Be(TenantStatus.Active);
     }
 
     // ---- DB helpers ---------------------------------------------------------

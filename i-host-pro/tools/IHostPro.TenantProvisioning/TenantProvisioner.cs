@@ -1,4 +1,5 @@
 using IHostPro.BuildingBlocks.Infrastructure.Multitenancy;
+using IHostPro.Contexts.Identity.Application;
 using IHostPro.Contexts.Identity.Domain;
 using IHostPro.Contexts.Identity.Domain.Enums;
 using IHostPro.Contexts.Identity.Domain.ValueObjects;
@@ -33,6 +34,8 @@ public sealed record ProvisioningResult(
     bool UserCreated,
     bool AdminRoleAssigned);
 
+public sealed record TenantLifecycleResult(Guid TenantId, TenantSlug TenantSlug, TenantStatus PreviousStatus, TenantStatus NewStatus);
+
 /// <summary>
 /// CP5.3D-C corrective Decision Gate: the real, explicit-execution,
 /// idempotent mechanism for provisioning a Tenant + initial Admin user in
@@ -55,12 +58,15 @@ public sealed class TenantProvisioner
 {
     private readonly IdentityDbContext _dbContext;
     private readonly ITenantContext _tenantContext;
+    private readonly ITenantAccessStateCache _accessStateCache;
     private readonly TimeProvider _timeProvider;
 
-    public TenantProvisioner(IdentityDbContext dbContext, ITenantContext tenantContext, TimeProvider timeProvider)
+    public TenantProvisioner(
+        IdentityDbContext dbContext, ITenantContext tenantContext, ITenantAccessStateCache accessStateCache, TimeProvider timeProvider)
     {
         _dbContext = dbContext;
         _tenantContext = tenantContext;
+        _accessStateCache = accessStateCache;
         _timeProvider = timeProvider;
     }
 
@@ -152,5 +158,64 @@ public sealed class TenantProvisioner
         await transaction.CommitAsync(cancellationToken);
 
         return new ProvisioningResult(tenant.Id, tenantCreated, user.Id, userCreated, adminRoleAssigned);
+    }
+
+    /// <summary>
+    /// Tenant Suspension/Reactivation Enforcement workstream: suspends an
+    /// existing tenant. Unlike <see cref="ProvisionAsync"/>, this never
+    /// touches the RLS-protected <c>users</c>/<c>user_roles</c> tables, so no
+    /// tenant context/RLS GUC needs to be set — only the tenant row itself
+    /// (never RLS-protected — see <see cref="Tenant"/>'s own doc comment) is
+    /// read and updated. PostgreSQL is updated first, then
+    /// <see cref="ITenantAccessStateCache"/> — the cache write is what
+    /// actually blocks already-issued credentials (Postgres' own Status only
+    /// gates NEW logins/refreshes), so a failure there must propagate and
+    /// fail this whole operation loudly, never be swallowed.
+    /// </summary>
+    public async Task<TenantLifecycleResult> SuspendAsync(TenantSlug tenantSlug, CancellationToken cancellationToken)
+    {
+        var tenant = await _dbContext.Tenants.SingleOrDefaultAsync(t => t.Slug == tenantSlug, cancellationToken)
+            ?? throw new InvalidOperationException($"Tenant '{tenantSlug}' was not found.");
+
+        if (tenant.Status == TenantStatus.Suspended)
+            throw new InvalidOperationException($"Tenant '{tenantSlug}' is already suspended.");
+
+        var previousStatus = tenant.Status;
+        tenant.Suspend();
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _accessStateCache.MarkSuspendedAsync(tenant.Id, cancellationToken);
+
+        return new TenantLifecycleResult(tenant.Id, tenant.Slug, previousStatus, tenant.Status);
+    }
+
+    /// <summary>
+    /// Tenant Suspension/Reactivation Enforcement workstream: reactivates a
+    /// suspended tenant. Restores <see cref="Tenant.Status"/> to
+    /// <see cref="TenantStatus.Active"/> (allowing new logins/refreshes again)
+    /// and records the reactivation instant in <see cref="ITenantAccessStateCache"/>
+    /// as the new access cutover — a credential issued before this instant
+    /// (i.e. anything from before the suspension) remains denied; only a
+    /// fresh login issues a credential that passes. See
+    /// <see cref="ITenantAccessStateCache"/>'s own remarks for why this is
+    /// NOT simply clearing back to "Active" with no cutover.
+    /// </summary>
+    public async Task<TenantLifecycleResult> ReactivateAsync(TenantSlug tenantSlug, CancellationToken cancellationToken)
+    {
+        var now = _timeProvider.GetUtcNow();
+
+        var tenant = await _dbContext.Tenants.SingleOrDefaultAsync(t => t.Slug == tenantSlug, cancellationToken)
+            ?? throw new InvalidOperationException($"Tenant '{tenantSlug}' was not found.");
+
+        if (tenant.Status == TenantStatus.Active)
+            throw new InvalidOperationException($"Tenant '{tenantSlug}' is already active.");
+
+        var previousStatus = tenant.Status;
+        tenant.Reactivate();
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _accessStateCache.MarkReactivatedAsync(tenant.Id, now, cancellationToken);
+
+        return new TenantLifecycleResult(tenant.Id, tenant.Slug, previousStatus, tenant.Status);
     }
 }

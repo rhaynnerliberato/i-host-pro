@@ -30,4 +30,17 @@ public enum SecurityAuditReasonCode
     /// lockout to newly trigger (Incremento 2 plan, Etapa 9).
     /// </summary>
     AccountLocked = 10,
+
+    /// <summary>
+    /// A refresh was rejected by <c>ITenantAccessStateCache</c> (Tenant
+    /// Suspension/Reactivation Enforcement workstream) — the presented
+    /// session predates the tenant's most recent reactivation (or, as
+    /// defense in depth, the tenant is still suspended even though
+    /// <c>RefreshTokenTenantBootstrapResolver</c> already normally rejects
+    /// that case earlier). Unlike the doc comment above about excluding
+    /// tenant-resolution reasons, this fires only AFTER the tenant is
+    /// validly resolved and Active in PostgreSQL — this is about the
+    /// SESSION's age, not tenant resolution, so it belongs in this enum.
+    /// </summary>
+    TenantAccessDenied = 11,
 }

@@ -254,6 +254,13 @@ try
     // hosts, this overrides it with the real implementation for the Api.
     builder.Services.AddIdentitySessionRevocationCache(builder.Configuration);
 
+    // Tenant access-state cache (Tenant Suspension/Reactivation Enforcement
+    // workstream) — Redis-backed ITenantAccessStateCache, registered ONLY
+    // here for the same reason as AddIdentitySessionRevocationCache above.
+    // Must come after it: it reuses the IConnectionMultiplexer that call
+    // registers, rather than opening a second connection to the same Redis.
+    builder.Services.AddIdentityTenantAccessStateCache();
+
     // JWT Bearer authentication/authorization (Incremento 2 plan, Etapa 13;
     // ADR-012) — validates the access tokens AddIdentityJwtIssuance's
     // IJwtTokenGenerator issues, and consults AddIdentitySessionRevocationCache's

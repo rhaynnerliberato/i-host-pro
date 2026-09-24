@@ -18,8 +18,8 @@ namespace IHostPro.Contexts.Identity.Infrastructure.Authentication;
 /// <see cref="JwtOptions"/> — both Singleton-safe) are supplied by the DI
 /// container when the Options infrastructure builds this instance, never by
 /// calling <c>BuildServiceProvider()</c> inside <c>AddJwtBearer(...)</c>
-/// itself. <see cref="ISessionRevocationCache"/>/<see cref="ITenantContext"/>
-/// (both Scoped) are deliberately NOT constructor-injected here — that would
+/// itself. <see cref="ISessionRevocationCache"/>/<see cref="ITenantAccessStateCache"/>/
+/// <see cref="ITenantContext"/> (all Scoped) are deliberately NOT constructor-injected here — that would
 /// be the same captive-dependency defect fixed for <c>DummyPasswordVerifier</c>
 /// (Etapa 9 -&gt; 10). They are resolved per-request from
 /// <c>HttpContext.RequestServices</c> inside <see cref="OnTokenValidatedAsync"/>
@@ -126,6 +126,26 @@ public sealed class ConfigureJwtBearerOptions : IConfigureNamedOptions<JwtBearer
             return;
         }
 
+        // Tenant Suspension/Reactivation Enforcement workstream: a suspended
+        // tenant's already-issued access tokens must stop working immediately,
+        // not merely at their natural expiry — Tenant.Status in PostgreSQL is
+        // never re-checked here (same "Redis only" rule as above), so this
+        // consults ITenantAccessStateCache instead, which fails CLOSED (see
+        // its own remarks) unlike ISessionRevocationCache's fail-open above.
+        if (!TryGetIssuedAtUtc(principal, out var issuedAtUtc))
+        {
+            context.Fail(InvalidTokenFailureReason);
+            return;
+        }
+
+        var accessStateCache = context.HttpContext.RequestServices.GetRequiredService<ITenantAccessStateCache>();
+        var isAccessAllowed = await accessStateCache.IsAccessAllowedAsync(tenantId, issuedAtUtc, context.HttpContext.RequestAborted);
+        if (!isAccessAllowed)
+        {
+            context.Fail(InvalidTokenFailureReason);
+            return;
+        }
+
         // Only reached once every prior check succeeded.
         var tenantContext = context.HttpContext.RequestServices.GetRequiredService<ITenantContext>();
         tenantContext.SetTenant(tenantId);
@@ -149,6 +169,27 @@ public sealed class ConfigureJwtBearerOptions : IConfigureNamedOptions<JwtBearer
             return false;
 
         return Guid.TryParseExact(matches[0].Value, "D", out value);
+    }
+
+    /// <summary>
+    /// True only when exactly one <c>iat</c> claim exists and parses as a
+    /// standard JWT NumericDate (Unix seconds) — the exact form
+    /// <see cref="Security.JwtTokenGenerator"/> always emits via
+    /// <c>SecurityTokenDescriptor.IssuedAt</c>.
+    /// </summary>
+    private static bool TryGetIssuedAtUtc(ClaimsPrincipal principal, out DateTimeOffset issuedAtUtc)
+    {
+        issuedAtUtc = default;
+
+        var matches = principal.Claims.Where(c => c.Type == JwtRegisteredClaimNames.Iat).ToArray();
+        if (matches.Length != 1)
+            return false;
+
+        if (!long.TryParse(matches[0].Value, out var unixSeconds))
+            return false;
+
+        issuedAtUtc = DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
+        return true;
     }
 
     private const string InvalidTokenFailureReason = "invalid_token";

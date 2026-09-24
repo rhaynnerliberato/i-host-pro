@@ -187,6 +187,12 @@ public static class IdentityModuleExtensions
         services.AddScoped<ISessionRevocationSignal, SessionRevocationSignal>();
         services.AddScoped<ISessionRevocationCache, NullSessionRevocationCache>();
 
+        // Tenant access-state cache (Tenant Suspension/Reactivation
+        // Enforcement workstream) — same "no-op default, Api overrides with
+        // Redis" pattern as ISessionRevocationCache immediately above.
+        // IHostPro.Worker never validates a JWT and never needs this either.
+        services.AddScoped<ITenantAccessStateCache, NullTenantAccessStateCache>();
+
         // Permission resolver (Incremento 3, Checkpoint 2) — RolePermissionCache
         // is a Singleton (the actual cross-request cache storage); PermissionReader
         // is Scoped, matching IdentityDbContext's own lifetime. Registered for

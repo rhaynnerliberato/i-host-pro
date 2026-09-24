@@ -487,6 +487,55 @@ public class RefreshTokenCommandHandlerTests : IClassFixture<RefreshTokenCommand
         forInactive.Error.Should().Be(forUnresolved.Error);
     }
 
+    /// <summary>
+    /// Tenant Suspension/Reactivation Enforcement workstream: the tenant is
+    /// resolved and Active in PostgreSQL (so bootstrap succeeds, unlike the
+    /// test above), but the session predates the tenant's most recent
+    /// reactivation — <see cref="ITenantAccessStateCache"/> denies it. Proven
+    /// here with a fake rather than a real Redis cache: the real,
+    /// Redis-backed enforcement (including the JWT-pipeline half of this same
+    /// workstream) is proven end-to-end by TenantSuspensionEnforcementTests;
+    /// this test isolates the ONE thing that lives in this handler — that it
+    /// actually calls the cache and rejects on a false result.
+    /// </summary>
+    [Fact]
+    public async Task Refresh_is_rejected_when_the_tenant_access_state_cache_denies_the_sessions_issued_at()
+    {
+        var tenantId = await SeedTenantAsync();
+        var userId = await SeedUserAsync(tenantId);
+        var sessionId = await SeedSessionAsync(tenantId, userId);
+        var now = DateTimeOffset.UtcNow;
+        var (presented, tokenId, hash) = BuildPresentedToken(tenantId);
+        await SeedRefreshTokenAsync(tenantId, userId, sessionId, tokenId, hash, now.AddMinutes(-1), now.AddDays(30));
+        using var services = await BuildServices(now, overrides: s =>
+            s.AddScoped<ITenantAccessStateCache>(_ => new DenyingTenantAccessStateCache()));
+
+        var result = await ExecuteRefreshAsync(services, RefreshAs(presented));
+
+        result.IsFailure.Should().BeTrue();
+
+        await using var dbContext = CreateMigratorDbContextWithTenant(tenantId);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+        await SetPostgresTenantAsync(dbContext, tenantId);
+        var audit = await dbContext.SecurityAuditLog.SingleAsync(e => e.RefreshTokenId == tokenId);
+        audit.EventType.Should().Be(SecurityAuditEventType.RefreshRejected);
+        audit.ReasonCode.Should().Be(SecurityAuditReasonCode.TenantAccessDenied);
+
+        var untouchedToken = await dbContext.RefreshTokens.SingleAsync(rt => rt.TokenId == tokenId);
+        untouchedToken.IsRevoked.Should().BeFalse("a tenant-access rejection must never rotate or otherwise touch the presented token");
+    }
+
+    private sealed class DenyingTenantAccessStateCache : ITenantAccessStateCache
+    {
+        public Task MarkSuspendedAsync(Guid tenantId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task MarkReactivatedAsync(Guid tenantId, DateTimeOffset reactivatedAtUtc, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<bool> IsAccessAllowedAsync(Guid tenantId, DateTimeOffset credentialIssuedAtUtc, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+    }
+
     [Fact]
     public async Task Refresh_with_an_incorrect_secret_returns_the_generic_failure_and_records_a_hash_mismatch()
     {

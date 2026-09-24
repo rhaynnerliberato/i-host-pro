@@ -23,7 +23,9 @@ namespace IHostPro.Contexts.Identity.Application;
 /// Every rejection path — malformed token or unresolved/inactive tenant
 /// (handled in <see cref="RefreshTokenTenantBootstrapResolver"/>, before this
 /// handler ever runs), token not found, hash mismatch, revoked (for any
-/// reason), expired, inactive user, inactive session — returns the exact
+/// reason), expired, inactive user, inactive session, tenant access denied
+/// (<see cref="ITenantAccessStateCache"/> — the session predates the
+/// tenant's most recent reactivation) — returns the exact
 /// same <see cref="Error"/> (<see cref="InvalidRefreshTokenError"/>): the
 /// specific reason is recorded only internally, in
 /// <c>security_audit_log</c>, never surfaced to the caller.
@@ -63,6 +65,7 @@ public sealed class RefreshTokenCommandHandler : ICommandHandler<RefreshTokenCom
     private readonly ISecurityAuditWriter _auditWriter;
     private readonly IIntegrationEventCollector _eventCollector;
     private readonly ISessionRevocationSignal _revocationSignal;
+    private readonly ITenantAccessStateCache _tenantAccessStateCache;
     private readonly ICurrentTenantProvider _currentTenantProvider;
     private readonly TimeProvider _timeProvider;
 
@@ -80,6 +83,7 @@ public sealed class RefreshTokenCommandHandler : ICommandHandler<RefreshTokenCom
         ISecurityAuditWriter auditWriter,
         IIntegrationEventCollector eventCollector,
         ISessionRevocationSignal revocationSignal,
+        ITenantAccessStateCache tenantAccessStateCache,
         ICurrentTenantProvider currentTenantProvider,
         TimeProvider timeProvider)
     {
@@ -96,6 +100,7 @@ public sealed class RefreshTokenCommandHandler : ICommandHandler<RefreshTokenCom
         _auditWriter = auditWriter;
         _eventCollector = eventCollector;
         _revocationSignal = revocationSignal;
+        _tenantAccessStateCache = tenantAccessStateCache;
         _currentTenantProvider = currentTenantProvider;
         _timeProvider = timeProvider;
     }
@@ -190,6 +195,22 @@ public sealed class RefreshTokenCommandHandler : ICommandHandler<RefreshTokenCom
         {
             return Reject(
                 SecurityAuditEventType.RefreshRejected, SecurityAuditReasonCode.SessionNotActive,
+                tenantId, now, correlationId, ipAddress, token.UserId, token.SessionId, token.TokenId);
+        }
+
+        // Tenant Suspension/Reactivation Enforcement workstream: the tenant is
+        // resolved and Active in PostgreSQL (RefreshTokenTenantBootstrapResolver
+        // already required that before this handler ever ran), but a session
+        // opened BEFORE the tenant's most recent reactivation must not be
+        // silently resurrected by a refresh — Session.CreatedAt never changes
+        // across rotations (only LastActivityAt does), so it is the session's
+        // true "issued at" for this comparison. A fresh login opens a brand
+        // new session, which naturally passes.
+        var isTenantAccessAllowed = await _tenantAccessStateCache.IsAccessAllowedAsync(tenantId, session.CreatedAt, cancellationToken);
+        if (!isTenantAccessAllowed)
+        {
+            return Reject(
+                SecurityAuditEventType.RefreshRejected, SecurityAuditReasonCode.TenantAccessDenied,
                 tenantId, now, correlationId, ipAddress, token.UserId, token.SessionId, token.TokenId);
         }
 
