@@ -19,6 +19,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Testcontainers.RabbitMq;
+using Testcontainers.Redis;
 
 namespace IHostPro.Api.Tests.Integration;
 
@@ -70,12 +71,14 @@ public sealed class ConversationMessageReceivedWorkflowRoundTripTests : IClassFi
 
         private PostgreSqlContainer _postgresContainer = null!;
         private RabbitMqContainer _rabbitMqContainer = null!;
+        private RedisContainer _redisContainer = null!;
         private Process? _workerProcess;
         private WebApplicationFactory<Program>? _apiFactory;
         private readonly Dictionary<string, string?> _envValues = [];
 
         public string MigratorConnectionString { get; private set; } = null!;
         public string AppConnectionString { get; private set; } = null!;
+        public string RedisConnectionString => _redisContainer.GetConnectionString();
         public HttpClient ApiClient { get; private set; } = null!;
         public IServiceProvider ApiServices => _apiFactory!.Services;
 
@@ -94,6 +97,15 @@ public sealed class ConversationMessageReceivedWorkflowRoundTripTests : IClassFi
                 .WithPortBinding(5672, 5672)
                 .Build();
             await _rabbitMqContainer.StartAsync();
+
+            // Redis backs 3 separate app-config keys (rate limiting, policy cache,
+            // session revocation cache) - all default to "localhost:6379" in
+            // appsettings.json, which is never actually available on a CI runner.
+            // A real Testcontainers instance here (rather than assuming a local
+            // Redis exists) is what every OTHER Redis-dependent fixture in this
+            // project already does (see PolicyUpdatedRegressionTests).
+            _redisContainer = new RedisBuilder().WithImage("redis:7-alpine").Build();
+            await _redisContainer.StartAsync();
 
             var adminConnectionString = _postgresContainer.GetConnectionString();
             await using (var adminConnection = new NpgsqlConnection(adminConnectionString))
@@ -163,6 +175,7 @@ public sealed class ConversationMessageReceivedWorkflowRoundTripTests : IClassFi
             _workerProcess?.Dispose();
 
             await _rabbitMqContainer.DisposeAsync();
+            await _redisContainer.DisposeAsync();
             await _postgresContainer.DisposeAsync();
         }
 
@@ -267,7 +280,9 @@ public sealed class ConversationMessageReceivedWorkflowRoundTripTests : IClassFi
             ["Identity__RefreshToken__Lifetime"] = "30.00:00:00",
             ["Identity__RefreshToken__SecretSizeBytes"] = "32",
             ["Identity__RefreshToken__ConcurrentRotationGraceWindow"] = "00:00:10",
-            ["Configuration__PolicyCache__ConnectionString"] = "localhost:6379",
+            ["Configuration__PolicyCache__ConnectionString"] = _redisContainer.GetConnectionString(),
+            ["Identity__SessionRevocationCache__ConnectionString"] = _redisContainer.GetConnectionString(),
+            ["RateLimiting__Redis__ConnectionString"] = _redisContainer.GetConnectionString(),
             ["RabbitMq__Host"] = _rabbitMqContainer.Hostname,
             ["RabbitMq__VirtualHost"] = "/",
             ["RabbitMq__Username"] = RabbitMqBuilder.DefaultUsername,

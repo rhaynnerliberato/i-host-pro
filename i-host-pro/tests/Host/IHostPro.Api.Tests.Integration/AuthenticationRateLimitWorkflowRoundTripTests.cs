@@ -54,12 +54,13 @@ public sealed class AuthenticationRateLimitWorkflowRoundTripTests : IClassFixtur
             // The "Authentication" partition key is the TestServer's own synthetic
             // loopback IP (see this class's own doc comment) — the exact same
             // partition every OTHER test class hitting an Authentication-limited
-            // endpoint (Login/Refresh/Signup) also uses against this same real,
-            // shared dev Redis (RateLimiting:Redis:ConnectionString, appsettings.json).
-            // Without this cleanup, this test's own deliberate exhaustion leaks into
-            // any other test sharing that window, causing spurious 429s elsewhere
-            // (e.g. SelfServiceSignupAuthorizationParityTests) - always runs, pass or fail.
-            await using var redisConnection = await ConnectionMultiplexer.ConnectAsync("localhost:6379");
+            // endpoint (Login/Refresh/Signup) also uses against this same fixture's
+            // own Testcontainers Redis (RateLimiting:Redis:ConnectionString, wired
+            // in ConversationMessageReceivedWorkflowRoundTripTests.Fixture). Without
+            // this cleanup, this test's own deliberate exhaustion leaks into any
+            // other test sharing that window, causing spurious 429s elsewhere (e.g.
+            // SelfServiceSignupAuthorizationParityTests) - always runs, pass or fail.
+            await using var redisConnection = await ConnectionMultiplexer.ConnectAsync(_fixture.RedisConnectionString);
             var server = redisConnection.GetServer(redisConnection.GetEndPoints()[0]);
             var keys = server.KeysAsync(pattern: "ihostpro:ratelimit:Authentication:*");
             await foreach (var key in keys)
